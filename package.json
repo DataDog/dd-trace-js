@@ -145,6 +145,7 @@
     "index.js",
     "init.js",
     "initialize.mjs",
+    "initialize-next.mjs",
     "LICENSE-3rdparty.csv",
     "LICENSE",
     "LICENSE.Apache",

@@ -109,6 +109,10 @@ class NoopProxy {
   get TracerProvider () {
     return require('../opentelemetry/tracer_provider')
   }
+
+  get OpenTelemetryContextManager () {
+    return require('../opentelemetry/context_manager')
+  }
 }
 
 module.exports = NoopProxy

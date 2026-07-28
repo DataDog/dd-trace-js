@@ -1,6 +1,9 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const nomenclature = require('../../dd-trace/src/service-naming')
+const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:next:request:start')
@@ -20,6 +23,72 @@ const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
+
+// `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
+const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
+const NEXT_ROUTE_HANDLERS = new Set([
+  'AppRouteRouteHandlers.runHandler',
+  'Node.runHandler',
+])
+
+function findAncestorTag (span, tag) {
+  const trace = span.context()._trace
+  let parentId = span.context()._parentId
+
+  while (parentId) {
+    const parent = trace.started.find(candidate => candidate.context()._spanId.equals(parentId))
+    if (!parent) return
+
+    const value = parent.context().getTag(tag)
+    if (value !== undefined) return value
+
+    parentId = parent.context()._parentId
+  }
+}
+
+function normalizeRouteHandler (span, method, route) {
+  span.setOperationName('next.route.handler')
+  span.setTag(RESOURCE_NAME, `${method} ${route}`)
+}
+
+function normalizeRouteHandlers (root, method, route) {
+  for (const span of root.context()._trace.started) {
+    if (!NEXT_ROUTE_HANDLERS.has(span.context().getTag('next.span_type'))) continue
+
+    const tags = span.context().getTags()
+    normalizeRouteHandler(span, method, tags['next.route'] ?? tags['http.route'] ?? route)
+  }
+}
+
+// In OTel-bridge mode (`plugins: false` + `new tracer.TracerProvider().register()`) Next emits its
+// own OTel spans and renames the root request span to `${method} ${route}` at finish, which the
+// bridge routes into the DD operation name and leaves the resource as the bare method — the reverse
+// of Datadog's contract. Correct it via the bridge's pre-finish hook. See span-ending-hook.js.
+spanEndingHook.hook = (ddSpan) => {
+  const tags = ddSpan.context().getTags()
+  const spanType = tags['next.span_type']
+
+  if (NEXT_ROUTE_HANDLERS.has(spanType)) {
+    const route = tags['next.route'] ?? tags['http.route'] ?? findAncestorTag(ddSpan, 'next.route')
+    const method = tags['http.method'] ?? findAncestorTag(ddSpan, 'http.method')
+    if (!route || !method) return
+
+    normalizeRouteHandler(ddSpan, method, route)
+    return
+  }
+
+  if (spanType !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
+
+  const method = tags['http.method']
+  const route = tags['next.route'] ?? tags['http.route']
+  // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
+  // mirror Next's own naming, and only construct the resource when it is absent.
+  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+
+  ddSpan.setOperationName(nomenclature.opName('web', 'server', 'next'))
+  ddSpan.setTag(RESOURCE_NAME, resource)
+  if (route && method) normalizeRouteHandlers(ddSpan, method, route)
+}
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -220,13 +289,6 @@ addHook({
   return NextRequestAdapter
 })
 
-// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
-// above no longer maps the node request to the app-route NextRequest and a thrown handler error
-// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
-// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
-// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
-// bundled. The bundler/experimental part of the name is matched with a pattern rather than
-// enumerated, so a variant next adds later is picked up without a code change.
 const patchedAppRouteModules = new WeakSet()
 
 function wrapOnRequestError (onRequestError) {

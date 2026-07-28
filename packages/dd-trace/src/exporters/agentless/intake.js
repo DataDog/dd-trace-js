@@ -15,8 +15,8 @@ const INTAKE_URLS = {
   'datad0g.com': 'https://public-trace-http-intake.logs.datad0g.com',
 }
 
-// Path of the JSON span intake on every intake host.
-const INTAKE_PATH = '/api/v2/spans'
+// Path of the APM agentless JSON span intake on every intake host.
+const INTAKE_PATH = '/v1/input'
 
 /**
  * Resolves the agentless intake origin for a Datadog site.

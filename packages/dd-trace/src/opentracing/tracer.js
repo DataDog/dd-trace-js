@@ -1,6 +1,8 @@
 'use strict'
 
 const os = require('os')
+const { storage } = require('../../../datadog-core')
+const { getApi } = require('../opentelemetry/api')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
@@ -67,9 +69,13 @@ class DatadogTracer {
   }
 
   startSpan (name, options = {}) {
-    const parent = options.childOf
+    let parent = options.childOf
       ? getContext(options.childOf)
       : getParent(options.references)
+
+    if (!parent && options.childOf === undefined) {
+      parent = getActiveOtelParent(this)
+    }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
@@ -126,6 +132,27 @@ class DatadogTracer {
       return null
     }
   }
+}
+
+function getActiveOtelParent (tracer) {
+  const { trace } = getApi()
+  const storedContext = storage('opentelemetry').getStore()
+  const activeSpan = trace.getActiveSpan()
+  const storedSpan = storedContext && trace.getSpan(storedContext)
+  const context = (activeSpan ?? storedSpan)?.spanContext()
+
+  if (!context || !trace.isSpanContextValid(context)) return null
+  if (context._ddContext) return context._ddContext
+
+  const flags = (context.traceFlags & 1).toString(16).padStart(2, '0')
+  const carrier = {
+    traceparent: `00-${context.traceId}-${context.spanId}-${flags}`,
+  }
+
+  const tracestate = context.traceState?.serialize()
+  if (tracestate) carrier.tracestate = tracestate
+
+  return tracer.extract(formats.HTTP_HEADERS, carrier)
 }
 
 /**

@@ -8,6 +8,7 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
+const { scheduleVercelFlush } = require('../serverless')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
@@ -15,6 +16,7 @@ const id = require('../id')
 const { getApi } = require('./api')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
+const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 // SpanKind is an OTel spec enum of fixed numeric constants, identical across every copy of the API,
@@ -260,8 +262,17 @@ class Span extends BridgeSpanBase {
     const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
+    // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
+    if (spanEndingHook.hook !== undefined) {
+      spanEndingHook.hook(this._ddSpan)
+    }
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)
+
+    if (this.instrumentationLibrary.name === 'next.js' &&
+      this._ddSpan.context().getTag('next.span_type') === 'BaseServer.handleRequest') {
+      scheduleVercelFlush(tracer)
+    }
   }
 
   get duration () {

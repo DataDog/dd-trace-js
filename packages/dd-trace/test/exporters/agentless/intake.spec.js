@@ -36,6 +36,6 @@ describe('agentless intake', () => {
   })
 
   it('targets the JSON span intake path', () => {
-    assert.strictEqual(INTAKE_PATH, '/api/v2/spans')
+    assert.strictEqual(INTAKE_PATH, '/v1/input')
   })
 })

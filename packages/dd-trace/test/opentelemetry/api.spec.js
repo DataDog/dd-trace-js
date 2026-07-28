@@ -49,4 +49,26 @@ describe('opentelemetry/api holder', () => {
     holder.setApi(holder.API, second)
     assert.strictEqual(holder.getApi(), first)
   })
+
+  it('runs readiness callbacks when the application API is captured', () => {
+    const api = {}
+    const received = []
+
+    holder.onApiReady(holder.API, value => received.push(value))
+    holder.onApiReady(holder.API, value => received.push(value))
+    holder.setApi(holder.API, api)
+    holder.setApi(holder.API, {})
+
+    assert.deepStrictEqual(received, [api, api])
+  })
+
+  it('runs readiness callbacks immediately after the API was captured', () => {
+    const api = {}
+    let received
+
+    holder.setApi(holder.API, api)
+    holder.onApiReady(holder.API, value => { received = value })
+
+    assert.strictEqual(received, api)
+  })
 })

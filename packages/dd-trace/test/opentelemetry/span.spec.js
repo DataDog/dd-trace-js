@@ -33,6 +33,8 @@ const spanKindNames = {
   [api.SpanKind.CONSUMER]: kinds.CONSUMER,
 }
 
+const vercelRequestContext = Symbol.for('@vercel/request-context')
+
 function makeSpan (...args) {
   const tracerProvider = new TracerProvider()
   tracerProvider.register()
@@ -657,6 +659,58 @@ describe('OTel Span', () => {
 
     sinon.assert.calledWith(processor.onStart, span, span._context)
     sinon.assert.calledWith(processor.onEnd, span)
+  })
+
+  describe('Vercel request-lifetime flush', () => {
+    for (const [expectation, name, library, spanType, expectedFlushes] of [
+      ['schedules', 'Next root request', 'next.js', 'BaseServer.handleRequest', 1],
+      ['does not schedule', 'Next child span', 'next.js', 'NextNodeServer.startResponse', 0],
+      ['does not schedule', 'non-Next span', 'custom', 'BaseServer.handleRequest', 0],
+    ]) {
+      it(`${expectation} agentless export for a ${name}`, async () => {
+        const originalVercel = process.env.VERCEL
+        const originalExporter = tracer._tracer._exporter
+        const originalExporterType = tracer._tracer._config.experimental.exporter
+        const waitUntilTasks = []
+        let flushes = 0
+
+        process.env.VERCEL = '1'
+        tracer._tracer._config.experimental.exporter = 'agentless'
+        tracer._tracer._exporter = {
+          flush (done) {
+            flushes++
+            done()
+          },
+        }
+        globalThis[vercelRequestContext] = {
+          get: () => ({
+            waitUntil: promise => waitUntilTasks.push(promise),
+          }),
+        }
+
+        try {
+          const provider = new TracerProvider()
+          const span = provider.getTracer(library).startSpan('request', {
+            attributes: {
+              'next.span_type': spanType,
+            },
+          })
+
+          span.end()
+          await new Promise(resolve => setImmediate(resolve))
+          await Promise.all(waitUntilTasks)
+
+          assert.strictEqual(flushes, expectedFlushes)
+          assert.strictEqual(waitUntilTasks.length, expectedFlushes)
+        } finally {
+          if (originalVercel === undefined) delete process.env.VERCEL
+          else process.env.VERCEL = originalVercel
+          tracer._tracer._config.experimental.exporter = originalExporterType
+          tracer._tracer._exporter = originalExporter
+          delete globalThis[vercelRequestContext]
+        }
+      })
+    }
   })
 
   it('should add span events', () => {

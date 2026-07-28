@@ -21,6 +21,8 @@ const API_LOGS = '@opentelemetry/api-logs'
 
 /** @type {Map<string, object>} */
 const captured = new Map()
+/** @type {Map<string, Array<(api: object) => void>>} */
+const readyCallbacks = new Map()
 
 /**
  * Records the application's copy of an OpenTelemetry API package. Called by the instrumentation
@@ -33,6 +35,30 @@ const captured = new Map()
 function setApi (packageName, api) {
   if (captured.has(packageName)) return
   captured.set(packageName, api)
+
+  const callbacks = readyCallbacks.get(packageName)
+  readyCallbacks.delete(packageName)
+  for (const callback of callbacks ?? []) {
+    callback(api)
+  }
+}
+
+/**
+ * Runs a callback when the application's copy of an OpenTelemetry API package is available.
+ *
+ * @param {string} packageName
+ * @param {(api: object) => void} callback
+ */
+function onApiReady (packageName, callback) {
+  const api = captured.get(packageName)
+  if (api) {
+    callback(api)
+    return
+  }
+
+  const callbacks = readyCallbacks.get(packageName) ?? []
+  callbacks.push(callback)
+  readyCallbacks.set(packageName, callbacks)
 }
 
 /**
@@ -52,4 +78,4 @@ function getApiLogs () {
   return /** @type {OtelApiLogs} */ (captured.get(API_LOGS) ?? require('@opentelemetry/api-logs'))
 }
 
-module.exports = { API, API_LOGS, setApi, getApi, getApiLogs }
+module.exports = { API, API_LOGS, setApi, onApiReady, getApi, getApiLogs }

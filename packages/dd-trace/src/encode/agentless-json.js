@@ -14,7 +14,7 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
  * @param {boolean} isFirstSpan - Whether this is the first span in the trace
  * @returns {object} The formatted span
  */
-function formatSpan (span, isFirstSpan) {
+function formatSpan (span, isFirstSpan, isTopLevel) {
   span = normalizeSpan(span)
 
   // Remove _dd.p.tid (the upper 64 bits of a 128-bit trace ID) since trace_id is truncated to lower 64 bits
@@ -36,17 +36,53 @@ function formatSpan (span, isFirstSpan) {
     span.metrics._trace_root = 1
   }
 
-  if (span.metrics[TOP_LEVEL_KEY]) {
+  if (span.metrics[TOP_LEVEL_KEY] || (span.metrics[TOP_LEVEL_KEY] === undefined && isTopLevel)) {
     span.metrics._top_level = 1
   }
 
   return span
 }
 
+function getSpanId (span) {
+  try {
+    return span.span_id?.toString(16)
+  } catch {
+    // A malformed span is skipped by the encoder below.
+  }
+}
+
+function getTopLevelSpanIds (trace) {
+  const spansById = new Map()
+  const topLevelSpanIds = new Set()
+
+  for (const span of trace) {
+    const spanId = getSpanId(span)
+    if (spanId !== undefined) spansById.set(spanId, span)
+  }
+
+  for (const span of trace) {
+    const spanId = getSpanId(span)
+    if (spanId === undefined) continue
+
+    let parent
+    try {
+      parent = spansById.get(span.parent_id?.toString(16))
+    } catch {
+      continue
+    }
+
+    if (parent === undefined || parent.service !== span.service) {
+      topLevelSpanIds.add(spanId)
+    }
+  }
+
+  return topLevelSpanIds
+}
+
 /**
  * Converts a span to JSON-serializable format.
- * IDs are converted to lowercase hex strings. Start time is converted from
- * nanoseconds to seconds for the intake format.
+ * IDs are converted to lowercase hex strings. Start time and duration are kept
+ * in nanoseconds for the intake format.
  * @param {object} span - The formatted span
  * @returns {object} JSON-serializable span object
  */
@@ -59,7 +95,7 @@ function spanToJSON (span) {
     resource: span.resource,
     service: span.service,
     error: span.error,
-    start: Math.floor(span.start / 1e9),
+    start: span.start,
     duration: span.duration,
     meta: span.meta,
     metrics: span.metrics,
@@ -114,10 +150,15 @@ class AgentlessJSONEncoder {
   encode (trace) {
     const spanStrings = []
     let traceSize = 0
+    const topLevelSpanIds = getTopLevelSpanIds(trace)
 
     for (const span of trace) {
       try {
-        const formattedSpan = formatSpan(span, spanStrings.length === 0)
+        const formattedSpan = formatSpan(
+          span,
+          spanStrings.length === 0,
+          topLevelSpanIds.has(getSpanId(span))
+        )
         const serialized = JSON.stringify(spanToJSON(formattedSpan))
         spanStrings.push(serialized)
         traceSize += serialized.length

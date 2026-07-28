@@ -143,6 +143,8 @@ interface Tracer extends opentracing.Tracer {
 
   TracerProvider: tracer.opentelemetry.TracerProvider;
 
+  OpenTelemetryContextManager: tracer.opentelemetry.ContextManager;
+
   dogstatsd: tracer.DogStatsD;
 
   /**
@@ -3152,6 +3154,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface ContextManager {
+      new(): otel.ContextManager;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */

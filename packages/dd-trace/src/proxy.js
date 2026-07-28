@@ -384,6 +384,13 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+
+  /**
+   * @override
+   */
+  get OpenTelemetryContextManager () {
+    return require('./opentelemetry/context_manager')
+  }
 }
 
 module.exports = Tracer

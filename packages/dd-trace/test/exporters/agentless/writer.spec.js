@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('node:url')
-const { inspect } = require('node:util')
+const { format, inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -128,6 +128,147 @@ describe('AgentlessWriter', () => {
       writer.flush(done)
     })
 
+    it('should not log API keys when sending traces', (done) => {
+      apiKey = 'sentinel-api-key-that-must-not-be-logged'
+      writer = new Writer({ url })
+      encoder.count.returns(2)
+
+      writer.flush(() => {
+        for (const call of log.debug.getCalls()) {
+          assert.ok(!inspect(call.args).includes(apiKey), `Raw debug arguments leaked API key: ${inspect(call.args)}`)
+          assert.ok(
+            !format(...call.args).includes(apiKey),
+            `Formatted debug output leaked API key: ${format(...call.args)}`
+          )
+        }
+
+        sinon.assert.calledWithExactly(
+          log.debug,
+          'Request to the agentless intake: method=%s host=%s path=%s trace_count=%d timeout_ms=%d',
+          'POST',
+          url.hostname,
+          '/v1/input',
+          2,
+          15_000
+        )
+        done()
+      })
+    })
+
+    it('should wait for an active intake request when empty', (done) => {
+      let requestCallback
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      assert.strictEqual(flushed, false)
+      requestCallback(null, '{}', 200)
+    })
+
+    it('should wait for prior and newly submitted intake requests', (done) => {
+      const requestCallbacks = []
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      requestCallbacks[1](null, '{}', 200)
+      assert.strictEqual(flushed, false)
+      requestCallbacks[0](null, '{}', 200)
+    })
+
+    it('should not wait for requests submitted by a later flush', () => {
+      const requestCallbacks = []
+      let firstFlushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        firstFlushed = true
+      })
+      writer.flush()
+
+      requestCallbacks[0](null, '{}', 200)
+      assert.strictEqual(firstFlushed, true)
+      requestCallbacks[1](null, '{}', 200)
+    })
+
+    it('should release an empty flush when an active request fails', (done) => {
+      let requestCallback
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      writer.flush()
+      writer.flush(done)
+
+      requestCallback(new Error('ECONNRESET'))
+    })
+
+    it('should release every waiter when one callback throws', () => {
+      const error = new Error('flush callback failed')
+      let requestCallback
+      let secondCallbackCalled = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.returns(0)
+
+      writer.flush()
+      writer.flush(() => {
+        throw error
+      })
+      writer.flush(() => {
+        secondCallbackCalled = true
+      })
+
+      assert.throws(() => requestCallback(null, '{}', 200), error)
+      assert.strictEqual(secondCallbackCalled, true)
+    })
+
+    it('should not retain a request when submission throws', () => {
+      const error = new Error('submission failed')
+
+      request.throws(error)
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      assert.throws(() => writer.flush(), error)
+
+      request.resetBehavior()
+      let flushed = false
+      writer.flush(() => {
+        flushed = true
+      })
+      assert.strictEqual(flushed, true)
+    })
+
     it('should flush traces to the intake with correct headers', (done) => {
       const expectedData = Buffer.from('{"traces":[]}')
 
@@ -138,7 +279,7 @@ describe('AgentlessWriter', () => {
         assert.deepStrictEqual(request.getCall(0).args[0], expectedData)
         assertObjectContains(request.getCall(0).args[1], {
           url,
-          path: '/api/v2/spans',
+          path: '/v1/input',
           method: 'POST',
           timeout: 15_000,
           headers: {

@@ -39,7 +39,7 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    const childOf = store && allowed ? store.span : null
+    const childOf = allowed ? store?.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
