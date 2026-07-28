@@ -1,6 +1,24 @@
 import { mergeRunCoverage } from './group-coverage.mjs'
 import { logUploads, runUpload, runUploadWithRetry } from './run-upload.mjs'
 
+// Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail.
+const MAX_FLAG_LENGTH = 45
+
+/**
+ * The Codecov flag for one sibling workflow's upload, so each workflow's coverage is
+ * distinguishable in Codecov's per-flag breakdown instead of every upload sharing one flag.
+ *
+ * @param {string} workflowName
+ * @returns {string}
+ */
+function flagOf (workflowName) {
+  return workflowName
+    .toLowerCase()
+    .replaceAll(/[^\w.-]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
+    .slice(0, MAX_FLAG_LENGTH)
+}
+
 /**
  * @param {{ sha: string, branch: string, prNumber?: string }} options
  * @returns {string[]}
@@ -21,11 +39,12 @@ function codecovReportArgs (sha) {
 
 /**
  * @param {string} coverageDir
+ * @param {string} flag
  * @param {{ sha: string, prNumber?: string, eventName: string, baseRef: string }} options
  * @returns {string[]}
  */
-function codecovUploadArgs (coverageDir, { sha, prNumber, eventName, baseRef }) {
-  const args = ['do-upload', '--sha', sha, '--dir', coverageDir, '-F', 'coverage', '--fail-on-error']
+function codecovUploadArgs (coverageDir, flag, { sha, prNumber, eventName, baseRef }) {
+  const args = ['do-upload', '--sha', sha, '--dir', coverageDir, '-F', flag, '--fail-on-error']
   if (prNumber) args.push('--pr', prNumber)
   // `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only on PRs
   // targeting master so release-branch PRs auto-pass.
@@ -66,7 +85,9 @@ export function hasCodecovCommit () {
  * Merge and upload one workflow run's coverage to Datadog and Codecov, if it produced any. Only
  * lcov is uploaded: both backends read it, and this repo's `patch-istanbul-lib-coverage.js`
  * already folds branch/function hit data into lcov's `DA:` records, so no separate istanbul JSON
- * report is needed for either backend's coverage gate.
+ * report is needed for either backend's coverage gate. The Codecov upload carries a flag derived
+ * from the workflow's name (see `flagOf`) so its per-flag breakdown reflects each sibling workflow
+ * separately instead of every upload sharing one flag.
  *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
@@ -79,7 +100,7 @@ export async function uploadCoverage (run, options) {
   const datadogUpload = runUpload('datadog-ci', ['coverage', 'upload', coverageDir, '--flags', 'coverage'])
   const commitReady = await ensureCodecovCommit(options)
   const codecovUpload = commitReady
-    ? runUploadWithRetry('codecovcli', codecovUploadArgs(coverageDir, options))
+    ? runUploadWithRetry('codecovcli', codecovUploadArgs(coverageDir, flagOf(run.name), options))
     : null
 
   const results = await Promise.all([datadogUpload, codecovUpload])
@@ -98,3 +119,5 @@ export async function uploadCoverage (run, options) {
 export function sendCodecovNotifications (sha) {
   return runUploadWithRetry('codecovcli', ['send-notifications', '--sha', sha, '--fail-on-error'])
 }
+
+export { codecovUploadArgs, flagOf }
