@@ -42,20 +42,22 @@ let configurationRequestId = 0
  *
  * @param {object} message
  * @param {() => void} [onError]
+ * @param {() => void} [onDone]
  * @returns {void}
  */
-function sendWebdriverioMessage (message, onError) {
+function sendWebdriverioMessage (message, onError, onDone) {
   if (!process.send || !process.connected) {
     onError?.()
+    onDone?.()
     return
   }
 
   process.send(createWebdriverioWorkerMessage(message), (error) => {
-    if (!error) {
-      return
+    if (error) {
+      log.error('WebdriverIO Test Optimization IPC error', error)
+      onError?.()
     }
-    log.error('WebdriverIO Test Optimization IPC error', error)
-    onError?.()
+    onDone?.()
   })
 }
 
@@ -266,10 +268,12 @@ function getWebdriverioSuiteResults (runner) {
  * Sends suite results to the WebdriverIO launcher.
  *
  * @param {object} runner
+ * @param {() => void} [onDone]
  * @returns {void}
  */
-function reportWebdriverioSuiteResults (runner) {
+function reportWebdriverioSuiteResults (runner, onDone) {
   if (!isWebdriverioWorker) {
+    onDone?.()
     return
   }
 
@@ -279,7 +283,32 @@ function reportWebdriverioSuiteResults (runner) {
     content: {
       results: getWebdriverioSuiteResults(runner),
     },
-  })
+  }, undefined, onDone)
+}
+
+/**
+ * Flushes worker payloads before reporting suite results and completing Mocha.
+ *
+ * @param {object} runner
+ * @param {() => void} onDone
+ * @returns {void}
+ */
+function finishWebdriverioWorker (runner, onDone) {
+  try {
+    workerFinishCh.publish({
+      onDone: () => {
+        try {
+          reportWebdriverioSuiteResults(runner, onDone)
+        } catch (error) {
+          log.error('WebdriverIO Test Optimization worker completion error', error)
+          onDone()
+        }
+      },
+    })
+  } catch (error) {
+    log.error('WebdriverIO Test Optimization worker completion error', error)
+    onDone()
+  }
 }
 
 function isFailedTestReplayEnabled () {
@@ -376,11 +405,22 @@ addHook({
     if (isFailedTestReplayEnabled()) {
       patchFailedTestReplayHookUp(Runner)
     }
-    // Flush after the worker finishes its Mocha run, including grouped spec files.
-    this.once('end', () => {
-      workerFinishCh.publish()
-      reportWebdriverioSuiteResults(this)
-    })
+    const onRunDone = args[0]
+    if (isWebdriverioWorker && typeof onRunDone === 'function') {
+      args[0] = (...onRunDoneArgs) => {
+        finishWebdriverioWorker(this, () => onRunDone(...onRunDoneArgs))
+      }
+    } else {
+      // Flush after the worker finishes its Mocha run, including grouped spec files.
+      this.once('end', () => {
+        try {
+          workerFinishCh.publish()
+          reportWebdriverioSuiteResults(this)
+        } catch (error) {
+          log.error('WebdriverIO Test Optimization worker completion error', error)
+        }
+      })
+    }
     this.on('test', getOnTestHandler(false))
 
     this.on('test end', getOnTestEndHandler(config))
