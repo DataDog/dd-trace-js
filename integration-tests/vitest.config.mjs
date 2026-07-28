@@ -52,6 +52,13 @@ if (process.env.CUSTOM_SEQUENCER) {
   }
 }
 
+if (process.env.VITEST_HOOKS_SEQUENCE) {
+  config.test.sequence = {
+    ...config.test.sequence,
+    hooks: process.env.VITEST_HOOKS_SEQUENCE,
+  }
+}
+
 if (process.env.VITEST_RUNNER) {
   config.test.runner = process.env.VITEST_RUNNER
 }

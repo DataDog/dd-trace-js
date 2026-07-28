@@ -87,6 +87,7 @@ if (isNoWorkerInitActive) {
         }
         switchQuarantinedFinalFailure(task, attemptIndex)
       }
+      finishRumCorrelation(task, attemptIndex)
     })
   })
 
@@ -99,7 +100,6 @@ if (isNoWorkerInitActive) {
     if (!restoredEarlyFlakeDetectionResult) {
       switchQuarantinedFinalFailure(task, attemptIndex)
     }
-    finishRumCorrelation(task, attemptIndex)
   })
 }
 

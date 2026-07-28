@@ -262,6 +262,24 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('keeps RUM correlation active through user teardown hooks', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-teardown.mjs', {
+        VITEST_HOOKS_SEQUENCE: 'list',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('does not fail browser tests when correlation ID generation fails', async () => {
     const payloadsPromise = gatherEvents(events => {
       const tests = getEventContents(events, 'test')
