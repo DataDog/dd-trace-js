@@ -117,9 +117,11 @@ class Experiment {
     this.#evaluators = new Map(Object.entries(options.evaluators ?? {}))
     this.#config = {}
     this.#hasConfig = false
-    for (const [key, value] of Object.entries(options.config ?? {})) {
-      this.#config[key] = value
-      this.#hasConfig = true
+    if (options.config) {
+      for (const [key, value] of Object.entries(options.config)) {
+        this.#config[key] = value
+        this.#hasConfig = true
+      }
     }
     this.#tags = { ...options.tags }
     this.#experimentId = null
