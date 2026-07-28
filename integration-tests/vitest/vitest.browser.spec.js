@@ -261,6 +261,26 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('does not fail browser tests when correlation ID generation fails', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-crypto-failure.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-failure-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('does not treat an uninitialized RUM stub as active', async () => {
     const payloadsPromise = gatherEvents(events => {
       const [test] = getEventContents(events, 'test')

@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
@@ -198,7 +199,21 @@ function getTestFilepaths (ctx, testSpecifications) {
  */
 function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   const testSuiteAbsolutePath = path.isAbsolute(testFilepath) ? testFilepath : path.join(repositoryRoot, testFilepath)
-  return getTestSuitePath(testSuiteAbsolutePath, repositoryRoot)
+  return getTestSuitePath(realpath(testSuiteAbsolutePath), realpath(repositoryRoot))
+}
+
+/**
+ * Resolves a path without failing Test Optimization when the path is unavailable.
+ *
+ * @param {string} filepath
+ * @returns {string}
+ */
+function realpath (filepath) {
+  try {
+    return fs.realpathSync(filepath)
+  } catch {
+    return filepath
+  }
 }
 
 /**
@@ -282,6 +297,10 @@ function getTestPropertiesByFilepath (
   for (const testFilepath of testFilepaths) {
     if (typeof testFilepath !== 'string') continue
 
+    const testSuiteAbsolutePath = path.isAbsolute(testFilepath)
+      ? testFilepath
+      : path.join(repositoryRoot, testFilepath)
+    const realTestFilepath = realpath(testSuiteAbsolutePath)
     const testSuite = getNormalizedTestSuitePath(testFilepath, repositoryRoot)
     const testProperties = { testSuite }
     const hasProperties = knownTestsBySuite !== undefined ||
@@ -300,6 +319,8 @@ function getTestPropertiesByFilepath (
 
     if (hasProperties) {
       testPropertiesByFilepath[testFilepath] = testProperties
+      testPropertiesByFilepath[testSuiteAbsolutePath] = testProperties
+      testPropertiesByFilepath[realTestFilepath] = testProperties
     }
   }
 
@@ -417,7 +438,7 @@ async function runMainProcessSetup (
     return
   }
 
-  isVitestBrowserModeActive = shouldInstallBrowserReporter
+  isVitestBrowserModeActive ||= shouldInstallBrowserReporter
   let repositoryRoot = process.cwd()
   let testSessionConfiguration
   let testFilepaths
@@ -443,7 +464,7 @@ async function runMainProcessSetup (
       requestErrorTags: receivedRequestErrorTags = {},
     } = await getChannelPromise(libraryConfigurationCh, {
       frameworkVersion,
-      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || shouldInstallBrowserReporter,
+      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || isVitestBrowserModeActive,
     })
     requestErrorTags = receivedRequestErrorTags
     if (err) {
@@ -467,7 +488,11 @@ async function runMainProcessSetup (
       repositoryRoot: receivedRepositoryRoot,
       codeOwnersEntries,
     } = testSessionConfiguration
-    repositoryRoot = receivedRepositoryRoot || repositoryRoot
+    repositoryRoot = realpath(receivedRepositoryRoot || repositoryRoot)
+    testSessionConfiguration = {
+      ...testSessionConfiguration,
+      repositoryRoot,
+    }
     if (!shouldInstallNoWorkerInit) {
       setProvidedContext(ctx, {
         _ddTestSessionId: testSessionId,

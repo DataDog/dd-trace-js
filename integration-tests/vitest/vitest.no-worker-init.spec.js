@@ -366,6 +366,26 @@ describe('vitest no-worker init instrumentation selection', () => {
       assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
     })
 
+    it('disables RUM correlation when browser hooks run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            hooks: 'parallel',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
     it('keeps RUM correlation enabled when browser files run sequentially', () => {
       const ctx = getNoWorkerReporterContext()
       const project = {
@@ -374,6 +394,9 @@ describe('vitest no-worker init instrumentation selection', () => {
             enabled: true,
           },
           fileParallelism: false,
+          sequence: {
+            hooks: 'list',
+          },
         },
       }
 
@@ -1336,6 +1359,61 @@ describe('impacted test', () => {
       ]).then(([exitCode]) => exitCode)
 
       assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('normalizes no-worker setup data when the repository root is a symlink', async () => {
+      const testSuite = 'ci-visibility/vitest-tests/early-flake-detection.mjs'
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        vitest: {
+          [testSuite]: [
+            'early flake detection does not retry if it is not new',
+          ],
+        },
+      })
+
+      const linkedRepositoryRoot = path.join(
+        path.dirname(cwd),
+        `repository-link-${path.basename(cwd)}-${process.pid}`
+      )
+      fs.symlinkSync(cwd, linkedRepositoryRoot, process.platform === 'win32' ? 'junction' : 'dir')
+
+      try {
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+          const knownTests = getTestsByName(
+            getEventContents(events, 'test'),
+            'early flake detection does not retry if it is not new'
+          )
+          assert.strictEqual(knownTests.length, 1)
+          assert.ok(!(TEST_IS_NEW in knownTests[0].meta), inspect(knownTests[0].meta))
+          assert.ok(!(TEST_IS_RETRY in knownTests[0].meta), inspect(knownTests[0].meta))
+          assert.strictEqual(knownTests[0].meta[TEST_SUITE], testSuite)
+        })
+
+        const exitCode = await Promise.all([
+          runVitest({
+            CI_PROJECT_DIR: linkedRepositoryRoot,
+            GITLAB_CI: 'true',
+            POOL_CONFIG: 'forks',
+            TEST_DIR: testSuite,
+          }),
+          payloadsPromise,
+        ]).then(([exitCode]) => exitCode)
+
+        assert.strictEqual(exitCode, 0, testOutput)
+      } finally {
+        fs.unlinkSync(linkedRepositoryRoot)
+      }
     })
 
     it('uses an unmocked clock for no-worker attempt durations and EFD retries', async () => {

@@ -234,11 +234,15 @@ function generateTestExecutionId () {
   if (typeof globalThis.crypto?.getRandomValues !== 'function') return
 
   const words = new Uint32Array(2)
-  do {
+  try {
     // eslint-disable-next-line n/no-unsupported-features/node-builtins
     globalThis.crypto.getRandomValues(words)
-    words[0] &= 0x7F_FF_FF_FF
-  } while (words[0] === 0 && words[1] === 0)
+  } catch {
+    return
+  }
+
+  words[0] &= 0x7F_FF_FF_FF
+  if (words[0] === 0 && words[1] === 0) return
 
   return ((BigInt(words[0]) << 32n) | BigInt(words[1])).toString(10)
 }

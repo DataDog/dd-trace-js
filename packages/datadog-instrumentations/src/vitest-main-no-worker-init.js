@@ -170,7 +170,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
       earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
-      isRumCorrelationEnabled: !canRunBrowserTestFilesInParallel(ctx, testSpecifications),
+      isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
       quarantinedTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isQuarantined'),
@@ -1366,14 +1366,16 @@ function normalizeProjectName (name) {
 }
 
 /**
- * Returns whether Vitest can overlap browser files that share the RUM correlation cookie origin.
+ * Returns whether Vitest can overlap browser execution that shares the RUM correlation cookie origin.
  *
  * @param {object} ctx
  * @param {object[]|undefined} testSpecifications
  * @returns {boolean}
  */
-function canRunBrowserTestFilesInParallel (ctx, testSpecifications) {
-  if (!Array.isArray(testSpecifications) || testSpecifications.length < 2) return false
+function canRaceRumCorrelation (ctx, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return safeConfig(ctx)?.sequence?.hooks === 'parallel'
+  }
 
   let browserFileCount = 0
   let hasBrowserProject = false
@@ -1386,6 +1388,9 @@ function canRunBrowserTestFilesInParallel (ctx, testSpecifications) {
     ) {
       continue
     }
+
+    const config = getProjectReportingConfig(testProject) || safeConfig(ctx)
+    if (config?.sequence?.hooks === 'parallel') return true
 
     browserFileCount++
     if (hasBrowserProject && testProject !== project) return true
