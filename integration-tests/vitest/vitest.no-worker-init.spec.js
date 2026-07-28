@@ -1338,6 +1338,52 @@ describe('impacted test', () => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
+    it('uses an unmocked clock for no-worker attempt durations and EFD retries', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 1,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const tests = getTestsByName(
+          getEventContents(events, 'test'),
+          'uses real time for early flake detection with fake timers'
+        )
+        assert.strictEqual(tests.length, 3)
+        for (let index = 0; index < tests.length; index++) {
+          const test = tests[index]
+          assert.ok(
+            Number(test.duration) < 1000 * 1e6,
+            `Expected duration to use an unmocked clock, got ${Number(test.duration) / 1e6}ms`
+          )
+          if (index === 0) {
+            assert.ok(!(TEST_IS_RETRY in test.meta), inspect(test.meta))
+          } else {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
+        }
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/efd-fake-timers.mjs',
+          POOL_CONFIG: 'forks',
+          VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/fake-timers-setup.mjs',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     it('keeps a failed slow EFD test failed when remaining repeats are no-ops', async () => {
       receiver.setSettings({
         early_flake_detection: {

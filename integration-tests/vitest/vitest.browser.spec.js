@@ -449,6 +449,46 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('uses an unmocked clock for browser attempt durations and EFD retries', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+          '10s': 1,
+        },
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 3)
+      for (let index = 0; index < tests.length; index++) {
+        const test = tests[index]
+        assert.ok(
+          Number(test.duration) < 1000 * 1e6,
+          `Expected duration to use an unmocked clock, got ${Number(test.duration) / 1e6}ms`
+        )
+        if (index === 0) {
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        } else {
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+        }
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd-fake-timers.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/fake-timers-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('applies Test Management execution changes to browser tests', async () => {
     const testSuite = 'ci-visibility/vitest-browser-tests/browser-test-management.mjs'
     receiver.setSettings({

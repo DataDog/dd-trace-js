@@ -33,7 +33,14 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
-const now = globalThis.performance ? globalThis.performance.now.bind(globalThis.performance) : Date.now
+let clock = globalThis.performance
+if (globalThis.process?.versions?.node) {
+  const { performance: nodePerformance } = await import('node:perf_hooks')
+  clock = nodePerformance
+} else if (globalThis.window?.parent && globalThis.window.parent !== globalThis.window) {
+  clock = globalThis.window.parent.performance
+}
+const now = clock ? clock.now.bind(clock) : Date.now
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
@@ -491,7 +498,7 @@ function getPreviousErrorCount (errorCounts, repeatCount) {
 
 function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
   if (attemptIndex === 0) {
-    earlyFlakeDetectionStartByTask.set(task, performance.now())
+    earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
 
@@ -507,12 +514,12 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
   }
 
   if (attemptIndex <= retryCount) {
-    earlyFlakeDetectionStartByTask.set(task, performance.now())
+    earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
 
   if (!canReplaceVitestTaskFn()) {
-    earlyFlakeDetectionStartByTask.set(task, performance.now())
+    earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
 
@@ -533,7 +540,7 @@ function getEarlyFlakeDetectionRetryCount (task) {
   }
 
   const executionStart = earlyFlakeDetectionStartByTask.get(task)
-  const duration = executionStart === undefined ? task.result?.duration ?? 0 : performance.now() - executionStart
+  const duration = executionStart === undefined ? task.result?.duration ?? 0 : now() - executionStart
   for (const { key, limitMs } of earlyFlakeDetectionRetryThresholds) {
     if (duration < limitMs) {
       return earlyFlakeDetectionSlowRetries[key] ?? 0
