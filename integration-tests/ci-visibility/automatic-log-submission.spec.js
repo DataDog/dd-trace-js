@@ -17,6 +17,8 @@ const { NODE_MAJOR } = require('../../version')
 const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+// Playwright 1.62 drops Node 18 support.
+const playwrightDependency = NODE_MAJOR < 20 ? '@playwright/test@1.61.0' : '@playwright/test'
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
@@ -27,7 +29,7 @@ describe('test optimization automatic log submission', () => {
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'jest',
     'winston',
-    '@playwright/test',
+    playwrightDependency,
   ], true)
 
   before(async () => {
