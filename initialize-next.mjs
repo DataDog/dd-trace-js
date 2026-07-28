@@ -9,11 +9,10 @@ const tracer = require('.')
 // Load Next's OTel span normalization hook without enabling the legacy plugin.
 require('./packages/datadog-instrumentations/src/next')
 
-// Next's native OTel spans own the server lifecycle. Keep dd-trace's HTTP client
-// instrumentation for propagation and integrations that Next does not provide.
-// eslint-disable-next-line eslint-rules/eslint-process-env
-process.env.NEXT_OTEL_FETCH_DISABLED ??= '1'
+// Next's native OTel spans own the server lifecycle, including fetch. Keep the
+// native fetch span so distributed W3C context refers to an exported parent.
 tracer.use('http', { server: false })
+tracer.use('fetch', false)
 tracer.use('next', false)
 
 onApiReady(API, () => {
