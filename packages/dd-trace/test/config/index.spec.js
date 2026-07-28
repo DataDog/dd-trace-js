@@ -4737,6 +4737,13 @@ rules:
       assert.strictEqual(config.experimental.exporter, 'agentless')
     })
 
+    it('should flush every completed trace immediately on Vercel', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.VERCEL = '1'
+      const config = getConfig()
+      assert.strictEqual(config.flushInterval, 0)
+    })
+
     it('should disable rate limiting when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
