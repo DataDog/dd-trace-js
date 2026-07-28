@@ -2,7 +2,6 @@
 
 const id = require('../../id')
 
-const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
   buildExperimentTagObject,
@@ -17,6 +16,10 @@ const {
   validateEvaluatorName,
 } = require('./util')
 
+function mergeTags (baseTags, overrideTags) {
+  return { ...(baseTags ?? {}), ...(overrideTags ?? {}) }
+}
+
 // One span per experiment row (LLM Obs experiment span wire format).
 function toSpan (row, metadata, ids, spanName, userTags) {
   const meta = {
@@ -28,7 +31,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     meta.metadata = metadata
   }
   if (row.isError) {
-    meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: '' }
+    meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
   return {
@@ -89,6 +92,265 @@ function createFallbackSpanContext (startNs) {
   const spanId = spanIdentifier.toString(16).padStart(16, '0')
   const traceId = spanIdentifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
   return { spanId, traceId }
+}
+
+function timestampMs (value, fallback = Date.now()) {
+  if (value === null || value === undefined) return fallback
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Date.parse(String(value))
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function durationNs (row, startMs) {
+  if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
+    return Math.max(0, Math.round(row.durationMs * 1e6))
+  }
+
+  if (row.completedAt !== undefined) {
+    const completedMs = timestampMs(row.completedAt, startMs)
+    return Math.max(0, Math.round((completedMs - startMs) * 1e6))
+  }
+
+  return 0
+}
+
+function normalizeError (error) {
+  if (error === null || error === undefined) {
+    return { errorType: null, errorMessage: null, errorStack: '' }
+  }
+
+  if (typeof error === 'string') {
+    return { errorType: 'Error', errorMessage: error, errorStack: '' }
+  }
+
+  return {
+    errorType: error.type ?? error.name ?? 'Error',
+    errorMessage: error.message ?? String(error),
+    errorStack: error.stack ?? '',
+  }
+}
+
+function errorMessage (error) {
+  if (error === null || error === undefined) return null
+  if (typeof error === 'string') return error
+  return error.message ?? String(error)
+}
+
+class ExperimentRecorder {
+  #client
+  #name
+  #description
+  #config
+  #tags
+  #metadata
+  #dataset
+  #projectId
+  #experimentId
+
+  /**
+   * @param {import('./client').ExperimentsClient} client
+   * @param {object} options
+   */
+  constructor (client, options = {}) {
+    if (!options.name) throw new Error('Experiment name is required')
+
+    this.#client = client
+    this.#name = options.name
+    this.#description = options.description ?? ''
+    this.#config = { ...options.config }
+    this.#tags = { ...options.tags }
+    this.#metadata = { ...options.metadata }
+    this.#dataset = options.dataset ?? {}
+    this.#projectId = null
+    this.#experimentId = null
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  get experimentId () {
+    return this.#experimentId
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  url () {
+    if (this.#experimentId === null) return null
+    return `${this.#client.appBase}/llm/experiments/${this.#experimentId}`
+  }
+
+  /**
+   * @returns {Promise<ExperimentRecorder>}
+   */
+  async start () {
+    this.#projectId = await this.#client.ensureProjectId()
+
+    const dataset = await this.#ensureDataset()
+    const attributes = {
+      name: this.#name,
+      project_id: this.#projectId,
+      dataset_id: dataset.id,
+      description: this.#description,
+      ensure_unique: true,
+    }
+    if (dataset.version !== undefined) attributes.dataset_version = dataset.version
+    if (hasEntries(this.#config)) attributes.config = this.#config
+    if (hasEntries(this.#metadata)) attributes.metadata = this.#metadata
+    if (hasEntries(this.#tags)) attributes.tags = this.#tags
+
+    let created
+    try {
+      created = await this.#client.createExperiment(attributes)
+    } catch (err) {
+      throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
+    }
+    this.#experimentId = created.experimentId
+    return this
+  }
+
+  async #ensureDataset () {
+    if (this.#dataset.id) {
+      return { id: this.#dataset.id, version: this.#dataset.version }
+    }
+
+    const name = this.#dataset.name ?? `${this.#name} dataset`
+    const description = this.#dataset.description ?? `Placeholder dataset for externally-driven experiment '${this.#name}'`
+    let response
+    try {
+      response = await this.#client.createDataset(this.#projectId, { name, description })
+    } catch (err) {
+      throw new Error(`Failed to create placeholder dataset '${name}': ${err.message}`)
+    }
+
+    const id = response.id()
+    if (id === null) {
+      throw new Error(`Failed to create placeholder dataset '${name}': backend response is missing dataset id`)
+    }
+
+    this.#dataset = {
+      ...this.#dataset,
+      id,
+      version: this.#dataset.version ?? response.version(),
+    }
+    return { id: this.#dataset.id, version: this.#dataset.version }
+  }
+
+  /**
+   * @param {object} input
+   * @returns {Promise<{experimentId: string, spanId: string, traceId: string, url: string | null}>}
+   */
+  async submitSpan (input = {}) {
+    if (this.#experimentId === null || this.#projectId === null) {
+      throw new Error('Experiment has not been started')
+    }
+
+    const startMs = timestampMs(input.startedAt)
+    const startNs = Math.round(startMs * 1e6)
+    const { spanId, traceId } = createFallbackSpanContext(startNs)
+    const error = normalizeError(input.error)
+    const row = new Row({
+      index: input.id ?? '',
+      spanId,
+      traceId,
+      startNs,
+      durationNs: durationNs(input, startMs),
+      input: input.input,
+      output: input.output,
+      expectedOutput: input.expectedOutput,
+      errorType: error.errorType,
+      errorMessage: error.errorMessage,
+      errorStack: error.errorStack,
+      evaluations: {},
+      evaluationErrors: {},
+    })
+
+    const span = toSpan(row, input.metadata, {
+      experimentId: this.#experimentId,
+      projectId: this.#projectId,
+      datasetId: this.#dataset.id,
+      datasetRecordId: input.datasetRecordId,
+      runId: input.runId,
+      runIteration: input.runIteration,
+    }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
+
+    await this.#postEvents([span], [])
+
+    return {
+      experimentId: this.#experimentId,
+      spanId,
+      traceId,
+      url: this.url(),
+    }
+  }
+
+  /**
+   * @param {{experimentId?: string, spanId: string, traceId?: string}} span
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  async submitEvaluationMetrics (span, metrics) {
+    if (this.#experimentId === null) {
+      throw new Error('Experiment has not been started')
+    }
+    if (!span?.spanId) {
+      throw new Error('Experiment span id is required')
+    }
+
+    const experimentId = span.experimentId ?? this.#experimentId
+    const payload = []
+    for (const metric of metrics) {
+      payload.push(toMetric(
+        metric.label,
+        metric.value,
+        errorMessage(metric.error),
+        span.spanId,
+        span.traceId ?? '',
+        timestampMs(metric.timestamp),
+        experimentId,
+        mergeTags(this.#tags, metric.tags),
+        metric.source ?? 'custom'
+      ))
+    }
+
+    await this.#postEvents([], payload)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<void>}
+   */
+  async close (options = {}) {
+    if (this.#experimentId === null) return
+    const status = options.status ?? 'completed'
+    await this.#updateStatus(this.#experimentId, status, errorMessage(options.error))
+  }
+
+  /**
+   * @param {object[]} spans
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  async #postEvents (spans, metrics) {
+    await this.#client.postExperimentEvents(this.#experimentId, { spans, metrics })
+  }
+
+  /**
+   * @param {string} experimentId
+   * @param {string} status
+   * @param {string | null} error
+   * @returns {Promise<void>}
+   */
+  async #updateStatus (experimentId, status, error) {
+    const attributes = { status }
+    if (error !== null) attributes.error = error
+    try {
+      await this.#client.updateExperiment(experimentId, attributes)
+    } catch {
+      // Status update is best-effort; never let it mask the real result/error.
+    }
+  }
 }
 
 // Builder + run() orchestration: runs rows sequentially, emits one root span
@@ -172,13 +434,11 @@ class Experiment {
 
     let created
     try {
-      created = await this.#client.request('POST', `${API_BASE_PATH}/experiments`, {
-        data: { type: 'experiments', attributes },
-      })
+      created = await this.#client.createExperiment(attributes)
     } catch (err) {
       throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
     }
-    this.#experimentId = created?.data?.id ?? null
+    this.#experimentId = created.experimentId
     const experimentId = this.#experimentId
     const runId = id().toString(16).padStart(16, '0')
     const runIteration = 0
@@ -454,9 +714,7 @@ class Experiment {
   async #postEvents (experimentId, spans, metrics) {
     const attributes = { metrics }
     if (spans.length > 0) attributes.spans = spans
-    await this.#client.request('POST', `${API_BASE_PATH}/experiments/${experimentId}/events`, {
-      data: { type: 'experiments', attributes },
-    })
+    await this.#client.postExperimentEvents(experimentId, attributes)
   }
 
   async #updateStatus (experimentId, status, error) {
@@ -465,13 +723,11 @@ class Experiment {
     const attributes = { status }
     if (error !== null) attributes.error = error
     try {
-      await this.#client.request('PATCH', `${API_BASE_PATH}/experiments/${experimentId}`, {
-        data: { type: 'experiments', attributes },
-      })
+      await this.#client.updateExperiment(experimentId, attributes)
     } catch {
       // Status update is best-effort; never let it mask the real result/error.
     }
   }
 }
 
-module.exports = { Experiment, normalizeEvaluators, validateEvaluatorName }
+module.exports = { Experiment, ExperimentRecorder, normalizeEvaluators, validateEvaluatorName }
