@@ -328,19 +328,6 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * Regenerates all clone-specific identities (runtime ID, RC client ID).
-   * No-op outside a MicroVM environment to avoid breaking span correlation.
-   *
-   * @returns {this}
-   */
-  resetRuntimeId () {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    if (!this._initialized || !process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) return this
-    this.#refreshIdentity(getConfig())
-    return this
-  }
-
-  /**
    * @param {import('./config/config-base')} config
    */
   #refreshIdentity (config) {

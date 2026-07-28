@@ -1216,45 +1216,6 @@ describe('TracerProxy', () => {
 
       assert.ok(channelMock.publish.calledBefore(tracer.refreshMetadata))
     })
-
-    it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
-      microProxy.init()
-      channelMock.publish.resetHistory()
-      tracer.refreshMetadata.resetHistory()
-
-      microProxy.resetRuntimeId()
-
-      sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
-    })
-
-    it('should be a no-op from resetRuntimeId when not initialized', () => {
-      // do not call init()
-      microProxy.resetRuntimeId()
-
-      sinon.assert.notCalled(channelMock.publish)
-    })
-
-    it('should still publish and call the noop tracer when the real tracer was never constructed', () => {
-      // simulate init() having run with tracing disabled, so #updateTracing never replaced the noop tracer
-      microProxy._initialized = true
-
-      microProxy.resetRuntimeId()
-
-      sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(noop.refreshMetadata)
-    })
-
-    it('should be a no-op from resetRuntimeId when env var not set', () => {
-      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
-
-      microProxy.init()
-      channelMock.publish.resetHistory()
-
-      microProxy.resetRuntimeId()
-
-      sinon.assert.notCalled(channelMock.publish)
-    })
   })
 })
 
