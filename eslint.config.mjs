@@ -361,7 +361,9 @@ export default [
       'preserve-caught-error': 'off',
       'promise/no-new-statics': 'error',
       'promise/no-return-in-finally': 'error',
+      'promise/no-return-wrap': 'error',
       'promise/param-names': 'error',
+      'promise/valid-params': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
       'use-isnan': [ // override config from @eslint/js/recommended
@@ -468,6 +470,9 @@ export default [
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
+      // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
+      // callback, so returning the callback call would drop the event.
+      'n/callback-return': 'off',
       'n/hashbang': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -490,6 +495,9 @@ export default [
       }],
       'no-console': 'error',
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      // 107 errors, all of them the `new Promise(resolve => setTimeout(resolve, ms))` shape.
+      // `no-async-promise-executor` already covers the executor footgun that loses errors.
+      'no-promise-executor-return': 'off',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-useless-assignment': 'error',
       'no-var': 'error',
@@ -498,6 +506,9 @@ export default [
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
+      // 49 errors, all in single-flow init or test scaffolding. The one site with real
+      // concurrency (the debugger's breakpoint bookkeeping) already runs behind a lock.
+      'require-atomic-updates': 'off',
       'require-await': 'error',
       strict: 'error',
     },
@@ -539,6 +550,9 @@ export default [
 
       // --- Rules to check later ------------------
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
+      // 37 errors, all false positives: those suites are built by shared helper factories
+      // (`assertPromise`, `prepareTestServerForIast`) instead of literal `it()` calls.
+      'sonarjs/no-empty-test-file': 'off',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
@@ -589,7 +603,9 @@ export default [
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
-      'unicorn/no-unsafe-dom-html': 'error', // Not in `recommended`; guards the innerHTML sink class.
+      // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/no-unsafe-dom-html': 'error',
+      'unicorn/no-unused-properties': 'error',
 
       // Overriding recommended unicorn rules.
       // Rules not listed here are left at the `recommended` default. The entries below
@@ -685,7 +701,6 @@ export default [
       'unicorn/no-confusing-array-splice': 'off', // few
       'unicorn/no-for-each': 'off', // many | we already prefer for-of in production
       'unicorn/no-unnecessary-global-this': 'off', // few | explicit globals are clearer
-      'unicorn/no-useless-continue': 'off', // few | the one site guards third-party parser output
       'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // many
       'unicorn/prefer-ternary': 'off', // many
@@ -986,6 +1001,21 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/openfeature',
+    plugins: {
+      promise: eslintPluginPromise,
+    },
+    files: [
+      'packages/dd-trace/src/openfeature/**/*.js',
+      'packages/dd-trace/test/openfeature/**/*.js',
+    ],
+    rules: {
+      // The OpenFeature hook API defines `finally(hookContext, evalDetails)`, which the rule
+      // reads as `Promise.prototype.finally`.
+      'promise/valid-params': 'off',
     },
   },
   {

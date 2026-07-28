@@ -7,13 +7,9 @@ var isTrue = require('./util').isTrue
 var DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG
 var DD_TRACE_LOG_LEVEL = process.env.DD_TRACE_LOG_LEVEL
 
+// Numeric severities match the canonical `Level` map in `../log/channels.js`.
 var logLevels = {
-  trace: 20,
   debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  critical: 50,
   off: 100
 }
 
