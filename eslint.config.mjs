@@ -293,11 +293,11 @@ export default [
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
-      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
-      'jsdoc/require-param': 'off',
+      'jsdoc/require-param': 'error',
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
