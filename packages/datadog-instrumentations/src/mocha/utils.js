@@ -48,6 +48,58 @@ function waitForHitProbe () {
 }
 const loggedAttemptToFixTests = new Set()
 
+/**
+ * Checks whether a Mocha test failed, including serialized tests from parallel workers.
+ *
+ * @param {object} test
+ * @returns {boolean}
+ */
+function isTestFailed (test) {
+  if (test.isFailed) {
+    return test.isFailed()
+  }
+  if (test.isPending) {
+    return !test.isPending() && test.state === 'failed'
+  }
+  return false
+}
+
+/**
+ * Applies EFD and quarantine failure suppression to a completed Mocha runner.
+ *
+ * @param {object} runner
+ * @param {object} config
+ * @returns {void}
+ */
+function adjustRunnerFailuresForTestOptimization (runner, config) {
+  if (config.isEarlyFlakeDetectionEnabled) {
+    for (const tests of Object.values(efdTests)) {
+      const failingEfdTests = tests.filter(test => isTestFailed(test))
+      const areAllEfdTestsFailing = failingEfdTests.length === tests.length
+      const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+      if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+        if (runner.stats) {
+          runner.stats.failures -= nonQuarantinedFailingEfdTests.length
+        }
+        runner.failures -= nonQuarantinedFailingEfdTests.length
+      }
+    }
+  }
+
+  if (config.isTestManagementTestsEnabled) {
+    let numFailedQuarantinedTests = 0
+    for (const test of testsQuarantined) {
+      if (isTestFailed(test)) {
+        numFailedQuarantinedTests++
+      }
+    }
+    if (runner.stats) {
+      runner.stats.failures -= numFailedQuarantinedTests
+    }
+    runner.failures -= numFailedQuarantinedTests
+  }
+}
+
 function getAfterEachHooks (testOrHook) {
   const hooks = []
 
@@ -1015,4 +1067,5 @@ module.exports = {
   testsStatuses,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 }

@@ -16,6 +16,9 @@ const {
   getOnTestRetryHandler,
   getRunTestsWrapper,
   patchFailedTestReplayHookUp,
+  adjustRunnerFailuresForTestOptimization,
+  efdTests,
+  getTestFullName,
 } = require('./utils')
 const {
   CONFIGURATION_REQUEST,
@@ -30,6 +33,7 @@ require('./common')
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
+const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 
 const config = {}
 const runnerToFiles = new WeakMap()
@@ -229,9 +233,14 @@ function getWebdriverioSuiteResults (runner) {
     if (!result) {
       return
     }
-    if (test.state === 'failed' || test.timedOut || test._ddHookFailed) {
+    const hasPassingEfdAttempt = config.isEarlyFlakeDetectionEnabled &&
+      efdTests[getTestFullName(test)]?.some(attempt => attempt.state === 'passed')
+    const isSuppressedFailure =
+      (test._ddIsQuarantined && !test._ddIsAttemptToFix) ||
+      hasPassingEfdAttempt
+    if ((test.state === 'failed' || test.timedOut || test._ddHookFailed) && !isSuppressedFailure) {
       result.status = 'fail'
-    } else if (test.state === 'passed') {
+    } else if (test.state === 'passed' || isSuppressedFailure) {
       result.hasPassingTest = true
     }
   })
@@ -370,6 +379,10 @@ addHook({
     }) => {
       if (configuration) {
         Object.assign(config, configuration)
+        workerConfigurationCh.publish({
+          libraryConfig: config,
+          repositoryRoot: config.repositoryRoot,
+        })
       }
       filterSkippedFiles(runner, skippedFiles)
       if (isFailedTestReplayEnabled()) {
@@ -404,6 +417,15 @@ addHook({
     }
     if (isFailedTestReplayEnabled()) {
       patchFailedTestReplayHookUp(Runner)
+    }
+    if (isWebdriverioWorker) {
+      this.prependOnceListener('end', () => {
+        try {
+          adjustRunnerFailuresForTestOptimization(this, config)
+        } catch (error) {
+          log.error('WebdriverIO Test Optimization failure adjustment error', error)
+        }
+      })
     }
     const onRunDone = args[0]
     if (isWebdriverioWorker && typeof onRunDone === 'function') {

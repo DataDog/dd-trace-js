@@ -27,6 +27,10 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  atr: {
+    maxInstances: 1,
+    specs: ['./atr.e2e.js'],
+  },
   bail: {
     maxInstances: 1,
     mochaOpts: {
@@ -48,6 +52,14 @@ const scenarioConfig = {
       delay: true,
     },
     specs: ['./delay.e2e.js'],
+  },
+  efd: {
+    maxInstances: 1,
+    specs: ['./efd.e2e.js'],
+  },
+  failedTestReplay: {
+    maxInstances: 1,
+    specs: ['./failed-test-replay.e2e.js'],
   },
   grep: {
     maxInstances: 1,
@@ -72,6 +84,10 @@ const scenarioConfig = {
       './hook-fail.e2e.js',
       './first.e2e.js',
     ]],
+  },
+  impacted: {
+    maxInstances: 1,
+    specs: ['./impacted.e2e.js'],
   },
   loadFailure: {
     maxInstances: 1,
@@ -114,6 +130,10 @@ const scenarioConfig = {
       ui: 'tdd',
     },
     specs: ['./tdd.e2e.js'],
+  },
+  testManagement: {
+    maxInstances: 1,
+    specs: ['./test-management.e2e.js'],
   },
 }
 

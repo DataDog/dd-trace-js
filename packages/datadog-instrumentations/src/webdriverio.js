@@ -6,6 +6,9 @@ const { fileURLToPath } = require('node:url')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
+  getIsFaultyEarlyFlakeDetection,
+  getTestSuitePath,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -25,7 +28,11 @@ const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+const knownTestsCh = channel('ci:mocha:known-tests')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+const modifiedFilesCh = channel('ci:mocha:modified-files')
+const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
@@ -99,20 +106,20 @@ addHook({
  * @property {number} activeWorkers
  * @property {number} maxActiveWorkers
  * @property {number} nextWorkerId
+ * @property {Set<string>} requestedFiles
  * @property {unknown} runError
  * @property {Set<WorkerRecord>} workers
  * @property {Map<object, string>} suiteStatuses
  */
 
 /**
- * Creates the basic-reporting configuration consumed by Mocha workers.
- *
- * Advanced Test Optimization features remain disabled until they have WebdriverIO-specific coverage.
+ * Creates the configuration consumed by Mocha workers.
  *
  * @returns {object}
  */
 function createWorkerConfiguration () {
   return {
+    earlyFlakeDetectionFaultyThreshold: 30,
     earlyFlakeDetectionNumRetries: 0,
     earlyFlakeDetectionSlowTestRetries: {},
     flakyTestRetriesCount: 0,
@@ -171,6 +178,7 @@ function getCoordinatorState (localRunner) {
     activeWorkers: 0,
     maxActiveWorkers: 0,
     nextWorkerId: 0,
+    requestedFiles: new Set(),
     runError: undefined,
     workers: new Set(),
     suiteStatuses: new Map(),
@@ -245,15 +253,13 @@ function startSession (state) {
  * Completes coordinator initialization and releases waiting workers.
  *
  * @param {CoordinatorState} state
- * @param {object|undefined} response
  * @returns {void}
  */
-function completeCoordinatorInitialization (state, response) {
+function completeCoordinatorInitialization (state) {
   if (state.initialized) {
     return
   }
 
-  state.configuration.repositoryRoot = response?.repositoryRoot
   state.initialized = true
   state.initializing = false
   startSession(state)
@@ -266,9 +272,133 @@ function completeCoordinatorInitialization (state, response) {
 }
 
 /**
- * Requests settings once so the launcher owns initialization for every worker.
+ * Runs one coordinator-owned feature request.
  *
- * Settings for advanced features are intentionally ignored while WebdriverIO support is basic-reporting only.
+ * @param {CoordinatorState} state
+ * @param {import('node:diagnostics_channel').Channel} requestChannel
+ * @param {(response: object) => void} onDone
+ * @returns {void}
+ */
+function requestCoordinatorData (state, requestChannel, onDone) {
+  if (!requestChannel.hasSubscribers) {
+    onDone({ err: new Error('Test optimization was not initialized correctly') })
+    return
+  }
+
+  try {
+    requestChannel.runStores({
+      onDone: response => state.asyncResource.runInAsyncScope(onDone, undefined, response),
+    }, () => {})
+  } catch (error) {
+    log.error('WebdriverIO Test Optimization feature request error', error)
+    onDone({ err: error })
+  }
+}
+
+/**
+ * Maps backend framework data to the Mocha adapter's internal framework key.
+ *
+ * @param {object|undefined} frameworkData
+ * @returns {object|undefined}
+ */
+function getMochaFrameworkData (frameworkData) {
+  return frameworkData?.[TEST_FRAMEWORK] ?? frameworkData?.mocha
+}
+
+/**
+ * Applies settings and requests the enabled non-TIA datasets once for the whole run.
+ *
+ * @param {CoordinatorState} state
+ * @param {object|undefined} response
+ * @returns {void}
+ */
+function configureCoordinator (state, response) {
+  const { configuration } = state
+  const {
+    err,
+    isTestDynamicInstrumentationEnabled,
+    libraryConfig,
+    repositoryRoot,
+  } = response || {}
+
+  configuration.repositoryRoot = repositoryRoot
+  if (err || !libraryConfig) {
+    completeCoordinatorInitialization(state)
+    return
+  }
+
+  configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
+  configuration.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+  configuration.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+  configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+  configuration.isDiEnabled = libraryConfig.isDiEnabled
+  configuration.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+  configuration.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+  configuration.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+  configuration.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+  configuration.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
+  configuration.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+  configuration.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+
+  let pendingRequests = 1
+
+  /**
+   * Completes initialization after all enabled requests settle.
+   *
+   * @returns {void}
+   */
+  function finishRequest () {
+    pendingRequests--
+    if (pendingRequests === 0) {
+      completeCoordinatorInitialization(state)
+    }
+  }
+
+  if (configuration.isKnownTestsEnabled) {
+    pendingRequests++
+    requestCoordinatorData(state, knownTestsCh, ({ err, knownTests } = {}) => {
+      const mochaKnownTests = getMochaFrameworkData(knownTests)
+      if (err || !mochaKnownTests) {
+        configuration.isEarlyFlakeDetectionEnabled = false
+        configuration.isKnownTestsEnabled = false
+      } else {
+        configuration.knownTests = { mocha: mochaKnownTests }
+      }
+      finishRequest()
+    })
+  }
+
+  if (configuration.isTestManagementTestsEnabled) {
+    pendingRequests++
+    requestCoordinatorData(state, testManagementTestsCh, ({ err, testManagementTests } = {}) => {
+      if (err) {
+        configuration.isTestManagementTestsEnabled = false
+        configuration.testManagementAttemptToFixRetries = 0
+      } else {
+        const mochaTestManagementTests = getMochaFrameworkData(testManagementTests) || { suites: {} }
+        configuration.testManagementTests = { mocha: mochaTestManagementTests }
+      }
+      finishRequest()
+    })
+  }
+
+  if (configuration.isImpactedTestsEnabled) {
+    pendingRequests++
+    requestCoordinatorData(state, modifiedFilesCh, ({ err, modifiedFiles } = {}) => {
+      if (err) {
+        configuration.isImpactedTestsEnabled = false
+      } else {
+        configuration.modifiedFiles = modifiedFiles
+      }
+      finishRequest()
+    })
+  }
+
+  finishRequest()
+}
+
+/**
+ * Requests settings once so the launcher owns initialization for every worker.
  *
  * @param {CoordinatorState} state
  * @param {(configuration: object) => void} [onDone]
@@ -294,11 +424,12 @@ function initializeCoordinator (state, onDone) {
 
   try {
     libraryConfigurationCh.runStores({
-      basicReportingOnly: true,
+      disableTestImpactAnalysis: true,
       frameworkVersion: state.frameworkVersion,
       isParallel: state.maxActiveWorkers > 1,
+      testFramework: TEST_FRAMEWORK,
       onDone: response => state.asyncResource.runInAsyncScope(
-        completeCoordinatorInitialization,
+        configureCoordinator,
         undefined,
         state,
         response
@@ -311,7 +442,7 @@ function initializeCoordinator (state, onDone) {
 }
 
 /**
- * Starts basic-reporting suites for one worker.
+ * Starts suites for one worker.
  *
  * @param {WorkerRecord} workerRecord
  * @param {string[]} files
@@ -411,6 +542,7 @@ function handleConfigurationRequest (state, workerRecord, message) {
   const { files = [], requestId } = message.content || {}
 
   initializeCoordinator(state, (configuration) => {
+    updateEarlyFlakeDetectionFaultyState(state, files)
     startWorkerSuites(workerRecord, files)
     sendWorkerMessage(workerRecord, {
       origin: 'datadog',
@@ -421,6 +553,40 @@ function handleConfigurationRequest (state, workerRecord, message) {
       },
     })
   })
+}
+
+/**
+ * Disables EFD when the accumulated WebdriverIO run exceeds its new-suite threshold.
+ *
+ * @param {CoordinatorState} state
+ * @param {string[]} files
+ * @returns {void}
+ */
+function updateEarlyFlakeDetectionFaultyState (state, files) {
+  const { configuration } = state
+  if (!configuration.isKnownTestsEnabled) {
+    return
+  }
+
+  for (const file of files) {
+    state.requestedFiles.add(getTestSuitePath(normalizeFile(file), configuration.repositoryRoot))
+  }
+  for (const { specs } of state.workers) {
+    for (const file of specs) {
+      state.requestedFiles.add(getTestSuitePath(file, configuration.repositoryRoot))
+    }
+  }
+
+  const isFaulty = getIsFaultyEarlyFlakeDetection(
+    [...state.requestedFiles],
+    configuration.knownTests?.mocha || {},
+    configuration.earlyFlakeDetectionFaultyThreshold
+  )
+  if (isFaulty) {
+    configuration.isEarlyFlakeDetectionEnabled = false
+    configuration.isEarlyFlakeDetectionFaulty = true
+    configuration.isKnownTestsEnabled = false
+  }
 }
 
 /**
@@ -460,6 +626,8 @@ function handleWorkerMessage (state, workerRecord, message) {
         traces: payload,
         [TEST_SUITE_EXECUTION_ID]: workerRecord.testSuiteExecutionId,
       })
+    } else if (messageCode === MOCHA_WORKER_LOGS_PAYLOAD_CODE) {
+      workerReportLogsCh.publish(payload)
     }
     return
   }
@@ -615,7 +783,11 @@ function finishCoordinator (state, error, onDone) {
   testSessionFinishCh.publish({
     status: error ? 'fail' : getSessionStatus(state),
     error,
+    isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
+    isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,
     isParallel: state.maxActiveWorkers > 1,
+    isSuitesSkipped: false,
+    isTestManagementEnabled: state.configuration.isTestManagementTestsEnabled,
     onDone,
   })
 }

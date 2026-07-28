@@ -12,6 +12,7 @@ const { promisify } = require('node:util')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const {
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -170,30 +171,68 @@ describe('webdriverio instrumentation', () => {
     const testSuiteStartCh = channel('ci:mocha:test-suite:start')
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
     const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
     const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
     const sessionStarts = []
     const sessionFinishes = []
     const suiteStarts = []
     const suiteFinishes = []
+    const workerLogPayloads = []
     const workerTracePayloads = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
+    let skippableSuiteRequests = 0
     const originalNodeOptions = process.env.NODE_OPTIONS
     process.env.NODE_OPTIONS = '--require dd-trace/ci/init'
 
     function onTestFinish () {}
-    function onAdvancedFeatureRequest (request) {
+    function onKnownTestsRequest (request) {
       advancedFeatureRequests++
+      request.onDone({
+        knownTests: {
+          webdriverio: {
+            'first.spec.js': ['first test'],
+          },
+        },
+      })
+    }
+    function onModifiedFilesRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({
+        modifiedFiles: {
+          'first.spec.js': [1],
+        },
+      })
+    }
+    function onSkippableSuitesRequest (request) {
+      skippableSuiteRequests++
       request.onDone({})
+    }
+    function onTestManagementTestsRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({
+        testManagementTests: {
+          webdriverio: {
+            suites: {
+              'second.spec.js': {
+                tests: {},
+              },
+            },
+          },
+        },
+      })
     }
     function onLibraryConfiguration (request) {
       configurationRequests++
+      assert.strictEqual(request.testFramework, 'webdriverio')
+      assert.strictEqual(request.disableTestImpactAnalysis, true)
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
           earlyFlakeDetectionNumRetries: 5,
           earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+          earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
@@ -226,17 +265,21 @@ describe('webdriverio instrumentation', () => {
     function onWorkerTrace (event) {
       workerTracePayloads.push(event)
     }
+    function onWorkerLogs (event) {
+      workerLogPayloads.push(event)
+    }
 
     testFinishCh.subscribe(onTestFinish)
-    knownTestsCh.subscribe(onAdvancedFeatureRequest)
+    knownTestsCh.subscribe(onKnownTestsRequest)
     libraryConfigurationCh.subscribe(onLibraryConfiguration)
-    modifiedFilesCh.subscribe(onAdvancedFeatureRequest)
-    skippableSuitesCh.subscribe(onAdvancedFeatureRequest)
+    modifiedFilesCh.subscribe(onModifiedFilesRequest)
+    skippableSuitesCh.subscribe(onSkippableSuitesRequest)
     testSessionStartCh.subscribe(onSessionStart)
     testSessionFinishCh.subscribe(onSessionFinish)
     testSuiteStartCh.subscribe(onSuiteStart)
     testSuiteFinishCh.subscribe(onSuiteFinish)
-    testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
+    testManagementTestsCh.subscribe(onTestManagementTestsRequest)
+    workerReportLogsCh.subscribe(onWorkerLogs)
     workerReportTraceCh.subscribe(onWorkerTrace)
 
     try {
@@ -299,31 +342,51 @@ describe('webdriverio instrumentation', () => {
         name: 'workerEvent',
         args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'second-trace'],
       })
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, 'first-logs'],
+      })
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: {},
-        flakyTestRetriesCount: 0,
+        earlyFlakeDetectionFaultyThreshold: 30,
+        earlyFlakeDetectionNumRetries: 5,
+        earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+        flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
-        isDiEnabled: false,
-        isEarlyFlakeDetectionEnabled: false,
-        isFlakyTestRetriesEnabled: false,
-        isImpactedTestsEnabled: false,
+        isDiEnabled: true,
+        isEarlyFlakeDetectionEnabled: true,
+        isFlakyTestRetriesEnabled: true,
+        isImpactedTestsEnabled: true,
         isItrEnabled: false,
-        isKnownTestsEnabled: false,
+        isKnownTestsEnabled: true,
         isSuitesSkippingEnabled: false,
-        isTestDynamicInstrumentationEnabled: false,
-        isTestManagementTestsEnabled: false,
-        knownTests: {},
-        modifiedFiles: [],
+        isTestDynamicInstrumentationEnabled: true,
+        isTestManagementTestsEnabled: true,
+        knownTests: {
+          mocha: {
+            'first.spec.js': ['first test'],
+          },
+        },
+        modifiedFiles: {
+          'first.spec.js': [1],
+        },
         repositoryRoot: process.cwd(),
-        testManagementAttemptToFixRetries: 0,
-        testManagementTests: {},
+        testManagementAttemptToFixRetries: 5,
+        testManagementTests: {
+          mocha: {
+            suites: {
+              'second.spec.js': {
+                tests: {},
+              },
+            },
+          },
+        },
       })
 
       reportSuiteFinish(firstWorker, firstFile, 'fail')
@@ -334,16 +397,17 @@ describe('webdriverio instrumentation', () => {
       await finishLocalRunner(localRunner)
 
       assert.strictEqual(configurationRequests, 1)
-      assert.strictEqual(advancedFeatureRequests, 0)
+      assert.strictEqual(advancedFeatureRequests, 3)
+      assert.strictEqual(skippableSuiteRequests, 0)
       assert.strictEqual(sessionStarts.length, 1)
       assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
       assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'mocha')
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'pass')
       assert.strictEqual(sessionFinishes[0].isParallel, true)
-      assert.strictEqual('isEarlyFlakeDetectionEnabled' in sessionFinishes[0], false)
-      assert.strictEqual('isSuitesSkipped' in sessionFinishes[0], false)
-      assert.strictEqual('isTestManagementEnabled' in sessionFinishes[0], false)
+      assert.strictEqual(sessionFinishes[0].isEarlyFlakeDetectionEnabled, true)
+      assert.strictEqual(sessionFinishes[0].isTestManagementEnabled, true)
+      assert.strictEqual(sessionFinishes[0].isSuitesSkipped, false)
       assert.deepStrictEqual(suiteStarts.map(({ testSuiteAbsolutePath }) => testSuiteAbsolutePath), [
         firstFile,
         secondFile,
@@ -359,18 +423,20 @@ describe('webdriverio instrumentation', () => {
           [TEST_SUITE_EXECUTION_ID]: suiteStarts[1].testSuiteExecutionId,
         },
       ])
+      assert.deepStrictEqual(workerLogPayloads, ['first-logs'])
       assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
-      knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      knownTestsCh.unsubscribe(onKnownTestsRequest)
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
-      modifiedFilesCh.unsubscribe(onAdvancedFeatureRequest)
-      skippableSuitesCh.unsubscribe(onAdvancedFeatureRequest)
+      modifiedFilesCh.unsubscribe(onModifiedFilesRequest)
+      skippableSuitesCh.unsubscribe(onSkippableSuitesRequest)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
       testSuiteStartCh.unsubscribe(onSuiteStart)
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
-      testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      testManagementTestsCh.unsubscribe(onTestManagementTestsRequest)
+      workerReportLogsCh.unsubscribe(onWorkerLogs)
       workerReportTraceCh.unsubscribe(onWorkerTrace)
       if (originalNodeOptions === undefined) {
         delete process.env.NODE_OPTIONS

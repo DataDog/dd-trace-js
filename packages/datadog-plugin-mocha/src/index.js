@@ -60,6 +60,11 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
+    this.addSub('ci:mocha:worker:configuration', ({ libraryConfig, repositoryRoot }) => {
+      this.libraryConfig = libraryConfig
+      this._setRepositoryRoot(repositoryRoot)
+    })
+
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
