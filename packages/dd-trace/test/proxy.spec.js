@@ -1206,7 +1206,6 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
-        './microvm-identity-refresh': {},
         'dc-polyfill': diagnosticsChannelMock,
       })
 

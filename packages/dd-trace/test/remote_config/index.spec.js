@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const Capabilities = require('../../src/remote_config/capabilities')
@@ -944,6 +945,15 @@ describe('RemoteConfig', () => {
 
       // once at module load for the initial clientId, once on refresh
       sinon.assert.calledTwice(uuidStub)
+    })
+
+    it('should refresh the client id when datadog:identity:update is published', () => {
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
   })
 })

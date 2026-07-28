@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 
@@ -200,6 +201,16 @@ describe('id', () => {
       freshId.reseed()
       randomFillSyncStub.resetHistory()
 
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should reseed when datadog:identity:update is published', () => {
+      freshId()
+      randomFillSyncStub.resetHistory()
+
+      channel('datadog:identity:update').publish({ tags: {} })
       freshId()
 
       sinon.assert.calledOnce(randomFillSyncStub)
