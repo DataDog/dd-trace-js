@@ -63,9 +63,7 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * @returns {string}
  */
 function getRuntimeId () {
-  if (runtimeId === undefined) {
-    runtimeId = uuid()
-  }
+  runtimeId ??= uuid()
   return runtimeId
 }
 
@@ -181,7 +179,6 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
 }
 
 module.exports = getConfig
-module.exports.refreshRuntimeId = refreshRuntimeId
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {

@@ -278,4 +278,3 @@ module.exports = function createIdentifier (value, radix) {
 }
 
 module.exports.Identifier = Identifier
-module.exports.reseed = reseed
