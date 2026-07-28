@@ -15,7 +15,7 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
-const UNRESOLVABLE_HOST = 'not-a-threat.invalid'
+const NON_ROUTABLE_HOST = '192.0.2.1'
 
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
@@ -81,17 +81,18 @@ describe('RASP - ssrf', () => {
             const module = require(protocol)
 
             app = (req, res) => {
-              const clientRequest = module.get(`${protocol}://${req.query.host}`, function (incomingResponse) {
-                incomingResponse.resume()
+              const clientRequest = module.get(`${protocol}://${req.query.host}`)
+
+              clientRequest.on('error', noop)
+              setImmediate(() => {
+                clientRequest.destroy()
                 res.end('end')
               })
-
-              clientRequest.on('error', () => res.end('end'))
             }
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
             ])
           })
 
@@ -148,13 +149,18 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`, { proxy: false })
+              const abortController = new AbortController()
+              axiosToTest.get(`https://${req.query.host}`, { proxy: false, signal: abortController.signal })
                 .catch(noop) // swallow network error
-                .then(() => res.end('end'))
+
+              setImmediate(() => {
+                abortController.abort()
+                res.end('end')
+              })
             }
 
             await Promise.all([
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -202,13 +208,17 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              requestToTest.get(`https://${req.query.host}`, { proxy: false })
-                .on('response', () => res.end('end'))
-                .on('error', () => res.end('end'))
+              const clientRequest = requestToTest.get(`https://${req.query.host}`, { proxy: false })
+              clientRequest.on('error', noop)
+
+              setImmediate(() => {
+                clientRequest.abort()
+                res.end('end')
+              })
             }
 
             await Promise.all([
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
