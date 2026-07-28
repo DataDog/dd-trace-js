@@ -212,11 +212,7 @@ function retryTest (test, numRetries, tags, slowTestRetries) {
 }
 
 function getConfiguredEfdRetryCount (config) {
-  const { earlyFlakeDetectionSlowTestRetries } = config
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return config.earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  return getMaxEfdRetryCount(config.earlyFlakeDetectionSlowTestRetries) ?? config.earlyFlakeDetectionNumRetries
 }
 
 function getSuitesByTestFile (root) {

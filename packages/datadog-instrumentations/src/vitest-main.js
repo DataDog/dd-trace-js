@@ -72,10 +72,7 @@ let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
 
 function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
-  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
-    return fallbackRetryCount
-  }
-  return getMaxEfdRetryCount(slowTestRetries)
+  return getMaxEfdRetryCount(slowTestRetries) ?? fallbackRetryCount
 }
 
 function getTestCommand () {

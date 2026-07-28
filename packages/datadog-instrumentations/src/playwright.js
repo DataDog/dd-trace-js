@@ -206,10 +206,7 @@ function getTestEfdKey (test) {
 }
 
 function getConfiguredEfdRetryCount () {
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries) ?? earlyFlakeDetectionNumRetries
 }
 
 function markEfdManagedTest (test) {

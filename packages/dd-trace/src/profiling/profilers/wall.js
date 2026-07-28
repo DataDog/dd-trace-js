@@ -470,7 +470,7 @@ class NativeWallProfiler {
     if (rootSpanId !== undefined) {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = toBigInt(rootSpanId)
     }
-    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
+    if (webTags !== undefined) {
       labels[TRACE_ENDPOINT_LABEL] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken

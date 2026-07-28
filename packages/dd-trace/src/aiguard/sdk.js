@@ -182,12 +182,14 @@ class AIGuard extends NoopAIGuard {
     if (!req) return
 
     const newTags = {}
+    let hasNewTags = false
 
     if (needsHttpClientIp) {
       const clientIp = extractIp(this.#config, req)
 
       if (clientIp) {
         newTags[HTTP_CLIENT_IP] = clientIp
+        hasNewTags = true
       }
     }
 
@@ -196,10 +198,11 @@ class AIGuard extends NoopAIGuard {
 
       if (networkClientIp) {
         newTags[NETWORK_CLIENT_IP] = networkClientIp
+        hasNewTags = true
       }
     }
 
-    if (Object.keys(newTags).length > 0) {
+    if (hasNewTags) {
       rootSpan.addTags(newTags)
     }
   }

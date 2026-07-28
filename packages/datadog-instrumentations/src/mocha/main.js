@@ -66,7 +66,7 @@ const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
 let skippedSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
@@ -185,12 +185,6 @@ function getFilteredSuites (originalSuites) {
   }, { suitesToRun: [], skippedSuites: new Set(), suitesToSkipForRun })
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function isTiaCoverageBackfillEnabled () {
   return config.isItrEnabled && config.isCoverageReportUploadEnabled
 }
@@ -221,7 +215,7 @@ function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
 }
 
 function getSkippedSuitesCoverageForRun () {
-  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && skippableSuitesCoverage !== undefined
     ? skippableSuitesCoverage
     : {}
 }
@@ -238,7 +232,7 @@ function getMochaTestSessionCoverageFiles () {
 function resetSuiteSkippingRunState () {
   isSuitesSkipped = false
   skippedSuites = []
-  skippableSuitesCoverage = {}
+  skippableSuitesCoverage = undefined
   skippedSuitesCoverage = {}
   untestedCoverage = undefined
   config.repositoryRoot = undefined
@@ -443,11 +437,11 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     } = response || {}
     if (!response || err) {
       suitesToSkip = []
-      skippableSuitesCoverage = {}
+      skippableSuitesCoverage = undefined
     } else {
       suitesToSkip = skippableSuites
       itrCorrelationId = responseItrCorrelationId
-      skippableSuitesCoverage = responseSkippableSuitesCoverage || {}
+      skippableSuitesCoverage = responseSkippableSuitesCoverage
     }
     if (localSuites) {
       suitesToSkip = getSuitesToSkipFromPaths(localSuites)

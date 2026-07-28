@@ -40,6 +40,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     output: row.output ?? null,
     expected_output: row.expectedOutput ?? null,
   }
+  // eslint-disable-next-line no-restricted-syntax -- no key to probe; omitting vs sending {} is observable
   if (metadata && Object.keys(metadata).length > 0) {
     meta.metadata = metadata
   }
@@ -99,6 +100,7 @@ class Experiment {
   #task
   #evaluators
   #config
+  #hasConfig
   #tags
   #experimentId
 
@@ -113,7 +115,14 @@ class Experiment {
     this.#dataset = options.dataset
     this.#task = options.task
     this.#evaluators = new Map(Object.entries(options.evaluators ?? {}))
-    this.#config = { ...options.config }
+    this.#config = {}
+    this.#hasConfig = false
+    if (options.config) {
+      for (const [key, value] of Object.entries(options.config)) {
+        this.#config[key] = value
+        this.#hasConfig = true
+      }
+    }
     this.#tags = { ...options.tags }
     this.#experimentId = null
   }
@@ -149,7 +158,7 @@ class Experiment {
       description: this.#description,
       ensure_unique: true,
     }
-    if (Object.keys(this.#config).length > 0) attributes.config = this.#config
+    if (this.#hasConfig) attributes.config = this.#config
 
     let created
     try {
@@ -199,12 +208,14 @@ class Experiment {
         const durationNs = Number(process.hrtime.bigint() - startHr)
         const evaluations = {}
         const evaluationErrors = {}
+        let hasEvaluationError = false
         const timestampMs = Date.now()
 
         for (const [label, evaluator] of this.#evaluators) {
           if (errorType !== null) {
             const msg = 'task error; evaluation skipped'
             evaluationErrors[label] = msg
+            hasEvaluationError = true
             metrics.push(toMetric(label, null, msg, spanId, timestampMs, experimentId, this.#tags))
             continue
           }
@@ -216,6 +227,7 @@ class Experiment {
           } catch (err) {
             const msg = err.message ?? String(err)
             evaluationErrors[label] = msg
+            hasEvaluationError = true
             metrics.push(toMetric(label, null, msg, spanId, timestampMs, experimentId, this.#tags))
           }
         }
@@ -235,7 +247,7 @@ class Experiment {
           evaluationErrors,
         })
         rows.push(row)
-        if (row.isError || Object.keys(evaluationErrors).length > 0) hasRowError = true
+        if (row.isError || hasEvaluationError) hasRowError = true
         spans.push(toSpan(row, record.metadata, {
           experimentId,
           projectId,

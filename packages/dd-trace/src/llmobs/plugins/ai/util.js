@@ -228,6 +228,7 @@ function getJsonStringValue (str, defaultValue) {
 function getModelMetadata (tags) {
   /** @type {Record<string, unknown>} */
   const modelMetadata = {}
+  let hasModelMetadata = false
   for (const tag of Object.keys(tags)) {
     const isModelMetadata = tag.startsWith(VERCEL_AI_MODEL_METADATA_PREFIX)
     if (isModelMetadata) {
@@ -235,6 +236,7 @@ function getModelMetadata (tags) {
       const metadataKey = lastCommaPosition === -1 ? tag : tag.slice(lastCommaPosition + 1)
       if (metadataKey && MODEL_METADATA_KEYS.has(metadataKey)) {
         modelMetadata[metadataKey] = tags[tag]
+        hasModelMetadata = true
       }
     } else {
       const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
@@ -242,12 +244,13 @@ function getModelMetadata (tags) {
         const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
         if (metadataKey) {
           modelMetadata[metadataKey] = tags[tag]
+          hasModelMetadata = true
         }
       }
     }
   }
 
-  return Object.keys(modelMetadata).length ? modelMetadata : null
+  return hasModelMetadata ? modelMetadata : null
 }
 
 /**
@@ -259,6 +262,7 @@ function getModelMetadata (tags) {
 function getGenerationMetadata (tags) {
   /** @type {Record<string, unknown>} */
   const metadata = {}
+  let hasMetadata = false
 
   for (const tag of Object.keys(tags)) {
     const isGenerationMetadata = tag.startsWith(VERCEL_AI_GENERATION_METADATA_PREFIX)
@@ -270,18 +274,20 @@ function getGenerationMetadata (tags) {
 
       const settingValue = tags[tag]
       metadata[settingKey] = settingValue
+      hasMetadata = true
     } else {
       const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
       if (isTelemetryMetadata) {
         const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
         if (metadataKey) {
           metadata[metadataKey] = tags[tag]
+          hasMetadata = true
         }
       }
     }
   }
 
-  return Object.keys(metadata).length ? metadata : null
+  return hasMetadata ? metadata : null
 }
 
 /**
@@ -293,21 +299,26 @@ function getGenerationMetadata (tags) {
 function getGenerationMetadataFromEvent (event) {
   /** @type {Record<string, unknown>} */
   const metadata = {}
+  let hasMetadata = false
 
   for (const [key, value] of Object.entries(event)) {
     const transformedKey = key.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
     if (!MODEL_METADATA_KEYS.has(transformedKey)) {
-      if (key === 'runtimeContext') { // custom telemetry metadata
-        Object.assign(metadata, value)
+      if (key === 'runtimeContext' && value !== null && typeof value === 'object') { // custom telemetry metadata
+        for (const [contextKey, contextValue] of Object.entries(value)) {
+          metadata[contextKey] = contextValue
+          hasMetadata = true
+        }
       }
 
       continue
     }
 
     metadata[transformedKey] = value
+    hasMetadata = true
   }
 
-  return Object.keys(metadata).length ? metadata : null
+  return hasMetadata ? metadata : null
 }
 
 /**
@@ -432,6 +443,7 @@ function getLlmObsSpanName (operation, functionId) {
  */
 function getTelemetryMetadata (tags) {
   const metadata = {}
+  let hasMetadata = false
 
   for (const tag of Object.keys(tags)) {
     if (!tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)) continue
@@ -439,10 +451,11 @@ function getTelemetryMetadata (tags) {
     const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
     if (metadataKey) {
       metadata[metadataKey] = tags[tag]
+      hasMetadata = true
     }
   }
 
-  return Object.keys(metadata).length ? metadata : null
+  return hasMetadata ? metadata : null
 }
 
 module.exports = {

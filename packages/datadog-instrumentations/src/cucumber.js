@@ -97,7 +97,7 @@ let pickleByFile = {}
 const pickleResultByFile = {}
 
 let skippableSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
@@ -127,12 +127,6 @@ function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function isTiaCoverageBackfillEnabled () {
   return isItrEnabled && isCoverageReportUploadEnabled
 }
@@ -146,7 +140,7 @@ function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
 }
 
 function getSkippedSuitesCoverageForRun () {
-  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && skippableSuitesCoverage !== undefined
     ? skippableSuitesCoverage
     : {}
 }
@@ -162,7 +156,7 @@ function getCucumberTestSessionCoverageFiles () {
 
 function resetSuiteSkippingRunState () {
   skippableSuites = []
-  skippableSuitesCoverage = {}
+  skippableSuitesCoverage = undefined
   skippedSuitesCoverage = {}
   skippedSuites = []
   isSuitesSkipped = false
@@ -1102,7 +1096,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
-      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage ?? {}
+      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator

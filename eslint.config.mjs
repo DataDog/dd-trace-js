@@ -80,6 +80,37 @@ const GLOBAL_RESTRICTED_REQUIRES = [
   },
 ]
 
+const SRC_RESTRICTED_SYNTAX = [
+  {
+    // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+    // `toString()` and run in chromium — coverage counters inside would ReferenceError.
+    selector:
+      "CallExpression[callee.property.name='evaluate']" +
+      ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+    message:
+      'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+      '(NYC-excluded in nyc.config.js) and import it here.',
+  },
+  {
+    // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
+    // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
+    selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
+    message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
+  },
+]
+
+// Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
+const OBJECT_KEYS_LENGTH_PROBE = {
+  selector:
+    ':matches(BinaryExpression[right.value=0], BinaryExpression[left.value=0], UnaryExpression[operator="!"],' +
+    ' IfStatement, ConditionalExpression, LogicalExpression, WhileStatement, DoWhileStatement)' +
+    " > MemberExpression[property.name='length']" +
+    " > CallExpression[callee.object.name='Object'][callee.property.name='keys']",
+  message: 'Do not probe emptiness with `Object.keys(obj).length`; the keys array is allocated on every call. ' +
+    'Track presence with a boolean at the assignment site, probe a known key (`obj.field !== undefined`), or ' +
+    'return `undefined` when there is nothing to report instead of an empty object.',
+}
+
 export default [
   {
     name: 'dd-trace/global-ignore',
@@ -552,21 +583,7 @@ export default [
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
-      'no-restricted-syntax': ['error', {
-        // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
-        // `toString()` and run in chromium — coverage counters inside would ReferenceError.
-        selector:
-          "CallExpression[callee.property.name='evaluate']" +
-          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
-        message:
-          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(NYC-excluded in nyc.config.js) and import it here.',
-      }, {
-        // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
-        // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
-        selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
-        message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
-      }],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX],
 
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
@@ -684,6 +701,16 @@ export default [
       'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // many
       'unicorn/prefer-ternary': 'off', // many
+    },
+  },
+  {
+    name: 'dd-trace/packages/src',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
     },
   },
   {

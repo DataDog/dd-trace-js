@@ -401,6 +401,7 @@ class OpenAIAgentsIntegration {
 
     this.#tagger.tagTextIO(ddSpan, inputValue, outputValue)
 
+    // eslint-disable-next-line no-restricted-syntax -- SDK trace metadata has no key to probe; tagging {} is observable
     if (info.metadata && Object.keys(info.metadata).length > 0) {
       this.#tagger.tagMetadata(ddSpan, info.metadata)
     }

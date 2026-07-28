@@ -111,6 +111,7 @@ class Dataset {
       if (rec.expectedOutput !== null && rec.expectedOutput !== undefined) {
         out.expected_output = rec.expectedOutput
       }
+      // eslint-disable-next-line no-restricted-syntax -- no key to probe; omitting vs sending {} is observable
       if (rec.metadata && Object.keys(rec.metadata).length > 0) {
         out.metadata = rec.metadata
       }
