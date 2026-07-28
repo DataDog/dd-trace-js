@@ -90,6 +90,13 @@ describe('sdk', () => {
     }
   })
 
+  describe('experiments', () => {
+    it('exposes dataset operations only through the experiments facade', () => {
+      assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+      assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
+    })
+  })
+
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
       const config = getConfigFresh({})
