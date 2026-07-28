@@ -1,30 +1,43 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const path = require('node:path')
 
 const { describe, it } = require('mocha')
-const nock = require('nock')
 
-const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
+const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
-const cassetteDir = path.join(__dirname, 'cassettes')
+function defaultAppendRecordAttributes (_record, index) {
+  return { id: `rec-${index}`, valid_from_version: 2 }
+}
 
-nock.back.fixtures = cassetteDir
-
-async function withCassette (name, fn) {
-  nock.back.setMode('lockdown')
-  const { nockDone, context } = await nock.back(name)
-  try {
-    await fn()
-    context.assertScopesFinished()
-  } finally {
-    nockDone()
-    nock.cleanAll()
-    nock.enableNetConnect()
-    nock.back.setMode('wild')
+function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes } = {}) {
+  const requests = []
+  return {
+    appBase: 'https://app.datadoghq.com',
+    requests,
+    ensureProjectId: async () => 'proj',
+    request: async (method, requestPath, body) => {
+      requests.push({ method, path: requestPath, body })
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
+        return { data: { id: 'ds', attributes: { current_version: 1 } } }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets/ds/records`) {
+        return {
+          data: body.data.attributes.records.map((record, index) => ({
+            id: record.id ?? `rec-${index}`,
+            attributes: appendRecordAttributes(record, index),
+          })),
+        }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments`) {
+        return { data: { id: 'exp' } }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments/exp/events`) return {}
+      if (method === 'PATCH' && requestPath === `${API_BASE_PATH}/experiments/exp`) return {}
+      throw new Error(`Unexpected request ${method} ${requestPath}`)
+    },
   }
 }
 
@@ -36,65 +49,67 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     projectName: 'my-app',
   })
 
-  it('runs an experiment with recorded control-plane responses', async () => {
-    await withCassette('experiment-run-success.json', async () => {
-      const dataset = new Dataset(client(), 'demo', 'desc')
-        .addRecord({ q: 'apple' }, 'true', { row: 0 })
-        .addRecord({ q: 'car' }, 'false', { row: 1 })
+  it('runs an experiment and returns rows, ids and dashboard URLs', async () => {
+    const c = stubClient()
+    const dataset = new Dataset(c, 'demo', 'desc')
+      .addRecord({ q: 'apple' }, 'true', { row: 0 })
+      .addRecord({ q: 'car' }, 'false', { row: 1 })
 
-      const result = await new Experiment(client(), {
-        name: 'exp-demo',
-        description: 'desc exp',
-        dataset,
-        task: (input) => ({ answer: input.q.toUpperCase() }),
-        evaluators: {
-          nonempty: (_input, output) => output.answer.length > 0,
-          len: (_input, output) => output.answer.length,
-          label: (_input, output) => (output.answer === 'APPLE' ? 'match' : 'miss'),
-        },
-        config: { temperature: 0 },
-        tags: { env: 'test' },
-      }).run()
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      description: 'desc exp',
+      dataset,
+      task: (input) => ({ answer: input.q.toUpperCase() }),
+      evaluators: {
+        nonempty: (_input, output) => output.answer.length > 0,
+        len: (_input, output) => output.answer.length,
+        label: (_input, output) => (output.answer === 'APPLE' ? 'match' : 'miss'),
+      },
+      config: { temperature: 0 },
+      tags: { env: 'test' },
+    }).run()
 
-      assert.equal(result.experimentId, 'exp')
-      assert.equal(result.url, 'https://app.datadoghq.com/llm/experiments/exp')
-      assert.equal(result.rows.length, 2)
-      assert.deepEqual(result.rows[0].output, { answer: 'APPLE' })
-      assert.equal(result.rows[0].evaluations.nonempty, true)
-      assert.equal(result.rows[0].evaluations.len, 5)
-      assert.equal(result.rows[0].evaluations.label, 'match')
-      assert.equal(dataset.id(), 'ds')
-      assert.equal(dataset.version(), 2)
-      assert.deepEqual(dataset.recordIds(), ['rec-0', 'rec-1'])
-      assert.equal(dataset.url(), 'https://app.datadoghq.com/llm/datasets/ds')
-    })
+    assert.equal(result.experimentId, 'exp')
+    assert.equal(result.url, 'https://app.datadoghq.com/llm/experiments/exp')
+    assert.equal(result.rows.length, 2)
+    assert.deepEqual(result.rows[0].output, { answer: 'APPLE' })
+    assert.equal(result.rows[0].evaluations.nonempty, true)
+    assert.equal(result.rows[0].evaluations.len, 5)
+    assert.equal(result.rows[0].evaluations.label, 'match')
+    assert.equal(dataset.id(), 'ds')
+    assert.equal(dataset.version(), 2)
+    assert.deepEqual(dataset.recordIds(), ['rec-0', 'rec-1'])
+    assert.equal(dataset.url(), 'https://app.datadoghq.com/llm/datasets/ds')
   })
 
-  it('submits custom record ids with recorded append responses', async () => {
-    await withCassette('dataset-push-custom-record-ids.json', async () => {
-      const dataset = new Dataset(client(), 'demo')
-        .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
-        .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
+  it('submits custom record ids with append responses', async () => {
+    const dataset = new Dataset(stubClient(), 'demo')
+      .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
+      .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
 
-      const result = await dataset.push()
+    const result = await dataset.push()
 
-      assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
-      assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
-      assert.deepEqual(dataset.records().map(record => record.id), ['custom-a', 'custom-b'])
-      assert.equal(dataset.version(), 2)
-      assert.equal(dataset.latestVersion(), 2)
-    })
+    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
+    assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
+    assert.deepEqual(dataset.records().map(record => record.id), ['custom-a', 'custom-b'])
+    assert.equal(dataset.version(), 2)
+    assert.equal(dataset.latestVersion(), 2)
   })
 
-  it('surfaces recorded backend failures', async () => {
-    await withCassette('dataset-create-failure.json', async () => {
-      const dataset = new Dataset(client(), 'demo').addRecord('a')
+  it('surfaces backend failures', async () => {
+    const c = stubClient()
+    c.request = async (method, requestPath) => {
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
+        throw new Error('HTTP 500 boom')
+      }
+      throw new Error(`Unexpected request ${method} ${requestPath}`)
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('a')
 
-      await assert.rejects(
-        () => dataset.push(),
-        /Failed to create dataset 'demo'.*HTTP 500 boom/
-      )
-    })
+    await assert.rejects(
+      () => dataset.push(),
+      /Failed to create dataset 'demo'.*HTTP 500 boom/
+    )
   })
 
   it('validates required options', () => {
