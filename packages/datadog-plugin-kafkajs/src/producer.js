@@ -29,12 +29,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   /**
    *
    * @typedef {object} ProducerResponseItem
-   * @property {string} topic
+   * @property {string} topicName
    * @property {number} partition
    * @property {import('kafkajs/utils/long').Long} [offset]
    * @property {import('kafkajs/utils/long').Long} [baseOffset]
    *
    * @param {ProducerResponseItem} response
+   * @param {string} [clusterId]
    * @returns {ProducerBacklog}
    */
   transformProduceResponse (response, clusterId) {
