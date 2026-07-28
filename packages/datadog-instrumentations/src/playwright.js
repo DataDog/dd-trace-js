@@ -12,7 +12,7 @@ const {
   EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
-  shouldSkipEfdRetry: shouldSkipRetryIndex,
+  shouldSkipEfdRetry,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   parseAnnotations,
@@ -406,12 +406,12 @@ function waitForEfdRetryCount (test) {
   })
 }
 
-function shouldSkipEfdRetry (test) {
+function shouldSkipEfdRetryTest (test) {
   if (!test._ddIsEfdRetry) {
     return false
   }
   const retryCount = test._ddEfdRetryCount ?? efdRetryCountByTestKey.get(getTestEfdKey(test))
-  return shouldSkipRetryIndex(test._ddEfdRetryIndex, retryCount)
+  return shouldSkipEfdRetry(test._ddEfdRetryIndex, retryCount)
 }
 
 function getTestProperties (test) {
@@ -693,7 +693,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
-  if (shouldSkipEfdRetry(test)) {
+  if (shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     return
   }
@@ -838,7 +838,7 @@ function testEndHandler ({
     return
   }
 
-  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetry(test)) {
+  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(currentTest => currentTest !== test)
@@ -2013,7 +2013,7 @@ function instrumentWorkerMainMethods (workerMain) {
       test.expectedStatus = 'skipped'
     }
     await waitForEfdRetryCount(test)
-    if (shouldSkipEfdRetry(test)) {
+    if (shouldSkipEfdRetryTest(test)) {
       test._ddShouldSkipEfdRetry = true
       test.expectedStatus = 'skipped'
     }

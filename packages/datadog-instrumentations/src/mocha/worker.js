@@ -79,7 +79,7 @@ function applyMochaOptions (options) {
     config.isKnownTestsEnabled = true
     config.isEarlyFlakeDetectionEnabled = options._ddIsEfdEnabled
     config.knownTests = options._ddKnownTests
-    config.earlyFlakeDetectionRetryPolicy = options._ddEfdRetryPolicy
+    config.earlyFlakeDetectionRetryPolicy = options._ddEfdRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     delete options._ddIsEfdEnabled
     delete options._ddKnownTests
     delete options._ddEfdRetryPolicy

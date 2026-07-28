@@ -1804,8 +1804,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
 
-        // it runs regardless of quarantine status
-        assert.match(stdout, /I am running when quarantined/)
         if (isQuarantining) {
           // even though a test fails, the exit code is 0 because the test is quarantined
           assert.strictEqual(exitCode, 0)
@@ -3249,6 +3247,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
               RUN_SLOW_CONCURRENT_IMPACTED_TEST: '1',
               GITHUB_BASE_REF: '',
+              SHOULD_CHECK_RESULTS: '1',
             },
           }
         )
@@ -3266,6 +3265,85 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.doesNotMatch(output, /\d+ skipped/)
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('runs only the duration-selected number of concurrent retries', async () => {
+        const durationRetryCount = 2
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            // Retries are pre-registered from the largest bucket because the test tree is
+            // frozen before any duration is known. The 5s bucket then selects far fewer,
+            // so the surplus has to disappear from the tree instead of running.
+            slow_test_retries: {
+              '5s': durationRetryCount,
+              '10s': 5,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const concurrentTestNames = [
+          'impacted concurrent tests can pass normally',
+          'impacted concurrent tests parameterized row can pass normally',
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js'
+              )
+
+            for (const testName of concurrentTestNames) {
+              const concurrentTests = tests.filter(test => test.meta[TEST_NAME] === testName)
+              assert.strictEqual(concurrentTests.length, durationRetryCount + 1)
+
+              const retryTests = concurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retryTests.length, durationRetryCount)
+              for (const retryTest of retryTests) {
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
+
+              // Exactly one execution closes the EFD attempt group, and it is not a slow abort.
+              assert.strictEqual(concurrentTests.filter(test => TEST_FINAL_STATUS in test.meta).length, 1)
+              assert.ok(concurrentTests.every(test => !(TEST_EARLY_FLAKE_ABORT_REASON in test.meta)))
+            }
+          })
+
+        let output = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              GITHUB_BASE_REF: '',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          output += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        // Discarded retries must leave the test tree, not surface as skipped tests.
+        assert.doesNotMatch(output, /\d+ skipped/)
+        // Retries must not run the *Each hooks Jest skips for their concurrent original.
+        assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)
       })
 

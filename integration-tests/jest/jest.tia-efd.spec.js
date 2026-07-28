@@ -1723,6 +1723,302 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
+    it('keeps concurrent originals and EFD retries concurrent', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-sibling-test.js'
+      const newTestName = 'early flake detection concurrent siblings new test waits for its known sibling'
+      const knownTestName = 'early flake detection concurrent siblings known sibling releases the new test'
+      const concurrentRetryTestName = 'early flake detection concurrent siblings runs its retries concurrently'
+      receiver.setKnownTests({ jest: { [testSuite]: [knownTestName] } })
+      const SCHEDULED_RETRIES = 5
+      const SELECTED_RETRIES = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': SELECTED_RETRIES,
+            '10s': SCHEDULED_RETRIES,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          const newTests = tests.filter(test => test.meta[TEST_NAME] === newTestName)
+          assert.strictEqual(newTests.length, SELECTED_RETRIES + 1)
+          for (const test of newTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+          assert.strictEqual(newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, SELECTED_RETRIES)
+
+          const knownTests = tests.filter(test => test.meta[TEST_NAME] === knownTestName)
+          assert.strictEqual(knownTests.length, 1)
+          assert.strictEqual(knownTests[0].meta[TEST_STATUS], 'pass')
+          assert.ok(!(TEST_IS_RETRY in knownTests[0].meta))
+
+          const concurrentRetryTests = tests.filter(test => test.meta[TEST_NAME] === concurrentRetryTestName)
+          assert.strictEqual(concurrentRetryTests.length, SELECTED_RETRIES + 1)
+          assert.strictEqual(
+            concurrentRetryTests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
+            SELECTED_RETRIES - 1
+          )
+          assert.strictEqual(
+            concurrentRetryTests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
+            2
+          )
+          assert.strictEqual(
+            concurrentRetryTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+            SELECTED_RETRIES
+          )
+          const finalTests = concurrentRetryTests.filter(test => TEST_FINAL_STATUS in test.meta)
+          assert.strictEqual(finalTests.length, 1)
+          assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            ...(
+              JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29
+                ? { JEST_RANDOMIZE: '1', JEST_SEED: '4' }
+                : {}
+            ),
+            EFD_RETRY_COUNT: String(SELECTED_RETRIES),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-sibling-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('retries a concurrent test after its original times out', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-timeout-test.js'
+      receiver.setKnownTests({ jest: {} })
+      const RETRY_COUNT = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': RETRY_COUNT,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          assert.deepStrictEqual(
+            tests.map(test => test.meta[TEST_STATUS]).sort(),
+            ['fail', 'pass', 'pass', 'pass']
+          )
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, RETRY_COUNT)
+          const finalTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
+          assert.strictEqual(finalTests.length, 1)
+          assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-timeout-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('retries a new test that takes a done callback', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/callback-test.js'
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          assert.deepStrictEqual(
+            tests.map(test => test.meta[TEST_STATUS]),
+            Array.from({ length: NUM_RETRIES + 1 }, () => 'pass')
+          )
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, NUM_RETRIES)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/callback-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    onlyLatestIt('runs concurrent done-callback retries concurrently', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-callback-test.js'
+      receiver.setKnownTests({ jest: {} })
+      const RETRY_COUNT = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': RETRY_COUNT,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          assert.strictEqual(tests.length, RETRY_COUNT + 1)
+          assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, RETRY_COUNT)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            EFD_RETRY_COUNT: String(RETRY_COUNT),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-callback-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('does not report the retries of a new test that Jest skips', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/focused-test.js'
+      const focusSkippedName = 'early flake detection focus new test skipped by focus'
+      const blockSkippedName = 'early flake detection skipped block new test inside a skipped block'
+      receiver.setKnownTests({ jest: { [testSuite]: ['early flake detection focus known focused test'] } })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const statusesByName = {}
+          for (const { content } of payloads.flatMap(({ payload }) => payload.events)) {
+            const testName = content.meta?.[TEST_NAME]
+            if (testName === focusSkippedName || testName === blockSkippedName) {
+              statusesByName[testName] ??= []
+              statusesByName[testName].push(content.meta[TEST_STATUS])
+            }
+          }
+
+          assert.deepStrictEqual(statusesByName, {
+            [focusSkippedName]: ['skip'],
+            [blockSkippedName]: ['skip'],
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/focused-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // fail-test.js will be considered new and will always fail
@@ -2102,6 +2398,82 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('keeps every test runnable when Jest randomizes the order of retries', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      let testOutput = ''
+
+      // The fast test picks the '5s' budget, so 3 of the 5 scheduled retries are surplus.
+      const SCHEDULED_RETRIES = 5
+      const SELECTED_RETRIES = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': SELECTED_RETRIES,
+            '10s': SCHEDULED_RETRIES,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const executionsByName = {}
+          for (const { type, content } of payloads.flatMap(({ payload }) => payload.events)) {
+            if (type === 'test') {
+              executionsByName[content.meta[TEST_NAME]] ??= 0
+              executionsByName[content.meta[TEST_NAME]]++
+            }
+          }
+
+          const { 'ci visibility can report tests': retriedTestExecutions, ...otherExecutions } = executionsByName
+          // Jest shuffles the retries in among the tests they were registered next to. Discarding a
+          // surplus retry must not remove the test that took its place, and a surplus retry shuffled
+          // ahead of the original runs before its budget is known.
+          assert.deepStrictEqual(otherExecutions, {
+            'ci visibility skip will not be retried': 1,
+            'ci visibility todo will not be retried': 1,
+          })
+          assert.ok(
+            retriedTestExecutions >= SELECTED_RETRIES + 1 && retriedTestExecutions <= SCHEDULED_RETRIES + 1,
+            `expected 3 to 6 executions of the new test, got ${retriedTestExecutions}`
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test',
+            JEST_RANDOMIZE: '1',
+            // Seed 4 shuffles a surplus retry ahead of the test it was registered for.
+            JEST_SEED: '4',
+            SHOULD_CHECK_RESULTS: '1',
+            USE_JEST_RUN: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+      assert.match(testOutput, /Seed:\s+4/, 'Jest ran with a randomized order')
     })
 
     it('handles spaces in test names', (done) => {
@@ -3902,6 +4274,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/parallel-test-hit-breakpoint-',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_GIT_REPOSITORY_URL: 'https://github.com/DataDog/dd-trace-js',
             RUN_IN_PARALLEL: 'true',
           },
         }

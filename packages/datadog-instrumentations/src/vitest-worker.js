@@ -6,9 +6,7 @@ const { fileURLToPath } = require('node:url')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const {
-  getEfdRetryCountForDuration,
-} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getEfdRetryCountForDuration } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   DYNAMIC_NAME_RE,
   getTestSuitePath,

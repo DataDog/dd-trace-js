@@ -4,7 +4,7 @@ const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
-const { createEfdRetryPolicy } = require('../efd-retry-policy')
+const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -323,7 +323,7 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
     const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
-      ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? createEfdRetryPolicy()
+      ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
       : createEfdRetryPolicy({
         '5s': earlyFlakeDetectionRetryCount,
         '10s': earlyFlakeDetectionRetryCount,

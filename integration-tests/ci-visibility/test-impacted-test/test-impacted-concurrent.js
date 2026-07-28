@@ -27,6 +27,7 @@ describe('impacted concurrent tests', () => {
   })
 
   if (process.env.RUN_SLOW_CONCURRENT_IMPACTED_TEST) {
+    // Runs past the 5s bucket, so the timeout has to exceed Jest's 5s default.
     test.concurrent('uses its duration retry budget', () => {
       const slowLabel = 'slow'
       return new Promise(resolve => {
@@ -35,6 +36,6 @@ describe('impacted concurrent tests', () => {
           resolve()
         }, 5100)
       })
-    })
+    }, 20_000)
   }
 })
