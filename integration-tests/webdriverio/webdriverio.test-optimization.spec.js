@@ -331,6 +331,37 @@ for (const version of versions) {
       }, {}, 1)
     })
 
+    it('evaluates EFD faultiness from specs that have not started yet', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          faulty_session_threshold: 1,
+          slow_test_retries: { '5s': 2 },
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        webdriverio: {
+          'first.e2e.js': ['WebdriverIO first worker reports one test'],
+        },
+      })
+
+      await runScenario('efdFaultySchedule', 2, payloads => {
+        const events = getEvents(payloads)
+        const session = events.find(event => event.type === 'test_session_end').content
+        const efdTests = events
+          .filter(event => event.type === 'test')
+          .map(event => event.content)
+          .filter(test => test.meta[TEST_NAME].endsWith('retries a new test'))
+
+        assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ENABLED], undefined)
+        assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+        assert.strictEqual(efdTests.length, 1)
+        assert.strictEqual(efdTests[0].meta[TEST_IS_NEW], undefined)
+        assert.strictEqual(efdTests[0].meta[TEST_IS_RETRY], undefined)
+      }, {}, 1)
+    })
+
     it('retries failures with ATR', async () => {
       receiver.setSettings({
         flaky_test_retries_count: 2,
@@ -400,6 +431,57 @@ for (const version of versions) {
         const finalAttempt = attemptToFix.find(test => TEST_FINAL_STATUS in test.meta)
         assert.ok(finalAttempt)
         assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+      })
+    })
+
+    it('suppresses quarantined and recovered EFD hook failures', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          faulty_session_threshold: 100,
+          slow_test_retries: { '5s': 2 },
+        },
+        known_tests_enabled: true,
+        test_management: { enabled: true },
+      })
+      receiver.setKnownTests({
+        webdriverio: {
+          'managed-hook-fail.e2e.js': ['WebdriverIO quarantined hook failure is quarantined'],
+        },
+      })
+      receiver.setTestManagementTests({
+        webdriverio: {
+          suites: {
+            'managed-hook-fail.e2e.js': {
+              tests: {
+                'WebdriverIO quarantined hook failure is quarantined': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      await runScenario('managedHookFailures', 1, payloads => {
+        const events = getEvents(payloads)
+        const session = events.find(event => event.type === 'test_session_end').content
+        const suite = events.find(event => event.type === 'test_suite_end').content
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const quarantined = tests.find(test => test.meta[TEST_NAME].endsWith('is quarantined'))
+        const earlyFlakeDetectionTests = tests.filter(test =>
+          test.meta[TEST_NAME].endsWith('passes an EFD retry'))
+
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(quarantined.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
+        assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.strictEqual(earlyFlakeDetectionTests.length, 2)
+        assert.deepStrictEqual(
+          earlyFlakeDetectionTests.map(test => test.meta[TEST_STATUS]).sort(),
+          ['fail', 'pass']
+        )
       })
     })
 

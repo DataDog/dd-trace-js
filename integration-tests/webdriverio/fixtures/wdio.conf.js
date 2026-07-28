@@ -57,6 +57,16 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./efd.e2e.js'],
   },
+  efdFaultySchedule: {
+    maxInstances: 1,
+    specs: [
+      [
+        './first.e2e.js',
+        './efd.e2e.js',
+      ],
+      './second.e2e.js',
+    ],
+  },
   failedTestReplay: {
     maxInstances: 1,
     specs: ['./failed-test-replay.e2e.js'],
@@ -92,6 +102,10 @@ const scenarioConfig = {
   loadFailure: {
     maxInstances: 1,
     specs: ['./load-fail.e2e.js'],
+  },
+  managedHookFailures: {
+    maxInstances: 1,
+    specs: ['./managed-hook-fail.e2e.js'],
   },
   multipleCapabilities: {
     capabilities: [

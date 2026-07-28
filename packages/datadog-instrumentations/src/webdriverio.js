@@ -6,8 +6,10 @@ const { fileURLToPath } = require('node:url')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
+  collectTestOptimizationSummariesFromTraces,
   getIsFaultyEarlyFlakeDetection,
   getTestSuitePath,
+  logTestOptimizationSummary,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
@@ -35,6 +37,7 @@ const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
+const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 
@@ -104,9 +107,11 @@ addHook({
  * @property {string|undefined} frameworkVersion
  * @property {string} testFrameworkAdapter
  * @property {number} activeWorkers
+ * @property {Map<string, object>} attemptToFixExecutions
  * @property {number} maxActiveWorkers
+ * @property {Set<string>} newTestsWithDynamicNames
  * @property {number} nextWorkerId
- * @property {Set<string>} requestedFiles
+ * @property {Set<string>} scheduledFiles
  * @property {unknown} runError
  * @property {Set<WorkerRecord>} workers
  * @property {Map<object, string>} suiteStatuses
@@ -176,9 +181,11 @@ function getCoordinatorState (localRunner) {
     frameworkVersion: localRunnerVersions.get(localRunner.constructor),
     testFrameworkAdapter: getRunnerConfiguration(localRunner)?.framework,
     activeWorkers: 0,
+    attemptToFixExecutions: new Map(),
     maxActiveWorkers: 0,
+    newTestsWithDynamicNames: new Set(),
     nextWorkerId: 0,
-    requestedFiles: new Set(),
+    scheduledFiles: new Set(),
     runError: undefined,
     workers: new Set(),
     suiteStatuses: new Map(),
@@ -196,6 +203,19 @@ function getCoordinatorState (localRunner) {
  */
 function normalizeFile (file) {
   return file.startsWith('file://') ? fileURLToPath(file) : file
+}
+
+/**
+ * Adds resolved WebdriverIO spec files to the coordinator's complete schedule.
+ *
+ * @param {CoordinatorState} state
+ * @param {string[]} files
+ * @returns {void}
+ */
+function addScheduledFiles (state, files) {
+  for (const file of files) {
+    state.scheduledFiles.add(normalizeFile(file))
+  }
 }
 
 /**
@@ -568,17 +588,14 @@ function updateEarlyFlakeDetectionFaultyState (state, files) {
     return
   }
 
-  for (const file of files) {
-    state.requestedFiles.add(getTestSuitePath(normalizeFile(file), configuration.repositoryRoot))
-  }
-  for (const { specs } of state.workers) {
-    for (const file of specs) {
-      state.requestedFiles.add(getTestSuitePath(file, configuration.repositoryRoot))
-    }
+  addScheduledFiles(state, files)
+  const scheduledSuites = []
+  for (const file of state.scheduledFiles) {
+    scheduledSuites.push(getTestSuitePath(file, process.cwd()))
   }
 
   const isFaulty = getIsFaultyEarlyFlakeDetection(
-    [...state.requestedFiles],
+    scheduledSuites,
     configuration.knownTests?.mocha || {},
     configuration.earlyFlakeDetectionFaultyThreshold
   )
@@ -622,6 +639,10 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
+      collectTestOptimizationSummariesFromTraces(payload, {
+        attemptToFixExecutions: state.attemptToFixExecutions,
+        newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+      })
       workerReportTraceCh.publish({
         traces: payload,
         [TEST_SUITE_EXECUTION_ID]: workerRecord.testSuiteExecutionId,
@@ -776,6 +797,10 @@ function finishCoordinator (state, error, onDone) {
   }
 
   if (!testSessionFinishCh.hasSubscribers) {
+    logTestOptimizationSummary({
+      attemptToFixExecutions: state.attemptToFixExecutions,
+      newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+    })
     onDone()
     return
   }
@@ -790,7 +815,31 @@ function finishCoordinator (state, error, onDone) {
     isTestManagementEnabled: state.configuration.isTestManagementTestsEnabled,
     onDone,
   })
+  logTestOptimizationSummary({
+    attemptToFixExecutions: state.attemptToFixExecutions,
+    newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+  })
 }
+
+// dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
+// @ts-expect-error
+launcherStartInstanceCh.subscribe({
+  start (context) {
+    const localRunner = context.self?.runner
+    const runnerConfiguration = localRunner && getRunnerConfiguration(localRunner)
+    if (!testFinishCh.hasSubscribers || runnerConfiguration?.framework !== 'mocha') {
+      return
+    }
+
+    const state = getCoordinatorState(localRunner)
+    addScheduledFiles(state, context.arguments?.[0] || [])
+    for (const schedule of context.self._schedule || []) {
+      for (const { files } of schedule.specs || []) {
+        addScheduledFiles(state, files)
+      }
+    }
+  },
+})
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
@@ -803,6 +852,7 @@ localRunnerRunCh.subscribe({
 
     const state = getCoordinatorState(context.self)
     const workerOptions = context.arguments?.[0]
+    addScheduledFiles(state, workerOptions?.specs || [])
     let workerEnvironment = runnerConfiguration.runnerEnv || {}
     const launcherNodeOptions = getEnvironmentVariable('NODE_OPTIONS')
     const workerNodeOptions = workerEnvironment.NODE_OPTIONS

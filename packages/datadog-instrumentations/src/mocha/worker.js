@@ -37,7 +37,7 @@ const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 
 const config = {}
 const runnerToFiles = new WeakMap()
-const runnerToFailedHookFiles = new WeakMap()
+const runnerToFailedHooks = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 let configurationRequestId = 0
 
@@ -211,6 +211,40 @@ function reportWebdriverioWorkerReady (frameworkVersion) {
 }
 
 /**
+ * Checks whether Test Optimization converts a failed WebdriverIO test attempt to a passing result.
+ *
+ * @param {object|undefined} test
+ * @returns {boolean}
+ */
+function isWebdriverioFailureSuppressed (test) {
+  if (!test) {
+    return false
+  }
+  const hasPassingEfdAttempt = config.isEarlyFlakeDetectionEnabled &&
+    efdTests[getTestFullName(test)]?.some(attempt => attempt.state === 'passed')
+  return (test._ddIsQuarantined && !test._ddIsAttemptToFix) || hasPassingEfdAttempt
+}
+
+/**
+ * Removes managed hook failures from WebdriverIO's Mocha runner totals.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function adjustWebdriverioHookFailures (runner) {
+  let suppressedFailures = 0
+  for (const { test } of runnerToFailedHooks.get(runner) || []) {
+    if (isWebdriverioFailureSuppressed(test)) {
+      suppressedFailures++
+    }
+  }
+  if (runner.stats) {
+    runner.stats.failures -= suppressedFailures
+  }
+  runner.failures -= suppressedFailures
+}
+
+/**
  * Computes a final result for every file loaded into one Mocha worker.
  *
  * @param {object} runner
@@ -233,11 +267,7 @@ function getWebdriverioSuiteResults (runner) {
     if (!result) {
       return
     }
-    const hasPassingEfdAttempt = config.isEarlyFlakeDetectionEnabled &&
-      efdTests[getTestFullName(test)]?.some(attempt => attempt.state === 'passed')
-    const isSuppressedFailure =
-      (test._ddIsQuarantined && !test._ddIsAttemptToFix) ||
-      hasPassingEfdAttempt
+    const isSuppressedFailure = isWebdriverioFailureSuppressed(test)
     if ((test.state === 'failed' || test.timedOut || test._ddHookFailed) && !isSuppressedFailure) {
       result.status = 'fail'
     } else if (test.state === 'passed' || isSuppressedFailure) {
@@ -245,9 +275,9 @@ function getWebdriverioSuiteResults (runner) {
     }
   })
 
-  for (const file of runnerToFailedHookFiles.get(runner) || []) {
+  for (const { file, test } of runnerToFailedHooks.get(runner) || []) {
     const result = resultsByFile.get(file)
-    if (result) {
+    if (result && !isWebdriverioFailureSuppressed(test)) {
       result.status = 'fail'
     }
   }
@@ -422,6 +452,7 @@ addHook({
       this.prependOnceListener('end', () => {
         try {
           adjustRunnerFailuresForTestOptimization(this, config)
+          adjustWebdriverioHookFailures(this)
         } catch (error) {
           log.error('WebdriverIO Test Optimization failure adjustment error', error)
         }
@@ -453,11 +484,14 @@ addHook({
     this.on('hook end', getOnHookEndHandler(config))
 
     if (isWebdriverioWorker) {
-      const failedHookFiles = new Set()
-      runnerToFailedHookFiles.set(this, failedHookFiles)
+      const failedHooks = []
+      runnerToFailedHooks.set(this, failedHooks)
       this.on('fail', runnable => {
         if (runnable.type === 'hook' && runnable.file) {
-          failedHookFiles.add(runnable.file)
+          failedHooks.push({
+            file: runnable.file,
+            test: runnable.ctx?.currentTest,
+          })
         }
       })
     }
