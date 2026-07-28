@@ -314,6 +314,8 @@ for (const version of versions) {
       }
 
       assert.strictEqual(exitCode, expectedExitCode, testOutput)
+      assert.doesNotMatch(testOutput, /dd:test-optimization:webdriverio:/)
+      assert.doesNotMatch(testOutput, /\bundefined undefined undefined\b/)
       assert.strictEqual(
         webDriver.getSessionCount() - initialWebDriverSessionCount,
         expectedWebDriverSessions

@@ -20,6 +20,7 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  createWebdriverioWorkerMessage,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
@@ -49,7 +50,7 @@ function sendWebdriverioMessage (message, onError) {
     return
   }
 
-  process.send(message, (error) => {
+  process.send(createWebdriverioWorkerMessage(message), (error) => {
     if (!error) {
       return
     }
