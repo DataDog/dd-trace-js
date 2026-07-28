@@ -190,6 +190,27 @@ describe('CI Visibility Test Worker Exporter', () => {
     })
   })
 
+  context('when writing from a WebdriverIO worker', () => {
+    it('wraps traces in a filtered WebdriverIO worker event', () => {
+      const trace = [{ type: 'test' }]
+      const WebdriverioWriter = proxyquire('../../../../src/ci-visibility/exporters/test-worker/writer', {
+        '../../../config/helper': {
+          getEnvironmentVariable: name =>
+            name === '_DD_TEST_OPTIMIZATION_WEBDRIVERIO_WORKER' ? 'true' : undefined,
+        },
+      })
+      const writer = new WebdriverioWriter(MOCHA_WORKER_TRACE_PAYLOAD_CODE)
+      writer.append(trace)
+      writer.flush()
+
+      sinon.assert.calledWith(send, {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])],
+      })
+    })
+  })
+
   context('when the process is a playwright worker', () => {
     beforeEach(() => {
       process.env.DD_PLAYWRIGHT_WORKER = '1'

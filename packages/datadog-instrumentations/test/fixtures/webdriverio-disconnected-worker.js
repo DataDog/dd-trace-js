@@ -9,6 +9,8 @@ const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
   WEBDRIVERIO_WORKER_ENV,
+  WEBDRIVERIO_WORKER_EVENT,
+  WEBDRIVERIO_WORKER_ORIGIN,
 } = require('../../src/mocha/webdriverio-protocol')
 
 process.env[WEBDRIVERIO_WORKER_ENV] = 'true'
@@ -93,7 +95,9 @@ assert.strictEqual(sendCalls, 0)
 process.connected = true
 process.send = (message, onDone) => {
   sendCalls++
-  assert.ok(message)
+  assert.strictEqual(message.origin, WEBDRIVERIO_WORKER_ORIGIN)
+  assert.strictEqual(message.name, WEBDRIVERIO_WORKER_EVENT)
+  assert.ok(message.args)
   assert.strictEqual(typeof onDone, 'function')
   onDone(new Error('IPC channel closed during send'))
 }
@@ -103,14 +107,16 @@ assert.strictEqual(sendCalls, 3)
 
 process.send = (message, onDone) => {
   sendCalls++
-  assert.ok(message)
+  assert.strictEqual(message.origin, WEBDRIVERIO_WORKER_ORIGIN)
+  assert.strictEqual(message.name, WEBDRIVERIO_WORKER_EVENT)
+  assert.ok(message.args)
   assert.strictEqual(typeof onDone, 'function')
   onDone()
-  if (message.name === CONFIGURATION_REQUEST) {
+  if (message.args.name === CONFIGURATION_REQUEST) {
     process.emit('message', {
       name: CONFIGURATION_RESPONSE,
       content: {
-        requestId: message.content.requestId,
+        requestId: message.args.content.requestId,
       },
     })
   }
