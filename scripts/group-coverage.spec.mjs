@@ -78,14 +78,62 @@ describe('group-coverage', () => {
       rmSync(dir, { force: true, recursive: true })
     })
 
-    it('concatenates every report, adding a trailing newline when one is missing', () => {
+    it('keeps unrelated files as separate records, in first-seen order', () => {
       const a = join(dir, 'a.info')
       const b = join(dir, 'b.info')
-      writeFileSync(a, 'SF:a.js\nDA:1,1\nend_of_record\n')
-      writeFileSync(b, 'SF:b.js\nDA:1,1\nend_of_record') // no trailing newline
+      writeFileSync(a, 'SF:a.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n')
+      writeFileSync(b, 'SF:b.js\nDA:1,1\nLF:1\nLH:1\nend_of_record') // no trailing newline
       assert.equal(
         mergeLcov([a, b]),
-        'SF:a.js\nDA:1,1\nend_of_record\nSF:b.js\nDA:1,1\nend_of_record\n'
+        'SF:a.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n' +
+        'SF:b.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n'
+      )
+    })
+
+    it('sums DA hit counts for the same file and line across reports', () => {
+      const a = join(dir, 'a.info')
+      const b = join(dir, 'b.info')
+      writeFileSync(a, 'SF:shared.js\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n')
+      writeFileSync(b, 'SF:shared.js\nDA:1,2\nDA:2,3\nLF:2\nLH:2\nend_of_record\n')
+      assert.equal(
+        mergeLcov([a, b]),
+        'SF:shared.js\nDA:1,3\nDA:2,3\nLF:2\nLH:2\nend_of_record\n'
+      )
+    })
+
+    it('sums FNDA hit counts for the same function across reports', () => {
+      const a = join(dir, 'a.info')
+      const b = join(dir, 'b.info')
+      writeFileSync(a, 'SF:shared.js\nFN:1,foo\nFNDA:1,foo\nFNF:1\nFNH:1\nend_of_record\n')
+      writeFileSync(b, 'SF:shared.js\nFN:1,foo\nFNDA:0,foo\nFNF:1\nFNH:0\nend_of_record\n')
+      assert.equal(
+        mergeLcov([a, b]),
+        'SF:shared.js\nFN:1,foo\nFNDA:1,foo\nFNF:1\nFNH:1\nend_of_record\n'
+      )
+    })
+
+    it('sums BRDA hit counts for the same branch, treating "-" as an unreached block', () => {
+      const a = join(dir, 'a.info')
+      const b = join(dir, 'b.info')
+      // First cell never reaches the block (`-`); second cell reaches it but doesn't take branch 1.
+      writeFileSync(a, 'SF:shared.js\nBRDA:1,0,0,-\nBRDA:1,0,1,-\nBRF:2\nBRH:0\nend_of_record\n')
+      writeFileSync(b, 'SF:shared.js\nBRDA:1,0,0,2\nBRDA:1,0,1,0\nBRF:2\nBRH:1\nend_of_record\n')
+      assert.equal(
+        mergeLcov([a, b]),
+        'SF:shared.js\nBRDA:1,0,0,2\nBRDA:1,0,1,0\nBRF:2\nBRH:1\nend_of_record\n'
+      )
+    })
+
+    it('merges duplicate SF blocks for the same file into one record instead of two', () => {
+      const a = join(dir, 'a.info')
+      writeFileSync(
+        a,
+        'SF:shared.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n' +
+        'SF:shared.js\nDA:1,4\nLF:1\nLH:1\nend_of_record\n'
+      )
+      assert.equal(
+        mergeLcov([a]),
+        'SF:shared.js\nDA:1,5\nLF:1\nLH:1\nend_of_record\n'
       )
     })
   })
@@ -113,7 +161,7 @@ describe('group-coverage', () => {
       assert.equal(outputDir, join(output, '42', 'lcov'))
       assert.equal(
         readFileSync(join(outputDir, 'lcov.info'), 'utf8'),
-        'SF:a.js\nDA:1,1\nend_of_record\n'
+        'SF:a.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n'
       )
     })
 
