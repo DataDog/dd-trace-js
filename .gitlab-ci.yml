@@ -31,7 +31,7 @@ include:
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   # Compare changes to the repository's agent instructions against master.
   - project: "DataDog/llm-validation-platform"
-    ref: main
+    ref: pabloerhard/performance-improvements
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
@@ -42,7 +42,7 @@ include:
 
 "llm validation":
   variables:
-    LLMVAL_PLATFORM_REF: "main"
+    LLMVAL_PLATFORM_REF: "pabloerhard/performance-improvements"
 
 workflow:
   auto_cancel:
