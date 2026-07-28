@@ -299,6 +299,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
 
+  dependency-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+      - uses: ./.github/actions/install
+      - run: npm run test:integration:test-optimization:helpers
+
   integration-cucumber:
     strategy:
       fail-fast: false
