@@ -539,7 +539,7 @@ jobs:
         version: [oldest, latest]
     name: integration-vitest-browser (node-${{ matrix.version }})
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images).latest }}
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.version].latest }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
