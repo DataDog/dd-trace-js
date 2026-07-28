@@ -12,7 +12,7 @@ function defaultAppendRecordAttributes (_record, index) {
   return { id: `rec-${index}`, valid_from_version: 2 }
 }
 
-function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes } = {}) {
+function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes, createDatasetError } = {}) {
   const requests = []
   return {
     appBase: 'https://app.datadoghq.com',
@@ -21,6 +21,7 @@ function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes } 
     request: async (method, requestPath, body) => {
       requests.push({ method, path: requestPath, body })
       if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
+        if (createDatasetError) throw createDatasetError
         return { data: { id: 'ds', attributes: { current_version: 1 } } }
       }
       if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets/ds/records`) {
@@ -97,13 +98,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('surfaces backend failures', async () => {
-    const c = stubClient()
-    c.request = async (method, requestPath) => {
-      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
-        throw new Error('HTTP 500 boom')
-      }
-      throw new Error(`Unexpected request ${method} ${requestPath}`)
-    }
+    const c = stubClient({ createDatasetError: new Error('HTTP 500 boom') })
     const dataset = new Dataset(c, 'demo').addRecord('a')
 
     await assert.rejects(
