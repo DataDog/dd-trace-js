@@ -112,10 +112,11 @@ try {
   // the capped commits actually included in the proposal, not deferred ones.
   // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
-    .split('\n').filter(Boolean)
+    .split('\n')
   const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
   for (const sha of notesShas) {
+    if (!sha) continue
     notesEntries.push({
       sha,
       subject: capture(`git show -s --format=%s ${sha}`),

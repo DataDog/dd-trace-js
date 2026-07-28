@@ -90,6 +90,33 @@ function createResponseFetch () {
   }
 }
 
+function createChatCompletionsFetch () {
+  return async () => {
+    return new Response(JSON.stringify({
+      id: 'chatcmpl_test',
+      object: 'chat.completion',
+      created: 0,
+      model: 'gpt-4o',
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: 'hello' },
+        finish_reason: 'stop',
+      }],
+      usage: {
+        prompt_tokens: 2,
+        completion_tokens: 1,
+        total_tokens: 3,
+      },
+    }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req_chat_test',
+      },
+    })
+  }
+}
+
 function createHandoffFetch () {
   let request = 0
 
@@ -122,16 +149,60 @@ function createHandoffFetch () {
   }
 }
 
+function createToolFetch () {
+  let request = 0
+
+  return async () => {
+    const response = createStreamResponse('completed')
+    response.output = request++ === 0
+      ? [{
+          id: 'fc_lookup',
+          type: 'function_call',
+          call_id: 'call_lookup',
+          name: 'lookup',
+          arguments: '{"city":"New York"}',
+          status: 'completed',
+        }]
+      : [{
+          id: 'msg_tool_final',
+          type: 'message',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: '72F', annotations: [] }],
+        }]
+
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': `req_tool_${request}`,
+      },
+    })
+  }
+}
+
 class OpenaiAgentsTestSetup {
   async setup (clientModule, version) {
     this.module = clientModule
 
     const agentsOpenaiDir = path.join(__dirname, '..', '..', '..', 'versions', '@openai', `agents-openai@${version}`)
-    const { OpenAIResponsesModel } = require(agentsOpenaiDir).get()
+    const { OpenAIChatCompletionsModel, OpenAIResponsesModel } = require(agentsOpenaiDir).get()
+    const directModelPath = path.join(
+      agentsOpenaiDir,
+      'node_modules',
+      '@openai',
+      'agents-openai',
+      'dist',
+      'openaiChatCompletionsModel.js'
+    )
+    const { OpenAIChatCompletionsModel: DirectOpenAIChatCompletionsModel } = require(directModelPath)
     const openaiPath = require.resolve('openai', {
       paths: [path.join(__dirname, '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
     })
     const { OpenAI } = require(openaiPath)
+
+    this.chatCompletionsModelClass = OpenAIChatCompletionsModel
+    this.directChatCompletionsModelClass = DirectOpenAIChatCompletionsModel
 
     const mockClient = new OpenAI({
       apiKey: 'test',
@@ -164,6 +235,16 @@ class OpenaiAgentsTestSetup {
       baseURL: 'https://api.openai.com/v1',
       fetch: createHandoffFetch(),
     }), 'gpt-4')
+    const chatCompletionsModel = new OpenAIChatCompletionsModel(new OpenAI({
+      apiKey: 'test',
+      baseURL: 'https://api.openai.com/v1',
+      fetch: createChatCompletionsFetch(),
+    }), 'gpt-4o')
+    const toolModel = new OpenAIResponsesModel(new OpenAI({
+      apiKey: 'test',
+      baseURL: 'https://api.openai.com/v1',
+      fetch: createToolFetch(),
+    }), 'gpt-4')
 
     this.agent = new clientModule.Agent({
       name: 'test_agent',
@@ -175,6 +256,11 @@ class OpenaiAgentsTestSetup {
       name: 'test_agent',
       instructions: 'You are a test agent',
       model: streamModel,
+    })
+    this.chatCompletionsAgent = new clientModule.Agent({
+      name: 'chat_completions_agent',
+      instructions: 'You are a test agent',
+      model: chatCompletionsModel,
     })
 
     this.errorAgent = new clientModule.Agent({
@@ -194,15 +280,40 @@ class OpenaiAgentsTestSetup {
       model: handoffModel,
       handoffs: [this.handoffAgentB],
     })
+
+    const lookupTool = clientModule.tool({
+      name: 'lookup',
+      description: 'Looks up the weather for a city.',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string' },
+        },
+        required: ['city'],
+        additionalProperties: false,
+      },
+      execute: () => this.toolExecute(),
+    })
+    this.toolAgent = new clientModule.Agent({
+      name: 'tool_agent',
+      instructions: 'Use the lookup tool.',
+      model: toolModel,
+      tools: [lookupTool],
+    })
   }
 
   async teardown () {
     this.module = undefined
     this.agent = undefined
     this.streamAgent = undefined
+    this.chatCompletionsAgent = undefined
+    this.chatCompletionsModelClass = undefined
+    this.directChatCompletionsModelClass = undefined
     this.errorAgent = undefined
     this.handoffAgentA = undefined
     this.handoffAgentB = undefined
+    this.toolAgent = undefined
+    this.toolExecute = undefined
   }
 
   async run () {
@@ -223,8 +334,17 @@ class OpenaiAgentsTestSetup {
     return this.module.run(this.errorAgent, 'hello', { maxTurns: 1 })
   }
 
+  async runChatCompletions () {
+    return this.module.run(this.chatCompletionsAgent, 'hello', { maxTurns: 1 })
+  }
+
   async multiAgentHandoff () {
     return this.module.run(this.handoffAgentA, 'start', { maxTurns: 2 })
+  }
+
+  async runWithTool (execute) {
+    this.toolExecute = execute
+    return this.module.run(this.toolAgent, 'weather', { maxTurns: 2 })
   }
 }
 

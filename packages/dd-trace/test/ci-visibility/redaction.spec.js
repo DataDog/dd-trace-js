@@ -9,6 +9,16 @@ const {
 } = require('../../../../ci/test-optimization-validation/redaction')
 
 describe('test optimization validation redaction', () => {
+  it('preserves boolean configuration evidence under secret-like field names', () => {
+    assert.deepStrictEqual(sanitizeForReport({
+      apiKeyConfigured: true,
+      apiKeyValue: 'actual-value',
+    }), {
+      apiKeyConfigured: true,
+      apiKeyValue: '<redacted>',
+    })
+  })
+
   it('redacts exact inline secret assignments', () => {
     const input = [
       'API_KEY=api-key-secret',

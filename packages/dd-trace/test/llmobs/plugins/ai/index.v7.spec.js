@@ -11,6 +11,7 @@ const {
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
+  MOCK_OBJECT,
 } = require('../../util')
 
 /**
@@ -942,6 +943,137 @@ describe('Plugin', () => {
           reasoning_output_tokens: 0,
         },
         tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+  })
+
+  describe('tool result formatting', () => {
+    withAiSdkOpenAiVersions((version, _, openaiVersion) => {
+      let ai
+      let openai
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
+      })
+
+      it('formats file result parts produced by the AI SDK', async () => {
+        const result = await ai.generateText({
+          // Chat Completions serializes every tool result as text. The Responses API validates file contents before
+          // the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
+          prompt: 'Run the test tool',
+          tools: {
+            testTool: ai.tool({
+              description: 'Run the test tool and return its result',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {},
+              }),
+              execute: () => 'result',
+              toModelOutput: () => ({
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'before' },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1pbWFnZS1kYXRh' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1maWxlLWRhdGE=' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'reference', reference: { test: 'private-file-id' } },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'reference', reference: { test: 'private-image-id' } },
+                  },
+                  { type: 'custom', providerOptions: { secret: 'provider-data' } },
+                  { type: 'text', text: 'after' },
+                ],
+              }),
+            }),
+          },
+          stopWhen: ai.stepCountIs(2),
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+        })
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(6)
+        let finalModelSpan
+        let finalModelApmSpan
+        let finalStepSpan
+        for (const span of llmobsSpans) {
+          if (span.name === 'languageModelCall') {
+            finalModelSpan = span
+          } else if (span.name === 'step') {
+            finalStepSpan = span
+          }
+        }
+        for (const span of apmSpans) {
+          if (span.name === 'languageModelCall') finalModelApmSpan = span
+        }
+
+        assertLlmObsSpanEvent(finalModelSpan, {
+          span: finalModelApmSpan,
+          parentId: finalStepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [
+            { content: 'Run the test tool', role: 'user' },
+            {
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'testTool',
+                arguments: {},
+                type: 'function',
+              }],
+            },
+            {
+              content: 'before[Image][File][File][Image][Custom Content]after',
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [MOCK_OBJECT],
+          toolDefinitions: [{
+            name: 'testTool',
+            description: 'Run the test tool and return its result',
+            schema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          }],
+          metadata: {},
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
       })
     })
   })

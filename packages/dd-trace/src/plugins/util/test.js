@@ -45,6 +45,7 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
@@ -89,10 +90,12 @@ const {
 const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
+const TEST_FRAMEWORK_ADAPTER = 'test.framework_adapter'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
+const TEST_SUITE_EXECUTION_ID = '_dd.test_suite_execution_id'
 const TEST_STATUS = 'test.status'
 const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
@@ -244,6 +247,7 @@ const TEST_LEVELS_METADATA_TAGS = [
   CI_NODE_NAME,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
@@ -422,10 +426,22 @@ function addTestOptimizationRequest (requestPromises, responseNames, responseNam
   }
 }
 
+/**
+ * Builds the internal key used to correlate a worker test with one suite execution.
+ *
+ * @param {string} testSuite
+ * @param {string|undefined} testSuiteExecutionId
+ * @returns {string}
+ */
+function getTestSuiteExecutionKey (testSuite, testSuiteExecutionId) {
+  return testSuiteExecutionId ? `${testSuite}\0${testSuiteExecutionId}` : testSuite
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
@@ -435,6 +451,8 @@ module.exports = {
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
+  TEST_SUITE_EXECUTION_ID,
+  getTestSuiteExecutionKey,
   TEST_STATUS,
   TEST_FINAL_STATUS,
   TEST_PARAMETERS,
@@ -800,7 +818,7 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
 }
 
 function getTestTypeFromFramework (testFramework) {
-  if (testFramework === 'playwright' || testFramework === 'cypress') {
+  if (testFramework === 'playwright' || testFramework === 'cypress' || testFramework === 'webdriverio') {
     return 'browser'
   }
   return 'test'
@@ -878,6 +896,7 @@ function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
+    [TEST_FRAMEWORK]: testFramework,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
@@ -948,8 +967,7 @@ function getCodeOwnersFileEntries (rootDir) {
   const lines = codeOwnersContent.split('\n')
 
   for (const line of lines) {
-    const [content] = line.split('#')
-    const trimmed = content.trim()
+    const trimmed = getSegment(line, '#', 0).trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
     entries.push(setCodeOwnersPatternRegex({ pattern, owners }))
@@ -995,9 +1013,7 @@ function codeOwnersPatternToRegexSource (pattern) {
 
     if (character === '\\') {
       const escapedCharacter = pattern[i + 1]
-      source += escapedCharacter === undefined
-        ? escapeRegexCharacter(character)
-        : escapeRegexCharacter(escapedCharacter)
+      source += escapeRegexCharacter(escapedCharacter ?? character)
       i++
     } else if (character === '*') {
       if (pattern[i + 1] === '*') {
@@ -1108,6 +1124,7 @@ function getCodeOwnersForFilename (filename, entries) {
 
 function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
+    [TEST_FRAMEWORK]: testFramework,
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
@@ -1191,7 +1208,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
 }
 
 function getCoverageMap (coverage) {
-  if (coverage?.files && coverage?.fileCoverageFor) {
+  if (coverage?.files && coverage.fileCoverageFor) {
     return coverage
   }
   return istanbul.createCoverageMap(coverage)
@@ -1924,8 +1941,8 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   }
 
   result.executions++
-  result.isDisabled = result.isDisabled || !!isDisabled
-  result.isQuarantined = result.isQuarantined || !!isQuarantined
+  result.isDisabled ||= !!isDisabled
+  result.isQuarantined ||= !!isQuarantined
 
   if (status === 'fail') {
     result.failedCount++
