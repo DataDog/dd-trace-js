@@ -31,17 +31,17 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn add @actions/core @actions/github octokit
+      - run: yarn add @actions/core @actions/github octokit istanbul-lib-coverage
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/datadog-ci
       - run: pip install --quiet codecov-cli
       # Polls sibling workflows and, as soon as each one reaches a final state, downloads its
-      # artifacts, merges its lcov reports, and uploads its junit/coverage to Datadog and Codecov —
+      # artifacts, merges its reports, and uploads its junit/coverage to Datadog and Codecov —
       # instead of waiting for every workflow to finish before downloading or uploading anything.
-      # Codecov's coverage gate (`.codecov.yml`) is line-based `patch` coverage only, and this repo's
-      # `patch-istanbul-lib-coverage.js` already folds branch/function hit data into lcov's `DA:`
-      # records, so only lcov is uploaded — no separate istanbul JSON report is needed for the gate.
+      # Datadog gets the merged lcov, Codecov gets the merged istanbul JSON (it reads branch/function
+      # coverage from that format, and its own cross-session merge for a shared file has been
+      # observed overwriting rather than summing when more than one session reports it).
       # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attached only on PRs
       # targeting master so release-branch PRs auto-pass. The SHA/PR are passed explicitly because
       # All Green checks out the merge ref, not the head the other workflows reported coverage for.
