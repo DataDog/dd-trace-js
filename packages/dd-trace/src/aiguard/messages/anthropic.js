@@ -19,31 +19,63 @@ function convertAnthropicImageBlock (block) {
 }
 
 /**
- * Extracts text from an Anthropic document block.
- * Inline `text` and `content` sources are normalized to their actual text so
- * prompt-injections embedded in document content reach AI Guard for evaluation.
- * URL sources return the URL; base64 / unknown sources fall back to title or [file].
+ * Extracts the body content from a document block's source.
+ * Inline `text` and `content` sources are normalized to their actual text; URL sources return the
+ * URL; base64 / unknown sources return undefined (no readable body).
+ *
+ * @param {object|undefined} source
+ * @returns {string|Array<object>|undefined}
+ */
+function extractDocumentSource (source) {
+  if (!source) return
+  // PlainTextSource stores inline text in `data`, not `text`.
+  if (source.type === 'text' && typeof source.data === 'string') return source.data
+  if (source.type === 'url' && typeof source.url === 'string') return source.url
+  if (source.type === 'content') {
+    // ContentBlockSource.content is string | Array<ContentBlockSourceContent>.
+    if (typeof source.content === 'string') return source.content
+    if (Array.isArray(source.content)) {
+      const { parts, hasImages } = walkContentBlocks(source.content)
+      return partsToContent(parts, hasImages)
+    }
+  }
+}
+
+/**
+ * Combines model-visible metadata strings with an extracted body. When the body has images the
+ * metadata becomes leading text parts and an array is returned; otherwise the metadata and a string
+ * body are newline-joined. Returns undefined when there is nothing to include.
+ *
+ * @param {Array<string>} metadata
+ * @param {string|Array<object>|undefined} body
+ * @returns {string|Array<object>|undefined}
+ */
+function combineMetadataWithBody (metadata, body) {
+  if (Array.isArray(body)) {
+    const parts = metadata.map(text => ({ type: 'text', text }))
+    for (const part of body) parts.push(part)
+    return parts
+  }
+
+  const lines = [...metadata]
+  if (typeof body === 'string') lines.push(body)
+  return lines.length ? lines.join('\n') : undefined
+}
+
+/**
+ * Extracts text from an Anthropic document block. The model-visible `title` and `context` are
+ * combined with the source body so prompt-injections placed in document metadata — not just its
+ * content — reach AI Guard. base64 / unknown sources fall back to the metadata or [file].
  *
  * @param {AnthropicDocumentBlock} block
  * @returns {string|Array<object>}
  */
 function convertAnthropicDocumentBlock (block) {
-  const source = block.source
-  if (source) {
-    // PlainTextSource stores inline text in `data`, not `text`.
-    if (source.type === 'text' && typeof source.data === 'string') return source.data
-    if (source.type === 'url' && typeof source.url === 'string') return source.url
-    if (source.type === 'content') {
-      // ContentBlockSource.content is string | Array<ContentBlockSourceContent>.
-      if (typeof source.content === 'string') return source.content
-      if (Array.isArray(source.content)) {
-        const { parts, hasImages } = walkContentBlocks(source.content)
-        const content = partsToContent(parts, hasImages)
-        if (content != null) return content
-      }
-    }
-  }
-  return block.title ?? FILE_FALLBACK
+  const metadata = []
+  if (typeof block.title === 'string' && block.title) metadata.push(block.title)
+  if (typeof block.context === 'string' && block.context) metadata.push(block.context)
+
+  return combineMetadataWithBody(metadata, extractDocumentSource(block.source)) ?? FILE_FALLBACK
 }
 
 /**
@@ -80,7 +112,9 @@ function appendContent (output, content) {
  * }}
  */
 function walkContentBlocks (blocks) {
-  const out = { parts: [], toolCalls: [], toolResults: [], hasImages: false }
+  // `partsBeforeLastResult` records how many `parts` were collected before the last tool result,
+  // so a caller can tell text that precedes the results from text that follows them.
+  const out = { parts: [], toolCalls: [], toolResults: [], hasImages: false, partsBeforeLastResult: 0 }
   if (!Array.isArray(blocks)) return out
 
   for (const block of blocks) {
@@ -105,7 +139,8 @@ function walkContentBlocks (blocks) {
       }
       case 'tool_use':
       case 'server_tool_use':
-        // server_tool_use is the built-in-tool counterpart of tool_use (web_search, code_execution, ...).
+      case 'mcp_tool_use':
+        // server_tool_use / mcp_tool_use are the built-in- and MCP-tool counterparts of tool_use.
         out.toolCalls.push({
           id: block.id ?? block.name,
           function: {
@@ -115,21 +150,38 @@ function walkContentBlocks (blocks) {
         })
         break
       case 'tool_result':
+        out.partsBeforeLastResult = out.parts.length
         out.toolResults.push({
           role: 'tool',
           tool_call_id: block.tool_use_id,
           content: convertAnthropicToolResultContent(block.content),
         })
         break
-      case 'search_result':
+      case 'search_result': {
+        // title and source are required, model-visible strings; include them so a prompt injection
+        // placed in the metadata (not only the content) reaches AI Guard for evaluation.
+        const metadata = []
+        if (typeof block.title === 'string' && block.title) metadata.push(block.title)
+        if (typeof block.source === 'string' && block.source) metadata.push(block.source)
+        appendContent(out, combineMetadataWithBody(metadata, convertAnthropicBlocksToContent(block.content)))
+        break
+      }
       case 'mid_conv_system':
         appendContent(out, convertAnthropicBlocksToContent(block.content))
         break
       case 'web_fetch_tool_result': {
+        // Emit as a tool result (like other *_tool_result blocks) so the call -> result -> final-text
+        // timeline is preserved and the fetched document isn't merged into the assistant answer.
+        out.partsBeforeLastResult = out.parts.length
         const content = block.content
-        if (content?.type === 'web_fetch_result' && content.content) {
-          appendContent(out, convertAnthropicDocumentBlock(content.content))
-        }
+        const resultContent = content?.type === 'web_fetch_result' && content.content
+          ? convertAnthropicDocumentBlock(content.content)
+          : convertServerToolResultContent(content)
+        out.toolResults.push({
+          role: 'tool',
+          tool_call_id: block.tool_use_id,
+          content: resultContent,
+        })
         break
       }
       case 'thinking':
@@ -137,6 +189,7 @@ function walkContentBlocks (blocks) {
         break
       default:
         if (typeof block.type === 'string' && block.type.endsWith('_tool_result')) {
+          out.partsBeforeLastResult = out.parts.length
           out.toolResults.push({
             role: 'tool',
             tool_call_id: block.tool_use_id,
@@ -164,6 +217,14 @@ function partsToContent (parts, hasImages) {
   if (!parts.length) return
   if (hasImages) return parts
   return parts.map(p => p.text).join('\n')
+}
+
+/**
+ * @param {Array<object>} parts
+ * @returns {boolean}
+ */
+function hasImageParts (parts) {
+  return parts.some(part => part.type === 'image_url')
 }
 
 /**
@@ -207,19 +268,30 @@ function convertAnthropicToolResultContent (content) {
  * @returns {string}
  */
 function convertServerToolResultContent (content) {
+  if (typeof content === 'string') return content || '[tool result]'
   if (!content || typeof content !== 'object') return '[tool result]'
-  if (typeof content.error_code === 'string') return content.error_code
+  if (typeof content.error_code === 'string') {
+    return content.error_message ? `${content.error_code}: ${content.error_message}` : content.error_code
+  }
 
   const lines = []
   if (Array.isArray(content)) {
     for (const item of content) {
       if (!item || typeof item !== 'object') continue
+      // text blocks (MCP / generic), then web-search title + url.
+      if (typeof item.text === 'string') lines.push(item.text)
       if (typeof item.title === 'string') lines.push(item.title)
       if (typeof item.url === 'string') lines.push(item.url)
     }
   } else {
     if (typeof content.stdout === 'string' && content.stdout) lines.push(content.stdout)
     if (typeof content.stderr === 'string' && content.stderr) lines.push(content.stderr)
+    if (typeof content.content === 'string' && content.content) lines.push(content.content)
+    if (Array.isArray(content.lines)) {
+      for (const line of content.lines) {
+        if (typeof line === 'string') lines.push(line)
+      }
+    }
   }
 
   return lines.join('\n') || '[tool result]'
@@ -227,10 +299,14 @@ function convertServerToolResultContent (content) {
 
 /**
  * Converts a single Anthropic message to zero or more normalized messages.
- * Assistant `tool_use` blocks become an assistant `tool_calls` message.
- * User `tool_result` blocks become one `tool` message per block, emitted
- * before any accompanying text so the chat-style timeline is preserved.
- * Text/image blocks are merged into a single message per role.
+ *
+ * Assistant `tool_use` blocks become an assistant `tool_calls` message. Tool result blocks become
+ * one `tool` message per block. When the message calls a built-in server tool (call, result and
+ * final text arrive together), the content-block timeline is preserved: the tool-call message and
+ * any text before the last result come first, then the results, then text that follows them as a
+ * separate assistant message — so the final answer stays last (`messages.at(-1)`) rather than being
+ * moved ahead of the tool result. User turns carry only results, so those precede any accompanying
+ * text. Text/image blocks are otherwise merged into a single message per role.
  *
  * @param {{role: string, content: string|Array<AnthropicContentBlock>}} message
  * @returns {Array<object>}
@@ -244,17 +320,39 @@ function convertAnthropicMessage (message) {
   }
   if (!Array.isArray(content)) return []
 
-  const { parts, toolCalls, toolResults, hasImages } = walkContentBlocks(content)
-  const messages = [...toolResults]
-  const messageContent = partsToContent(parts, hasImages)
+  const { parts, toolCalls, toolResults, hasImages, partsBeforeLastResult } = walkContentBlocks(content)
 
-  if (messageContent != null || toolCalls.length) {
-    const converted = { role }
-    if (messageContent != null) converted.content = messageContent
-    if (toolCalls.length) converted.tool_calls = toolCalls
-    messages.push(converted)
+  // Built-in server tool turn: keep the call -> result -> final-answer timeline.
+  if (toolCalls.length && toolResults.length) {
+    const leadingParts = parts.slice(0, partsBeforeLastResult)
+    const trailingParts = parts.slice(partsBeforeLastResult)
+
+    const callMessage = { role, tool_calls: toolCalls }
+    const leadingContent = partsToContent(leadingParts, hasImageParts(leadingParts))
+    if (leadingContent != null) callMessage.content = leadingContent
+
+    const messages = [callMessage, ...toolResults]
+
+    const trailingContent = partsToContent(trailingParts, hasImageParts(trailingParts))
+    if (trailingContent != null) messages.push({ role, content: trailingContent })
+    return messages
   }
 
+  const messageContent = partsToContent(parts, hasImages)
+
+  let assistantMessage
+  if (messageContent != null || toolCalls.length) {
+    assistantMessage = { role }
+    if (messageContent != null) assistantMessage.content = messageContent
+    if (toolCalls.length) assistantMessage.tool_calls = toolCalls
+  }
+
+  if (toolCalls.length) {
+    return [assistantMessage]
+  }
+
+  const messages = [...toolResults]
+  if (assistantMessage) messages.push(assistantMessage)
   return messages
 }
 

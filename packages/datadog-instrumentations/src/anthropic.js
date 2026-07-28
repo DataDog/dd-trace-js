@@ -47,16 +47,38 @@ function waitForVerdict (promise, verdict) {
 /**
  * @param {object} response
  * @param {'json'|'text'} method
+ * @param {object} ctx
  * @param {(body: object|string) => Promise<void>|undefined} getVerdict
  */
-function wrapResponseReader (response, method, getVerdict) {
+function wrapResponseReader (response, method, ctx, getVerdict) {
   if (typeof response[method] !== 'function') return
 
   shimmer.wrap(response, method, original => function (...args) {
-    return original.apply(this, args).then(body => {
-      const verdict = getVerdict(body)
-      return verdict ? verdict.then(() => body) : body
-    })
+    return original.apply(this, args)
+      .then(body => finishResult(ctx, body, getVerdict))
+      .catch(error => {
+        if (!ctx.finished) finish(ctx, null, error)
+        throw error
+      })
+  })
+}
+
+/**
+ * @param {object} ctx
+ * @param {object|string} result
+ * @param {(body: object|string) => Promise<void>|undefined} getVerdict
+ * @returns {object|string|Promise<object|string>}
+ */
+function finishResult (ctx, result, getVerdict) {
+  const verdict = getVerdict(result)
+  if (!verdict) {
+    finish(ctx, result, null)
+    return result
+  }
+
+  return verdict.then(() => {
+    finish(ctx, result, null)
+    return result
   })
 }
 
@@ -103,6 +125,7 @@ function wrapCreate (create) {
 
       let apiPromise
       try {
+        // Anthropic starts the request eagerly; the input verdict only gates result delivery.
         apiPromise = create.apply(this, args)
       } catch (error) {
         finish(ctx, null, error)
@@ -143,17 +166,7 @@ function wrapCreate (create) {
               shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
               return response
             }
-            const verdict = getAfterVerdict(response)
-            if (!verdict) {
-              finish(ctx, response, null)
-              return response
-            }
-            // Finish after evaluation so a block propagates the error to anthropic.request
-            // and the span wraps its child instead of closing before it.
-            return verdict.then(() => {
-              finish(ctx, response, null)
-              return response
-            })
+            return finishResult(ctx, response, getAfterVerdict)
           }).catch(error => {
             if (!ctx.finished) finish(ctx, null, error)
             throw error
@@ -162,19 +175,17 @@ function wrapCreate (create) {
         return parseResult
       })
 
-      // Gate `.asResponse()` callers on the before verdict so raw-response paths still block,
-      // then evaluate output only if the caller consumes the JSON body.
+      // Gate raw access; output evaluation supports only the common json() and text() readers.
       shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
         return waitForVerdict(origAsResponse.apply(this, asResponseArgs), getBeforeVerdict())
           .then(response => {
-            if (!stream && hasLifecycle && wrappedResponse !== response) {
+            if (!stream && wrappedResponse !== response) {
               wrappedResponse = response
-              wrapResponseReader(response, 'json', getAfterVerdict)
-              wrapResponseReader(response, 'text', getAfterVerdict)
+              wrapResponseReader(response, 'json', ctx, getAfterVerdict)
+              wrapResponseReader(response, 'text', ctx, getAfterVerdict)
             }
 
             if (afterVerdict) return afterVerdict.then(() => response)
-            if (!stream && !ctx.finished && !parseResult) finish(ctx, null, null)
             return response
           })
           .catch(error => {

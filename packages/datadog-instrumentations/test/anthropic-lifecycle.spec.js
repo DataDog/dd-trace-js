@@ -260,7 +260,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('finishes after a resolving before subscriber leaves', async () => {
+  it('finishes after reading a raw response when the before subscriber leaves', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let asyncEndCount = 0
@@ -282,10 +282,11 @@ describe('anthropic lifecycle instrumentation', () => {
     messages._nextApiPromise = apiPromise
 
     try {
-      assert.strictEqual(
-        await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse(),
-        apiPromise._rawResponse
-      )
+      const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+
+      assert.strictEqual(response, apiPromise._rawResponse)
+      assert.strictEqual(asyncEndCount, 0)
+      await response.json()
       assert.strictEqual(asyncEndCount, 1)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
@@ -293,7 +294,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('finishes an unconsumed raw response and evaluates it when read', async () => {
+  it('finishes a raw response with its result when read', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let asyncEndCtx
@@ -312,15 +313,39 @@ describe('anthropic lifecycle instrumentation', () => {
       const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
 
       assert.strictEqual(calls.length, 1)
-      assert.ok(asyncEndCtx, 'asyncEnd was not published')
-      assert.strictEqual(asyncEndCtx.finished, true)
+      assert.strictEqual(asyncEndCtx, undefined)
       assert.strictEqual(response.bodyUsed, false)
       assert.deepStrictEqual(await response.json(), body)
       assert.strictEqual(calls.length, 2)
       assert.deepStrictEqual(calls[1].body, body)
+      assert.ok(asyncEndCtx, 'asyncEnd was not published')
+      assert.strictEqual(asyncEndCtx.finished, true)
+      assert.deepStrictEqual(asyncEndCtx.result, body)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
       unsubscribe()
+    }
+  })
+
+  it('finishes a raw response reader when only tracing is active', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCtx
+    apmHandlers.asyncEnd = ctx => { asyncEndCtx = ctx }
+    apmChannel.subscribe(apmHandlers)
+
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(body)
+
+    try {
+      const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+
+      assert.strictEqual(asyncEndCtx, undefined)
+      assert.deepStrictEqual(await response.json(), body)
+      assert.deepStrictEqual(asyncEndCtx.result, body)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
     }
   })
 
@@ -377,11 +402,12 @@ describe('anthropic lifecycle instrumentation', () => {
       )
       sinon.assert.notCalled(response.clone)
       assert.strictEqual(calls.length, 0)
-      assert.strictEqual(asyncEndCount, 1)
+      assert.strictEqual(asyncEndCount, 0)
       assert.deepStrictEqual(await response.json(), body)
       sinon.assert.calledOnce(readJson)
       assert.strictEqual(calls.length, 1)
       assert.strictEqual(calls[0].body, body)
+      assert.strictEqual(asyncEndCount, 1)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
       unsubscribe()
@@ -508,22 +534,33 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('keeps a raw-terminal span finished when parsing starts later', async () => {
+  it('retains the parsed result when parsing starts after raw response access', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let asyncEndCount = 0
-    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    let asyncEndCtx
+    apmHandlers.asyncEnd = ctx => {
+      asyncEndCount++
+      asyncEndCtx = ctx
+    }
     apmChannel.subscribe(apmHandlers)
 
     const { unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
+    const body = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hi' }],
+      usage: { input_tokens: 1, output_tokens: 2 },
+    }
     const messages = new Messages()
-    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    messages._nextApiPromise = new FakeAPIPromise(body)
     const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
 
     try {
       await apiPromise.asResponse()
-      await apiPromise.parse()
+      assert.strictEqual(asyncEndCount, 0)
+      assert.strictEqual(await apiPromise.parse(), body)
       assert.strictEqual(asyncEndCount, 1)
+      assert.strictEqual(asyncEndCtx.result, body)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
       unsubscribe()
