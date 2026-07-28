@@ -11,5 +11,8 @@ module.exports = {
   reporterEnabled,
   scriptsJunitReporterJsReporterOptions: {
     mochaFile: `./node-${process.versions.node}-junit.xml`,
+    properties: {
+      node_version: process.versions.node,
+    },
   },
 }
