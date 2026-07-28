@@ -12,6 +12,7 @@ const {
   useSandbox,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
@@ -38,7 +39,7 @@ const { NODE_MAJOR } = require('../../version')
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVersions.vitest
-const playwrightVersion = latestVersions.playwright
+const playwrightVersion = getLatestPlaywrightSpecifier()
 const browserProviderDependency = isLegacyBrowserProvider
   ? `@vitest/browser@${vitestVersion}`
   : `@vitest/browser-playwright@${vitestVersion}`
