@@ -31,8 +31,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 const NUM_RETRIES_EFD = 3
 const PLAYWRIGHT_EFD_GATHER_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
