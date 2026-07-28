@@ -19,6 +19,7 @@ const {
   TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_IS_RUM_ACTIVE,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
@@ -145,6 +146,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(passedTest.meta[TEST_TYPE], 'browser')
       assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], 'chromium')
       assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], 'playwright')
+      assert.ok(!(TEST_IS_RUM_ACTIVE in passedTest.meta))
       assert.deepStrictEqual(JSON.parse(passedTest.meta[TEST_PARAMETERS]), {
         arguments: {
           browser: 'chromium',
@@ -161,6 +163,73 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
 
     const [exitCode] = await Promise.all([
       runVitest('browser-reporting.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('correlates sequential browser tests with RUM', async () => {
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      early_flake_detection: {
+        enabled: false,
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 4)
+
+      const firstTest = getTestByName(tests, 'vitest browser RUM correlation correlates the first browser test')
+      const secondTest = getTestByName(
+        tests,
+        'vitest browser RUM correlation uses a new correlation ID after restarting RUM'
+      )
+      const retriedTests = tests.filter(
+        test => test.meta[TEST_NAME] === 'vitest browser RUM correlation uses a new RUM correlation ID on retry'
+      )
+      const firstTestExecutionId = getRumTestExecutionId(testOutput, 'first')
+      const secondTestExecutionId = getRumTestExecutionId(testOutput, 'second')
+      const firstRetryExecutionId = getRumTestExecutionId(testOutput, 'retry-1')
+      const secondRetryExecutionId = getRumTestExecutionId(testOutput, 'retry-2')
+
+      assert.strictEqual(firstTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(firstTest.trace_id.toString(), firstTestExecutionId)
+      assert.strictEqual(secondTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(secondTest.trace_id.toString(), secondTestExecutionId)
+      assert.strictEqual(retriedTests.length, 2)
+      assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
+      assert.strictEqual(retriedTests[0].meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(retriedTests[0].trace_id.toString(), firstRetryExecutionId)
+      assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'pass')
+      assert.strictEqual(retriedTests[1].meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(retriedTests[1].trace_id.toString(), secondRetryExecutionId)
+      assert.notStrictEqual(firstTestExecutionId, secondTestExecutionId)
+      assert.notStrictEqual(firstRetryExecutionId, secondRetryExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum.mjs', {
+        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate concurrent browser tests with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-concurrent.mjs', {
+        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
+      }),
       payloadsPromise,
     ])
 
@@ -335,3 +404,9 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 })
+
+function getRumTestExecutionId (testOutput, testName) {
+  const match = testOutput.match(new RegExp(`DD_VITEST_RUM_EXECUTION_ID:${testName}:(\\d+)`))
+  assert.ok(match, testOutput)
+  return match[1]
+}

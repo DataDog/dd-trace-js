@@ -18,7 +18,12 @@ const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnable
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
 const quarantinedTests = providedContext.quarantinedTests || {}
+const rumFlushWaitMillis = Number.isFinite(providedContext.rumFlushWaitMillis)
+  ? providedContext.rumFlushWaitMillis
+  : 500
+const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
+const realSetTimeout = globalThis.setTimeout
 let setVitestTaskFn
 if (isNoWorkerInitActive) {
   try {
@@ -31,6 +36,7 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
+let shouldRestartRumSession = false
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
@@ -50,7 +56,7 @@ if (isNoWorkerInitActive) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
 
-    if (disabledTests[testSuite]?.[testName] && !isAttemptToFixTest) {
+    if (!isAttemptToFixTest && disabledTests[testSuite]?.[testName]) {
       skip('Skipped by Datadog Test Optimization')
     } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'
@@ -60,6 +66,8 @@ if (isNoWorkerInitActive) {
         task.result.state = 'run'
       }
     }
+
+    prepareRumCorrelation(task, attemptIndex)
 
     if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) {
       onTestFinished(() => {
@@ -73,15 +81,16 @@ if (isNoWorkerInitActive) {
     }
   })
 
-  afterEach(function ({ task }) {
+  afterEach(async function ({ task }) {
     const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
-    if (restoreEarlyFlakeDetectionSkippedResult(task)) {
-      return
-    }
-    if (attemptIndex === getFinalAttemptIndex(task)) {
+    const restoredEarlyFlakeDetectionResult = restoreEarlyFlakeDetectionSkippedResult(task)
+    if (!restoredEarlyFlakeDetectionResult && attemptIndex === getFinalAttemptIndex(task)) {
       recordTestOptimizationStatus(task, attemptIndex)
     }
-    switchQuarantinedFinalFailure(task, attemptIndex)
+    if (!restoredEarlyFlakeDetectionResult) {
+      switchQuarantinedFinalFailure(task, attemptIndex)
+    }
+    await finishRumCorrelation(task, attemptIndex)
   })
 }
 
@@ -113,6 +122,170 @@ function getNextAttemptIndex (task) {
   nextAttemptIndexByTask.set(task, attemptIndex + 1)
   task.meta.__ddTestOptCurrentAttemptIndex = attemptIndex
   return attemptIndex
+}
+
+/**
+ * Sets the RUM correlation cookie for a sequential browser test attempt.
+ *
+ * @param {object} task
+ * @param {number} attemptIndex
+ * @returns {void}
+ */
+function prepareRumCorrelation (task, attemptIndex) {
+  // A per-origin cookie cannot identify overlapping attempts without racing.
+  if (task.concurrent === true) return
+
+  if (
+    typeof window === 'undefined' ||
+    typeof document === 'undefined' ||
+    typeof rumTestExecutionIdCookieName !== 'string'
+  ) {
+    return
+  }
+
+  const testExecutionId = generateTestExecutionId()
+  if (!testExecutionId || !setRumCorrelationCookie(testExecutionId)) return
+
+  task.meta.__ddTestOptRumTestExecutionIds ||= []
+  task.meta.__ddTestOptRumTestExecutionIds[attemptIndex] = testExecutionId
+
+  if (!shouldRestartRumSession) return
+
+  const rum = getRum()
+  if (!rum) return
+
+  shouldRestartRumSession = false
+  try {
+    const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, '__ddIsTrusted', { value: true })
+    window.dispatchEvent(event)
+  } catch {}
+  try {
+    rum.startView?.()
+  } catch {}
+}
+
+/**
+ * Records whether RUM was active, stops it, flushes its events, and clears the attempt cookie.
+ *
+ * @param {object} task
+ * @param {number} attemptIndex
+ * @returns {Promise<void>}
+ */
+async function finishRumCorrelation (task, attemptIndex) {
+  const testExecutionId = task.meta.__ddTestOptRumTestExecutionIds?.[attemptIndex]
+  if (!testExecutionId) return
+
+  const rum = getRum()
+  const isRumActive = getIsRumActive(rum)
+  if (isRumActive) {
+    task.meta.__ddTestOptRumActive ||= []
+    task.meta.__ddTestOptRumActive[attemptIndex] = true
+  }
+
+  if (isRumActive && typeof rum?.stopSession === 'function') {
+    shouldRestartRumSession = true
+    try {
+      rum.stopSession()
+      await new Promise(resolve => realSetTimeout(resolve, rumFlushWaitMillis))
+    } catch {}
+  }
+
+  clearRumCorrelationCookie(testExecutionId)
+}
+
+/**
+ * Returns the RUM public API without letting application-defined accessors fail a test.
+ *
+ * @returns {object|undefined}
+ */
+function getRum () {
+  try {
+    return window.DD_RUM
+  } catch {}
+}
+
+/**
+ * Returns whether the current RUM session is active.
+ *
+ * @param {object|undefined} rum
+ * @returns {boolean}
+ */
+function getIsRumActive (rum) {
+  if (!rum) return false
+  if (typeof rum.getInternalContext !== 'function') return true
+
+  try {
+    return !!rum.getInternalContext()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Generates a positive 63-bit decimal test execution ID.
+ *
+ * @returns {string|undefined}
+ */
+function generateTestExecutionId () {
+  // This setup file executes in a browser even though lint validates it against the package's Node.js target.
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof globalThis.crypto?.getRandomValues !== 'function') return
+
+  const words = new Uint32Array(2)
+  do {
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+    globalThis.crypto.getRandomValues(words)
+    words[0] &= 0x7F_FF_FF_FF
+  } while (words[0] === 0 && words[1] === 0)
+
+  return ((BigInt(words[0]) << 32n) | BigInt(words[1])).toString(10)
+}
+
+/**
+ * Sets and verifies the RUM correlation cookie for the current origin.
+ *
+ * @param {string} testExecutionId
+ * @returns {boolean}
+ */
+function setRumCorrelationCookie (testExecutionId) {
+  try {
+    // eslint-disable-next-line unicorn/no-document-cookie
+    document.cookie = `${rumTestExecutionIdCookieName}=${testExecutionId}; path=/`
+    return getRumCorrelationCookie() === testExecutionId
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Clears the RUM correlation cookie if it still belongs to this attempt.
+ *
+ * @param {string} testExecutionId
+ * @returns {void}
+ */
+function clearRumCorrelationCookie (testExecutionId) {
+  try {
+    if (getRumCorrelationCookie() === testExecutionId) {
+      // eslint-disable-next-line unicorn/no-document-cookie
+      document.cookie = `${rumTestExecutionIdCookieName}=; path=/; max-age=0`
+    }
+  } catch {}
+}
+
+/**
+ * Returns the current RUM correlation cookie value.
+ *
+ * @returns {string|undefined}
+ */
+function getRumCorrelationCookie () {
+  const prefix = `${rumTestExecutionIdCookieName}=`
+  for (const cookie of document.cookie.split(';')) {
+    const normalizedCookie = cookie.trim()
+    if (normalizedCookie.startsWith(prefix)) {
+      return normalizedCookie.slice(prefix.length)
+    }
+  }
 }
 
 function recordTestOptimizationStatus (task, attemptIndex = task.result?.repeatCount || 0, onlyIfNewErrors = false) {

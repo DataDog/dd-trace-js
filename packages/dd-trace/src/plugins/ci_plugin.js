@@ -755,8 +755,8 @@ module.exports = class CiPlugin extends Plugin {
     return codeOwners
   }
 
-  startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
-    const childOf = getTestParentSpan(this.tracer)
+  startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}, testExecutionId) {
+    const childOf = getTestParentSpan(this.tracer, testExecutionId)
 
     let testTags = {
       ...getTestCommonTags(

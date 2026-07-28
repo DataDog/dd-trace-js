@@ -15,6 +15,9 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest-main-no-worker-init')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+} = require('../../packages/dd-trace/src/ci-visibility/rum')
 const { testSuiteStartCh } = require('../../packages/datadog-instrumentations/src/vitest-util')
 const {
   ERROR_MESSAGE,
@@ -304,15 +307,15 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
-    it('sends EFD retry thresholds to the no-worker setup context', () => {
+    it('sends execution and RUM configuration to the no-worker setup context', () => {
       const ctx = getNoWorkerReporterContext()
 
       configureNoWorkerReporter(ctx)
 
-      assert.deepStrictEqual(
-        ctx.getRootProject()._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
-        EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
-      )
+      const setupContext = ctx.getRootProject()._provided._ddVitestWorkerSetup
+      assert.deepStrictEqual(setupContext.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
+      assert.strictEqual(setupContext.rumFlushWaitMillis, 500)
+      assert.strictEqual(setupContext.rumTestExecutionIdCookieName, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

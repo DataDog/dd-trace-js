@@ -4,6 +4,7 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
@@ -173,6 +174,8 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       modifiedFiles: modifiedFiles || {},
       quarantinedTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isQuarantined'),
       repositoryRoot: repositoryRoot || process.cwd(),
+      rumFlushWaitMillis: getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'),
+      rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
       testPropertiesByFilepath: testPropertiesByFilepath || {},
     },
   }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
@@ -560,6 +563,7 @@ function createMainProcessReporter (reporterState) {
         if (index === finalErrorIndex) continue
         nonFinalAttempts.push({
           error: errors[index],
+          index,
           isRetry: index > 0,
           status: 'fail',
         })
@@ -787,6 +791,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
       errorIndex++
     }
     const attempt = {
+      index,
       attemptToFixFailed: type === 'attempt_to_fix' && isFinalAttempt && hasFailure,
       earlyFlakeAbortReason: type === 'early_flake_detection' && isFinalAttempt
         ? task.meta?.__ddTestOptEfdAbortReason
@@ -950,6 +955,10 @@ function reportTestAttempt (testReport, attempt) {
   } = testReport
   const result = task.result
   const status = attempt.status
+  const {
+    isRumActive,
+    testExecutionId,
+  } = getRumCorrelation(task, attempt.index)
   const testCtx = {
     ...browserEnvironment,
     currentStore: testSuiteStore,
@@ -966,8 +975,10 @@ function reportTestAttempt (testReport, attempt) {
     isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
     isRetryReasonAtr: !testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection &&
       testProperties.isFlakyTestRetries,
+    isRumActive,
     isTestFrameworkWorker: true,
     requestErrorTags: state.requestErrorTags,
+    testExecutionId,
   }
   if (testProperties.isAttemptToFix) {
     recordAttemptToFixExecution(state.attemptToFixExecutions, {
@@ -1018,6 +1029,24 @@ function reportTestAttempt (testReport, attempt) {
     attemptToFixFailed: attempt.attemptToFixFailed,
     ...testCtx.currentStore,
   })
+}
+
+/**
+ * Returns the browser RUM correlation metadata for a test attempt.
+ *
+ * @param {object} task
+ * @param {number|undefined} attemptIndex
+ * @returns {{ isRumActive?: boolean, testExecutionId?: string }}
+ */
+function getRumCorrelation (task, attemptIndex) {
+  const testExecutionIds = task.meta?.__ddTestOptRumTestExecutionIds
+  if (!Array.isArray(testExecutionIds) || testExecutionIds.length === 0) return {}
+
+  attemptIndex ??= testExecutionIds.length - 1
+  return {
+    isRumActive: task.meta?.__ddTestOptRumActive?.[attemptIndex] === true,
+    testExecutionId: testExecutionIds[attemptIndex],
+  }
 }
 
 function isFinalTestAttempt (testReport, attempt) {

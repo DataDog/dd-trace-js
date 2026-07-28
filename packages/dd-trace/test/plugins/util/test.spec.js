@@ -46,6 +46,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
   TEST_BROWSER_VERSION,
@@ -144,6 +145,17 @@ describe('RUM test correlation', () => {
 
     assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
     assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('uses a preallocated test execution ID for the test trace', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }, '123456789'), parentSpan)
+    sinon.assert.calledOnceWithExactly(extract, 'text_map', {
+      'x-datadog-trace-id': '123456789',
+      'x-datadog-parent-id': '0000000000000000',
+    })
   })
 })
 

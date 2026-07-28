@@ -39,6 +39,7 @@ const {
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_NAME,
+  TEST_IS_RUM_ACTIVE,
   TEST_PARAMETERS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -130,6 +131,8 @@ class VitestPlugin extends CiPlugin {
         browserDriver,
         browserName,
         browserProjectName,
+        isRumActive,
+        testExecutionId,
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -173,6 +176,9 @@ class VitestPlugin extends CiPlugin {
       if (isTestFrameworkWorker) {
         extraTags[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       }
+      if (isRumActive) {
+        extraTags[TEST_IS_RUM_ACTIVE] = 'true'
+      }
       setBrowserTags(extraTags, {
         browserDriver,
         browserName,
@@ -184,7 +190,8 @@ class VitestPlugin extends CiPlugin {
         testName,
         testSuite,
         testSuiteSpan,
-        extraTags
+        extraTags,
+        testExecutionId
       )
 
       ctx.parentStore = store
