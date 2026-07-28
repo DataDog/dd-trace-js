@@ -33,14 +33,15 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
-let clock = globalThis.performance
+let now
 if (globalThis.process?.versions?.node) {
-  const { performance: nodePerformance } = await import('node:perf_hooks')
-  clock = nodePerformance
-} else if (globalThis.window?.parent && globalThis.window.parent !== globalThis.window) {
-  clock = globalThis.window.parent.performance
+  now = () => globalThis.process.uptime() * 1000
+} else {
+  const clock = globalThis.window?.parent && globalThis.window.parent !== globalThis.window
+    ? globalThis.window.parent.performance
+    : globalThis.performance
+  now = clock ? clock.now.bind(clock) : Date.now
 }
-const now = clock ? clock.now.bind(clock) : Date.now
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
