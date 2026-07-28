@@ -47,19 +47,16 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
-/**
- * Register an agentless export with Vercel's active Next.js request lifetime.
- *
- * @param {import('./opentracing/tracer') | {_tracer: import('./opentracing/tracer')}} tracer Datadog tracer instance.
- * @returns {boolean} Whether the export was registered with the request context.
- */
-function scheduleVercelFlush (tracer) {
+function getVercelAgentlessExporter (tracer) {
   if (getEnvironmentVariable('VERCEL') !== '1') return false
 
   tracer = tracer?._tracer || tracer
   if (tracer?._config?.experimental?.exporter !== 'agentless') return false
   if (typeof tracer._exporter?.flush !== 'function') return false
+  return tracer._exporter
+}
 
+function getVercelWaitUntil () {
   let waitUntil
   for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
     try {
@@ -69,7 +66,22 @@ function scheduleVercelFlush (tracer) {
     }
     if (typeof waitUntil === 'function') break
   }
-  if (typeof waitUntil !== 'function') return false
+  return waitUntil
+}
+
+/**
+ * Reserve a task in Vercel's active request lifetime, returning a function that
+ * flushes agentless traces and completes the task.
+ *
+ * @param {import('./opentracing/tracer') | {_tracer: import('./opentracing/tracer')}} tracer Datadog tracer instance.
+ * @returns {Function | undefined} Function that starts the registered export.
+ */
+function registerVercelFlush (tracer) {
+  const exporter = getVercelAgentlessExporter(tracer)
+  if (!exporter) return
+
+  const waitUntil = getVercelWaitUntil()
+  if (typeof waitUntil !== 'function') return
 
   let resolveFlush
   const promise = new Promise(resolve => {
@@ -80,10 +92,28 @@ function scheduleVercelFlush (tracer) {
     waitUntil(promise)
   } catch {
     resolveFlush()
-    return false
+    return
   }
 
-  setImmediate(flushExporter, tracer._exporter, resolveFlush)
+  let started = false
+  return () => {
+    if (started) return
+    started = true
+    setImmediate(flushExporter, exporter, resolveFlush)
+  }
+}
+
+/**
+ * Register and immediately schedule an agentless export with Vercel's active
+ * request lifetime.
+ *
+ * @param {import('./opentracing/tracer') | {_tracer: import('./opentracing/tracer')}} tracer Datadog tracer instance.
+ * @returns {boolean} Whether the export was registered with the request context.
+ */
+function scheduleVercelFlush (tracer) {
+  const flush = registerVercelFlush(tracer)
+  if (!flush) return false
+  flush()
   return true
 }
 
@@ -98,6 +128,7 @@ function flushExporter (exporter, done) {
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
+  registerVercelFlush,
   scheduleVercelFlush,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,

@@ -8,7 +8,7 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { scheduleVercelFlush } = require('../serverless')
+const { registerVercelFlush, scheduleVercelFlush } = require('../serverless')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
@@ -126,6 +126,7 @@ function spanNameMapper (spanName, kind, attributes) {
  */
 class Span extends BridgeSpanBase {
   #otelName
+  #vercelFlush
 
   /**
    * @param {import('./tracer')} parentTracer
@@ -188,6 +189,11 @@ class Span extends BridgeSpanBase {
     this.startTime = hrStartTime
     this.kind = kind
     this._spanProcessor.onStart(this, context)
+
+    if (this.instrumentationLibrary.name === 'next.js' &&
+      this._ddSpan.context().getTag('next.span_type') === 'BaseServer.handleRequest') {
+      this.#vercelFlush = registerVercelFlush(tracer)
+    }
   }
 
   get parentSpanId () {
@@ -271,7 +277,11 @@ class Span extends BridgeSpanBase {
 
     if (this.instrumentationLibrary.name === 'next.js' &&
       this._ddSpan.context().getTag('next.span_type') === 'BaseServer.handleRequest') {
-      scheduleVercelFlush(tracer)
+      if (this.#vercelFlush) {
+        this.#vercelFlush()
+      } else {
+        scheduleVercelFlush(tracer)
+      }
     }
   }
 

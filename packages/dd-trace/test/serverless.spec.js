@@ -10,6 +10,7 @@ require('./setup/core')
 
 const {
   enableGCPPubSubPushSubscription,
+  registerVercelFlush,
   scheduleVercelFlush,
 } = require('../src/serverless')
 
@@ -99,6 +100,35 @@ describe('scheduleVercelFlush', () => {
     await nextImmediate()
 
     assert.strictEqual(typeof flushDone, 'function')
+    flushDone()
+    await waitUntilTask
+  })
+
+  it('can complete a flush after the request context has exited', async () => {
+    process.env.VERCEL = '1'
+    const requestContextStorage = new AsyncLocalStorage()
+    let flushDone
+    let waitUntilTask
+    const tracer = createAgentlessTracer(done => {
+      flushDone = done
+    })
+    globalThis[vercelRequestContext] = {
+      get: () => requestContextStorage.getStore(),
+    }
+
+    const flush = requestContextStorage.run({
+      waitUntil: promise => {
+        waitUntilTask = promise
+      },
+    }, () => registerVercelFlush(tracer))
+
+    assert.strictEqual(typeof flush, 'function')
+    assert.strictEqual(requestContextStorage.getStore(), undefined)
+
+    flush()
+    await nextImmediate()
+    assert.strictEqual(typeof flushDone, 'function')
+
     flushDone()
     await waitUntilTask
   })
