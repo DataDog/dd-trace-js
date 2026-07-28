@@ -82,25 +82,27 @@ export function hasCodecovCommit () {
 }
 
 /**
- * Merge and upload one workflow run's coverage to Datadog and Codecov, if it produced any. Only
- * lcov is uploaded: both backends read it, and this repo's `patch-istanbul-lib-coverage.js`
- * already folds branch/function hit data into lcov's `DA:` records, so no separate istanbul JSON
- * report is needed for either backend's coverage gate. The Codecov upload carries a flag derived
- * from the workflow's name (see `flagOf`) so its per-flag breakdown reflects each sibling workflow
- * separately instead of every upload sharing one flag.
+ * Merge and upload one workflow run's coverage to Datadog and Codecov, if it produced any. Datadog
+ * gets the lcov report; Codecov gets the istanbul JSON report, since Codecov reads branch/function
+ * coverage from it and its own cross-session merge for a shared file has been observed overwriting
+ * rather than summing when more than one session reports it — see `group-coverage.mjs`. The Codecov
+ * upload carries a flag derived from the workflow's name (see `flagOf`) so its per-flag breakdown
+ * reflects each sibling workflow separately instead of every upload sharing one flag.
  *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
 export async function uploadCoverage (run, options) {
-  const coverageDir = mergeRunCoverage(run.id)
-  if (!coverageDir) return []
+  const { lcovDir, jsonDir } = mergeRunCoverage(run.id)
+  if (!lcovDir && !jsonDir) return []
 
-  const datadogUpload = runUpload('datadog-ci', ['coverage', 'upload', coverageDir, '--flags', 'coverage'])
-  const commitReady = await ensureCodecovCommit(options)
+  const datadogUpload = lcovDir
+    ? runUpload('datadog-ci', ['coverage', 'upload', lcovDir, '--flags', 'coverage'])
+    : null
+  const commitReady = jsonDir ? await ensureCodecovCommit(options) : false
   const codecovUpload = commitReady
-    ? runUploadWithRetry('codecovcli', codecovUploadArgs(coverageDir, flagOf(run.name), options))
+    ? runUploadWithRetry('codecovcli', codecovUploadArgs(jsonDir, flagOf(run.name), options))
     : null
 
   const results = await Promise.all([datadogUpload, codecovUpload])
