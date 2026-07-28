@@ -17,11 +17,6 @@ module.exports = {
   PROPAGATED_SESSION_ID_KEY: '_dd.p.llmobs_sid',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
 
-  // Agent attribution: the nearest agent ancestor a span is attributed to. Resolved once at
-  // span registration and stored on the registry entry; surfaced on the wire as
-  // `meta.agent_attribution`. The propagated keys carry the same identity across process
-  // boundaries. The id is always `str(span_id)` (digit-safe); the name is arbitrary user text
-  // and must pass `agentNameWireSafe` before being written to the `x-datadog-tags` tagset.
   PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
   PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
   PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',

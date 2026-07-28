@@ -61,6 +61,7 @@ const {
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
+  resolveAgentAttribution,
   validateCostTags,
   writeBridgeTags,
   validateToolDefinitions,
@@ -107,27 +108,6 @@ class LLMObsTagger {
 
   static getSpanKind (span) {
     return registry.get(span)?.[SPAN_KIND]
-  }
-
-  /**
-   * Resolve the nearest agent that a *child* of `span` should be attributed to.
-   *
-   * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
-   * already resolved its own nearest agent when it was registered, so the child inherits that
-   * (one-level lookup, no ancestor walk). An agent never attributes itself: resolution always
-   * looks at the passed span as the prospective parent. Returns `undefined` values when there
-   * is no agent ancestor (or when `span` is not a registered LLMObs span).
-   *
-   * @param {import('../opentracing/span')} [span]
-   * @returns {{ name: string | undefined, spanId: string | undefined }}
-   */
-  static resolveAgentAttribution (span) {
-    const tags = registry.get(span)
-    if (!tags) return { name: undefined, spanId: undefined }
-    if (tags[SPAN_KIND] === 'agent') {
-      return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
-    }
-    return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
   }
 
   registerLLMObsSpan (span, {
@@ -263,11 +243,13 @@ class LLMObsTagger {
    * @param {import('../opentracing/span')} span
    * @param {import('../opentracing/span')} [parent] the LLMObs parent span, if any
    */
+  // TODO: spans whose kind changes after registration (e.g. claude-agent-sdk tools promoted to
+  // sub-agents) will not retroactively update already-finished children's attribution. Follow up.
   #tagAgentAttribution (span, parent) {
     let name, spanId
     if (registry.has(parent)) {
       // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
-      ({ name, spanId } = LLMObsTagger.resolveAgentAttribution(parent))
+      ({ name, spanId } = resolveAgentAttribution(registry.get(parent), parent))
     } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
       // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
       // name may be absent when the upstream hop ran an older SDK or its name was not

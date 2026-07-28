@@ -6,6 +6,10 @@ const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
+  SPAN_KIND,
+  NAME,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
 } = require('./constants/tags')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
@@ -314,6 +318,42 @@ function agentNameWireSafe (name) {
   return true
 }
 
+/**
+ * Resolve the nearest agent that a *child* of `span` should be attributed to.
+ *
+ * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
+ * already resolved its own nearest agent at registration, so the child inherits that with a
+ * single lookup rather than walking the ancestor chain. An agent never attributes itself.
+ *
+ * @param {Record<string, any> | undefined} tags - Registry entry for the parent span.
+ * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
+ * @returns {{ name: string | undefined, spanId: string | undefined }}
+ */
+function resolveAgentAttribution (tags, span) {
+  if (!tags) return { name: undefined, spanId: undefined }
+  if (tags[SPAN_KIND] === 'agent') {
+    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+  }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
+}
+
+/**
+ * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
+ * truthy and passes the optional `safeguard` predicate. Returns the original `tags` unchanged
+ * when the value is absent or unsafe, so the caller can chain calls without branching.
+ *
+ * @param {string} tags - Existing tagset string (may be empty).
+ * @param {string} key
+ * @param {string | undefined} value
+ * @param {(v: string) => boolean} [safeguard]
+ * @returns {string}
+ */
+function appendOptionalPropagatedTag (tags, key, value, safeguard) {
+  if (!value) return tags
+  if (safeguard && !safeguard(value)) return tags
+  return `${tags}${tags ? ',' : ''}${key}=${value}`
+}
+
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -464,6 +504,7 @@ function formatAudioPart (data, mimeType) {
 
 module.exports = {
   agentNameWireSafe,
+  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -471,6 +512,7 @@ module.exports = {
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
   formatAudioPart,
+  resolveAgentAttribution,
   validateCostTags,
   validateKind,
   getFunctionArguments,

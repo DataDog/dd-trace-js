@@ -23,7 +23,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { agentNameWireSafe } = require('./util')
+const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -155,7 +155,7 @@ function handleLLMObsInjection ({ carrier }) {
   // active span sits under a distributed agent, `resolveAgentAttribution` inherits the propagated
   // id/name already on the parent's registry entry, so the chain survives multiple hops. Resolved
   // after the bail-out above so we don't allocate when there is nothing to inject.
-  const { name: parentAgentName, spanId: parentAgentSpanId } = LLMObsTagger.resolveAgentAttribution(parent)
+  const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(LLMObsTagger.tagMap.get(parent), parent)
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -167,15 +167,10 @@ function handleLLMObsInjection ({ carrier }) {
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
   if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
-  // The id is always digit-safe; skip an unsafe name (id-only) rather than letting the tagset
-  // encoder drop the whole header. The backend resolves the name from the id in that case.
-  if (parentAgentSpanId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_ID_KEY}=${parentAgentSpanId}`
-  if (parentAgentName && agentNameWireSafe(parentAgentName)) {
-    const nameEntry = `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_NAME_KEY}=${parentAgentName}`
-    if (tags.length + nameEntry.length <= globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
-      tags += nameEntry
-    }
-  }
+  // The id is always digit-safe; skip an unsafe name rather than letting the tagset encoder drop
+  // the whole header. Budget overflow (like ml_app) is a known limitation tracked separately.
+  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId)
+  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe)
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
