@@ -828,10 +828,11 @@ describe('RemoteConfig', () => {
       // a refreshed id without the RemoteConfig instance being recreated.
       const originalId = rc.state.client.id
 
-      // Simulate a direct update to the module-level clientId by checking that
-      // creating a second instance (which captures the current value) sees the same id.
-      const rc2 = new RemoteConfig(config)
-      assert.strictEqual(rc2.state.client.id, originalId)
+      uuid.returns('refreshed-client-id')
+      RemoteConfig.refreshClientId(config)
+
+      assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
+      assert.notStrictEqual(rc.state.client.id, originalId)
     })
 
     it('should reflect runtime-id tag changes immediately via client_tracer.runtime_id getter', () => {
