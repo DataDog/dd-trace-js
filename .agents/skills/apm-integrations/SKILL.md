@@ -10,8 +10,12 @@ description: |
 
 # APM integrations
 
-Use this skill for third-party library calls. Use `serverless-integrations` when dd-trace-js owns the cloud function
-invocation itself, and `llmobs-integration` / `llmobs-testing` when the change also emits LLMObs spans.
+This skill owns the mechanics shared by APM, plugin-backed serverless, and LLMObs integrations: source inspection,
+hook selection, the instrumentation/plugin boundary, registration, and generic tests. Specialized skills own only
+their domain-specific behavior.
+
+Use `serverless-integrations` when dd-trace-js owns the cloud function invocation itself, and `llmobs-integration` /
+`llmobs-testing` when the change emits LLMObs spans.
 
 ## Architecture
 
@@ -19,12 +23,26 @@ Instrumentation under `packages/datadog-instrumentations/src/` observes the libr
 diagnostic-channel events. A plugin under `packages/datadog-plugin-<name>/src/` subscribes to those events and owns
 span naming, tags, parenting, errors, and completion. Keep tracer imports out of the instrumentation layer.
 
-Before editing either layer:
+## Execution sequence
 
-1. Read the upstream source for every supported build and version range that reaches the hook.
-2. Trace the real call from the public API to the source function, callback, stream, or runtime-created object.
-3. Read one or two current in-repo integrations with the same hook shape and plugin base class.
-4. List every subscriber to a channel before moving or gating its publish.
+Follow the full sequence for a new APM or plugin-backed integration. Specialized skills use only the shared steps
+their integration needs.
+
+1. Read the upstream source and trace the public call through every supported build and completion form.
+2. Choose the hook and plugin base, then read their implementations and one or two current integrations of that
+   shape.
+3. Add the instrumentation file and one `helpers/hooks.js` entry per npm package name. The plain form is
+   `() => require('../<name>')`; `{ esmFirst: true, fn }` also hooks files below an ESM package entry point, and
+   `{ serverless: false, fn }` skips hooks that must not load in serverless environments.
+4. For Orchestrion, add its config and register it in `rewriter/instrumentations/index.js`.
+5. Add the plugin package and the runtime getter in `packages/dd-trace/src/plugins/index.js`.
+6. Register operation and service names in `service-naming/schemas/v0/<type>.js` and `v1/<type>.js` when the plugin
+   or its base calls `operationName()` or `serviceName()`.
+7. Configure versions and tests through [Testing integrations](references/testing.md).
+8. Add the plugin to `index.d.ts` and `index.d.v5.ts` unless it is v6-only; `docs/API.md` needs both the
+   `Available Plugins` entry and an `<h5 id="<name>"></h5>` anchor, and `docs/test.ts` needs a `tracer.use` call.
+   Add the package to `.github/CODEOWNERS` and the matching CI workflow.
+9. Run the plugin tests, structural contract, and changed-file coverage commands from the testing reference.
 
 ## Read upstream source first
 
@@ -65,10 +83,7 @@ Use shimmer only when the source cannot express the required boundary:
 Leave one short comment at a shimmer hook naming the constraint that rules out Orchestrion. A decorated public
 handle is not enough; match the source function behind it when all calls funnel through one declaration.
 
-For shimmer, prefer `tracingChannel()` from `dc-polyfill` over new manual start/finish channels. Use `traceSync`,
-`tracePromise`, or `traceCallback` when they match the API. A manual start event that establishes context must use
-`runStores()`, not `publish()`. Current references: `src/undici.js` and `src/azure-functions.js` for
-`tracingChannel`, `src/pg.js` for the legacy manual channels.
+See [Shimmer](references/shimmer.md) for the canonical `tracingChannel` and event-driven stream shapes.
 
 ## Channel and plugin contract
 
@@ -194,27 +209,6 @@ Before moving a publish behind deduplication, caching, depth filtering, or an ea
 
 `hasSubscribers` may skip channel work only when no subscriber needs the event. Do not equate "plugin disabled" with
 "channel unused."
-
-## New-integration checklist
-
-Start with the minimal shape above, then copy the role-specific behavior of the closest current reference.
-
-- Add the instrumentation file and one entry per npm package name in
-  `packages/datadog-instrumentations/src/helpers/hooks.js`. The plain form is `() => require('../<name>')`;
-  `{ esmFirst: true, fn }` passes `internals: true` to the ESM hook so files below the package entry point are
-  hooked too, and `{ serverless: false, fn }` skips the hook in serverless environments.
-- For Orchestrion, add the config and register it in `rewriter/instrumentations/index.js`.
-- Add the plugin package and runtime getter in `packages/dd-trace/src/plugins/index.js`.
-- Add operation and service names to `service-naming/schemas/v0/<type>.js` and `v1/<type>.js` whenever the plugin or
-  its base class calls `operationName()` or `serviceName()`.
-- Add `versions/<package>/package.json` entries for the supported test matrix.
-- Add the plugin to `index.d.ts` and `index.d.v5.ts` unless it is v6-only; `docs/API.md` needs both the entry in the
-  `Available Plugins` list and an `<h5 id="<name>"></h5>` anchor, and `docs/test.ts` needs a `tracer.use` call.
-- Add the package to `.github/CODEOWNERS` and the matching CI workflow.
-- Test the real public API across supported versions and module formats.
-- Run `packages/dd-trace/test/plugins/plugin-structure.spec.js`.
-
-See [Testing integrations](references/testing.md) for commands and coverage requirements.
 
 ## Debugging
 
