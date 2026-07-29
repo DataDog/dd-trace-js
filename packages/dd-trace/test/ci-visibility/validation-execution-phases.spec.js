@@ -430,14 +430,15 @@ describe('test optimization validation execution boundary', () => {
     let swapped = false
     const { writeFileSafely } = proxyquire('../../../../ci/test-optimization-validation/safe-files', {
       'node:fs': createWindowsFileReferenceFs({
-        openSync: (...args) => {
-          const file = fs.openSync(...args)
+        // Windows refuses to rename a directory that still holds an open handle, so the swap waits
+        // until the temporary file is closed.
+        closeSync: (file) => {
+          fs.closeSync(file)
           if (!swapped) {
             swapped = true
             fs.renameSync(parent, `${parent}-original`)
             fs.mkdirSync(parent)
           }
-          return file
         },
       }),
     })
