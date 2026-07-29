@@ -13,7 +13,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
 > the locked version (currently 0.18.0). The repository vendors its bundled
-> `index.js`; for readable source, use the [source retrieval recipe](../SKILL.md#fetch-upstream-source) to unpack
+> `index.js`; for readable source, use the [source retrieval recipe](../SKILL.md#read-upstream-source-first) to unpack
 > that exact package version, then inspect `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`, `#visit`) and
 > `lib/transforms.js`.
 

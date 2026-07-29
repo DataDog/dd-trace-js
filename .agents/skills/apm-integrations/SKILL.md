@@ -26,7 +26,7 @@ Before editing either layer:
 3. Read one or two current in-repo integrations with the same hook shape and plugin base class.
 4. List every subscriber to a channel before moving or gating its publish.
 
-## Fetch upstream source
+## Read upstream source first
 
 Use the exact version under test. When the repository and release tag are known, make a shallow clone:
 
@@ -37,12 +37,11 @@ git clone --depth 1 --branch "<tag>" "<repository-url>" "/tmp/<slug>-versions/<t
 When the published package is the authoritative artifact, unpack that artifact instead:
 
 ```bash
-root="/tmp/<slug>-versions"
-mkdir -p "$root/<version>"
-cd "$root"
-archive=$(npm pack --silent "<package>@<version>")
-tar -xzf "$archive" -C "<version>" --strip-components=1
-rm "$archive"
+target="/tmp/<slug>-versions/<version>"
+mkdir -p "$target"
+archive=$(npm pack --silent --pack-destination /tmp "<package>@<version>")
+tar -xzf "/tmp/$archive" -C "$target" --strip-components=1
+rm "/tmp/$archive"
 ```
 
 Read the package exports, every distinct CJS and ESM implementation, and the call chain from the public entry point
@@ -86,10 +85,16 @@ Instrumentation determines which events actually fire:
 `ctx.arguments` and `ctx.self`; shimmer instrumentation usually adds named fields. Completion supplies `ctx.result`
 or `ctx.error`.
 
+`CachePlugin`, `ProducerPlugin`, and `ConsumerPlugin` override that signature as `startSpan(options, ctx)` and take
+the name from `operationName()` instead, so passing a name to them shifts every argument by one. Read the base
+class before the first call. `operationName()` and `serviceName()` resolve through
+`service-naming/schemas/<version>/<type>.js` and throw for an unregistered id, so a plugin reaching them needs its
+schema entries before it can start a span.
+
 Finish on the event that carries actual completion. Orchestrion never emits `finish`; promise and callback hooks
 normally complete through `asyncEnd`. `end` fires when the wrapped call returns, so for an async operation it runs
 before the result exists: a handler that finishes spans on `end` keeps the presence check
-(`if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return`) or it closes the span early. Never
+(`if (!Object.hasOwn(ctx, 'result') && !Object.hasOwn(ctx, 'error')) return`) or it closes the span early. Never
 drop that guard from an existing plugin.
 
 `TracingPlugin` already tags `ctx.error` on the current span, so override `error` only to add tags or to skip a
@@ -171,9 +176,9 @@ class ExamplePlugin extends TracingPlugin {
 module.exports = ExamplePlugin
 ```
 
-Replace `TracingPlugin` with the role-specific base when one applies. Use `asyncEnd` instead of `end` when the
-instrumentation reports promise or callback completion, and add lifecycle overrides only for behavior the base
-class does not provide.
+Replace `TracingPlugin` with the role-specific base when one applies, and check whether that base already supplies
+the span name and `startSpan` signature. Use `asyncEnd` instead of `end` when the instrumentation reports promise or
+callback completion, and add lifecycle overrides only for behavior the base class does not provide.
 
 ## Subscriber cardinality
 
@@ -200,6 +205,8 @@ Start with the minimal shape above, then copy the role-specific behavior of the 
   hooked too, and `{ serverless: false, fn }` skips the hook in serverless environments.
 - For Orchestrion, add the config and register it in `rewriter/instrumentations/index.js`.
 - Add the plugin package and runtime getter in `packages/dd-trace/src/plugins/index.js`.
+- Add operation and service names to `service-naming/schemas/v0/<type>.js` and `v1/<type>.js` whenever the plugin or
+  its base class calls `operationName()` or `serviceName()`.
 - Add `versions/<package>/package.json` entries for the supported test matrix.
 - Add the plugin to `index.d.ts` and `index.d.v5.ts` unless it is v6-only; `docs/API.md` needs both the entry in the
   `Available Plugins` list and an `<h5 id="<name>"></h5>` anchor, and `docs/test.ts` needs a `tracer.use` call.
