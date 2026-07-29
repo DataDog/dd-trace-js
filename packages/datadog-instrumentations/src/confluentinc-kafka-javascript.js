@@ -63,13 +63,17 @@ function instrumentBaseModule (module) {
 
               const ctx = {
                 topic,
-                messages: [{ key, value: message }],
+                messages: [{
+                  key,
+                  value: message,
+                  headers: nativeHeadersToCarrier(headers),
+                }],
                 bootstrapServers: brokers,
               }
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  const producedHeaders = mergeHeaders(headers, ctx.messages[0].headers)
+                  const producedHeaders = carrierToNativeHeaders(ctx.messages[0].headers)
                   const result = produce.apply(this, [
                     topic, partition, message, key, timestamp, opaque, producedHeaders,
                   ])
@@ -434,37 +438,44 @@ function getLatestOffsets () {
   return [...latestConsumerOffsets.values()]
 }
 
-function convertHeaders (headers) {
-  // convert headers from object to array of objects with 1 key and value per array entry
-  return Object.entries(headers).map(([key, value]) => ({ [key.toString()]: value.toString() }))
+/**
+ * Normalize valid native headers into a text-map carrier.
+ *
+ * Any malformed input produces an empty carrier so only tracing headers are sent.
+ * Duplicate exact-case keys intentionally collapse to the last value seen.
+ * @param {Array<Record<string, string | Buffer>> | undefined} headers
+ * @returns {Record<string, string | Buffer>}
+ */
+function nativeHeadersToCarrier (headers) {
+  const carrier = Object.create(null)
+  if (!Array.isArray(headers)) return carrier
+
+  // Duplicate exact-case keys intentionally collapse to the last value seen.
+  for (const header of headers) {
+    if (!header || typeof header !== 'object' || Array.isArray(header)) return Object.create(null)
+
+    const keys = Object.keys(header)
+    if (keys.length !== 1) return Object.create(null)
+
+    const key = keys[0]
+    const value = header[key]
+    if (typeof value !== 'string' && !Buffer.isBuffer(value)) return Object.create(null)
+
+    carrier[key] = value
+  }
+  return carrier
 }
 
 /**
- * Retain application headers while ensuring injected propagation headers have
- * a single, authoritative value.
+ * Serialize a text-map carrier back to native headers.
  *
- * @param {Array<Record<string, string | Buffer>> | undefined} headers
- * @param {Record<string, string>} tracingHeaders
+ * @param {Record<string, string | Buffer>} carrier
  * @returns {Array<Record<string, string | Buffer>>}
  */
-function mergeHeaders (headers, tracingHeaders) {
-  if (!Array.isArray(headers)) return convertHeaders(tracingHeaders)
-
-  const tracingHeaderNames = Object.keys(tracingHeaders)
-
-  const producedHeaders = []
-  for (const header of headers) {
-    let isOverridden = false
-    for (const headerName of Object.keys(header)) {
-      if (tracingHeaderNames.includes(headerName)) {
-        isOverridden = true
-        break
-      }
-    }
-    if (!isOverridden) {
-      producedHeaders.push(header)
-    }
+function carrierToNativeHeaders (carrier) {
+  const headers = []
+  for (const key of Object.keys(carrier)) {
+    headers.push({ [key]: carrier[key] })
   }
-  producedHeaders.push(...convertHeaders(tracingHeaders))
-  return producedHeaders
+  return headers
 }
