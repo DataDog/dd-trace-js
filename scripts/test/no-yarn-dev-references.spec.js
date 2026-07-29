@@ -434,6 +434,7 @@ describe('no yarn dev references', function () {
         'GHSA-hmw2-7cc7-3qxx',
         'GHSA-5c6j-r48x-rmvq',
         'GHSA-j3q9-mxjg-w52f',
+        'GHSA-mh99-v99m-4gvg',
       ]
     )
   })
