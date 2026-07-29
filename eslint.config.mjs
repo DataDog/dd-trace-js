@@ -722,6 +722,7 @@ export default [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
       'packages/datadog-instrumentations/test/helpers/check-require-cache/**/*.js',
+      'packages/datadog-instrumentations/test/helpers/hook-module-views/**/*.js',
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
