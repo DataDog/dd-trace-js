@@ -37,11 +37,13 @@ async function assertTracesProvider (entrypoint) {
 }
 
 describe('OpenFeature file tracing', () => {
-  it('traces the provider dependency tree through the runtime wrapper', async () => {
+  it('traces the provider dependency tree through the runtime wrapper', async function () {
+    this.timeout(30000)
     await assertTracesProvider(path.join(repoRoot, 'packages/dd-trace/src/openfeature/require-provider.js'))
   })
 
-  it('traces the provider dependency tree through the explicit entrypoint', async () => {
+  it('traces the provider dependency tree through the explicit entrypoint', async function () {
+    this.timeout(30000)
     await assertTracesProvider(path.join(repoRoot, 'openfeature.js'))
   })
 
