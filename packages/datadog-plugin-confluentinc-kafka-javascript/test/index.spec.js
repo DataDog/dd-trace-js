@@ -13,6 +13,8 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
 const { waitForTopicReady } = require('./helpers')
 
+/** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
+
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
   const groupId = 'test-group-confluent'
@@ -466,13 +468,14 @@ describe('Plugin', () => {
             })
 
             /**
-             * @param {import('@confluentinc/kafka-javascript').KafkaConsumer} consumer
-             * @param {import('@confluentinc/kafka-javascript').Producer} producer
+             * @param {{ consume: Function, unsubscribe: Function }} consumer
+             * @param {{ produce: Function }} producer
              * @param {string} topic
              * @param {Buffer} message
              * @param {number} [timeoutMs]
-             * @param {(message: import('@confluentinc/kafka-javascript').Message) => void} [onMessage]
-             * @param {import('@confluentinc/kafka-javascript').MessageHeader[]} [headers]
+             * @param {(message: { value: Buffer, headers?: NativeHeaders }) => void} [onMessage]
+             * @param {Array<Record<string, string | Buffer> | null>} [headers]
+             *   Entries may be malformed; the boundary decides what reaches the library.
              */
             function consume (
               consumer,
@@ -654,7 +657,7 @@ describe('Plugin', () => {
                 assert.ok(keys.includes('x-datadog-trace-id'))
               }, [
                 { 'content-type': 'text/plain' },
-                {},
+                null,
               ])
             })
           })
@@ -685,8 +688,8 @@ async function sendMessages (kafka, topic, messages) {
 }
 
 /**
- * @param {import('@confluentinc/kafka-javascript').MessageHeader[] | undefined} headers
- *   `KafkaConsumer~Message.headers`, absent when the record carries none.
+ * @param {NativeHeaders | undefined} headers `KafkaConsumer~Message.headers`,
+ *   absent when the record carries none.
  * @returns {Array<[string, string | Buffer]>} Wire order, duplicates kept.
  */
 function nativeHeaderEntries (headers) {
