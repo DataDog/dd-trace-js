@@ -13,8 +13,12 @@ const builtins = {
   },
   url: {
     channel: 'datadog:url:parse:finish',
+    getterChannel: 'datadog:url:getter:finish',
     probe: 'parse',
-    exercise: (view) => view.parse('https://www.datadoghq.com/path'),
+    exercise: (view) => {
+      const parsed = new view.URL('https://www.datadoghq.com/path')
+      parsed.host
+    },
   },
   vm: {
     channel: 'datadog:vm:run-script:start',
@@ -30,10 +34,12 @@ const builtins = {
 
 async function main () {
   const requests = process.argv.slice(2)
-  const { channel: channelName, probe, exercise } = builtins[requests[0].split(':').at(-1)]
+  const { channel: channelName, getterChannel, probe, exercise } = builtins[requests[0].split(':').at(-1)]
 
   let publishes = 0
+  let getterPublishes = 0
   channel(channelName).subscribe(() => { publishes++ })
+  if (getterChannel) channel(getterChannel).subscribe(() => { getterPublishes++ })
 
   const views = []
   for (const request of requests) {
@@ -44,12 +50,14 @@ async function main () {
   const report = []
   for (const [index, view] of views.entries()) {
     const before = publishes
+    const getterBefore = getterPublishes
     await exercise(view)
     const entry = {
       request: requests[index],
       publishes: publishes - before,
       matchesFirstView: view[probe] === views[0][probe],
     }
+    if (getterChannel) entry.getterPublishes = getterPublishes - getterBefore
     if (view.default !== undefined) {
       entry.matchesOwnDefaultExport = view.default[probe] === view[probe]
     }

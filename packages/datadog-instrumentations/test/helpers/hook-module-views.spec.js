@@ -35,6 +35,7 @@ const bootstrapModes = {
  * @typedef {object} ViewReport
  * @property {string} request
  * @property {number} publishes channel publishes the view produced for one operation
+ * @property {number} [getterPublishes] getter channel publishes for the view
  * @property {boolean} matchesFirstView whether the instrumented function is the same object
  * @property {boolean} [matchesOwnDefaultExport] ESM views only
  */
@@ -67,10 +68,16 @@ async function loadViews (nodeOptions, requests) {
 ;(runtimeSupported ? describe : describe.skip)('builtin instrumentation across CommonJS and ESM views', () => {
   for (const [mode, nodeOptions] of Object.entries(bootstrapModes)) {
     describe(`with ${mode}`, () => {
-      it('wraps url once when CommonJS loads it before ESM', async () => {
+      it('wraps url and its getters once when CommonJS loads it before ESM', async () => {
         assert.deepStrictEqual(await loadViews(nodeOptions, ['cjs:url', 'esm:node:url']), [
-          { request: 'cjs:url', publishes: 1, matchesFirstView: true },
-          { request: 'esm:node:url', publishes: 1, matchesFirstView: true, matchesOwnDefaultExport: true },
+          { request: 'cjs:url', publishes: 1, getterPublishes: 1, matchesFirstView: true },
+          {
+            request: 'esm:node:url',
+            publishes: 1,
+            getterPublishes: 1,
+            matchesFirstView: true,
+            matchesOwnDefaultExport: true,
+          },
         ])
       })
 
