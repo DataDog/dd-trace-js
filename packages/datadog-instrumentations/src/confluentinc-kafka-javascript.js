@@ -29,6 +29,8 @@ const channels = {
 
 const disabledHeaderWeakSet = new WeakSet()
 
+const EMPTY_CARRIER = Object.create(null)
+
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
@@ -61,19 +63,34 @@ function instrumentBaseModule (module) {
 
               const brokers = this.globalConfig?.['bootstrap.servers']
 
+              const headerKeys = nativeHeaderKeys(headers)
+              let carrier = {}
+              let applicationValues = EMPTY_CARRIER
+              if (headerKeys.length !== 0) {
+                // `__proto__` is a legal Kafka header key and propagation never
+                // writes it, so only the seeded carrier needs a null prototype.
+                applicationValues = Object.create(null)
+                for (let i = 0; i < headerKeys.length; i++) {
+                  applicationValues[headerKeys[i]] = headers[i][headerKeys[i]]
+                }
+                carrier = Object.assign(Object.create(null), applicationValues)
+              }
+
               const ctx = {
                 topic,
                 messages: [{
                   key,
                   value: message,
-                  headers: nativeHeadersToCarrier(headers),
+                  headers: carrier,
                 }],
                 bootstrapServers: brokers,
               }
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  const producedHeaders = carrierToNativeHeaders(ctx.messages[0].headers)
+                  const producedHeaders = mergeNativeHeaders(
+                    headers, headerKeys, applicationValues, ctx.messages[0].headers
+                  )
                   const result = produce.apply(this, [
                     topic, partition, message, key, timestamp, opaque, producedHeaders,
                   ])
@@ -439,43 +456,53 @@ function getLatestOffsets () {
 }
 
 /**
- * Normalize valid native headers into a text-map carrier.
+ * `Producer::NodeProduce` reads only the first own key of each entry, so a key
+ * may legitimately repeat and multi-key entries are the binding's business.
+ * Values are left alone for the same reason: it throws on anything it cannot
+ * serialize.
  *
- * Any malformed input produces an empty carrier so only tracing headers are sent.
- * Duplicate exact-case keys intentionally collapse to the last value seen.
- * @param {Array<Record<string, string | Buffer>> | undefined} headers
- * @returns {Record<string, string | Buffer>}
+ * @param {unknown} headers Seventh `produce()` argument, caller-owned.
+ * @returns {string[]} Empty when there is nothing to preserve — no headers, or a
+ *   shape the binding cannot consume, since a `null` entry aborts it.
+ * @see https://github.com/confluentinc/confluent-kafka-javascript/blob/v1.9.1/src/producer.cc
  */
-function nativeHeadersToCarrier (headers) {
-  const carrier = Object.create(null)
-  if (!Array.isArray(headers)) return carrier
+function nativeHeaderKeys (headers) {
+  if (!Array.isArray(headers)) return []
 
-  // Duplicate exact-case keys intentionally collapse to the last value seen.
-  for (const header of headers) {
-    if (!header || typeof header !== 'object' || Array.isArray(header)) return Object.create(null)
+  const keys = new Array(headers.length)
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i]
+    if (typeof header !== 'object' || header === null) return []
 
-    const keys = Object.keys(header)
-    if (keys.length !== 1) return Object.create(null)
+    const key = Object.keys(header)[0]
+    if (key === undefined) return []
 
-    const key = keys[0]
-    const value = header[key]
-    if (typeof value !== 'string' && !Buffer.isBuffer(value)) return Object.create(null)
-
-    carrier[key] = value
+    keys[i] = key
   }
-  return carrier
+  return keys
 }
 
 /**
- * Serialize a text-map carrier back to native headers.
- *
+ * @param {Array<Record<string, string | Buffer>>} headers Caller-owned; surviving
+ *   entries are forwarded by reference, never copied or mutated.
+ * @param {string[]} headerKeys Parallel to `headers`.
+ * @param {Record<string, string | Buffer>} applicationValues Carrier contents
+ *   before propagation ran.
  * @param {Record<string, string | Buffer>} carrier
- * @returns {Array<Record<string, string | Buffer>>}
  */
-function carrierToNativeHeaders (carrier) {
-  const headers = []
-  for (const key of Object.keys(carrier)) {
-    headers.push({ [key]: carrier[key] })
+function mergeNativeHeaders (headers, headerKeys, applicationValues, carrier) {
+  const merged = []
+  for (let i = 0; i < headerKeys.length; i++) {
+    const key = headerKeys[i]
+    if (carrier[key] === applicationValues[key]) {
+      merged.push(headers[i])
+    }
   }
-  return headers
+
+  for (const key of Object.keys(carrier)) {
+    if (carrier[key] !== applicationValues[key]) {
+      merged.push({ [key]: carrier[key] })
+    }
+  }
+  return merged
 }

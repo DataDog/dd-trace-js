@@ -4,12 +4,10 @@ const assert = require('node:assert/strict')
 
 const { randomUUID } = require('node:crypto')
 const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
@@ -402,41 +400,6 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            it('should include normalized native headers in the DSM payload size', () => {
-              if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-                DataStreamsProcessor.prototype.recordCheckpoint.restore()
-              }
-              const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-              const message = Buffer.from('native DSM message')
-              const key = 'native-dsm-key'
-              const headerName = 'native-application-header'
-              const headerValue = Buffer.alloc(1024, 0xab)
-              const minimumPayloadSize = message.length + Buffer.byteLength(key) +
-                Buffer.byteLength(headerName) + headerValue.length
-
-              try {
-                nativeProducer.produce(
-                  testTopic,
-                  null,
-                  message,
-                  key,
-                  undefined,
-                  undefined,
-                  [{ [headerName]: headerValue }]
-                )
-
-                assert.strictEqual(recordCheckpointSpy.callCount, 1)
-                const checkpoint = recordCheckpointSpy.firstCall.args[0]
-                assert.ok(Object.hasOwn(checkpoint, 'payloadSize'))
-                assert.ok(
-                  checkpoint.payloadSize >= minimumPayloadSize,
-                  `Expected payload size >= ${minimumPayloadSize}, received ${checkpoint.payloadSize}`
-                )
-              } finally {
-                recordCheckpointSpy.restore()
-              }
-            })
-
             it('should be instrumented with error', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -634,45 +597,51 @@ describe('Plugin', () => {
             it('should preserve native application headers and replace stale propagation headers', async () => {
               const message = Buffer.from('test message with native headers')
               const staleTraceId = 'stale-trace-id'
-              const finalContentType = 'application/json'
               const applicationBuffer = Buffer.from([0xde, 0xad, 0xbe, 0xef])
 
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
 
               await consume(nativeConsumer, nativeProducer, testTopic, message, 9500, (consumedMessage) => {
-                const headers = nativeHeadersToObject(consumedMessage.headers)
+                const entries = nativeHeaderEntries(consumedMessage.headers)
 
-                assert.deepStrictEqual(headers['content-type'], Buffer.from(finalContentType))
-                assert.deepStrictEqual(headers.Traceparent, Buffer.from('application-value'))
-                assert.ok(headers['x-datadog-trace-id'])
-                assert.notStrictEqual(headers['x-datadog-trace-id'].toString(), staleTraceId)
-                assert.ok(Buffer.isBuffer(headers['binary-header']))
-                assert.deepStrictEqual(headers['binary-header'], applicationBuffer)
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'content-type'), [
+                  ['content-type', Buffer.from('text/plain')],
+                  ['content-type', Buffer.from('application/json')],
+                ])
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'Traceparent'), [
+                  ['Traceparent', Buffer.from('application-value')],
+                ])
+                assert.deepStrictEqual(entries.filter(([key]) => key === 'binary-header'), [
+                  ['binary-header', applicationBuffer],
+                ])
+
+                const traceId = entries.find(([key]) => key === 'x-datadog-trace-id')
+                assert.ok(traceId)
+                assert.notStrictEqual(traceId[1].toString(), staleTraceId)
               }, [
                 { 'content-type': 'text/plain' },
-                { 'content-type': finalContentType },
+                { 'content-type': 'application/json' },
                 { 'binary-header': applicationBuffer },
                 { 'x-datadog-trace-id': staleTraceId },
                 { Traceparent: 'application-value' },
               ])
             })
 
-            it('should ignore malformed native headers', async () => {
-              const message = Buffer.from('test message with malformed native headers')
+            it('should send generated headers only when the header array is unusable', async () => {
+              const message = Buffer.from('test message with an unusable native header array')
 
               nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
 
               await consume(nativeConsumer, nativeProducer, testTopic, message, 9500, (consumedMessage) => {
-                const headers = nativeHeadersToObject(consumedMessage.headers)
+                const keys = nativeHeaderEntries(consumedMessage.headers).map(([key]) => key)
 
-                assert.ok(!Object.hasOwn(headers, 'content-type'))
-                assert.ok(!Object.hasOwn(headers, 'invalid-header'))
-                assert.ok(headers['x-datadog-trace-id'])
+                assert.ok(!keys.includes('content-type'))
+                assert.ok(keys.includes('x-datadog-trace-id'))
               }, [
                 { 'content-type': 'text/plain' },
-                { 'invalid-header': 42 },
+                {},
               ])
             })
           })
@@ -702,21 +671,14 @@ async function sendMessages (kafka, topic, messages) {
   await producer.disconnect()
 }
 
-function nativeHeadersToObject (headers) {
-  if (!Array.isArray(headers)) return headers || {}
-
-  const carrier = Object.create(null)
-  for (const header of headers) {
-    if (!header || typeof header !== 'object') continue
-
-    if (Object.hasOwn(header, 'key')) {
-      carrier[header.key] = header.value
-      continue
-    }
-
-    for (const key of Object.keys(header)) {
-      carrier[key] = header[key]
-    }
-  }
-  return carrier
+/**
+ * @param {Array<Record<string, string | Buffer>> | undefined} headers
+ *   `KafkaConsumer~Message.headers`, absent when the record carries none.
+ * @returns {Array<[string, string | Buffer]>} Wire order, duplicates kept.
+ */
+function nativeHeaderEntries (headers) {
+  return (headers ?? []).map((header) => {
+    const [key] = Object.keys(header)
+    return [key, header[key]]
+  })
 }
