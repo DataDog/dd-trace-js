@@ -19,8 +19,8 @@ The tested customer setup is documented in
 2. Import `dd-trace/initialize.mjs` from Next `instrumentation.js` for the
    Node runtime.
 3. Add `dd-trace` to `serverExternalPackages`.
-4. Set a conditional runtime `NODE_OPTIONS` import in `vercel.json`, with a
-   clean build-time `NODE_OPTIONS`.
+4. Set the runtime `NODE_OPTIONS` import in `vercel.json`, with a clean
+   build-time `NODE_OPTIONS`.
 5. Configure agentless export and normal Datadog service tags.
 
 No build mutation, custom launcher, copied tracer tree, hard-coded transitive
@@ -39,25 +39,17 @@ route code.
 The instrumentation import packages the tracer. The preload establishes the
 correct initialization order.
 
-## Mixed Runtime Behavior
+## Edge Runtime Boundary
 
 Vercel applies project runtime environment variables before both Node and Edge
-handlers:
+handlers. Node functions contain the NFT-packaged tracer, but Edge functions
+do not. A project-global `--import=dd-trace/initialize.mjs` therefore fails an
+Edge function before application code can check `NEXT_RUNTIME`.
 
-- Node functions contain the NFT-packaged tracer, so the conditional preload
-  initializes it.
-- Node Proxy or Middleware also contains the instrumentation NFT closure and
-  starts successfully.
-- Edge functions do not contain `dd-trace`, so the conditional preload skips
-  initialization and the Edge handler starts normally.
-
-The condition must execute from a self-contained `data:` import. A physical
-application preload is absent from Proxy and Edge deployment functions, so
-Node fails to resolve a file-based preload before that file can inspect the
-runtime.
-
-This preserves mixed-runtime applications. It does not add APM support for
-Edge, where Node instrumentation APIs are unavailable.
+There is no clean application-side conditional around that resolution step.
+Mixed Node and Edge projects need the official Vercel adapter to set
+`NODE_OPTIONS` only on generated Node functions. This is a platform integration
+requirement, not functionality that belongs in a customer loader.
 
 ## Required Tracer Changes
 
@@ -85,11 +77,10 @@ name and security review.
 
 ## Verified Output
 
-Validated on Vercel with Next.js 16.2.10 using App Router Node routes, a Node
-Proxy, and an Edge route:
+Validated on Vercel with Next.js 16.2.10 using App Router Node routes and a Node
+Proxy:
 
-- `/api/ping`, `/api/flow`, `/proxy-check`, and `/api/edge` all returned 200.
-- Edge skipped Datadog initialization instead of failing startup.
+- `/api/ping`, `/api/flow`, and `/proxy-check` returned 200.
 - Node route traces exported directly to Datadog.
 - Trace `2378948595391565956` contained:
 
@@ -108,9 +99,6 @@ Every displayed parent ID was present in the same trace, route resources were
 normalized, and the trace had a real root span.
 
 ## Production Direction
-
-The customer-side conditional import is viable today, but it is not the ideal
-onboarding surface.
 
 The preferred Vercel integration is:
 
@@ -145,7 +133,9 @@ without depending on private Vercel output formats or tracer internals.
 - `serverExternalPackages` alone: does not create a dependency edge.
 - Manual tracer or transitive dependency lists: brittle and unnecessary.
 - Post-build mutation or custom function launchers: coupled to private output.
-- Physical project preload with global `NODE_OPTIONS`: fails when that file is
-  absent from Proxy or Edge functions.
+- Encoded `data:` preload: can skip missing packages, but is opaque and not an
+  acceptable customer configuration.
+- Project-global package preload in mixed Edge projects: Edge does not contain
+  the Node tracer and fails before application code can inspect the runtime.
 - Vercel trace drain as a requirement: adds a separate paid data path and is
   not needed for native Node spans.

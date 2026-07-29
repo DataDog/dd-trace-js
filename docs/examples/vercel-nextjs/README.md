@@ -4,9 +4,8 @@ This setup initializes `dd-trace` before Next.js in deployed Node functions,
 lets Next package the tracer dependency closure, and exports traces directly to
 Datadog without a trace drain or Datadog Agent.
 
-It has been validated with Next.js 16 App Router routes, a Node Proxy, and an
-Edge route. Edge continues to run but is not traced by `dd-trace`, which only
-supports Node.js.
+It has been validated with Next.js 16 App Router routes and a Node Proxy.
+`dd-trace` does not support the Edge runtime.
 
 ## 1. Install
 
@@ -49,40 +48,24 @@ module.exports = nextConfig
 Preserve existing `serverExternalPackages` entries. Do not list individual
 `dd-trace` files or transitive packages.
 
-## 4. Preload Only When Available
+## 4. Preload Before Next
 
 Merge [`vercel.json`](./vercel.json) into the project configuration. Its
-runtime `NODE_OPTIONS` is a self-contained conditional import:
-
-- Node functions contain `dd-trace`, so it initializes before Next.
-- Edge functions do not contain `dd-trace`, so the import is a no-op.
-- `build.env.NODE_OPTIONS` prevents the runtime preload from affecting
-  dependency installation and the build.
+runtime `NODE_OPTIONS` initializes `dd-trace` before Vercel's Next launcher.
+`build.env.NODE_OPTIONS` prevents the runtime preload from affecting dependency
+installation and the build.
 
 Remove any project-level `NODE_OPTIONS` tracing value from the Vercel dashboard
 so there is one source of truth. If the application already uses
 `NODE_OPTIONS`, preserve those options in the corresponding runtime and build
 values.
 
-The encoded module is equivalent to:
-
-```js
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
-
-const require = createRequire(`${process.cwd()}/noop.js`)
-
-try {
-  const initializer = require.resolve('dd-trace/initialize.mjs')
-  await import(pathToFileURL(initializer))
-} catch (error) {
-  if (error?.code !== 'MODULE_NOT_FOUND') throw error
-}
-```
-
-It is inline because Vercel applies project runtime environment variables to
-Edge functions but does not copy application preload files into them. A file
-based `--require` fails before that file can check the runtime.
+Do not use this project-global preload in an application containing an Edge
+route. Vercel applies the option before the Edge handler starts, but Edge
+functions do not contain the Node tracer. Supporting mixed Node and Edge
+projects requires Vercel's adapter to apply the preload only to generated Node
+functions. An application-side runtime check cannot run before Node resolves
+the preload itself.
 
 ## 5. Configure Datadog
 

@@ -1,6 +1,6 @@
 {
   "env": {
-    "NODE_OPTIONS": "--import=data:text/javascript;base64,aW1wb3J0e2NyZWF0ZVJlcXVpcmV9ZnJvbSdub2RlOm1vZHVsZSc7aW1wb3J0e3BhdGhUb0ZpbGVVUkx9ZnJvbSdub2RlOnVybCc7Y29uc3Qgcj1jcmVhdGVSZXF1aXJlKHByb2Nlc3MuY3dkKCkrJy9ub29wLmpzJyk7dHJ5e2F3YWl0IGltcG9ydChwYXRoVG9GaWxlVVJMKHIucmVzb2x2ZSgnZGQtdHJhY2UvaW5pdGlhbGl6ZS5tanMnKSkpfWNhdGNoKGUpe2lmKGU/LmNvZGUhPT0nTU9EVUxFX05PVF9GT1VORCcpdGhyb3cgZX0="
+    "NODE_OPTIONS": "--import=dd-trace/initialize.mjs"
   },
   "build": {
     "env": {
