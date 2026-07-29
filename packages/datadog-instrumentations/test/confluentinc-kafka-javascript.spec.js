@@ -12,7 +12,12 @@ const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:star
 const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
 
 /** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
-/** @typedef {{ messages: Array<{ headers: Record<string, string | Buffer> }> }} ProduceContext */
+/** @typedef {Record<string, string | Buffer | Array<string | Buffer>>} NativeHeaderCarrier */
+/**
+ * @typedef {object} ProduceContext
+ * @property {Array<{ headers: NativeHeaderCarrier }>} messages
+ * @property {boolean} [countRepeatedHeaderKeys]
+ */
 
 function stageProducer () {
   class Producer {
@@ -74,6 +79,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       const applicationHeaders = [
         { 'content-type': 'text/plain' },
         { 'content-type': 'application/json' },
+        { 'content-type': 'application/octet-stream' },
         { 'binary-header': binary },
         { traceparent: 'stale-traceparent' },
         { Traceparent: 'application-value' },
@@ -85,6 +91,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       assert.deepStrictEqual(produced, [
         { 'content-type': 'text/plain' },
         { 'content-type': 'application/json' },
+        { 'content-type': 'application/octet-stream' },
         { 'binary-header': binary },
         { Traceparent: 'application-value' },
         { ['__proto__']: 'prototype-safe' },
@@ -92,7 +99,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         { 'x-datadog-trace-id': '123' },
       ])
       assert.strictEqual(produced[0], applicationHeaders[0])
-      assert.strictEqual(produced[2]['binary-header'], binary)
+      assert.strictEqual(produced[3]['binary-header'], binary)
     })
 
     it('merges entries the binding reads differently from their literal shape', () => {
@@ -100,12 +107,14 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
       const multiKey = { first: 'one', second: 'two' }
       const arrayEntry = ['array-value']
+      const primitiveEntry = 'primitive-value'
 
-      const produced = produce(stageProducer(), [multiKey, arrayEntry])
+      const produced = produce(stageProducer(), [multiKey, arrayEntry, primitiveEntry])
 
       assert.strictEqual(produced[0], multiKey)
       assert.strictEqual(produced[1], arrayEntry)
-      assert.deepStrictEqual(produced.slice(2), [
+      assert.strictEqual(produced[2], primitiveEntry)
+      assert.deepStrictEqual(produced.slice(3), [
         { 'x-datadog-trace-id': '123' },
         { traceparent: TRACEPARENT },
       ])
@@ -144,6 +153,20 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       ])
     })
 
+    it('drops stale duplicates when propagation writes the same final value', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const produced = produce(stageProducer(), [
+        { traceparent: 'stale-traceparent' },
+        { traceparent: TRACEPARENT },
+      ])
+
+      assert.deepStrictEqual(produced, [
+        { traceparent: TRACEPARENT },
+        { 'x-datadog-trace-id': '123' },
+      ])
+    })
+
     it('publishes a carrier seeded with the application headers', () => {
       const carriers = []
       trackSubscriber((ctx) => carriers.push(ctx.messages[0].headers))
@@ -155,6 +178,21 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       assert.deepStrictEqual(Object.keys(carriers[0]), ['content-type', 'binary-header'])
       assert.strictEqual(carriers[0]['content-type'], 'application/json')
       assert.strictEqual(carriers[0]['binary-header'], binary)
+    })
+
+    it('publishes repeated application values for exact DSM sizing', () => {
+      /** @type {ProduceContext | undefined} */
+      let context
+      trackSubscriber((ctx) => { context = ctx })
+
+      produce(stageProducer(), [
+        { 'content-type': 'text' },
+        { 'content-type': 'application/json' },
+      ])
+
+      assert.ok(context)
+      assert.deepStrictEqual(context.messages[0].headers['content-type'], ['text', 'application/json'])
+      assert.strictEqual(context.countRepeatedHeaderKeys, true)
     })
 
     it('sends generated headers only for shapes the binding cannot consume', () => {

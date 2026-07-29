@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { randomUUID } = require('node:crypto')
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
@@ -399,6 +400,41 @@ describe('Plugin', () => {
               nativeProducer.produce(testTopic, null, message, key)
 
               return expectedSpanPromise
+            })
+
+            it('should include every repeated native header key in the DSM payload size', () => {
+              const setCheckpointSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setCheckpoint')
+              const nativeProduceSpy = sinon.spy(nativeProducer._client, 'produce')
+              const message = Buffer.from('native DSM message')
+              const key = 'native-dsm-key'
+
+              try {
+                nativeProducer.produce(
+                  testTopic,
+                  null,
+                  message,
+                  key,
+                  undefined,
+                  undefined,
+                  [{ 'content-type': 'text' }, { 'content-type': 'application/json' }]
+                )
+
+                const producedHeaders = nativeProduceSpy.lastCall.args[6]
+                let expectedSize = message.length + Buffer.byteLength(key)
+                for (const header of producedHeaders) {
+                  const [headerName] = Object.keys(header)
+                  if (headerName === 'dd-pathway-ctx-base64') continue
+
+                  const value = header[headerName]
+                  expectedSize += Buffer.byteLength(headerName) +
+                    (Buffer.isBuffer(value) ? value.length : Buffer.byteLength(value))
+                }
+
+                assert.strictEqual(setCheckpointSpy.lastCall.args[3], expectedSize)
+              } finally {
+                nativeProduceSpy.restore()
+                setCheckpointSpy.restore()
+              }
             })
 
             it('should be instrumented with error', async () => {

@@ -33,7 +33,12 @@ const EMPTY_CARRIER = Object.create(null)
 /** @type {string[]} */
 const NO_MERGEABLE_KEYS = []
 
-/** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
+/** @typedef {string | Buffer} NativeHeaderValue */
+/** @typedef {Array<Record<string, NativeHeaderValue>>} NativeHeaders */
+/** @typedef {Record<string, NativeHeaderValue | NativeHeaderValue[]>} NativeHeaderCarrier */
+
+/** @type {NativeHeaders} */
+const EMPTY_NATIVE_HEADERS = []
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -66,21 +71,24 @@ function instrumentBaseModule (module) {
               }
 
               const brokers = this.globalConfig?.['bootstrap.servers']
+              const nativeHeaders = Array.isArray(headers) ? headers : EMPTY_NATIVE_HEADERS
 
               let carrier
+              let countRepeatedHeaderKeys = false
               let forwardCallerHeaders = false
               let applicationValues = EMPTY_CARRIER
               let headerKeys = NO_MERGEABLE_KEYS
-              if (Array.isArray(headers) && headers.length !== 0) {
+              if (nativeHeaders.length !== 0) {
                 // `__proto__` is a legal Kafka header key and propagation never
                 // writes it, so only the seeded carrier needs a null prototype.
                 const candidateCarrier = Object.create(null)
                 const candidateValues = Object.create(null)
-                const candidateKeys = seedNativeHeaderCarrier(headers, candidateCarrier, candidateValues)
+                const candidateKeys = seedNativeHeaderCarrier(nativeHeaders, candidateCarrier, candidateValues)
                 if (candidateKeys === undefined) {
                   forwardCallerHeaders = true
                 } else if (candidateKeys.length !== 0) {
                   carrier = candidateCarrier
+                  countRepeatedHeaderKeys = candidateKeys.length > 1
                   applicationValues = candidateValues
                   headerKeys = candidateKeys
                 }
@@ -94,14 +102,15 @@ function instrumentBaseModule (module) {
                   headers: carrier,
                 }],
                 bootstrapServers: brokers,
+                countRepeatedHeaderKeys,
               }
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
                   const producedHeaders = forwardCallerHeaders
-                    ? headers
+                    ? nativeHeaders
                     : mergeNativeHeaders(
-                      headers, headerKeys, applicationValues, ctx.messages[0].headers ?? EMPTY_CARRIER
+                      nativeHeaders, headerKeys, applicationValues, ctx.messages[0].headers ?? EMPTY_CARRIER
                     )
                   const result = produce.apply(this, [
                     topic, partition, message, key, timestamp, opaque, producedHeaders,
@@ -473,8 +482,8 @@ function getLatestOffsets () {
  * there, so those are the only entries we refuse to hand back to it.
  *
  * @param {NativeHeaders} headers Caller-owned.
- * @param {Record<string, string | Buffer>} carrier
- * @param {Record<string, string | Buffer>} applicationValues
+ * @param {NativeHeaderCarrier} carrier
+ * @param {NativeHeaderCarrier} applicationValues
  * @returns {string[] | undefined} `undefined` when the binding has to reject the
  *   array itself; empty when it cannot consume the array at all.
  * @see https://github.com/confluentinc/confluent-kafka-javascript/blob/v1.9.1/src/producer.cc
@@ -492,8 +501,21 @@ function seedNativeHeaderCarrier (headers, carrier, applicationValues) {
     const value = header[key]
     if (typeof value !== 'string' && !Buffer.isBuffer(value)) return
 
-    carrier[key] = value
-    applicationValues[key] = value
+    if (i === 0) {
+      carrier[key] = value
+      applicationValues[key] = value
+      continue
+    }
+
+    const previousValue = carrier[key]
+    if (previousValue === undefined) {
+      carrier[key] = value
+    } else if (Array.isArray(previousValue)) {
+      previousValue.push(value)
+    } else {
+      carrier[key] = [previousValue, value]
+    }
+    applicationValues[key] = carrier[key]
   }
   return keys
 }
@@ -502,9 +524,9 @@ function seedNativeHeaderCarrier (headers, carrier, applicationValues) {
  * @param {NativeHeaders} headers Caller-owned; surviving entries are forwarded
  *   by reference, never copied or mutated.
  * @param {string[]} headerKeys Parallel to `headers`.
- * @param {Record<string, string | Buffer>} applicationValues Carrier contents
- *   before propagation ran.
- * @param {Record<string, string | Buffer>} carrier
+ * @param {NativeHeaderCarrier} applicationValues Carrier contents before
+ *   propagation ran.
+ * @param {NativeHeaderCarrier} carrier
  */
 function mergeNativeHeaders (headers, headerKeys, applicationValues, carrier) {
   const merged = []
