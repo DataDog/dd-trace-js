@@ -23,8 +23,9 @@ The tested customer setup is documented in
    build-time `NODE_OPTIONS`.
 5. Configure agentless export and normal Datadog service tags.
 
-No build mutation, custom launcher, copied tracer tree, hard-coded transitive
-dependency list, trace drain, or custom Vercel adapter is required.
+For Node-only projects, no build mutation, custom launcher, copied tracer tree,
+hard-coded transitive dependency list, trace drain, or custom Vercel adapter is
+required. Mixed Node and Edge projects need the Datadog Builder described below.
 
 ## Why Both Initialization Paths Exist
 
@@ -40,6 +41,11 @@ The instrumentation import packages the tracer. The preload establishes the
 correct initialization order.
 
 ## Edge Runtime Boundary
+
+Next.js supports selecting Node or Edge per route, so one Vercel project can
+legitimately deploy both kinds of function. Node is the default and Vercel
+recommends it for most workloads, but mixed projects remain a supported
+compatibility case that the Datadog integration must not break.
 
 Vercel applies project runtime environment variables before both Node and Edge
 handlers. Node functions contain the NFT-packaged tracer, but Edge functions
@@ -113,8 +119,8 @@ The preferred Vercel integration is a Datadog-owned Builder:
 2. Vercel invokes the Datadog Builder instead of the default Next Builder.
 3. The Datadog Builder calls the published `@vercel/next.build()` implementation.
 4. It preserves all official output, routes, caching, and framework behavior.
-5. For each returned `NodejsLambda`, it adds the small conditional loader and
-   merges function-local `NODE_OPTIONS`.
+5. For each returned `NodejsLambda`, it merges the function-local
+   `NODE_OPTIONS=--import=dd-trace/initialize.mjs` preload.
 6. It leaves returned `EdgeFunction` objects unchanged.
 7. Next instrumentation NFT supplies the tracer dependency closure.
 8. Datadog injects secrets through the existing Vercel integration settings.
@@ -137,7 +143,7 @@ configuration so customers do not maintain it manually.
 3. Confirm supported Next.js version ranges rather than pinning one sample
    version.
 4. Package and deploy the Datadog Builder wrapper around `@vercel/next`, then
-   validate Git-connected Preview and Production deployments.
+   validate source and Git-connected Preview and Production deployments.
 5. Define Edge telemetry separately through supported Vercel or OpenTelemetry
    ingestion; do not load the Node tracer into Edge.
 

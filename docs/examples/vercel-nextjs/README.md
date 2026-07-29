@@ -5,7 +5,7 @@ lets Next package the tracer dependency closure, and exports traces directly to
 Datadog without a trace drain or Datadog Agent.
 
 It has been validated with Next.js 16 App Router routes and a Node Proxy.
-`dd-trace` does not support the Edge runtime.
+`dd-trace` does not run in the Edge runtime.
 
 ## 1. Install
 
@@ -60,13 +60,16 @@ so there is one source of truth. If the application already uses
 `NODE_OPTIONS`, preserve those options in the corresponding runtime and build
 values.
 
-Do not use this project-global preload in an application containing an Edge
-route. Vercel applies the option before the Edge handler starts, but Edge
-functions do not contain the Node tracer. Supporting mixed Node and Edge
-projects requires a Datadog-owned Vercel Builder to apply the preload only to
-generated Node functions. The Builder wraps `@vercel/next.build()` and leaves
-Edge outputs unchanged. An application-side runtime check cannot run before
-Node resolves the preload itself.
+Next.js supports choosing Node or Edge per route. Node is the default and
+Vercel recommends it for most workloads, but a project can legitimately contain
+both. Do not use this project-global preload in such a mixed project: Vercel
+applies it before the Edge handler starts, while Edge functions do not contain
+the Node tracer.
+
+Mixed projects require the Datadog-owned Vercel Builder package. It wraps
+`@vercel/next.build()`, adds the preload only to generated Node functions, and
+leaves Edge outputs unchanged. An application-side runtime check cannot run
+before Node resolves a project-global preload.
 
 ## 5. Configure Datadog
 
