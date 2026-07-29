@@ -239,7 +239,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: npm run test:instrumentations
+      - run: npm run test:instrumentations:ci
         env:
           PLUGINS: webdriverio
       - run: npm run test:integration:webdriverio:coverage

@@ -25,10 +25,16 @@ assert.ok(mochaHook)
 assert.ok(runnerHook)
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
+const workerConfigurationCh = channel('ci:mocha:worker:configuration')
+let workerTestFramework
 
 function onWorkerFinish () {}
+function onWorkerConfiguration ({ testFramework }) {
+  workerTestFramework = testFramework
+}
 
 workerFinishCh.subscribe(onWorkerFinish)
+workerConfigurationCh.subscribe(onWorkerConfiguration)
 
 /**
  * Exercises worker-ready and suite-finish messages.
@@ -116,6 +122,9 @@ process.send = (message, onDone) => {
     process.emit('message', {
       name: CONFIGURATION_RESPONSE,
       content: {
+        configuration: {
+          testFramework: 'webdriverio',
+        },
         requestId: message.args.content.requestId,
       },
     })
@@ -124,5 +133,7 @@ process.send = (message, onDone) => {
 
 exerciseWorkerMessages()
 assert.strictEqual(sendCalls, 6)
+assert.strictEqual(workerTestFramework, 'webdriverio')
 
 workerFinishCh.unsubscribe(onWorkerFinish)
+workerConfigurationCh.unsubscribe(onWorkerConfiguration)
