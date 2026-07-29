@@ -1,75 +1,99 @@
 ---
 name: serverless-integrations
 description: |
-  Use when adding, modifying, debugging, or reviewing dd-trace-js serverless platform integrations that create
-  root invocation spans for AWS Lambda, Azure Functions, Google Cloud Functions, or similar runtimes. Triggers:
-  serverless integration, function invocation root span, Lambda runtime, Azure Functions, GCP Functions,
-  type = 'serverless', DD_LAMBDA_HANDLER, datadog-lambda-js, deployed serverless verification,
-  manual serverless test.
+  Use when adding, modifying, debugging, or reviewing dd-trace-js serverless platform integrations that own a cloud
+  function invocation. Triggers: serverless invocation spans, AWS Lambda bootstrap, Azure Functions, GCP Functions,
+  DD_LAMBDA_HANDLER, datadog-lambda-js, timeout flushes, and serverless runtime verification.
 ---
 
-# Serverless Integrations
+# Serverless integrations
 
-Use this skill for platform-boundary instrumentation where dd-trace-js owns the function invocation lifecycle.
-Use `apm-integrations` instead for ordinary library instrumentation that runs inside a serverless function.
+Use this skill when the cloud runtime owns the unit of work or dd-trace-js manages its handler lifecycle. Use
+`apm-integrations` for a third-party library call that happens inside a function.
 
-## Decision Gate
+## Classify the boundary
 
-Classify the request before touching code:
+- Third-party library call inside Lambda, Azure, or GCP: ordinary APM child span.
+- Cloud function invocation: serverless invocation span or runtime-wrapper path.
+- HTTP, queue, database, or event trigger: invocation span plus trigger-specific context, inferred proxy behavior,
+  or span links.
+- AWS Lambda handler loading, timeout, or crash flushing: the special Lambda bootstrap path.
 
-| Request shape | Skill path | Span model |
-| --- | --- | --- |
-| Trace a third-party library call inside Lambda/Azure/GCP | `apm-integrations` | Child spans under the invocation |
-| Trace the cloud function invocation itself | This skill | Root `type = 'serverless'` span |
-| Trace an HTTP, queue, or event trigger | This skill plus trigger references | Root span plus context or links |
-| Change AWS Lambda bootstrap or timeout behavior | This skill | Special-case runtime wrapper path |
+Do not copy the Lambda bootstrap for an npm package integration. It is a runtime compatibility path, not the plugin
+architecture.
 
-Do not model ordinary library plugins after the Lambda bootstrap. Lambda is a compatibility/runtime wrapper path,
-not the default architecture for new integrations.
+## Read the runtime source first
 
-## Core Invariants
+Do not infer lifecycle support from a provider's documentation. Read the runtime source for the supported version
+range, plus the matching in-repo instrumentation, plugin, integration test, and workflow job. The source answers
+what the design depends on:
 
-- Serverless platform integrations represent the invocation as the primary unit of work.
-- Root plugins set `static kind = 'server'` and `static type = 'serverless'`.
-- Use `TracingPlugin` unless a more specific local pattern clearly applies. Do not default to `ServerPlugin` just
-  because the span kind is server.
-- The integration owns every completion path: success, thrown error, rejected promise, callback completion,
-  timeout, and runtime shutdown when the platform exposes it.
-- Flush behavior must be designed around the platform freezing or terminating the process.
-- Context extraction happens at the platform boundary: HTTP headers, event/message attributes, client context, or
-  batch span links.
-- Preserve diagnostic-channel subscriber behavior. AppSec, IAST, telemetry, and other subscribers may depend on
-  published events even when the tracing plugin is disabled.
-- Prefer Orchestrion for static module hooks. Use shimmer/runtime wrapping only when the platform's handler model
-  requires dynamic interception, and document why.
+1. How user handlers are registered, exported, or resolved.
+2. Which completion forms exist in that version range.
+3. Where the event, request, and context objects first cross into user code.
+4. Whether timeout or shutdown is observable.
+5. Which fields carry upstream trace context.
 
-## Workflow
+## Implemented shapes
 
-1. Read `references/architecture.md` to confirm whether the work is serverless-root or ordinary APM.
-2. Read `references/reference-integrations.md` and inspect at least one matching in-repo implementation.
-3. For implementation work, follow `references/implementation-guide.md`.
-4. For tests and deployed verification, follow `references/testing-guide.md`.
+### Plugin-backed invocation
 
-## Implementation Checklist
+Azure Functions is the current reference:
 
-- Add or update instrumentation in `packages/datadog-instrumentations/` when the runtime can be observed through
-  normal hooks.
-- Add or update the plugin under `packages/datadog-plugin-<name>/` when spans are created from diagnostic-channel
-  events.
-- Register the plugin in `packages/dd-trace/src/plugins/index.js`.
-- Add service naming behavior under `packages/dd-trace/src/service-naming/schemas/*/serverless.js`.
-- Add docs, TypeScript config surface, and supported-integration metadata only when the user-facing configuration
-  surface changes.
-- For HTTP-triggered functions, reuse web helpers such as `web.patch`, `web.startServerlessSpanWithInferredProxy`,
-  and `web.finishAll` when they match the trigger model.
-- For batch/message triggers, extract upstream context per item when possible and use span links for multiple
-  upstream contexts.
+- instrumentation wraps handler registration and calls a `tracingChannel` lifecycle named
+  `datadog:<platform>:<operation>`, so the plugin prefix starts with `tracing:datadog:` rather than `tracing:apm:`;
+- `AzureFunctionsPlugin` extends `TracingPlugin` with `kind = 'server'` and `type = 'serverless'`;
+- HTTP triggers use `web.patch`, `web.startServerlessSpanWithInferredProxy`, and `web.finishAll`;
+- non-HTTP triggers start the invocation span with `childOf: null` and add message links where the runtime exposes
+  upstream contexts;
+- service naming is registered in both `service-naming/schemas/*/serverless.js` files.
 
-## Review Checklist
+### AWS Lambda bootstrap
 
-- The invocation span starts before user handler execution and finishes exactly once.
-- Errors are tagged on the invocation span without crashing the user app.
-- Async, promise, callback, and synchronous handlers are all covered when the runtime supports them.
-- Timeout or near-shutdown behavior finishes or flushes trace data before the platform freezes execution.
-- Disabled instrumentation still leaves unrelated integrations intact.
-- Deployed/manual verification instructions confirm traces in Datadog, not only local unit behavior.
+`packages/dd-trace/src/lambda/` resolves `DD_LAMBDA_HANDLER`, falls back to `datadog-lambda-js`, installs the runtime
+patch, and manages impending-timeout flushing. Read `index.js`, `runtime/patch.js`, `handler.js`, and the tests under
+`packages/dd-trace/test/lambda/` before changing this path.
+
+This Lambda path does not start an invocation span or use the serverless plugin model. It composes the existing
+handler or `datadog-lambda-js` wrapper with timeout protection. Preserve that distinction when reviewing or
+designing a new platform integration.
+
+## Invariants
+
+- Start the invocation span before user code and run child instrumentation under its context.
+- Finish each started span exactly once on every completion path the runtime actually supports. Decide completion
+  from recorded state, such as a result or error present on the context or a flag set once, never from the ordering
+  of a timer against the handler.
+- Keep instrumentation failures from escaping into the user handler.
+- Extract distributed context at the runtime boundary. Use links when one invocation has several upstream contexts.
+- Keep resource names low-cardinality; request ids, message ids, object keys, and payload values are tags or omitted,
+  not resource-name components.
+- Preserve diagnostic-channel events needed by AppSec, IAST, telemetry, or other subscribers when tracing is
+  disabled.
+- When the runtime can freeze or terminate the process, verify the writer and flush path against that real lifecycle.
+
+Do not prescribe callbacks, streams, or shutdown hooks unless the target runtime exposes them. The upstream source
+and supported version range define the matrix.
+
+## Change map
+
+For plugin-backed integrations, inspect and update the applicable surfaces:
+
+- `packages/datadog-instrumentations/src/<name>.js` and `helpers/hooks.js`, where `{ serverless: false, fn }` skips
+  a hook that must not load in serverless environments;
+- `packages/datadog-plugin-<name>/`;
+- `packages/dd-trace/src/plugins/index.js`;
+- both serverless service-naming schema files;
+- `versions/` fixtures, public plugin types/docs, CODEOWNERS, and the serverless workflow job.
+
+Use Orchestrion for a static source function. Use shimmer when handler registration or export resolution is dynamic,
+and leave a short comment naming that constraint.
+
+## Verification
+
+Read [Architecture](references/architecture.md) for ownership and source paths. Read
+[Testing serverless integrations](references/testing-guide.md) for the real-runtime test shape and commands.
+
+Local tests must exercise the runtime-facing entry point. Add deployed verification only when the change depends on
+provider behavior the local runtime or emulator cannot reproduce; state the exact provider-only assumption being
+checked.
