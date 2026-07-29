@@ -57,6 +57,7 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
+  configResolved: allowVitestBrowserSetupFile,
 }
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
@@ -420,26 +421,32 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 }
 
 /**
- * Allows Vite to serve and resolve imports from the Datadog setup file when dd-trace is linked externally.
+ * Resolves the Vitest runner from the browser project's dependency tree.
  *
  * @param {{
- *   resolve?: { dedupe?: string[] },
- *   server?: { fs?: { allow?: string[] } }
+ *   resolve?: { dedupe?: string[] }
  * }} viteConfig
  * @returns {void}
  */
 function configureVitestBrowserSetupFile (viteConfig) {
   viteConfig.resolve ||= {}
   viteConfig.resolve.dedupe ||= []
-  viteConfig.server ||= {}
-  viteConfig.server.fs ||= {}
-  viteConfig.server.fs.allow ||= []
 
   if (!viteConfig.resolve.dedupe.includes('@vitest/runner')) {
     viteConfig.resolve.dedupe.push('@vitest/runner')
   }
-  if (!viteConfig.server.fs.allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
-    viteConfig.server.fs.allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
+}
+
+/**
+ * Allows Vite to serve the Datadog setup file after its default workspace detection has run.
+ *
+ * @param {{ server?: { fs?: { allow?: string[] } } }} viteConfig
+ * @returns {void}
+ */
+function allowVitestBrowserSetupFile (viteConfig) {
+  const allow = viteConfig.server?.fs?.allow
+  if (allow && !allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
+    allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
   }
 }
 
@@ -455,12 +462,7 @@ function addVitestBrowserSetupFileAccess (testSpecifications) {
   const configuredProjects = new Set()
   for (const testSpecification of testSpecifications) {
     const project = getTestSpecificationProject(testSpecification)
-    if (
-      getTestSpecificationPool(testSpecification) !== 'browser' &&
-      safeConfig(project)?.browser?.enabled !== true
-    ) {
-      continue
-    }
+    if (!isBrowserTestSpecification(testSpecification)) continue
 
     const browserServerProject = project?._parent || project
     if (!browserServerProject || configuredProjects.has(browserServerProject)) continue
@@ -678,7 +680,9 @@ function createMainProcessReporter (reporterState) {
     }
 
     if (testSuiteError) {
-      testSuiteCtx.error = normalizeVitestBrowserError(testSuiteError)
+      testSuiteCtx.error = testSuiteCtx.browserEnvironment
+        ? normalizeVitestBrowserError(testSuiteError)
+        : testSuiteError
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
@@ -805,7 +809,9 @@ function createMainProcessReporter (reporterState) {
       result.state = 'pass'
     }
 
-    const errors = normalizeVitestBrowserErrors(result?.errors)
+    const errors = browserEnvironment
+      ? normalizeVitestBrowserErrors(result?.errors)
+      : result?.errors || []
 
     return {
       browserEnvironment,
@@ -1003,8 +1009,10 @@ function getTestModuleProjectName (testModule) {
 
 function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
   const result = task.result
-  const errors = normalizeVitestBrowserErrors(result?.errors)
   const { browserEnvironment, errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
+  const errors = browserEnvironment
+    ? normalizeVitestBrowserErrors(result?.errors)
+    : result?.errors || []
   const finalAttemptStatus = finalStatus(statuses)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
@@ -1560,10 +1568,11 @@ function getTestSpecificationPool (testSpecification) {
   const options = getTestSpecificationOptions(testSpecification)
   const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
+  const projectConfig = safeConfig(project)
   return options?.pool ||
     file?.pool ||
     testSpecification?.pool ||
-    project?.config?.pool ||
+    projectConfig?.pool ||
     project?.serializedConfig?.pool ||
     project?.pool
 }
@@ -1596,15 +1605,16 @@ function getTestSpecificationIsolate (testSpecification, pool) {
   const options = getTestSpecificationOptions(testSpecification)
   const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
+  const projectConfig = safeConfig(project)
   return getPoolOptionsIsolate(options, pool) ??
     getPoolOptionsIsolate(file, pool) ??
-    getPoolOptionsIsolate(project?.config, pool) ??
+    getPoolOptionsIsolate(projectConfig, pool) ??
     getPoolOptionsIsolate(project?.serializedConfig, pool) ??
     getPoolOptionsIsolate(project, pool) ??
     getPoolOptionsIsolate(testSpecification, pool) ??
     options?.isolate ??
     file?.isolate ??
-    project?.config?.isolate ??
+    projectConfig?.isolate ??
     project?.serializedConfig?.isolate ??
     project?.isolate ??
     testSpecification?.isolate
@@ -1616,7 +1626,7 @@ function getEffectiveTestSpecificationIsolate (testSpecification, pool, defaultI
 }
 
 function getProjectName (project) {
-  return normalizeProjectName(project?.name || project?.config?.name || project?.test?.name)
+  return normalizeProjectName(project?.name || safeConfig(project)?.name || project?.test?.name)
 }
 
 function normalizeProjectName (name) {
@@ -1624,6 +1634,43 @@ function normalizeProjectName (name) {
 
   const label = name?.label
   return typeof label === 'string' ? label : undefined
+}
+
+/**
+ * Returns whether a Vitest specification runs in Browser Mode.
+ *
+ * @param {object} testSpecification
+ * @returns {boolean}
+ */
+function isBrowserTestSpecification (testSpecification) {
+  return getTestSpecificationPool(testSpecification) === 'browser' ||
+    isBrowserProject(getTestSpecificationProject(testSpecification))
+}
+
+/**
+ * Returns whether a Vitest project has Browser Mode enabled.
+ *
+ * @param {object|undefined} project
+ * @returns {boolean}
+ */
+function isBrowserProject (project) {
+  try {
+    if (project?.isBrowserEnabled?.() === true) return true
+  } catch {}
+  return getProjectReportingConfig(project)?.browser?.enabled === true
+}
+
+/**
+ * Returns whether Vitest can overlap tests or their setup and teardown.
+ *
+ * @param {object|undefined} config
+ * @returns {boolean}
+ */
+function hasConcurrentTestExecution (config) {
+  const sequence = config?.sequence
+  return sequence?.concurrent === true ||
+    sequence?.hooks === 'parallel' ||
+    sequence?.setupFiles === 'parallel'
 }
 
 /**
@@ -1635,8 +1682,7 @@ function normalizeProjectName (name) {
  */
 function canRaceRumCorrelation (ctx, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
-    const sequence = safeConfig(ctx)?.sequence
-    return sequence?.hooks === 'parallel' || sequence?.setupFiles === 'parallel'
+    return hasConcurrentTestExecution(safeConfig(ctx))
   }
 
   let browserFileCount = 0
@@ -1644,15 +1690,10 @@ function canRaceRumCorrelation (ctx, testSpecifications) {
   let project
   for (const testSpecification of testSpecifications) {
     const testProject = getTestSpecificationProject(testSpecification)
-    if (
-      getTestSpecificationPool(testSpecification) !== 'browser' &&
-      getProjectReportingConfig(testProject)?.browser?.enabled !== true
-    ) {
-      continue
-    }
+    if (!isBrowserTestSpecification(testSpecification)) continue
 
     const config = getProjectReportingConfig(testProject) || safeConfig(ctx)
-    if (config?.sequence?.hooks === 'parallel' || config?.sequence?.setupFiles === 'parallel') return true
+    if (hasConcurrentTestExecution(config)) return true
 
     browserFileCount++
     if (hasBrowserProject && testProject !== project) return true
@@ -1669,11 +1710,9 @@ function canRaceRumCorrelation (ctx, testSpecifications) {
 function getTestModuleBrowserEnvironment (testModule) {
   const project = testModule?.project
   const config = getProjectReportingConfig(project)
-  let isBrowserMode = testModule?.task?.pool === 'browser' || testModule?.pool === 'browser'
-  try {
-    isBrowserMode ||= project?.isBrowserEnabled?.() === true
-  } catch {}
-  isBrowserMode ||= config?.browser?.enabled === true
+  const isBrowserMode = testModule?.task?.pool === 'browser' ||
+    testModule?.pool === 'browser' ||
+    isBrowserProject(project)
   if (!isBrowserMode) return
 
   const provider = config?.browser?.provider

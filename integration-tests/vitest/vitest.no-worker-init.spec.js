@@ -390,19 +390,26 @@ describe('vitest no-worker init instrumentation selection', () => {
         resolve: {
           dedupe: ['user-dependency'],
         },
-        server: {
-          fs: {
-            allow: ['/repo/user-setup.mjs'],
-          },
-        },
       }
       accessPlugin.config(viteConfig)
       accessPlugin.config(viteConfig)
 
       assert.deepStrictEqual(viteConfig.resolve.dedupe, ['user-dependency', '@vitest/runner'])
-      assert.strictEqual(viteConfig.server.fs.allow[0], '/repo/user-setup.mjs')
-      assert.strictEqual(viteConfig.server.fs.allow.length, 2)
-      assert.strictEqual(path.basename(viteConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
+      assert.strictEqual(viteConfig.server, undefined)
+
+      const resolvedConfig = {
+        server: {
+          fs: {
+            allow: ['/repo'],
+          },
+        },
+      }
+      accessPlugin.configResolved(resolvedConfig)
+      accessPlugin.configResolved(resolvedConfig)
+
+      assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 2)
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
     })
 
     it('does not install the Vite access plugin for Node test projects', () => {
@@ -417,6 +424,28 @@ describe('vitest no-worker init instrumentation selection', () => {
 
       assert.strictEqual(project.options, undefined)
     })
+
+    for (const [description, project] of [
+      ['the project API', { isBrowserEnabled: () => true }],
+      ['serialized configuration', {
+        get config () {
+          throw new Error('config is unavailable')
+        },
+        serializedConfig: {
+          browser: {
+            enabled: true,
+          },
+        },
+      }],
+    ]) {
+      it(`installs the Vite access plugin for Browser Mode detected through ${description}`, () => {
+        const ctx = getNoWorkerReporterContext()
+
+        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
+
+        assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
+      })
+    }
 
     it('disables RUM correlation when browser files can run in parallel', () => {
       const ctx = getNoWorkerReporterContext()
@@ -446,6 +475,26 @@ describe('vitest no-worker init instrumentation selection', () => {
           },
           sequence: {
             setupFiles: 'parallel',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('disables RUM correlation when tests are globally concurrent', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            concurrent: true,
           },
         },
       }
@@ -606,6 +655,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       try {
         configureNoWorkerReporter(ctx)
         const { file, task } = createReporterTestFile(0, [error])
+        file.pool = 'browser'
         task.result.state = 'fail'
         file.result.state = 'fail'
         ctx.reporters[0].onTestCaseResult({ task })
@@ -622,6 +672,46 @@ describe('vitest no-worker init instrumentation selection', () => {
         '    at runHelper (/repo/helper.mjs?foo=bar:10:5)',
       ].join('\n'))
       assert.match(error.stack, /[?]import&browserv=/)
+    })
+
+    it('preserves Node error URLs for final and repeated attempts', () => {
+      const reportedErrors = []
+      const onTestError = context => reportedErrors.push(context.error)
+      const finalError = {
+        message: 'failed at http://localhost:63315/repo/test.mjs?import&browserv=123:60:13',
+        stack: 'Error: failed\n    at http://localhost:63315/repo/test.mjs?import&browserv=123:60:13',
+      }
+      const retryError = {
+        message: 'retry at http://localhost:63315/repo/test.mjs?import&browserv=456:70:13',
+        stack: 'Error: retry\n    at http://localhost:63315/repo/test.mjs?import&browserv=456:70:13',
+      }
+      testErrorCh.subscribe(onTestError)
+
+      try {
+        const finalCtx = getNoWorkerReporterContext()
+        configureNoWorkerReporter(finalCtx)
+        const finalRun = createReporterTestFile(0, [finalError])
+        finalRun.task.result.state = 'fail'
+        finalRun.file.result.state = 'fail'
+        finalCtx.reporters[0].onTestCaseResult({ task: finalRun.task })
+        finalCtx.reporters[0].onFinished([finalRun.file])
+
+        const retryCtx = getNoWorkerReporterContext()
+        configureNoWorkerReporter(retryCtx)
+        const retryRun = createReporterTestFile(1, [retryError])
+        retryCtx.reporters[0].onTaskUpdate(
+          [[retryRun.task.id, retryRun.task.result, retryRun.task.meta]],
+          [[retryRun.task.id, 'test-retried']]
+        )
+        retryCtx.reporters[0].onTestCaseResult({ task: retryRun.task })
+        retryCtx.reporters[0].onFinished([retryRun.file])
+      } finally {
+        testErrorCh.unsubscribe(onTestError)
+      }
+
+      assert.strictEqual(reportedErrors.length, 2)
+      assert.strictEqual(reportedErrors[0], finalError)
+      assert.strictEqual(reportedErrors[1], retryError)
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

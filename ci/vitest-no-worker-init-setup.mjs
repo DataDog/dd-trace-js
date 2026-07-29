@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 
-// Instrumentation-less setup for main-process Vitest reporting.
-// It applies Test Optimization execution changes without initializing dd-trace in the test environment.
+// Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
+// It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
@@ -37,6 +37,7 @@ const retryAttemptIndexByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let now
 let timeOrigin
+// Use an unfaked monotonic clock in Node and Vitest's parent frame in Browser Mode.
 if (typeof globalThis.process?.uptime === 'function') {
   now = () => globalThis.process.uptime() * 1000
   timeOrigin = Date.now() - now()
