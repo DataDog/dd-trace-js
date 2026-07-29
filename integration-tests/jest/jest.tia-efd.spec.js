@@ -735,7 +735,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('works with multi project setup and test skipping', (done) => {
+    it('works with multi project setup and test skipping', async () => {
       const projects = ['standard', 'node'].map(displayName => ({
         displayName,
         rootDir: 'ci-visibility/test',
@@ -762,24 +762,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          // suites for both projects in the multi-project config are reported as skipped
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-
-          const skippedSuites = testSuites.filter(
-            suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
-          )
-          assert.strictEqual(skippedSuites.length, 2)
-
-          skippedSuites.forEach(skippedSuite => {
-            assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
-          })
-        })
-
       childProcess = exec(
         'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
@@ -791,11 +773,29 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            // suites for both projects in the multi-project config are reported as skipped
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+            const skippedSuites = testSuites.filter(
+              suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+            )
+            assert.strictEqual(skippedSuites.length, 2)
+
+            skippedSuites.forEach(skippedSuite => {
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+            })
+          }
+        )
+
+      assert.strictEqual(childProcess.exitCode, 0)
     })
 
     it('does not run coverage reporters when TIA forces coverage collection', async () => {
