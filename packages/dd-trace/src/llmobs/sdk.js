@@ -36,12 +36,6 @@ class LLMObs extends NoopLLMObs {
   #hasUserSpanProcessor = false
 
   /**
-   * Lazily-created experiments facade (see ./experiments).
-   * @type {import('./experiments').Experiments | undefined}
-   */
-  #experiments
-
-  /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
@@ -66,19 +60,7 @@ class LLMObs extends NoopLLMObs {
    * a clear message on use.
    */
   get experiments () {
-    this.#experiments ??= createExperiments(this._config, this)
-    return this.#experiments
-  }
-
-  /**
-   * Drops the lazily-created experiments facade after LLMObs availability changes.
-   */
-  #resetExperiments () {
-    this.#experiments = undefined
-  }
-
-  experiment (options) {
-    return this.experiments.experiment(options)
+    return createExperiments(this._config, this)
   }
 
   enable (options = {}) {
@@ -107,7 +89,6 @@ class LLMObs extends NoopLLMObs {
     this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
-    this.#resetExperiments()
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -127,7 +108,6 @@ class LLMObs extends NoopLLMObs {
     logger.debug('Disabling LLMObs')
 
     this._config.llmobs.DD_LLMOBS_ENABLED = false
-    this.#resetExperiments()
 
     // disable writers and channel subscribers
     this._llmobsModule.disable()

@@ -3752,11 +3752,6 @@ declare namespace tracer {
       experiments: Experiments;
 
       /**
-       * Build an experiment to run over a dataset.
-       */
-      experiment(options: ExperimentOptions): Experiment;
-
-      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3994,7 +3989,7 @@ declare namespace tracer {
       /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
       retryDelay?: (attempt: number) => number;
       /** Reject on the first task/evaluator error instead of capturing it. Default false. */
-      raiseErrors?: boolean;
+      throwOnErrors?: boolean;
     }
 
     interface PullDatasetOptions {

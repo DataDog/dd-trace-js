@@ -6,12 +6,9 @@ const log = require('../../log')
 const EVALUATOR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 /**
- * @param {unknown} value
- * @returns {boolean}
+ * @typedef {null | string | number | boolean | NormalizedJsonValue[] | { [key: string]: NormalizedJsonValue }}
+ *   NormalizedJsonValue
  */
-function isPlainObject (value) {
-  return Object.prototype.toString.call(value) === '[object Object]'
-}
 
 /**
  * @param {object | null | undefined} value
@@ -74,7 +71,7 @@ function normalizeEvaluators (evaluators, kind) {
     return normalized
   }
 
-  if (!isPlainObject(evaluators)) {
+  if (typeof evaluators !== 'object') {
     throw new TypeError(`${kind} evaluators must be an array of functions or an object keyed by evaluator name`)
   }
 
@@ -93,8 +90,57 @@ function normalizeEvaluators (evaluators, kind) {
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
   if (typeof value === 'number' && Number.isFinite(value)) return 'score'
-  if (isPlainObject(value)) return 'json'
-  return 'categorical'
+  if (typeof value === 'string') return 'categorical'
+  return 'json'
+}
+
+/**
+ * @param {unknown} value
+ * @param {WeakSet<object>} seen
+ * @returns {NormalizedJsonValue}
+ */
+function normalizeJsonValue (value, seen) {
+  if (value === null) return null
+
+  const valueType = typeof value
+  if (valueType === 'string' || valueType === 'boolean') return value
+  if (valueType === 'number') return Number.isFinite(value) ? value : String(value)
+  if (valueType === 'bigint') return value.toString()
+  if (valueType === 'undefined') return null
+  if (valueType === 'symbol') return value.toString()
+  if (valueType === 'function') return { type: 'function', name: value.name || '<anonymous>' }
+
+  if (value instanceof Date) return value.toISOString()
+  if (value instanceof Error) {
+    return { type: value.name, message: value.message, stack: value.stack ?? '' }
+  }
+
+  if (seen.has(value)) return '[Circular]'
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    const normalized = new Array(value.length)
+    for (let i = 0; i < value.length; i++) normalized[i] = normalizeJsonValue(value[i], seen)
+    seen.delete(value)
+    return normalized
+  }
+
+  const normalized = {}
+  for (const [key, nestedValue] of Object.entries(value)) {
+    normalized[key] = normalizeJsonValue(nestedValue, seen)
+  }
+  seen.delete(value)
+  return normalized
+}
+
+/**
+ * @param {unknown} value
+ * @returns {{ [key: string]: NormalizedJsonValue }}
+ */
+function normalizeJsonMetricValue (value) {
+  const normalized = normalizeJsonValue(value, new WeakSet())
+  if (normalized !== null && typeof normalized === 'object' && !Array.isArray(normalized)) return normalized
+  return { value: normalized }
 }
 
 /**
@@ -102,9 +148,14 @@ function inferMetricType (value) {
  * @returns {string}
  */
 function stringify (value) {
-  if (value === null || value === undefined) return ''
+  if (value == null) return ''
   if (typeof value === 'string') return value.toLowerCase()
-  if (typeof value === 'object') return JSON.stringify(value).toLowerCase()
+  if (typeof value === 'object') {
+    try {
+      const stringified = JSON.stringify(value)
+      if (stringified !== undefined) return stringified.toLowerCase()
+    } catch {}
+  }
   return String(value).toLowerCase()
 }
 
@@ -159,8 +210,8 @@ module.exports = {
   buildTags,
   hasEntries,
   inferMetricType,
-  isPlainObject,
   normalizeEvaluators,
+  normalizeJsonMetricValue,
   sleep,
   stringify,
   validateEvaluatorName,

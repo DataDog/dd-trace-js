@@ -165,7 +165,7 @@ class LLMObsSpanProcessor {
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
       llmObsSpan.input = mlObsTags[INPUT_DOCUMENTS].map(doc => ({ content: doc.text, role: '' }))
       inputType = 'documents'
-    } else if (mlObsTags[INPUT_VALUE] !== undefined && mlObsTags[INPUT_VALUE] !== null) {
+    } else if (mlObsTags[INPUT_VALUE] != null) {
       llmObsSpan.input = [{ role: '', content: mlObsTags[INPUT_VALUE] }]
       inputType = 'value'
     }
@@ -176,7 +176,7 @@ class LLMObsSpanProcessor {
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
       llmObsSpan.output = mlObsTags[OUTPUT_DOCUMENTS].map(doc => ({ content: doc.text, role: '' }))
       outputType = 'documents'
-    } else if (mlObsTags[OUTPUT_VALUE] !== undefined && mlObsTags[OUTPUT_VALUE] !== null) {
+    } else if (mlObsTags[OUTPUT_VALUE] != null) {
       llmObsSpan.output = [{ role: '', content: mlObsTags[OUTPUT_VALUE] }]
       outputType = 'value'
     }

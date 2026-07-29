@@ -11,6 +11,7 @@ const {
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
+  normalizeJsonMetricValue,
   sleep,
   stringify,
   validateEvaluatorName,
@@ -74,7 +75,7 @@ function toMetric (
   metric.metric_type = type
   if (type === 'boolean') metric.boolean_value = value
   else if (type === 'score') metric.score_value = value
-  else if (type === 'json') metric.json_value = value
+  else if (type === 'json') metric.json_value = normalizeJsonMetricValue(value)
   else metric.categorical_value = stringify(value)
   return metric
 }
@@ -140,7 +141,7 @@ class Experiment {
     const {
       maxRetries = 0,
       retryDelay = (attempt) => 100 * (attempt + 1),
-      raiseErrors = false,
+      throwOnErrors = false,
     } = options
 
     if (maxRetries < 0) throw new Error('maxRetries must be >= 0')
@@ -189,7 +190,7 @@ class Experiment {
       const spans = []
       const metrics = []
       const evaluatorResults = {}
-      const usesLLMObsTrace = this.#usesLLMObsTrace()
+      const usesLLMObsTrace = Boolean(this.#llmobs?.enabled)
       let hasRowError = false
 
       for (let i = 0; i < records.length; i++) {
@@ -208,7 +209,7 @@ class Experiment {
           runIteration,
           maxRetries,
           retryDelay,
-          raiseErrors,
+          throwOnErrors,
         })
 
         const timestampMs = Date.now()
@@ -232,7 +233,7 @@ class Experiment {
             evaluatorResults[label].push(value)
             metrics.push(toMetric(label, value, null, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
           } catch (err) {
-            if (raiseErrors) throw err
+            if (throwOnErrors) throw err
             const msg = err.message ?? String(err)
             row.evaluationErrors[label] = msg
             evaluatorResults[label].push(null)
@@ -257,7 +258,7 @@ class Experiment {
       const summaryEvaluations = await this.#runSummaryEvaluators(rows, records, evaluatorResults, {
         maxRetries,
         retryDelay,
-        raiseErrors,
+        throwOnErrors,
         experimentId,
         metrics,
       })
@@ -295,7 +296,7 @@ class Experiment {
     runIteration,
     maxRetries,
     retryDelay,
-    raiseErrors,
+    throwOnErrors,
   }) {
     const startNs = Date.now() * 1e6
     const startHr = process.hrtime.bigint()
@@ -326,9 +327,9 @@ class Experiment {
       return output
     }
 
-    if (this.#usesLLMObsTrace()) {
+    if (this.#llmobs?.enabled) {
       try {
-        await this.#llmobs.annotationContext({ tags }, () => this.#llmobs.trace({
+        await this.#llmobs.trace({
           kind: 'experiment',
           name: this.#task.name || this.#name,
         }, async (span) => {
@@ -350,9 +351,9 @@ class Experiment {
             metadata: buildSpanMetadata(record.metadata, this.#config),
             tags,
           })
-        }))
+        })
       } catch (err) {
-        if (raiseErrors) throw err
+        if (throwOnErrors) throw err
         errorType = err.name || 'Error'
         errorMessage = err.message ?? String(err)
       }
@@ -360,7 +361,7 @@ class Experiment {
       try {
         await execute()
       } catch (err) {
-        if (raiseErrors) throw err
+        if (throwOnErrors) throw err
         errorType = err.name || 'Error'
         errorMessage = err.message ?? String(err)
       }
@@ -381,10 +382,6 @@ class Experiment {
       evaluations: {},
       evaluationErrors: {},
     })
-  }
-
-  #usesLLMObsTrace () {
-    return Boolean(this.#llmobs?.enabled && typeof this.#llmobs.trace === 'function')
   }
 
   async #runWithRetries (fn, maxRetries, retryDelay) {
@@ -438,7 +435,7 @@ class Experiment {
           'summary'
         ))
       } catch (err) {
-        if (options.raiseErrors) throw err
+        if (options.throwOnErrors) throw err
         const msg = err.message ?? String(err)
         summaryEvaluations[label] = { value: null, error: msg }
         options.metrics.push(toMetric(

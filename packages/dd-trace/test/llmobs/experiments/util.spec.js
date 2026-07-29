@@ -8,8 +8,8 @@ const log = require('../../../src/log')
 
 const {
   inferMetricType,
-  isPlainObject,
   normalizeEvaluators,
+  normalizeJsonMetricValue,
   validateEvaluatorName,
 } = require('../../../src/llmobs/experiments/util')
 
@@ -50,16 +50,35 @@ describe('LLMObs Experiments util', () => {
     )
   })
 
-  it('identifies plain objects for JSON metric inference', () => {
-    assert.equal(isPlainObject({}), true)
-    assert.equal(isPlainObject(Object.create(null)), true)
-    assert.equal(isPlainObject([]), false)
-    assert.equal(isPlainObject(new Date()), false)
-    assert.equal(isPlainObject(null), false)
-
+  it('infers metric types with a normalized JSON fallback', () => {
     assert.equal(inferMetricType({ x: 1 }), 'json')
-    assert.equal(inferMetricType(['Pass']), 'categorical')
+    assert.equal(inferMetricType(Object.create(null)), 'json')
+    assert.equal(inferMetricType(['Pass']), 'json')
+    assert.equal(inferMetricType(new Date()), 'json')
+    assert.equal(inferMetricType(null), 'json')
+    assert.equal(inferMetricType(Number.NaN), 'json')
+    assert.equal(inferMetricType(Number.POSITIVE_INFINITY), 'json')
+    assert.equal(inferMetricType('label'), 'categorical')
     assert.equal(inferMetricType(true), 'boolean')
     assert.equal(inferMetricType(0.5), 'score')
+  })
+
+  it('normalizes JSON metric values into backend-safe objects', () => {
+    const circular = { ok: true }
+    circular.self = circular
+    const error = new TypeError('bad')
+
+    assert.deepEqual(normalizeJsonMetricValue({ nested: { value: 1 }, circular }), {
+      nested: { value: 1 },
+      circular: { ok: true, self: '[Circular]' },
+    })
+    assert.deepEqual(normalizeJsonMetricValue(['Pass', undefined, 1n]), { value: ['Pass', null, '1'] })
+    assert.deepEqual(normalizeJsonMetricValue(Number.NaN), { value: 'NaN' })
+    assert.deepEqual(normalizeJsonMetricValue(null), { value: null })
+    assert.deepEqual(normalizeJsonMetricValue(error), {
+      type: 'TypeError',
+      message: 'bad',
+      stack: error.stack,
+    })
   })
 })

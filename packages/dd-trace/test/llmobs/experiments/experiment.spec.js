@@ -90,10 +90,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const callsToLlmobs = []
     const llmobs = {
       enabled: true,
-      annotationContext: (options, fn) => {
-        callsToLlmobs.push(['annotationContext', options])
-        return fn()
-      },
       trace: (options, fn) => {
         callsToLlmobs.push(['trace', options])
         return fn({ name: 'span' })
@@ -110,10 +106,11 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       evaluators: { ok: () => true },
     }, llmobs).run()
 
-    assert.equal(callsToLlmobs[0][0], 'annotationContext')
-    assert.equal(callsToLlmobs[1][1].kind, 'experiment')
-    assert.equal(callsToLlmobs[1][1].name, 'task')
-    assert.equal(callsToLlmobs[2][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[0][0], 'trace')
+    assert.equal(callsToLlmobs[0][1].kind, 'experiment')
+    assert.equal(callsToLlmobs[0][1].name, 'task')
+    assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, 'rec-0')
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
   })
@@ -189,6 +186,57 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(summaryOutputs, ['good', 'eval-bad', null])
     assert.deepEqual(summaryEvaluatorResults.exactMatch, [true, null, null])
     assert.equal(result.summaryEvaluations.passRate.value, 1 / 3)
+  })
+
+  it('throws task and evaluator errors when throwOnErrors is true', async () => {
+    const taskClient = stubClient()
+    await assert.rejects(
+      () => new Experiment(taskClient, {
+        name: 'exp-demo',
+        dataset: new Dataset(taskClient, 'demo').addRecord('bad'),
+        task: () => { throw new Error('task-fail') },
+      }).run({ throwOnErrors: true }),
+      /task-fail/
+    )
+
+    const evaluatorClient = stubClient()
+    await assert.rejects(
+      () => new Experiment(evaluatorClient, {
+        name: 'exp-demo',
+        dataset: new Dataset(evaluatorClient, 'demo').addRecord('bad'),
+        task: (input) => input,
+        evaluators: { bad: () => { throw new Error('eval-fail') } },
+      }).run({ throwOnErrors: true }),
+      /eval-fail/
+    )
+  })
+
+  it('normalizes fallback JSON evaluator metrics', async () => {
+    const c = stubClient()
+    const dataset = new Dataset(c, 'demo').addRecord('x')
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'out',
+      evaluators: {
+        obj: () => ({ x: 1 }),
+        arr: () => ['Pass', 'FAIL'],
+        nul: () => null,
+        nonfinite: () => Number.POSITIVE_INFINITY,
+        str: () => 'MATCH',
+      },
+    }).run()
+
+    const metrics = c.requests.find(request => request.path.endsWith('/experiments/exp/events'))
+      .body.data.attributes.metrics
+    const byLabel = (label) => metrics.find(metric => metric.label === label)
+
+    assert.deepEqual(byLabel('obj').json_value, { x: 1 })
+    assert.deepEqual(byLabel('arr').json_value, { value: ['Pass', 'FAIL'] })
+    assert.deepEqual(byLabel('nul').json_value, { value: null })
+    assert.deepEqual(byLabel('nonfinite').json_value, { value: 'Infinity' })
+    assert.equal(byLabel('str').metric_type, 'categorical')
+    assert.equal(byLabel('str').categorical_value, 'match')
   })
 
   it('validates required options', () => {

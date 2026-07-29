@@ -15,10 +15,6 @@ class NoopLLMObs {
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
-  experiment (options) {
-    return this.experiments.experiment(options)
-  }
-
   enable (options) {}
 
   disable () {}
