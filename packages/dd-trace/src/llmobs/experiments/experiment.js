@@ -116,7 +116,7 @@ class Experiment {
     this.#description = options.description ?? ''
     this.#dataset = options.dataset
     this.#task = options.task
-    this.#evaluators = options.evaluators ? new Map(Object.entries(options.evaluators)) : new Map()
+    this.#evaluators = new Map(options.evaluators && Object.entries(options.evaluators))
     this.#config = {}
     this.#hasConfig = false
     if (options.config) {
