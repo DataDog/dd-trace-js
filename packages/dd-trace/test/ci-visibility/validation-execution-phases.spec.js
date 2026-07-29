@@ -401,7 +401,7 @@ describe('test optimization validation execution boundary', () => {
       serializeApprovalCommand({ argv: ['/path with spaces/node', 'a\'b', '--flag'] }),
       expectedCommand
     )
-    assert.match(withCiPreloads('', framework).replaceAll('\\', '/'), /dd-trace-js\/ci\/init\.js/)
+    assert.match(withCiPreloads('', framework).replaceAll('\\', '/'), /-r "?[^"]*\/ci\/init\.js"?$/)
   })
 
   /**
