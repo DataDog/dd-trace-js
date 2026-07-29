@@ -15,7 +15,15 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest-main-no-worker-init')
-const { testSuiteStartCh } = require('../../packages/datadog-instrumentations/src/vitest-util')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+} = require('../../packages/dd-trace/src/ci-visibility/rum')
+const {
+  testErrorCh,
+  testStartCh,
+  testSuiteFinishCh,
+  testSuiteStartCh,
+} = require('../../packages/datadog-instrumentations/src/vitest-util')
 const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
@@ -285,8 +293,8 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
     }
 
-    function configureNoWorkerReporter (ctx) {
-      noWorkerInit.configure(ctx, '3.2.6', undefined, {
+    function configureNoWorkerReporter (ctx, testSpecifications) {
+      noWorkerInit.configure(ctx, '3.2.6', testSpecifications, {
         knownTestsBySuite: {},
         modifiedFiles: {},
         repositoryRoot: '/repo',
@@ -304,15 +312,406 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
-    it('sends EFD retry thresholds to the no-worker setup context', () => {
+    function createReporterTestFile (retryCount = 0, errors = []) {
+      const file = {
+        filepath: '/repo/watch-rerun.test.mjs',
+        id: 'watch-rerun-file',
+        meta: {},
+        projectName: 'browser',
+        result: { state: 'pass' },
+        tasks: [],
+        type: 'suite',
+      }
+      const task = {
+        file,
+        id: 'watch-rerun-test',
+        meta: {},
+        name: 'does not reuse retry state',
+        result: {
+          errors,
+          retryCount,
+          state: 'pass',
+        },
+        type: 'test',
+      }
+      file.tasks.push(task)
+      return { file, task }
+    }
+
+    it('sends execution and RUM configuration to the no-worker setup context', () => {
       const ctx = getNoWorkerReporterContext()
 
       configureNoWorkerReporter(ctx)
 
-      assert.deepStrictEqual(
-        ctx.getRootProject()._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
-        EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
-      )
+      const setupContext = ctx.getRootProject()._provided._ddVitestWorkerSetup
+      assert.deepStrictEqual(setupContext.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
+      assert.strictEqual(setupContext.isRumCorrelationEnabled, true)
+      assert.strictEqual(setupContext.rumTestExecutionIdCookieName, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+    })
+
+    it('installs the Datadog setup before user setup files', () => {
+      const ctx = getNoWorkerReporterContext()
+      ctx.config.setupFiles = ['/repo/user-setup.mjs']
+
+      configureNoWorkerReporter(ctx)
+
+      assert.strictEqual(ctx.config.includeTaskLocation, true)
+      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-setup.mjs')
+      assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
+    })
+
+    it('allows Vite to serve the Datadog setup when dd-trace is linked outside the browser project', () => {
+      const ctx = getNoWorkerReporterContext()
+      const userPlugin = { name: 'user-plugin' }
+      const parentProject = {
+        options: {
+          plugins: [userPlugin],
+        },
+      }
+      const project = {
+        _parent: parentProject,
+        config: {
+          browser: {
+            enabled: true,
+          },
+        },
+      }
+      const testSpecifications = [[project, { filepath: '/repo/test.mjs', pool: 'browser' }]]
+
+      configureNoWorkerReporter(ctx, testSpecifications)
+      configureNoWorkerReporter(ctx, testSpecifications)
+
+      assert.strictEqual(parentProject.options.plugins[0], userPlugin)
+      assert.strictEqual(parentProject.options.plugins.length, 2)
+      const accessPlugin = parentProject.options.plugins[1]
+      assert.strictEqual(accessPlugin.name, 'datadog:vitest-browser-setup-file')
+
+      const viteConfig = {
+        resolve: {
+          dedupe: ['user-dependency'],
+        },
+      }
+      accessPlugin.config(viteConfig)
+      accessPlugin.config(viteConfig)
+
+      assert.deepStrictEqual(viteConfig.resolve.dedupe, ['user-dependency', '@vitest/runner'])
+      assert.strictEqual(viteConfig.server, undefined)
+
+      const resolvedConfig = {
+        server: {
+          fs: {
+            allow: ['/repo'],
+          },
+        },
+      }
+      accessPlugin.configResolved(resolvedConfig)
+      accessPlugin.configResolved(resolvedConfig)
+
+      assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 2)
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
+    })
+
+    it('does not install the Vite access plugin for Node test projects', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          pool: 'forks',
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs', pool: 'forks' }]])
+
+      assert.strictEqual(project.options, undefined)
+    })
+
+    for (const [description, project] of [
+      ['the project API', { isBrowserEnabled: () => true }],
+      ['serialized configuration', {
+        get config () {
+          throw new Error('config is unavailable')
+        },
+        serializedConfig: {
+          browser: {
+            enabled: true,
+          },
+        },
+      }],
+    ]) {
+      it(`installs the Vite access plugin for Browser Mode detected through ${description}`, () => {
+        const ctx = getNoWorkerReporterContext()
+
+        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
+
+        assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
+      })
+    }
+
+    it('disables RUM correlation when browser files can run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          fileParallelism: true,
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('disables RUM correlation when browser setup files run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            setupFiles: 'parallel',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('disables RUM correlation when tests are globally concurrent', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            concurrent: true,
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('disables RUM correlation when browser hooks run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            hooks: 'parallel',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('keeps RUM correlation enabled when browser files run sequentially', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          fileParallelism: false,
+          sequence: {
+            hooks: 'list',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, true)
+    })
+
+    it('uses resolved browser file parallelism when available', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+            fileParallelism: false,
+          },
+          fileParallelism: true,
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, true)
+    })
+
+    it('uses serialized browser configuration for reporter metadata', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testSuiteStarts = []
+      const onTestSuiteStart = context => testSuiteStarts.push({
+        browserDriver: context.browserDriver,
+        browserName: context.browserName,
+        isBrowserMode: context.isBrowserMode,
+      })
+      testSuiteStartCh.subscribe(onTestSuiteStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        ctx.reporters[0].onTestModuleStart({
+          id: 'serialized-browser-module',
+          moduleId: '/repo/serialized-browser.test.mjs',
+          project: {
+            serializedConfig: {
+              browser: {
+                enabled: true,
+                name: 'chromium',
+                provider: 'playwright',
+              },
+            },
+          },
+        })
+      } finally {
+        testSuiteStartCh.unsubscribe(onTestSuiteStart)
+      }
+
+      assert.deepStrictEqual(testSuiteStarts, [{
+        browserDriver: 'playwright',
+        browserName: 'chromium',
+        isBrowserMode: true,
+      }])
+    })
+
+    it('reports the source line collected by Vitest', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testStartLines = []
+      const onTestStart = context => testStartLines.push(context.testStartLine)
+      testStartCh.subscribe(onTestStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const { file, task } = createReporterTestFile()
+        task.location = {
+          column: 3,
+          line: 42,
+        }
+        ctx.reporters[0].onTestCaseResult({ task })
+        ctx.reporters[0].onFinished([file])
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+      }
+
+      assert.deepStrictEqual(testStartLines, [42])
+    })
+
+    it('removes Vitest browser URL metadata from reported errors', () => {
+      const ctx = getNoWorkerReporterContext()
+      const reportedErrors = []
+      const onTestError = context => reportedErrors.push(context.error)
+      const error = {
+        message: 'failed at http://localhost:63315/repo/test.mjs?import&browserv=1785328307188:60:13',
+        name: 'Error',
+        stack: [
+          'Error: failed',
+          '    at http://localhost:63315/repo/test.mjs?import&browserv=1785328307188:60:13',
+          '    at http://localhost:63315/repo/helper.mjs?foo=bar:10:5',
+        ].join('\n'),
+        stacks: [{
+          column: 13,
+          file: '/repo/test.mjs',
+          line: 60,
+          method: '',
+        }, {
+          column: 5,
+          file: '/repo/helper.mjs?foo=bar',
+          line: 10,
+          method: 'runHelper',
+        }],
+      }
+      testErrorCh.subscribe(onTestError)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const { file, task } = createReporterTestFile(0, [error])
+        file.pool = 'browser'
+        task.result.state = 'fail'
+        file.result.state = 'fail'
+        ctx.reporters[0].onTestCaseResult({ task })
+        ctx.reporters[0].onFinished([file])
+      } finally {
+        testErrorCh.unsubscribe(onTestError)
+      }
+
+      assert.strictEqual(reportedErrors.length, 1)
+      assert.strictEqual(reportedErrors[0].message, 'failed at http://localhost:63315/repo/test.mjs:60:13')
+      assert.strictEqual(reportedErrors[0].stack, [
+        'Error: failed',
+        '    at /repo/test.mjs:60:13',
+        '    at runHelper (/repo/helper.mjs?foo=bar:10:5)',
+      ].join('\n'))
+      assert.match(error.stack, /[?]import&browserv=/)
+    })
+
+    it('preserves Node error URLs for final and repeated attempts', () => {
+      const reportedErrors = []
+      const onTestError = context => reportedErrors.push(context.error)
+      const finalError = {
+        message: 'failed at http://localhost:63315/repo/test.mjs?import&browserv=123:60:13',
+        stack: 'Error: failed\n    at http://localhost:63315/repo/test.mjs?import&browserv=123:60:13',
+      }
+      const retryError = {
+        message: 'retry at http://localhost:63315/repo/test.mjs?import&browserv=456:70:13',
+        stack: 'Error: retry\n    at http://localhost:63315/repo/test.mjs?import&browserv=456:70:13',
+      }
+      testErrorCh.subscribe(onTestError)
+
+      try {
+        const finalCtx = getNoWorkerReporterContext()
+        configureNoWorkerReporter(finalCtx)
+        const finalRun = createReporterTestFile(0, [finalError])
+        finalRun.task.result.state = 'fail'
+        finalRun.file.result.state = 'fail'
+        finalCtx.reporters[0].onTestCaseResult({ task: finalRun.task })
+        finalCtx.reporters[0].onFinished([finalRun.file])
+
+        const retryCtx = getNoWorkerReporterContext()
+        configureNoWorkerReporter(retryCtx)
+        const retryRun = createReporterTestFile(1, [retryError])
+        retryCtx.reporters[0].onTaskUpdate(
+          [[retryRun.task.id, retryRun.task.result, retryRun.task.meta]],
+          [[retryRun.task.id, 'test-retried']]
+        )
+        retryCtx.reporters[0].onTestCaseResult({ task: retryRun.task })
+        retryCtx.reporters[0].onFinished([retryRun.file])
+      } finally {
+        testErrorCh.unsubscribe(onTestError)
+      }
+
+      assert.strictEqual(reportedErrors.length, 2)
+      assert.strictEqual(reportedErrors[0], finalError)
+      assert.strictEqual(reportedErrors[1], retryError)
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {
@@ -330,6 +729,7 @@ describe('vitest no-worker init instrumentation selection', () => {
           moduleId: '/repo/first.test.mjs',
         })
         noWorkerInit.deactivate(ctx)
+        assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isActive, false)
         ctx.reporters[0].onTestModuleStart({
           id: 'second',
           moduleId: '/repo/second.test.mjs',
@@ -339,6 +739,66 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
 
       assert.deepStrictEqual(testSuiteStarts, ['/repo/first.test.mjs'])
+    })
+
+    it('clears completed modules and retry state before a watch rerun', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testAttemptRetries = []
+      const onTestStart = context => testAttemptRetries.push(context.isRetry)
+      testStartCh.subscribe(onTestStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const reporter = ctx.reporters[0]
+        const firstRun = createReporterTestFile(1, [new Error('first attempt failed')])
+        reporter.onTaskUpdate(
+          [[firstRun.task.id, firstRun.task.result, firstRun.task.meta]],
+          [[firstRun.task.id, 'test-retried']]
+        )
+        reporter.onTestCaseResult({ task: firstRun.task })
+        reporter.onFinished([firstRun.file])
+
+        reporter.onWatcherRerun()
+
+        const secondRun = createReporterTestFile()
+        reporter.onTestCaseResult({ task: secondRun.task })
+        reporter.onFinished([secondRun.file])
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+      }
+
+      assert.deepStrictEqual(testAttemptRetries, [false, true, false])
+    })
+
+    it('finishes active suites before a watch rerun', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testSuiteStarts = []
+      const testSuiteFinishes = []
+      const onTestSuiteStart = context => testSuiteStarts.push(context.testSuiteAbsolutePath)
+      const onTestSuiteFinish = context => testSuiteFinishes.push(context)
+      testSuiteStartCh.subscribe(onTestSuiteStart)
+      testSuiteFinishCh.subscribe(onTestSuiteFinish)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const reporter = ctx.reporters[0]
+        const { file } = createReporterTestFile()
+        reporter.onTestModuleStart(file)
+
+        reporter.onWatcherRerun()
+        reporter.onFinished([file])
+      } finally {
+        testSuiteStartCh.unsubscribe(onTestSuiteStart)
+        testSuiteFinishCh.unsubscribe(onTestSuiteFinish)
+      }
+
+      assert.deepStrictEqual(testSuiteStarts, [
+        '/repo/watch-rerun.test.mjs',
+        '/repo/watch-rerun.test.mjs',
+      ])
+      assert.strictEqual(testSuiteFinishes.length, 2)
+      assert.strictEqual(testSuiteFinishes[0].status, 'skip')
+      assert.strictEqual(testSuiteFinishes[1].status, 'pass')
     })
   })
 
@@ -1175,6 +1635,107 @@ describe('impacted test', () => {
         runVitest({
           TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
           POOL_CONFIG: 'forks',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('normalizes no-worker setup data when the repository root is a symlink', async () => {
+      const testSuite = 'ci-visibility/vitest-tests/early-flake-detection.mjs'
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        vitest: {
+          [testSuite]: [
+            'early flake detection does not retry if it is not new',
+          ],
+        },
+      })
+
+      const linkedRepositoryRoot = path.join(
+        path.dirname(cwd),
+        `repository-link-${path.basename(cwd)}-${process.pid}`
+      )
+      fs.symlinkSync(cwd, linkedRepositoryRoot, process.platform === 'win32' ? 'junction' : 'dir')
+
+      try {
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+          const knownTests = getTestsByName(
+            getEventContents(events, 'test'),
+            'early flake detection does not retry if it is not new'
+          )
+          assert.strictEqual(knownTests.length, 1)
+          assert.ok(!(TEST_IS_NEW in knownTests[0].meta), inspect(knownTests[0].meta))
+          assert.ok(!(TEST_IS_RETRY in knownTests[0].meta), inspect(knownTests[0].meta))
+          assert.strictEqual(knownTests[0].meta[TEST_SUITE], testSuite)
+        })
+
+        const exitCode = await Promise.all([
+          runVitest({
+            CI_PROJECT_DIR: linkedRepositoryRoot,
+            GITLAB_CI: 'true',
+            POOL_CONFIG: 'forks',
+            TEST_DIR: testSuite,
+          }),
+          payloadsPromise,
+        ]).then(([exitCode]) => exitCode)
+
+        assert.strictEqual(exitCode, 0, testOutput)
+      } finally {
+        fs.unlinkSync(linkedRepositoryRoot)
+      }
+    })
+
+    it('uses an unmocked clock for no-worker attempt durations and EFD retries', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 1,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const tests = getTestsByName(
+          getEventContents(events, 'test'),
+          'uses real time for early flake detection with fake timers'
+        )
+        assert.strictEqual(tests.length, 3)
+        for (let index = 0; index < tests.length; index++) {
+          const test = tests[index]
+          assert.ok(
+            Number(test.duration) < 1000 * 1e6,
+            `Expected duration to use an unmocked clock, got ${Number(test.duration) / 1e6}ms`
+          )
+          if (index === 0) {
+            assert.ok(!(TEST_IS_RETRY in test.meta), inspect(test.meta))
+          } else {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
+        }
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/efd-fake-timers.mjs',
+          POOL_CONFIG: 'forks',
+          VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/fake-timers-setup.mjs',
         }),
         payloadsPromise,
       ]).then(([exitCode]) => exitCode)

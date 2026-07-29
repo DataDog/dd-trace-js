@@ -880,9 +880,16 @@ function setRumTestCorrelation (context, activeSpan) {
   return testSpan
 }
 
-function getTestParentSpan (tracer) {
+/**
+ * Returns the synthetic parent that makes a test event the root of its trace.
+ *
+ * @param {import('../../tracer')} tracer
+ * @param {string} [testExecutionId]
+ * @returns {import('../../opentracing/span_context')}
+ */
+function getTestParentSpan (tracer, testExecutionId) {
   return tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-trace-id': testExecutionId || id().toString(10),
     'x-datadog-parent-id': '0000000000000000',
   })
 }
