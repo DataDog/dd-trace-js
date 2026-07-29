@@ -39,8 +39,8 @@ permutations the upstream contract excludes.
 ## ESM and sandbox tests
 
 Use `useSandbox` for native ESM or package-export tests. Load `dd-trace/init.js` before the library and exercise the
-real export. The helpers live in `integration-tests/helpers`: `FakeAgent` plus `assertMessageReceived` or
-`curlAndAssertMessage` for assertions, `sandboxCwd` for the sandbox directory,
+real export. The helpers live in `integration-tests/helpers`: `FakeAgent`, whose `assertMessageReceived` method takes
+the payload assertion, plus `curlAndAssertMessage`, `sandboxCwd` for the sandbox directory,
 `spawnPluginIntegrationTestProcAndExpectExit` to run a server file against the fake agent, and `stopProc` for
 teardown.
 
