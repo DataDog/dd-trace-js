@@ -15,7 +15,7 @@ describe('Plugin', () => {
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
       describe('data stream monitoring', function () {
@@ -31,7 +31,7 @@ describe('Plugin', () => {
           container?.removeAllListeners('message')
           connection?.close()
           connection = null
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         describe('concurrent context isolation', () => {
