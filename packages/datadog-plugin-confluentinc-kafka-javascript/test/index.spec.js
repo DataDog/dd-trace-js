@@ -3,10 +3,12 @@
 const assert = require('node:assert/strict')
 
 const { randomUUID } = require('node:crypto')
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -404,9 +406,14 @@ describe('Plugin', () => {
 
             it('should include every repeated native header key in the DSM payload size', () => {
               const setCheckpointSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setCheckpoint')
-              const nativeProduceSpy = sinon.spy(nativeProducer._client, 'produce')
+              const startChannel = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
               const message = Buffer.from('native DSM message')
               const key = 'native-dsm-key'
+              /** @type {Record<string, string | Buffer | Array<string | Buffer>>} */
+              let carrier = {}
+
+              const captureCarrier = (ctx) => { carrier = ctx.messages[0].headers }
+              startChannel.subscribe(captureCarrier)
 
               try {
                 nativeProducer.produce(
@@ -419,20 +426,26 @@ describe('Plugin', () => {
                   [{ 'content-type': 'text' }, { 'content-type': 'application/json' }]
                 )
 
-                const producedHeaders = nativeProduceSpy.lastCall.args[6]
-                let expectedSize = message.length + Buffer.byteLength(key)
-                for (const header of producedHeaders) {
-                  const [headerName] = Object.keys(header)
-                  if (headerName === 'dd-pathway-ctx-base64') continue
+                assert.deepStrictEqual(carrier['content-type'], ['text', 'application/json'])
 
-                  const value = header[headerName]
-                  expectedSize += Buffer.byteLength(headerName) +
-                    (Buffer.isBuffer(value) ? value.length : Buffer.byteLength(value))
+                let expectedSize = message.length + Buffer.byteLength(key)
+                for (const headerKey of Object.keys(carrier)) {
+                  // DsmPathwayCodec writes its header after the checkpoint is sized.
+                  if (headerKey === 'dd-pathway-ctx-base64') continue
+
+                  const value = carrier[headerKey]
+                  const values = Array.isArray(value) ? value : [value]
+                  for (const single of values) {
+                    expectedSize += Buffer.byteLength(headerKey) +
+                      (Buffer.isBuffer(single) ? single.length : Buffer.byteLength(single))
+                  }
                 }
 
                 assert.strictEqual(setCheckpointSpy.lastCall.args[3], expectedSize)
+                // Repeating 'content-type' is what the generic carrier walk would miss.
+                assert.notStrictEqual(getMessageSize({ key, value: message, headers: carrier }), expectedSize)
               } finally {
-                nativeProduceSpy.restore()
+                startChannel.unsubscribe(captureCarrier)
                 setCheckpointSpy.restore()
               }
             })

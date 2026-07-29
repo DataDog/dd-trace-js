@@ -10,26 +10,38 @@ const KafkajsConsumerPlugin = require('../src/consumer')
 const KafkajsProducerPlugin = require('../src/producer')
 
 describe('kafkajs producer start', () => {
-  it('counts every repeated native header key when requested by the instrumentation', () => {
+  /**
+   * @param {Record<string, string | Buffer | Array<string | Buffer>>} [headers]
+   */
+  function checkpointPayloadSize (headers) {
     const setCheckpoint = sinon.stub()
     const plugin = new KafkajsProducerPlugin({ setCheckpoint }, {})
     plugin.config = { dsmEnabled: true }
-    const message = {
-      key: 'key',
-      value: 'value',
-      headers: {
-        'content-type': ['text', 'application/json'],
-      },
-    }
 
     plugin.start({
       topic: 'topic',
-      messages: [message],
-      countRepeatedHeaderKeys: true,
+      messages: [{ key: 'key', value: 'value', headers }],
       currentStore: { span: {} },
     })
 
-    assert.strictEqual(setCheckpoint.firstCall.args[2], 52)
+    return setCheckpoint.firstCall.args[2]
+  }
+
+  it('counts the header key once per repeated value', () => {
+    // Every array element becomes its own wire record, so 'content-type' ships twice.
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': ['text', 'application/json'] }), 52)
+  })
+
+  it('counts a single header key once', () => {
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': 'application/json' }), 36)
+  })
+
+  it('counts no bytes for a header key with no values', () => {
+    assert.strictEqual(checkpointPayloadSize({ 'content-type': [] }), 8)
+  })
+
+  it('sizes a message the caller sent without headers', () => {
+    assert.strictEqual(checkpointPayloadSize(undefined), 8)
   })
 })
 

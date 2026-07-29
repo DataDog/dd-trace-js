@@ -1,21 +1,27 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { DsmPathwayCodec, getSizeOrZero } = require('../../dd-trace/src/datastreams')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 /**
- * @param {Record<string, string | Buffer | Array<string | Buffer>>} headers
+ * A Kafka header value array becomes one wire record per element, so the key
+ * bytes repeat with it.
+ *
+ * @param {{ key?: unknown, value?: unknown,
+ *   headers?: Record<string, string | Buffer | Array<string | Buffer>> }} message
  */
-function getRepeatedHeaderKeysSize (headers) {
-  let size = 0
-  for (const key of Object.keys(headers)) {
-    const value = headers[key]
-    if (Array.isArray(value) && value.length > 1) {
-      size += Buffer.byteLength(key) * (value.length - 1)
-    }
+function getKafkaMessageSize (message) {
+  const { key, value, headers } = message
+  let size = getSizeOrZero(key) + getSizeOrZero(value)
+  if (headers === undefined) return size
+
+  for (const headerKey of Object.keys(headers)) {
+    const headerValue = headers[headerKey]
+    const keySize = Buffer.byteLength(headerKey, 'utf8')
+    size += (Array.isArray(headerValue) ? keySize * headerValue.length : keySize) + getSizeOrZero(headerValue)
   }
   return size
 }
@@ -91,10 +97,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        let payloadSize = getMessageSize(message)
-        if (ctx.countRepeatedHeaderKeys) {
-          payloadSize += getRepeatedHeaderKeysSize(message.headers)
-        }
+        const payloadSize = getKafkaMessageSize(message)
         const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
         if (clusterId) {
