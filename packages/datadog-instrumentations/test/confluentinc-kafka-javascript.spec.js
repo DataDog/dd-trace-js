@@ -9,111 +9,167 @@ require('../src/confluentinc-kafka-javascript')
 
 const HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@confluentinc/kafka-javascript'][0].hook
 const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
+const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+
+function stageProducer () {
+  class Producer {
+    produce (...args) {
+      this.args = args
+    }
+  }
+
+  const module = { Producer }
+  HOOK(module)
+  return new module.Producer()
+}
+
+/**
+ * @param {{ produce: Function, args?: unknown[] }} producer
+ * @param {unknown} headers Seventh positional `produce()` argument.
+ * @returns {unknown} The header argument the boundary forwarded to the library.
+ */
+function produce (producer, headers) {
+  producer.produce('topic', null, Buffer.from('message'), 'key', Date.now(), undefined, headers)
+  return producer.args[6]
+}
 
 describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js', () => {
-  const subscriptions = []
+  const subscribers = []
 
   afterEach(() => {
-    for (const subscription of subscriptions) {
-      producerStart.unsubscribe(subscription)
+    for (const subscriber of subscribers) {
+      producerStart.unsubscribe(subscriber)
     }
-    subscriptions.length = 0
+    subscribers.length = 0
   })
 
-  it('normalizes native headers before tracing and preserves Buffer values', () => {
-    class Producer {
-      produce (...args) {
-        this.args = args
-      }
+  describe('native produce headers', () => {
+    /**
+     * @param {(ctx: { messages: Array<{ headers: Record<string, string | Buffer> }> }) => void} subscriber
+     */
+    function trackSubscriber (subscriber) {
+      subscribers.push(subscriber)
+      producerStart.subscribe(subscriber)
     }
 
-    const module = { Producer }
-    HOOK(module)
-
-    const injectTraceHeaders = (ctx) => {
+    /**
+     * @param {{ messages: Array<{ headers: Record<string, string> }> }} ctx
+     */
+    function injectPropagationHeaders (ctx) {
+      ctx.messages[0].headers ??= {}
       ctx.messages[0].headers['x-datadog-trace-id'] = '123'
-      ctx.messages[0].headers.traceparent =
-        '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+      ctx.messages[0].headers.traceparent = TRACEPARENT
     }
-    subscriptions.push(injectTraceHeaders)
-    producerStart.subscribe(injectTraceHeaders)
 
-    const producer = new module.Producer()
-    producer.produce(
-      'topic',
-      null,
-      Buffer.from('message'),
-      'key',
-      Date.now(),
-      undefined,
-      [
-        { 'content-type': 'text' },
+    it('keeps application entries and replaces only the keys propagation writes', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const binary = Buffer.from([0xde, 0xad, 0xbe, 0xef])
+      const applicationHeaders = [
+        { 'content-type': 'text/plain' },
         { 'content-type': 'application/json' },
-        { 'binary-header': Buffer.from([0xde, 0xad, 0xbe, 0xef]) },
-        { 'x-datadog-trace-id': 'old-trace-id' },
-        { traceparent: '00-old-old-00' },
+        { 'binary-header': binary },
+        { traceparent: 'stale-traceparent' },
         { Traceparent: 'application-value' },
         { ['__proto__']: 'prototype-safe' },
       ]
-    )
 
-    const producedHeaders = producer.args[6]
-    const producedCarrier = headersToObject(producedHeaders)
+      const produced = produce(stageProducer(), applicationHeaders)
 
-    assert.strictEqual(producedHeaders.filter(header => Object.hasOwn(header, 'content-type')).length, 1)
-    assert.strictEqual(producedCarrier['content-type'], 'application/json')
-    assert.strictEqual(producedCarrier.Traceparent, 'application-value')
-    assert.strictEqual(producedCarrier['x-datadog-trace-id'], '123')
-    assert.strictEqual(
-      producedCarrier.traceparent,
-      '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
-    )
-    assert.ok(Buffer.isBuffer(producedCarrier['binary-header']))
-    assert.deepStrictEqual(producedCarrier['binary-header'], Buffer.from([0xde, 0xad, 0xbe, 0xef]))
-    assert.ok(Object.hasOwn(producedCarrier, '__proto__'))
-    assert.strictEqual(Object.getOwnPropertyDescriptor(producedCarrier, '__proto__').value, 'prototype-safe')
-  })
+      assert.deepStrictEqual(produced, [
+        { 'content-type': 'text/plain' },
+        { 'content-type': 'application/json' },
+        { 'binary-header': binary },
+        { Traceparent: 'application-value' },
+        { ['__proto__']: 'prototype-safe' },
+        { traceparent: TRACEPARENT },
+        { 'x-datadog-trace-id': '123' },
+      ])
+      assert.strictEqual(produced[0], applicationHeaders[0])
+      assert.strictEqual(produced[2]['binary-header'], binary)
+    })
 
-  it('returns generated headers only when native headers are malformed', () => {
-    class Producer {
-      produce (...args) {
-        this.args = args
+    it('forwards entries the binding parses differently instead of rejecting them', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const multiKey = { first: 'one', second: 'two' }
+      const arrayEntry = ['array-value']
+      const numberValue = { 'content-length': 42 }
+
+      const produced = produce(stageProducer(), [multiKey, arrayEntry, numberValue])
+
+      assert.strictEqual(produced[0], multiKey)
+      assert.strictEqual(produced[1], arrayEntry)
+      assert.strictEqual(produced[2], numberValue)
+      assert.deepStrictEqual(produced.slice(3), [
+        { 'x-datadog-trace-id': '123' },
+        { traceparent: TRACEPARENT },
+      ])
+    })
+
+    it('drops every application entry sharing a key propagation claims', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const produced = produce(stageProducer(), [
+        { traceparent: 'first-stale' },
+        { traceparent: 'second-stale' },
+      ])
+
+      assert.deepStrictEqual(produced, [
+        { traceparent: TRACEPARENT },
+        { 'x-datadog-trace-id': '123' },
+      ])
+    })
+
+    it('publishes a carrier seeded with the application headers', () => {
+      const carriers = []
+      trackSubscriber((ctx) => carriers.push(ctx.messages[0].headers))
+
+      const binary = Buffer.from('binary-value')
+      produce(stageProducer(), [{ 'content-type': 'application/json' }, { 'binary-header': binary }])
+
+      assert.strictEqual(carriers.length, 1)
+      assert.deepStrictEqual(Object.keys(carriers[0]), ['content-type', 'binary-header'])
+      assert.strictEqual(carriers[0]['content-type'], 'application/json')
+      assert.strictEqual(carriers[0]['binary-header'], binary)
+    })
+
+    it('sends generated headers only for shapes the binding cannot consume', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const producer = stageProducer()
+      const unusableShapes = [
+        { 'content-type': 'text/plain' },
+        'content-type: text/plain',
+        [null],
+        [undefined],
+        [{ 'content-type': 'text/plain' }, null],
+        ['content-type'],
+        [42],
+        [{}],
+      ]
+
+      for (const [index, headers] of unusableShapes.entries()) {
+        assert.deepStrictEqual(produce(producer, headers), [
+          { 'x-datadog-trace-id': '123' },
+          { traceparent: TRACEPARENT },
+        ], `unusable shape at index ${index}`)
       }
-    }
+    })
 
-    const module = { Producer }
-    HOOK(module)
+    it('sends no headers when neither the caller nor propagation supplied any', () => {
+      trackSubscriber(() => {})
 
-    const injectTraceHeaders = (ctx) => {
-      ctx.messages[0].headers['x-datadog-trace-id'] = '123'
-    }
-    subscriptions.push(injectTraceHeaders)
-    producerStart.subscribe(injectTraceHeaders)
+      const producer = stageProducer()
 
-    const producer = new module.Producer()
-    const malformedHeaders = [
-      { 'content-type': 'text' },
-      [null],
-      [{ 'content-type': 'text' }, null],
-      [{}],
-      [{ first: 'one', second: 'two' }],
-      [{ 'content-type': 42 }],
-    ]
+      assert.deepStrictEqual(produce(producer, undefined), [])
+      assert.deepStrictEqual(produce(producer, []), [])
+    })
 
-    for (const headers of malformedHeaders) {
-      producer.produce('topic', null, Buffer.from('message'), 'key', Date.now(), undefined, headers)
-      assert.deepStrictEqual(producer.args[6], [{ 'x-datadog-trace-id': '123' }])
-    }
+    it('forwards the caller argument untouched when no subscriber is attached', () => {
+      const applicationHeaders = [{ 'content-type': 'application/json' }]
+
+      assert.strictEqual(produce(stageProducer(), applicationHeaders), applicationHeaders)
+    })
   })
 })
-
-function headersToObject (headers) {
-  const carrier = Object.create(null)
-  for (const header of headers) {
-    if (!header || typeof header !== 'object') continue
-    for (const key of Object.keys(header)) {
-      carrier[key] = header[key]
-    }
-  }
-  return carrier
-}
