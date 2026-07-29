@@ -271,6 +271,19 @@ Composition is the default; inheritance only when ≤2 sibling types share a com
 - Don't use language/runtime features that are too new
 - **Guard breaking changes with version checks** using [`version.js`](./version.js) (e.g., `DD_MAJOR`)
 
+#### The supported Node.js range differs per release line
+
+`engines.node` is `>=22` on `master`, `>=18` on `v5.x`, so never hardcode a major in a runtime gate —
+derive it from `engines.node` + `nodeMaxMajor`, the source `src/guardrails/index.js` reads. Below the
+floor the guardrail aborts instrumentation entirely, yet CI still runs Node 18 and 20 on `master` so
+backports stay honest. A spec needing a live tracer must therefore skip outside the range, honouring
+`DD_INJECT_FORCE` as `withVersions` (`packages/dd-trace/test/setup/mocha.js`) does:
+
+```js
+const runtimeSupported = Boolean(process.env.DD_INJECT_FORCE) ||
+  semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
+```
+
 ### Public TypeScript Types
 
 The repo carries two public TypeScript surfaces:
