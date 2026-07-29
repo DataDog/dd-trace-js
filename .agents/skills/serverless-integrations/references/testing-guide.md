@@ -37,17 +37,8 @@ path when registration or event publication changed.
 
 ## Commands
 
-Unset OpenTelemetry exporters before plugin tests so traces reach `FakeAgent`:
-
-```bash
-unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-```
-
-Run a serverless plugin with its version fixtures:
-
-```bash
-PLUGINS="<name>" npm run test:plugins:ci
-```
+Use the shared environment, plugin, service, and coverage commands from
+[Testing integrations](../../apm-integrations/references/testing.md).
 
 For a single already-installed spec:
 
@@ -66,9 +57,6 @@ Run Lambda specs directly:
 ```
 
 ## Coverage and deployed checks
-
-Sandboxed runtime processes do not contribute to nyc coverage. Add same-process coverage for changed production
-branches when the integration test cannot cover them in-process.
 
 Use deployed verification only for a provider-owned behavior the real local runtime or emulator cannot reproduce,
 such as freeze timing or platform-injected metadata. Record the runtime version, region, invocation identifier,
