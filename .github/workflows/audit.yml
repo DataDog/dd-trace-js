@@ -36,10 +36,13 @@ jobs:
       - uses: ./.github/actions/node/latest
       # Root dev tooling reaches these through @actions/*, Axios, Mocha, and Express.
       # Keep them explicit so any newly introduced high or critical advisory still fails.
+      # GHSA-mh99-v99m-4gvg declares `<= 5.0.7` across every brace-expansion major, so the 1.x
+      # and 2.x copies Mocha, glob, and @eslint/eslintrc pin can never clear it; 5.x is patched.
       - run: |
           bun audit --audit-level=high \
             --ignore GHSA-vxpw-j846-p89q \
             --ignore GHSA-hmw2-7cc7-3qxx \
             --ignore GHSA-5c6j-r48x-rmvq \
-            --ignore GHSA-j3q9-mxjg-w52f
+            --ignore GHSA-j3q9-mxjg-w52f \
+            --ignore GHSA-mh99-v99m-4gvg
         working-directory: ${{ matrix.directory }}
