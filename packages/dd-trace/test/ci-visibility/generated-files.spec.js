@@ -5,11 +5,14 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire')
+
 const {
   cleanupGeneratedFiles,
   cleanupGeneratedRuntimeFiles,
   writeGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
+const { createWindowsFileReferenceFs } = require('./validation-test-helpers')
 
 describe('test optimization validation generated files', () => {
   it('allows existing generated files when the content matches', () => {
@@ -269,6 +272,30 @@ describe('test optimization validation generated files', () => {
       assert.strictEqual(cleanup.filesRetained, 1)
       assert.strictEqual(fs.readFileSync(filename, 'utf8'), 'customer replacement\n')
       assert.strictEqual(fs.existsSync(original), true)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('retains a replaced generated file that reuses a file reference above 2^53', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-windows-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const original = path.join(root, 'original-generated.test.js')
+    const framework = getFramework(root, filename)
+    const windowsGeneratedFiles = proxyquire('../../../../ci/test-optimization-validation/generated-files', {
+      'node:fs': createWindowsFileReferenceFs(),
+    })
+
+    try {
+      windowsGeneratedFiles.writeGeneratedFiles(framework)
+      fs.renameSync(filename, original)
+      fs.writeFileSync(filename, 'customer replacement\n')
+
+      const cleanup = windowsGeneratedFiles.cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(cleanup.status, 'incomplete')
+      assert.strictEqual(cleanup.filesRetained, 1)
+      assert.strictEqual(fs.readFileSync(filename, 'utf8'), 'customer replacement\n')
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
