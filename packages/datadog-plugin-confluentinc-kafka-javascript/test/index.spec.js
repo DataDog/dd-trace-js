@@ -347,7 +347,6 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            // The outer setup loads the plugin before obtaining the library.
             Producer = nativeApi.Producer
             Consumer = nativeApi.KafkaConsumer
 
@@ -418,12 +417,17 @@ describe('Plugin', () => {
                 assert.ok(span.meta[ERROR_MESSAGE])
               }, { timeoutMs: 10000 })
 
-              try {
-                // Passing invalid arguments should cause an error
-                nativeProducer.produce()
-              } catch (err) {
-                // Error is expected
-              }
+              assert.throws(() => {
+                nativeProducer.produce(
+                  testTopic,
+                  null,
+                  Buffer.from('invalid native header'),
+                  'native-key',
+                  undefined,
+                  undefined,
+                  [{ invalid: 42 }]
+                )
+              }, { message: 'Header value must be a string or buffer' })
 
               return expectedSpanPromise
             })
@@ -461,14 +465,23 @@ describe('Plugin', () => {
               }))
             })
 
+            /**
+             * @param {import('@confluentinc/kafka-javascript').KafkaConsumer} consumer
+             * @param {import('@confluentinc/kafka-javascript').Producer} producer
+             * @param {string} topic
+             * @param {Buffer} message
+             * @param {number} [timeoutMs]
+             * @param {(message: import('@confluentinc/kafka-javascript').Message) => void} [onMessage]
+             * @param {import('@confluentinc/kafka-javascript').MessageHeader[]} [headers]
+             */
             function consume (
               consumer,
               producer,
               topic,
               message,
               timeoutMs = 9500,
-              onMessage = null,
-              headers = null
+              onMessage,
+              headers
             ) {
               return /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 let retryId
@@ -486,8 +499,8 @@ describe('Plugin', () => {
                   let unsubscribeError
                   try {
                     consumer.unsubscribe()
-                  } catch (error) {
-                    unsubscribeError = error
+                  } catch (unsubscribeFailure) {
+                    unsubscribeError = unsubscribeFailure
                   }
 
                   const rejection = error || unsubscribeError
@@ -503,11 +516,11 @@ describe('Plugin', () => {
                 }
 
                 function doConsume () {
-                  consumer.consume(1, function (err, messages) {
+                  consumer.consume(1, function (error, messages) {
                     if (settled) return
 
-                    if (err) {
-                      settle(err)
+                    if (error) {
+                      settle(error)
                       return
                     }
 
@@ -672,7 +685,7 @@ async function sendMessages (kafka, topic, messages) {
 }
 
 /**
- * @param {Array<Record<string, string | Buffer>> | undefined} headers
+ * @param {import('@confluentinc/kafka-javascript').MessageHeader[] | undefined} headers
  *   `KafkaConsumer~Message.headers`, absent when the record carries none.
  * @returns {Array<[string, string | Buffer]>} Wire order, duplicates kept.
  */

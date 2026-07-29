@@ -94,17 +94,29 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
       const multiKey = { first: 'one', second: 'two' }
       const arrayEntry = ['array-value']
-      const numberValue = { 'content-length': 42 }
+      const nonEnumerable = {}
+      Object.defineProperty(nonEnumerable, 'hidden', { value: 'value' })
 
-      const produced = produce(stageProducer(), [multiKey, arrayEntry, numberValue])
+      const produced = produce(stageProducer(), [multiKey, arrayEntry, nonEnumerable])
 
       assert.strictEqual(produced[0], multiKey)
       assert.strictEqual(produced[1], arrayEntry)
-      assert.strictEqual(produced[2], numberValue)
+      assert.strictEqual(produced[2], nonEnumerable)
       assert.deepStrictEqual(produced.slice(3), [
         { 'x-datadog-trace-id': '123' },
         { traceparent: TRACEPARENT },
       ])
+    })
+
+    it('passes invalid values unchanged to the native binding', () => {
+      trackSubscriber(injectPropagationHeaders)
+
+      const applicationHeaders = [
+        { 'content-type': 'application/json' },
+        { 'content-length': 42 },
+      ]
+
+      assert.strictEqual(produce(stageProducer(), applicationHeaders), applicationHeaders)
     })
 
     it('drops every application entry sharing a key propagation claims', () => {
