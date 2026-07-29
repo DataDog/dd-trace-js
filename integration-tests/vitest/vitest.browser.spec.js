@@ -516,6 +516,8 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
       assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
       assert.ok(Number(tests[1].duration) >= 30 * 1e6)
+      const firstAttemptEnd = BigInt(tests[0].start) + BigInt(tests[0].duration)
+      assert.ok(firstAttemptEnd <= BigInt(tests[1].start), 'Expected sequential attempts not to overlap')
       for (const test of tests) {
         const testEnd = BigInt(test.start) + BigInt(test.duration)
         assert.ok(testEnd <= testSuiteEnd, 'Expected every test attempt to finish before its suite')

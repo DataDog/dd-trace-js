@@ -1011,6 +1011,9 @@ function reportTestAttempt (testReport, attempt) {
     isRumActive,
     testExecutionId,
   } = getRumCorrelation(task, attempt.index)
+  const attemptStartTimes = task.meta?.__ddTestOptAttemptStartTimes
+  const attemptStartIndex = attempt.index ?? (attemptStartTimes?.length || 1) - 1
+  const attemptStartTime = attemptStartTimes?.[attemptStartIndex]
   let duration
   if (status === 'pass') {
     if (
@@ -1042,7 +1045,9 @@ function reportTestAttempt (testReport, attempt) {
     isRumActive,
     isTestFrameworkWorker: true,
     requestErrorTags: state.requestErrorTags,
-    startTime: Number.isFinite(duration) && duration >= 0 ? Date.now() - duration : undefined,
+    startTime: Number.isFinite(attemptStartTime)
+      ? attemptStartTime
+      : (Number.isFinite(duration) && duration >= 0 ? Date.now() - duration : undefined),
     testExecutionId,
   }
   if (testProperties.isAttemptToFix) {

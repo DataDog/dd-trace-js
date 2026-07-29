@@ -36,13 +36,16 @@ const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let now
+let timeOrigin
 if (typeof globalThis.process?.uptime === 'function') {
   now = () => globalThis.process.uptime() * 1000
+  timeOrigin = Date.now() - now()
 } else {
   const clock = globalThis.window?.parent && globalThis.window.parent !== globalThis.window
     ? globalThis.window.parent.performance
     : globalThis.performance
   now = clock ? clock.now.bind(clock) : Date.now
+  timeOrigin = Number.isFinite(clock?.timeOrigin) ? clock.timeOrigin : Date.now() - now()
 }
 
 if (isNoWorkerInitActive) {
@@ -78,7 +81,7 @@ if (isNoWorkerInitActive) {
     prepareRumCorrelation(task, attemptIndex)
 
     onTestFinished(() => {
-      recordTestAttemptDuration(task, attemptIndex, attemptStart)
+      recordTestAttemptTiming(task, attemptIndex, attemptStart)
       recordRetryErrorCount(task)
       if (
         (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) &&
@@ -423,15 +426,17 @@ function recordRetryErrorCount (task) {
 }
 
 /**
- * Records the elapsed time for one retry or repeat execution.
+ * Records the wall-clock start and elapsed time for one retry or repeat execution.
  *
  * @param {object} task
  * @param {number} attemptIndex
  * @param {number} attemptStart
  * @returns {void}
  */
-function recordTestAttemptDuration (task, attemptIndex, attemptStart) {
+function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
+  task.meta.__ddTestOptAttemptStartTimes ||= []
   task.meta.__ddTestOptAttemptDurations ||= []
+  task.meta.__ddTestOptAttemptStartTimes[attemptIndex] = timeOrigin + attemptStart
   task.meta.__ddTestOptAttemptDurations[attemptIndex] = now() - attemptStart
 }
 
