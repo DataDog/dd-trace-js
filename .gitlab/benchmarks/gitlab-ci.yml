@@ -182,6 +182,7 @@ benchmark-serverless-trigger:
     # The downstream serverless-tools hard cap can lag current main layer sizes;
     # keep PRs gated by size increase while allowing the largest measured current-main layer.
     MAX_LAYER_UNCOMPRESSED_SIZE_KB: "25280"
-    KUBERNETES_POD_ANNOTATIONS_1: "beta.fabric.datadoghq.com/no-proxy-additions=registry.yarnpkg.com"
+    KUBERNETES_POD_ANNOTATIONS_1: "beta.fabric.datadoghq.com/no-proxy-additions=registry.yarnpkg.com,registry.npmjs.org"
+    YARN_REGISTRY: "https://registry.npmjs.org"
     YARN_NETWORK_TIMEOUT: "600000"
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
