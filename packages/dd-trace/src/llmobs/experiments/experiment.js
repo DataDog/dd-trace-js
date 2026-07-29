@@ -332,7 +332,7 @@ class Experiment {
         }, async (span) => {
           spanContext = this.#llmobs.exportSpan(span)
           try {
-            await execute()
+            output = await execute()
           } catch (err) {
             this.#llmobs.annotate(span, {
               inputData: record.input,
@@ -356,7 +356,7 @@ class Experiment {
       }
     } else {
       try {
-        await execute()
+        output = await execute()
       } catch (err) {
         if (throwOnErrors) throw err
         errorType = err.name || 'Error'
