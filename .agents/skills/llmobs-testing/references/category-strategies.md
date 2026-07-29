@@ -1,7 +1,7 @@
-# Test Strategy Per Package Shape
+# Test Strategy Per Instrumented Surface
 
-The strategies do not mix: each shape forbids what another requires, so a spec written against the
-wrong one fails on contract rather than on behaviour.
+A package may expose several kinds of surface. Choose the response source and expected span fields for each
+instrumented operation.
 
 ## Quick Reference: What's FORBIDDEN vs REQUIRED
 
@@ -21,20 +21,22 @@ wrong one fails on contract rather than on behaviour.
 - ✅ spanKind: 'workflow' or 'agent'
 - ✅ Test orchestration logic, not API calls
 
-### LLM client (openai, anthropic, genai)
+### Provider-backed LLM operation (openai, anthropic, genai)
 
 **FORBIDDEN:**
 - ❌ Tests that skip the SDK and tag spans by hand
-- ❌ spanKind: 'workflow' (use 'llm' instead)
+- ❌ `spanKind: 'workflow'` for chat or generation
 
 **REQUIRED:**
-- ✅ Calls through the real client, answered by a cassette on the proxy baseURL or by a canned `fetch`
-- ✅ spanKind: 'llm'
-- ✅ modelName, modelProvider fields
+- ✅ Calls through the real client, answered by a cassette on the proxy baseURL or a canned `fetch`
+- ✅ `spanKind: 'llm'`
+- ✅ `modelName` and `modelProvider`
 
 ### Multi-provider (ai, langchain)
 
-Same as LLM client. `ai` records cassettes for some providers and hands a canned `fetch` to others.
+Exercise the real abstraction and provider path. `ai` records cassettes for some providers and hands a canned
+`fetch` to others. Do not assign one kind to the package: `ai` and LangChain emit kinds such as `llm`, `workflow`,
+`embedding`, `retrieval`, and `tool` according to the operation.
 
 ### Infrastructure (modelcontextprotocol-sdk)
 
@@ -46,29 +48,28 @@ Same as LLM client. `ai` records cassettes for some providers and hands a canned
 
 ## Overview
 
-Test strategy depends on package category:
+Response strategy depends on the surface under test:
 
-| Package shape | VCR | Real APIs | Mock LLMs | Strategy |
-|----------------|-----|-----------|-----------|----------|
-| LLM client | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| Multi-provider | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| Orchestration | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
-| Infrastructure | ❌ No | ❌ No | ✅ Yes | SDK server over in-memory transport |
+| Surface | Response source | Harness |
+|---------|-----------------|---------|
+| LLM client | Provider response | Real client through VCR or a canned `fetch` |
+| Multi-provider | Provider response | Real abstraction and provider through VCR or a canned `fetch` |
+| Orchestration | Plain node response | Native graph/workflow APIs |
+| Infrastructure | Protocol handler response | SDK server and client over in-memory transport |
 
-A cassette is the default source of responses for the first two rows. Where the client takes a `fetch` option
-(openai-agents, some `ai` providers) or only reaches for `global.fetch` (google-cloud-vertexai), the spec answers the
-call itself instead.
+A cassette is the default provider response. Where the client takes a `fetch` option (openai-agents, some `ai`
+providers) or only reaches for `global.fetch` (google-cloud-vertexai), the spec answers the call itself instead.
 
-## LLM client & multi-provider
+## Provider-backed operations
 
-**Strategy:** VCR with real API calls through proxy
+**Strategy:** the real SDK path through VCR or a canned `fetch`
 
 ### Setup
 
 ```javascript
 const client = new MyLLMClient({
   apiKey: 'test-key',
-  baseURL: 'http://127.0.0.1:9126/vcr/provider'  // VCR proxy
+  baseURL: 'http://127.0.0.1:9126/vcr/provider'
 })
 ```
 
@@ -76,8 +77,7 @@ const client = new MyLLMClient({
 
 ```javascript
 it('instruments chat completion', async () => {
-  // Real API call (first run records, subsequent replays)
-  const response = await client.chat.completions.create({
+  await client.chat.completions.create({
     messages: [{ role: 'user', content: 'Hello' }],
     model: 'gpt-4'
   })
@@ -87,15 +87,25 @@ it('instruments chat completion', async () => {
   assertLlmObsSpanEvent(llmobsSpans[0], {
     span: apmSpans[0],
     spanKind: 'llm',
-    modelName: 'gpt-4',
+    name: 'MyLLMClient.createChatCompletion',
+    modelName: 'my-model',
+    modelProvider: 'my-provider',
     inputMessages: [{ content: 'Hello', role: 'user' }],
     outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
-    metrics: { input_tokens: MOCK_NOT_NULLISH }
+    metrics: {
+      input_tokens: MOCK_NOT_NULLISH,
+      output_tokens: MOCK_NOT_NULLISH,
+      total_tokens: MOCK_NOT_NULLISH
+    },
+    tags: { ml_app: 'test', integration: 'my-integration' }
   })
 })
 ```
 
-### ⚠️ Require The SDK Inside `before()`
+`name` and `modelProvider` are whatever the plugin reports, not strings the spec picks, and `tags` is required —
+see [assertion-helpers.md](assertion-helpers.md) for the openai shape and the required-field list.
+
+### Require The SDK Inside `before()`
 
 A module is instrumented by the `require` that runs after the hooks are installed: RITM's patched require pulls
 the exports (from Node's cache if they are already there) and hands them to every registered hook.
@@ -112,9 +122,12 @@ withVersions('openai-agents', '@openai/agents', (version) => {
 })
 ```
 
-Order between the two does not matter here: `packages/datadog-instrumentations/src/openai-agents.js` hooks both
-`@openai/agents` and `@openai/agents-openai`. Where a spec's comment does ask for an order — the MCP spec requires
-its client entry before the server — keep it.
+`beforeEach()` works the same way and is what the openai and langgraph specs use; the requirement is any hook
+rather than file scope.
+
+Order between the two requires does not matter here: `packages/datadog-instrumentations/src/openai-agents.js` hooks
+both `@openai/agents` and `@openai/agents-openai`. Where a spec's comment does ask for an order — the MCP spec
+requires its client entry before the server — keep it.
 
 **Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own
 internal tracing output appears.
@@ -125,48 +138,60 @@ internal tracing output appears.
 
 ### Setup
 
+No proxy and no client — the graph is built from the library's own exports, required from the version fixture in a
+hook so the tracer is already installed:
+
 ```javascript
-// No VCR proxy - use library directly
-const { StateGraph, Annotation } = require('@langchain/langgraph')
+let StateGraph
+let Annotation
+
+beforeEach(() => {
+  const langgraph = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+  StateGraph = langgraph.StateGraph
+  Annotation = langgraph.Annotation
+})
 ```
 
 ### Test Pattern
 
 ```javascript
-it('instruments graph invoke', async () => {
-  // Create graph with mock LLM responses
-  const graph = new StateGraph({
-    channels: {
-      messages: Annotation.Root({
-        reducer: (x, y) => x.concat(y)
-      })
-    }
+it('creates a workflow span for streaming execution', async () => {
+  const StateAnnotation = Annotation.Root({
+    messages: Annotation({
+      reducer: (existingMessages, newMessages) => existingMessages.concat(newMessages),
+      default: () => [],
+    }),
   })
 
-  // Add node with mock LLM response (no real API call)
-  graph.addNode('agent', async (state) => ({
-    messages: [{ role: 'assistant', content: 'Mock LLM response' }]
-  }))
+  const workflow = new StateGraph(StateAnnotation)
+    .addNode('chat', () => ({ messages: [{ role: 'assistant', content: 'Streaming response' }] }))
+    .addEdge('__start__', 'chat')
+    .addEdge('chat', '__end__')
 
-  graph.addEdge(START, 'agent')
-  graph.addEdge('agent', END)
+  const app = workflow.compile({ name: 'my-graph' })
 
-  const compiled = graph.compile()
-
-  // Invoke with mock data
-  const result = await compiled.invoke({
-    messages: [{ role: 'user', content: 'Test' }]
-  })
+  const chunks = []
+  for await (const chunk of await app.stream({ messages: [{ role: 'user', content: 'Test' }] })) {
+    chunks.push(chunk)
+  }
+  assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
   const { apmSpans, llmobsSpans } = await getEvents()
 
   assertLlmObsSpanEvent(llmobsSpans[0], {
     span: apmSpans[0],
-    spanKind: 'workflow',  // Not 'llm'!
-    name: 'langgraph.graph.invoke'
+    spanKind: 'workflow',
+    name: 'my-graph',
+    inputValue: JSON.stringify({ messages: [{ role: 'user', content: 'Test' }] }),
+    outputValue: MOCK_STRING,
+    tags: { ml_app: 'test', integration: 'langgraph' },
   })
 })
 ```
+
+The instrumented entry point is `Pregel.stream`, so the span closes when the iterator is drained, and `name` is
+whatever `compile({ name })` was given. The graph's state shape comes from `Annotation.Root`, and the terminal
+nodes are the `'__start__'` / `'__end__'` literals the spec uses.
 
 ### Key Points
 
@@ -178,12 +203,12 @@ it('instruments graph invoke', async () => {
 - ✅ Use pure functions returning mock data
 - ✅ Test workflow/graph state transitions
 - ✅ Mock LLM responses as simple objects
-- ✅ Load modules in `beforeEach()` for fresh state
+- ✅ Load modules after `useLlmObs()` installs the tracer
 
 ### Why No VCR?
 
-Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires
-testing the orchestration logic, not API interactions.
+Pure orchestration operations do not make provider HTTP calls. Their tests exercise graph state and execution rather
+than a provider API.
 
 ## Infrastructure
 
@@ -208,7 +233,7 @@ await client.connect(clientTransport)
 
 ```javascript
 it('creates a tool span for a basic tool call', async () => {
-  const result = await client.callTool({ name: 'test-tool', arguments: {} })
+  await client.callTool({ name: 'test-tool', arguments: {} })
 
   const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -217,7 +242,17 @@ it('creates a tool span for a basic tool call', async () => {
     spanKind: 'tool',
     name: 'MCP Client Tool Call: test-tool',
     inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
-    tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk', mcp_tool_kind: 'client' },
+    outputValue: JSON.stringify({
+      content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
+      isError: false,
+    }),
+    tags: {
+      ml_app: 'test',
+      integration: 'modelcontextprotocol-sdk',
+      mcp_tool_kind: 'client',
+      mcp_server_name: 'test-server',
+      mcp_server_version: '1.0.0',
+    },
   })
 })
 ```
@@ -225,16 +260,15 @@ it('creates a tool span for a basic tool call', async () => {
 ### Key Points
 
 - ❌ NO VCR, and no hand-rolled fake server — the tool handlers you register are the canned responses
-- ✅ Span kinds `'tool'` for tool calls and `'task'` for the rest of the protocol
+- ✅ Span kind `'tool'` for tool calls and `'task'` for list-tools
 - ✅ Protocol-specific tags (`mcp_tool_kind`, `mcp_server_name`, `mcp_server_version`)
 - ✅ `inputValue` / `outputValue` carry the JSON-stringified protocol payloads
 
 ## Which Row Applies
 
-The question that picks the row is whether the package itself speaks HTTP to a provider. Pointing an
-orchestrator at a proxy baseURL, or letting a node inside a graph construct a real client, tests the provider
-instead of the graph; letting a client reach `https://api.openai.com` needs a key and stops being
-deterministic.
+The question that picks the response source is whether the instrumented operation reaches a provider. Pointing an
+orchestrator at a proxy baseURL, or letting a node construct a real client, tests the provider instead of the graph;
+letting a client reach `https://api.openai.com` needs a key and stops being deterministic.
 
 ## Examples by Shape
 
@@ -261,10 +295,13 @@ await generateText({ model, prompt: '...' })
 ### Orchestration: LangGraph (Pure Functions)
 
 ```javascript
-graph.addNode('agent', async (state) => ({
-  messages: [{ role: 'assistant', content: 'Mock' }]
-}))
-await graph.invoke({ ... })
+const workflow = new StateGraph(StateAnnotation)
+  .addNode('chat', () => ({ messages: [{ role: 'assistant', content: 'Mock' }] }))
+  .addEdge('__start__', 'chat')
+  .addEdge('chat', '__end__')
+
+const app = workflow.compile({ name: 'my-graph' })
+for await (const chunk of await app.stream({ messages: [] })) { /* drain to close the span */ }
 ```
 
 ### Infrastructure: MCP

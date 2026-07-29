@@ -11,15 +11,14 @@ description: |
 
 # LLM Observability Testing Skill
 
-## Decide how the package gets its responses first
+## Decide how each instrumented surface gets its responses first
 
-**That choice picks the test strategy, the span kind, and the test structure, and the wrong one tests the wrong
-contract** — cassettes for a workflow library record nothing, while pure-function tests for an HTTP wrapper miss the
-network surface entirely. These are working categories for reasoning about a package; none of them exists as a
-constant in the codebase.
+**That choice picks the response source and test setup** — cassettes for a workflow record nothing, while
+pure-function tests for a provider-backed call miss the network surface entirely. The operation independently
+determines its span kind and fields. These are working categories for reasoning; none exists as a code constant.
 
-- **LLM client / multi-provider** — talks provider HTTP itself (openai, anthropic, genai, ai, langchain): VCR
-  cassettes.
+- **LLM client / multi-provider** — reaches provider HTTP directly or through a supplied provider package (openai,
+  anthropic, genai, ai, langchain): VCR cassettes or a canned `fetch`.
 - **Orchestration** — carries workflow or graph state and makes no provider calls of its own (langgraph): no VCR;
   drive nodes with plain return values.
 - **Infrastructure** — implements a protocol or server (modelcontextprotocol-sdk): run the SDK's own server
@@ -65,12 +64,13 @@ Two facts block every first run:
 See [references/vcr-cassettes.md](references/vcr-cassettes.md) for recording, provider mapping, body
 normalizers, and the commands to run a single integration.
 
-### 3. Strategy Per Package Shape
+### 3. Response Strategy And Operation Kind
 
-The block at the top maps shape to strategy. The non-obvious bits:
+The block at the top maps response source to test strategy. The operation maps independently to a span kind:
 
-- **LLM client / multi-provider**: proxy baseURL `http://127.0.0.1:9126/vcr/{provider}`, span kind `'llm'`. Cassettes
-  are recorded once with real keys and replayed everywhere after.
+- **Provider-backed LLM client / multi-provider operations**: use the proxy baseURL
+  `http://127.0.0.1:9126/vcr/{provider}` or a canned `fetch`. Chat and generation emit `llm`; LangChain and `ai`
+  also expose operations with other kinds.
 - **Orchestration**: span kind `'workflow'` or `'agent'`, never `'llm'` — the orchestrator coordinates libraries that
   call providers rather than calling them itself. Nodes return plain values, so the test exercises graph execution
   instead of a provider API.
@@ -92,10 +92,16 @@ Validates span structure with flexible matchers for non-deterministic values.
 - `MOCK_OBJECT` - anything with `typeof 'object'`, `null` included (opaque `schema` / `metadata` payloads, or
   a whole output message whose shape varies, as the `ai` specs do)
 
-**Assertable fields:** `span`, `parentId`, `spanKind` (required), `name`, `modelName`, `modelProvider`,
-`inputMessages`, `outputMessages`, `inputDocuments`, `outputDocuments`, `inputValue`, `outputValue`, `metrics`,
-`metadata`, `error`, `tags`. Only the fields you pass are checked, and which ones a span carries depends on its
-kind. See [references/assertion-helpers.md](references/assertion-helpers.md) for the patterns.
+**Required fields:** `span`, `spanKind`, `name`, `tags`. A missing `tags` throws
+`TypeError: Cannot read properties of undefined (reading 'ml_app')` instead of failing an assertion, and every
+plugin span carries at least `{ ml_app: 'test', integration: '<integration>' }`.
+
+**Optional fields:** `modelName`, `modelProvider`, `inputMessages`, `outputMessages`, `inputDocuments`,
+`outputDocuments`, `inputValue`, `outputValue`, `metrics`, `metadata`, `toolDefinitions`, `error`, `parentId`,
+`sessionId`, `traceId`. Omitting a field asserts its absence rather than ignoring it: no model fields, no input, no
+output, no metadata, no tool definitions, `metrics` of `{}`, `status: 'ok'`, and the root parent id. `traceId` is
+the exception: omission defaults to `MOCK_STRING` because every event has one. See
+[references/assertion-helpers.md](references/assertion-helpers.md) for the patterns.
 
 ## Test File Organization
 
@@ -106,7 +112,7 @@ one file — `openaiv3.spec.js` / `openaiv4.spec.js`, `index.spec.js` / `index.v
 **Structure:**
 1. Import helpers from `'../../util'`
 2. Initialize LLMObs test environment
-3. Load modules in `beforeEach()` for fresh state
+3. Load modules after `useLlmObs()` installs the tracer, then recreate mutable clients per test
 4. Group tests by method (`describe('chat completions', ...)`)
 5. Cover all instrumented methods
 6. Test error cases
@@ -127,27 +133,30 @@ and claude-agent-sdk both emit `step`.
 
 Pinning a field the kind never emits asserts metadata production does not produce:
 
-- `llm` — `modelName`, `modelProvider`, `inputMessages` / `outputMessages`, token `metrics`, `metadata`
+- `llm` — `modelName`, `modelProvider`, `inputMessages` / `outputMessages`, and any emitted token `metrics` /
+  `metadata`
 - `embedding` — `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics`
 - `retrieval` — `inputValue`, `outputDocuments`
-- `workflow` / `agent` / `task` / `step` / `tool` — `name` plus `inputValue` / `outputValue`, no model fields
-  and no token metrics
+- `workflow` / `agent` / `task` / `step` / `tool` — kind-specific `inputValue` / `outputValue`, sometimes
+  `metadata`, never
+  model fields or token metrics
 
 Cover every instrumented method, and a multi-turn conversation where the surface takes one.
 
 ## Error Handling
 
-On errors the span is still submitted, with `outputMessages: [{ content: '', role: '' }]`. The specs that assert
-an error pass all three fields, reaching for a matcher where the value varies (`type: MOCK_STRING` in the MCP
-spec, `message: MOCK_STRING` in langchain):
+On errors the span is still submitted. Match the plugin's output contract: OpenAI and GenAI carry
+`outputMessages: [{ content: '', role: '' }]`, while Anthropic and non-`llm` integrations may omit output.
+Pass a truthy marker to expect an error:
 
 ```javascript
-error: { type: 'Error', message: error.message, stack: error.stack },
+error: {},
 ```
 
 The option decides only whether the expected event carries `status: 'error'` — `assertLlmObsSpanEvent`
-copies the three error fields out of the span it is checking, so the values written here document the
-throw without asserting it. Pin the identity of the error on the APM span the LLMObs span was built from:
+copies the three error fields out of the span it is checking, so the marker does not pin the throw.
+A call that resolves still fails on that status. Pin which error was thrown on the APM span the LLMObs
+span was built from:
 
 ```javascript
 assert.strictEqual(apmSpans[0].meta['error.message'], error.message)

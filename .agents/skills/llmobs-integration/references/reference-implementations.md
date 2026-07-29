@@ -6,18 +6,19 @@ Working examples of LLMObs plugins in dd-trace-js.
 
 **Location:** `packages/dd-trace/src/llmobs/plugins/base.js`
 
-The abstract base class all plugins extend.
+The abstract base class leaf plugins extend. Composite roots such as `ai/index.js` extend `CompositePlugin`
+instead.
 
 **Key methods:**
 - `start(ctx)` - Registers span, captures context
 - `getLLMObsSpanRegisterOptions(ctx)` - Abstract, must implement
 - `setLLMObsTags(ctx)` - Abstract, must implement
-- `asyncEnd(ctx)` - Calls setLLMObsTags
-- `end(ctx)` - Restores context
+- `end(ctx)` - Restores context after the wrapped call returns
+- `asyncEnd(ctx)` - Calls setLLMObsTags after the operation settles
 
 **Tagger methods** (accessed via `this._tagger`):
 - `tagLLMIO`, `tagEmbeddingIO`, `tagRetrievalIO`, `tagTextIO`
-- `tagMetadata`, `tagMetrics`, `tagSpanTags`, `tagPrompt`
+- `tagMetadata`, `tagMetrics`, `tagSpanTags`, `tagPrompt`, `tagToolDefinitions`, `tagModelName`
 
 ## Simple LLM Client Examples
 
@@ -90,9 +91,8 @@ The abstract base class all plugins extend.
 - Uses 'workflow' span kind instead of 'llm'
 - No direct LLM API calls
 
-LangChain is a separate plugin (`packages/dd-trace/src/llmobs/plugins/langchain/`) and is not
-orchestration: it returns `llm`, `embedding`, `tool` and `retrieval` kinds and its spec runs over the VCR
-proxy.
+LangChain is a separate hybrid plugin (`packages/dd-trace/src/llmobs/plugins/langchain/`). It emits `workflow`,
+`llm`, `embedding`, `tool`, and `retrieval` spans. Provider-backed cases run over the VCR proxy.
 
 **Good for:** Workflow instrumentation, non-LLM span kinds
 
@@ -121,15 +121,14 @@ Per-provider request, response and token-field shapes live in
 
 ### General Streaming Approach
 
-1. Maintain buffer keyed by request/span ID
-2. On each chunk, extract delta and append to buffer
-3. On completion, tag accumulated content
-4. Clear buffer for that request
+Use the contract the instrumentation already publishes. Anthropic and GenAI append chunks to the operation's `ctx`
+and build `ctx.result` when the chunk channel reports `done`; OpenAI's instrumentation builds the result before
+publishing `asyncEnd`. The plugin tags that final result instead of maintaining a second request-keyed buffer.
 
 ## CompositePlugin Integration
 
-Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class declares a
-`static plugins` field mapping keys to plugin classes.
+Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class exposes a
+`static plugins` mapping, either as a field or a getter.
 
 See `packages/datadog-plugin-google-genai/src/index.js` for a reference implementation.
 

@@ -39,14 +39,12 @@ new OpenAI({
 
 Names are generated as `{provider}_{path}_{method}_{hash}`, so you never choose or rename one. The
 hash covers the request, which means editing a prompt in a spec orphans its cassette and requires a
-new recording. Both `.json` and `.yaml` files are in the tree and both replay, so take whichever
-format a recording produces; each request is stored once, in one format, so a cassette never has a
-twin in the other. Binary and multipart bodies live inside JSON cassettes, base64-encoded behind a
-`base64:` prefix.
+new recording. Both `.json` and `.yaml` files replay, so keep the format a recording produces. Binary and
+multipart bodies may be base64-encoded behind a `base64:` prefix.
 
-Only one of the seven cassette directories has an entry in `VCR_PROVIDER_MAP` in `docker-compose.yml`:
-`claude-agent-sdk=https://api.anthropic.com`. The other six (openai, anthropic, genai, azure-openai,
-deepseek, bedrock-runtime) are names the testagent resolves on its own. Add a map entry when it cannot.
+`VCR_PROVIDER_MAP` in `docker-compose.yml` lists only provider aliases the testagent cannot resolve itself.
+Read the current mapping before adding another, and add one only when the testagent cannot infer the upstream
+provider.
 
 ## Recording
 
@@ -54,7 +52,9 @@ deepseek, bedrock-runtime) are names the testagent resolves on its own. Add a ma
   uncomment `AWS_SECRET_ACCESS_KEY` in the testagent service and restart it.
 2. Run the spec. A request with no cassette is recorded; one with a cassette is replayed, so
   re-recording means deleting exactly the cassette in question — never the provider directory.
-3. Commit the new files with the spec that produced them.
+3. Inspect every new cassette, including decoded `base64:` bodies, for credentials and sensitive prompt or response
+  data. Remove the value at the source or add a normalizer and re-record; do not hand-edit only the cassette.
+4. Commit the new files with the spec that produced them.
 
 ## Non-deterministic fields break replay — normalize, never loosen the assertion
 
@@ -65,7 +65,7 @@ match on replay. Strip it in `docker-compose.yml`, where the other normalizers a
 - `VCR_BODY_REGEX_NORMALIZERS` — regexes, for values embedded in prose bodies (agent ids,
   `<usage>` blocks, tool descriptions, client version markers).
 
-A cassette that replays locally but fails in CI is almost always a field that needs one of these.
+When replay differs across environments, inspect the request diff for a field that needs one of these.
 
 ## Running the specs
 

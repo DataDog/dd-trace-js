@@ -5,7 +5,9 @@
 Every LLM provider uses a different message format. Before implementing message extraction, you **must** read the
 provider's actual source code and existing plugin implementation to understand its specific format.
 
-All plugins must normalize messages to the standard LLMObs format: `[{ content: string, role: string }]`
+`llm` operations pass message objects to `tagLLMIO`. The tagger defaults a missing role to `''` and supports
+content, tool-call, tool-result and audio fields; a tool-only message need not carry content.
+Embedding, retrieval, workflow, agent, task, step, and tool operations use documents or text values instead.
 
 Common roles: `'user'`, `'assistant'`, `'system'`, `'tool'`
 
@@ -37,14 +39,16 @@ Common variations include:
 ## Reference Implementations
 
 The best examples of message extraction for the providers we support:
-- Anthropic: [`packages/dd-trace/src/llmobs/plugins/anthropic/util.js`](../../../../packages/dd-trace/src/llmobs/plugins/anthropic/util.js)
-- Google GenAI: [`packages/dd-trace/src/llmobs/plugins/genai/util.js`](../../../../packages/dd-trace/src/llmobs/plugins/genai/util.js)
+- Anthropic: `packages/dd-trace/src/llmobs/plugins/anthropic/util.js`
+- Google GenAI: `packages/dd-trace/src/llmobs/plugins/genai/util.js`
 
 ## Key Implementation Notes
 
-- Always handle null/undefined with fallback defaults (`|| ''` and `|| []`)
+- Preserve valid falsy values. Use nullish defaults such as `?? ''` or `?? []` when only `null` / `undefined` mean
+  absent, and follow the provider's semantics when an empty value also means absent
 - Normalize `'model'` role to `'assistant'` for consistency (preserve `'system'`, `'tool'`, `'function'`)
 - For array content parts, the separator is the provider's, not a default: `genai/util.js` joins text parts with
   `'\n'`, `anthropic/util.js` with `','`
 - For streaming, accumulate delta content across chunks before tagging
-- Always return `[{ content: '', role: '' }]` on error (never omit output messages)
+- Error output follows the integration contract: OpenAI and GenAI emit an empty message, while Anthropic omits
+  output when there is no result

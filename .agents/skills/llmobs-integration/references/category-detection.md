@@ -1,7 +1,7 @@
-# Package Category Detection Reference
+# Instrumented Surface Detection Reference
 
-Detailed guide for classifying an LLM package into one of the four shapes. These are working categories
-for reasoning about a package, not constants in the codebase.
+Detailed guide for classifying an instrumented surface by how it gets responses. These are working categories,
+not constants in the codebase. The operation itself determines its span kind and fields.
 
 ## Categories Explained
 
@@ -15,14 +15,12 @@ for reasoning about a package, not constants in the codebase.
 - `openai` - OpenAI API client
 
 **Observable signs:**
-- Package name contains provider name (openai, anthropic, genai, etc.)
 - Has chat/completion/embedding methods (`chat.completions.create`, `messages.create`)
 - Makes HTTP calls directly to LLM provider endpoints
-- Requires API keys for authentication
-- Has HTTP client dependencies (axios, fetch, request)
-- Code contains HTTP request patterns
+- Owns provider authentication and endpoint configuration
+- Uses an HTTP client or the runtime's `fetch`
 
-**Test strategy:** VCR with real API calls via proxy
+**Test strategy:** exercise the real client through VCR or a canned `fetch`
 
 ### Multi-provider
 
@@ -33,13 +31,12 @@ for reasoning about a package, not constants in the codebase.
 - `langchain` - LangChain framework
 
 **Observable signs:**
-- Package name suggests multi-provider (ai, langchain)
 - Provider configuration and switching support
 - Wraps multiple LLM client libraries
-- Dependencies include 2+ LLM provider SDKs
+- Accepts provider adapters or SDK instances, often from separate packages
 - Has abstraction layers over providers
 
-**Test strategy:** VCR with real API calls via proxy
+**Test strategy:** exercise the real provider path through VCR or an injected `fetch`
 
 ### Orchestration
 
@@ -50,7 +47,6 @@ for reasoning about a package, not constants in the codebase.
 - Workflow engines, agent coordinators
 
 **Observable signs:**
-- Package name suggests orchestration (langgraph, crew, workflow, graph)
 - Has graph/workflow/chain execution methods (`invoke`, `stream`, `run`)
 - Manages state and control flow between nodes/agents
 - Dependencies include orchestration libraries (e.g., @langchain/core)
@@ -68,7 +64,6 @@ for reasoning about a package, not constants in the codebase.
 - Transport layers
 
 **Observable signs:**
-- Package name suggests infrastructure (mcp, protocol, server, transport)
 - Implements protocols or server/client architecture
 - Transport layer code
 
@@ -76,50 +71,34 @@ for reasoning about a package, not constants in the codebase.
 
 ## Detection Process
 
-Direct HTTP calls to provider endpoints mean LLM client, or multi-provider when the provider is
-configurable. Without them, graph or workflow execution means orchestration and a protocol
-implementation means infrastructure.
+The component that performs provider HTTP determines the response strategy. A configurable provider surface is
+multi-provider even when the caller supplies the provider from another package. Without provider traffic, graph or
+workflow execution means orchestration and a protocol implementation means infrastructure.
 
-### Step 1: Read Package Name
+### Step 1: Read the Installed Source
 
-Analyze package name for patterns:
-- Contains "openai", "anthropic", "genai" → Likely LLM client
-- Named `ai`, or contains "langchain" or "llamaindex" → Likely multi-provider
-- Contains "langgraph", "crew", "workflow" → Likely orchestration
-- Contains "mcp", "protocol", "server" → Likely infrastructure
+Inspect `versions/<package>@<range>/node_modules/<package>/` and find the exported operation being instrumented.
+Follow that operation through wrappers and adapters to the code that produces its result.
 
-"ai" only counts as an exact package name. Every provider client contains it as a substring.
+### Step 2: Find the Response Owner
 
-### Step 2: Check package.json Dependencies
+- Direct provider HTTP from the package → LLM client
+- A caller-supplied provider adapter or model implementation → multi-provider
+- Node/state execution with no provider transport → orchestration
+- Client/server protocol handlers over a transport → infrastructure
 
-```bash
-cat node_modules/{{package}}/package.json
-```
+### Step 3: Check Configuration and Dependencies
 
-Look for:
-- HTTP clients (axios, fetch, got) → LLM client
-- Multiple LLM SDKs (openai + anthropic + cohere) → multi-provider
-- LangChain/orchestration libs → orchestration
-- Protocol/transport libs → infrastructure
+Use `package.json` and constructor options to confirm the source trace:
+- Provider credentials, endpoints and HTTP clients support an LLM-client classification
+- Provider adapter interfaces or separate provider packages support multi-provider
+- State/graph dependencies support orchestration
+- Protocol and transport dependencies support infrastructure
 
-### Step 3: Check Exported Methods
+### Step 4: Use the Name Only as a Weak Signal
 
-```bash
-node -e "console.log(Object.keys(require('{{package}}')))"
-```
-
-Method patterns:
-- `chat()`, `complete()`, `embed()` → LLM client or multi-provider
-- `invoke()`, `stream()`, `graph()`, `workflow()` → orchestration
-- `connect()`, `listen()`, `handle()` → infrastructure
-
-### Step 4: Analyze Source Code
-
-Check for:
-- HTTP request patterns (`http.request`, `.post(`, `fetch(`) → LLM client
-- Provider switching logic → multi-provider
-- State management, graph execution → orchestration
-- Protocol implementation → infrastructure
+Names such as `openai`, `langgraph`, or `mcp` are useful search hints, not classifications. Hybrid packages and
+provider adapters are classified per instrumented operation, regardless of package name.
 
 ## Worked Examples
 
@@ -127,16 +106,16 @@ Check for:
 |---------|----------|-----------------|
 | `@anthropic-ai/sdk` | LLM client | `messages.create` calls the Claude API directly, needs a key |
 | `@google/genai` | LLM client | calls the Gemini API directly, nested `contents` / `parts` format |
-| `ai` | multi-provider | not a provider name, and depends on the openai and anthropic SDKs |
+| `ai` | multi-provider | accepts separately installed provider implementations behind one API |
 | `@langchain/langgraph` | orchestration | `StateGraph.invoke` / `Pregel.stream` manage state, no provider calls |
 
 ## Edge Cases
 
-When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches
-test strategy needs: if the package makes HTTP calls it needs VCR (LLM client/multi-provider); if it doesn't, use pure
-functions (orchestration) or the SDK's in-memory transport (infrastructure).
+When signals conflict or are weak, classify each instrumented surface by its response source. Provider-backed calls
+use VCR or an injected `fetch`; orchestration uses plain node responses; infrastructure uses the SDK's in-memory
+transport.
 
 Some packages don't fit cleanly:
 - Utilities/helpers → Check what they instrument
 - Plugins/extensions → Follow parent library category
-- Hybrid packages → Categorize by primary function
+- Hybrid packages → Classify each instrumented operation separately

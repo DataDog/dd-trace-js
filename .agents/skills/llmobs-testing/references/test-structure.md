@@ -7,6 +7,8 @@ Complete guide to organizing LLMObs test files.
 ```javascript
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
 
 describe('my-integration LLMObs', () => {
@@ -15,24 +17,20 @@ describe('my-integration LLMObs', () => {
   let MyClient
   let client
 
-  beforeEach(() => {
-    // Load module fresh for each test
+  before(() => {
     MyClient = require('my-integration')
+  })
 
-    // Initialize client with VCR proxy (if using VCR)
+  beforeEach(() => {
     client = new MyClient({
       apiKey: 'test-api-key',
       baseURL: 'http://127.0.0.1:9126/vcr/my-integration'
     })
   })
 
-  afterEach(() => {
-    // Cleanup if needed
-  })
-
   describe('chat completions', () => {
     it('instruments basic chat', async () => {
-      const result = await client.chat({
+      await client.chat({
         messages: [{ role: 'user', content: 'Hello' }],
         model: 'test-model',
         temperature: 0.7
@@ -53,23 +51,40 @@ describe('my-integration LLMObs', () => {
           output_tokens: MOCK_NOT_NULLISH,
           total_tokens: MOCK_NOT_NULLISH
         },
-        metadata: {
-          temperature: 0.7
-        }
+        metadata: { temperature: 0.7 },
+        tags: { ml_app: 'test', integration: 'my-integration' }
       })
     })
 
     it('handles errors', async () => {
-      const error = await client.chat({ messages: [], model: 'invalid' }).catch(error => error)
+      let requestError
+      await assert.rejects(
+        () => client.chat({
+          messages: [{ role: 'user', content: 'Hello' }],
+          model: 'invalid',
+          temperature: 0.7
+        }),
+        (error) => {
+          requestError = error
+          return true
+        }
+      )
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
       assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         spanKind: 'llm',
+        name: 'my-integration.chat',
+        modelName: 'invalid',
+        modelProvider: 'my-integration',
+        inputMessages: [{ content: 'Hello', role: 'user' }],
         outputMessages: [{ content: '', role: '' }],
-        error: { type: 'Error', message: error.message, stack: error.stack }
+        metadata: { temperature: 0.7 },
+        tags: { ml_app: 'test', integration: 'my-integration' },
+        error: {}
       })
+      assert.strictEqual(apmSpans[0].meta['error.message'], requestError.message)
     })
   })
 })
@@ -92,22 +107,24 @@ const { apmSpans, llmobsSpans } = await getEvents(2)
 
 ## Module Loading Pattern
 
-**Critical for state isolation:**
+**Critical for instrumentation order:**
 
 ```javascript
 let MyLib
 let client
 
-beforeEach(() => {
-  // Fresh require each test
+before(() => {
   MyLib = require('my-lib')
+})
+
+beforeEach(() => {
   client = new MyLib()
 })
 ```
 
-A require at file scope is shared by every test and runs before the tracer exists, so the exports it captures
-are never instrumented. See
-[category-strategies.md](category-strategies.md) for the fixture form and why the hook matters.
+A file-scope require runs before `useLlmObs()` installs the tracer. Register `useLlmObs()` first, require the SDK
+from a `before()` or `beforeEach()` hook, and recreate mutable clients in `beforeEach()` when tests need isolation.
+See [category-strategies.md](category-strategies.md) for the version-fixture form.
 
 ## Test Organization
 
@@ -116,13 +133,17 @@ Group by method (`describe('chat completions')`, `describe('embeddings')`) or by
 
 ## Assertions
 
-```javascript
-const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
+Pin the number of events before asserting them, so an extra or missing span fails here rather than inside the
+event comparison:
 
+```javascript
 const { apmSpans, llmobsSpans } = await getEvents()
 assert.strictEqual(llmobsSpans.length, 1)
-assertLlmObsSpanEvent(llmobsSpans[0], { span: apmSpans[0], spanKind: 'llm' })
 ```
+
+Then assert each event as the template above does. `span`, `spanKind`, `name` and `tags` are required — leaving
+`span` or `tags` out throws a `TypeError` rather than failing an assertion — and omitted fields assert their
+absence. `traceId` is the exception: it defaults to `MOCK_STRING`.
 
 Per-shape patterns, including the orchestration spec that answers its own nodes rather than recording
 cassettes, live in [category-strategies.md](category-strategies.md).

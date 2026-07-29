@@ -29,53 +29,53 @@ shallow-clone / `npm pack` shapes.
 
 ### 1. LLMObsPlugin Base Class
 
-All LLMObs plugins extend `LLMObsPlugin`. Two methods must be implemented:
+Leaf plugins extend `LLMObsPlugin` and implement two methods:
 
-- `getLLMObsSpanRegisterOptions(ctx)` — returns `{ modelProvider, modelName, kind, name }`.
-- `setLLMObsTags(ctx)` — extracts and tags input / output messages, token metrics, and model metadata.
+- `getLLMObsSpanRegisterOptions(ctx)` — returns a required `kind` plus any available name, model and session fields.
+- `setLLMObsTags(ctx)` — tags the operation's input, output, metrics, and metadata.
 
-Lifecycle: `start(ctx)` registers the span and captures context; the wrapped operation runs; `asyncEnd(ctx)` calls
-`setLLMObsTags()`; `end(ctx)` restores the parent.
+A composite root such as `ai/index.js` extends `CompositePlugin` and selects leaf plugins.
+
+On the usual promise-backed channel, `start(ctx)` registers the span and captures context, `end(ctx)` restores the
+parent after the wrapped call returns, and `asyncEnd(ctx)` calls `setLLMObsTags()` after the operation settles.
 
 See [references/plugin-architecture.md](references/plugin-architecture.md) for the full implementation surface.
 
 ### 2. Package Shape
 
-**Settle the library's shape before writing anything** — it decides which methods to hook and how the plugin can be
-tested. These are working categories for reasoning about a package; none of them exists as a constant in the codebase,
-so classify by reading the source rather than looking for an enum.
+**Settle each instrumented surface's shape before writing anything** — it decides which methods to hook and how the
+operation gets its response. These are working categories for reasoning, not constants in the codebase, so classify
+by reading the source rather than looking for an enum.
 
-- **LLM client** — calls provider endpoints itself and needs API keys (openai, anthropic, genai). Hook the chat /
-  completion methods.
-- **Multi-provider** — exposes several providers behind one surface, wrapping the clients above (ai, langchain). Hook
-  the provider abstraction layer.
+- **LLM client** — owns the provider endpoint, transport and authentication (openai, anthropic, genai). Hook the
+  chat / completion methods.
+- **Multi-provider** — accepts provider implementations behind one surface (ai, langchain). The providers may live
+  in separate packages. Hook the provider abstraction layer.
 - **Orchestration** — runs a graph or workflow and holds state, with no provider HTTP of its own (langgraph). Hook the
   workflow lifecycle (invoke, stream, run).
 - **Infrastructure** — implements a protocol across a client / server split (modelcontextprotocol-sdk). Hook the
   protocol handlers.
 
-The distinctions that decide it: does the package talk to a provider endpoint itself, does it front more than
-one provider, and does it carry graph state. Test strategy per shape lives in
-[llmobs-testing](../llmobs-testing/SKILL.md) — including that an orchestration spec drives its nodes with
-plain return values, not a real model.
+The shape decides the response source and test harness. The instrumented operation decides its span kind and fields.
+Hybrid packages such as `ai` and LangChain must be classified per operation. Test strategy per shape lives in
+[llmobs-testing](../llmobs-testing/SKILL.md).
 
 See [references/category-detection.md](references/category-detection.md) for heuristics and worked examples.
 
 ### 3. LLM Span Kinds
 
-`SPAN_KINDS` in [`packages/dd-trace/src/llmobs/constants/tags.js`](../../../packages/dd-trace/src/llmobs/constants/tags.js)
-lists `llm`, `agent`, `workflow`, `task`, `tool`, `embedding`, `retrieval`. Chat completions and text generation are
-`llm`; graph or chain execution is `workflow`; agent runs are `agent`; vector-DB and RAG lookups are `retrieval`.
-Only the public SDK validates against that list, so a plugin may register a kind outside it — `ai` v7 and
-claude-agent-sdk both use `step`.
+`SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` lists `llm`, `agent`, `workflow`, `task`, `tool`,
+`embedding`, `retrieval`. Chat completions and text generation are `llm`; graph or chain execution is `workflow`;
+agent runs are `agent`; vector-DB and RAG lookups are `retrieval`. Only the public SDK validates against that list,
+so a plugin may register a kind outside it — `ai` v7 and claude-agent-sdk both use `step`.
 
 ### 4. Message Extraction
 
-All plugins must convert provider-specific message formats to the standard format:
+`llm` operations convert provider-specific messages to the tagger's message shape:
 
-**Standard format:** `[{content: string, role: string}]`
+**Common shape:** `[{ content?: string, role: string, toolCalls?: object[], toolResults?: object[] }]`
 
-**Common roles:** `'user'`, `'assistant'`, `'system'`, `'tool'`
+`role` defaults to an empty string. Tool-call or tool-result-only messages may omit `content`.
 
 **Provider-specific handling:**
 - OpenAI: Direct format match, handle `function_call` and `tool_calls`
@@ -87,14 +87,14 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
 
 ## Implementation Steps
 
-1. **Settle the shape first**, from the upstream source rather than the package name.
-2. **Create `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`** extending `LLMObsPlugin`.
-3. **Implement `getLLMObsSpanRegisterOptions(ctx)`** — model provider, model name, span kind, span name.
-4. **Implement `setLLMObsTags(ctx)`** — input from `ctx.arguments`, output from `ctx.result`, token metrics and
-  model metadata, tagged through `this._tagger`.
-5. **Cover the edges**: streaming, errors (output messages come out empty), non-standard formats, absent metadata.
+1. **Map each surface's response source and operation kind**, from the upstream source rather than the package name.
+2. **Create leaf plugins under `packages/dd-trace/src/llmobs/plugins/{integration}/`** extending `LLMObsPlugin`.
+3. **Implement `getLLMObsSpanRegisterOptions(ctx)`** — span kind plus any available name, model and session fields.
+4. **Implement `setLLMObsTags(ctx)`** — input, output, metrics and metadata from the fields the instrumentation
+  publishes on `ctx`, tagged through `this._tagger`.
+5. **Cover the edges**: streaming, kind-specific error output, non-standard formats, absent metadata.
 
 Export the class itself when the package needs one plugin (openai, anthropic, genai), or an array when several
-operations each need their own (langchain, langgraph, modelcontextprotocol-sdk, claude-agent-sdk). The required
-static fields and the rest of the surface are in
-[references/plugin-architecture.md](references/plugin-architecture.md).
+operations each need their own (langchain, langgraph, modelcontextprotocol-sdk, claude-agent-sdk). Use a
+`CompositePlugin` root when one integration selects between child implementations, as `ai` does. The required static
+fields and the rest of the surface are in [references/plugin-architecture.md](references/plugin-architecture.md).
