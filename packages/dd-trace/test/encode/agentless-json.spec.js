@@ -119,7 +119,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(span.meta['_dd.p.tid'], undefined)
     })
 
-    it('should include span fields with start time converted to seconds', () => {
+    it('should include span fields with start time in nanoseconds', () => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
@@ -132,11 +132,27 @@ describe('AgentlessJSONEncoder', () => {
         service: 'test-service',
         type: 'web',
         error: 0,
-        start: 1234567890,
+        start: 1234567890000000000,
         duration: 5000000,
       })
       assert.deepStrictEqual(span.meta, { foo: 'bar', '_dd.compute_stats': '1' })
-      assert.deepStrictEqual(span.metrics, { example: 1.5, _trace_root: 1 })
+      assert.deepStrictEqual(span.metrics, { example: 1.5, _trace_root: 1, _top_level: 1 })
+    })
+
+    it('should preserve nanosecond start times across separately encoded distributed chunks', () => {
+      data[0].duration = 2_000_000_000
+
+      encoder.encode(data)
+      encoder.encode([childSpan])
+
+      const decoded = JSON.parse(encoder.makePayload().toString())
+      const parent = decoded.traces[0].spans[0]
+      const child = decoded.traces[1].spans[0]
+
+      assert.strictEqual(parent.start, data[0].start)
+      assert.strictEqual(child.start, childSpan.start)
+      assert.strictEqual(child.start - parent.start, 1_000_000_000)
+      assert.ok(child.start < parent.start + parent.duration)
     })
 
     it('should handle multiple spans in one trace', () => {
@@ -249,15 +265,29 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(decoded.traces[0].spans[1].metrics._top_level, undefined)
     })
 
-    it('should not set _top_level when _dd.top_level is 0', () => {
-      data[0].metrics['_dd.top_level'] = 0
+    it('should not infer _top_level for a child with an in-chunk same-service parent', () => {
+      childSpan.metrics['_dd.top_level'] = 0
 
-      encoder.encode(data)
+      encoder.encode([data[0], childSpan])
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.traces[0].spans[0].metrics._top_level, undefined)
+      assert.strictEqual(decoded.traces[0].spans[1].metrics._top_level, undefined)
+    })
+
+    it('should infer _top_level for local roots and service boundaries', () => {
+      data[0].metrics['_dd.top_level'] = 0
+      data[0].service = 'upstream-service'
+      childSpan.metrics['_dd.top_level'] = 0
+
+      encoder.encode([data[0], childSpan])
+
+      const decoded = JSON.parse(encoder.makePayload().toString())
+      const [root, serviceBoundary] = decoded.traces[0].spans
+
+      assert.strictEqual(root.metrics._top_level, 1)
+      assert.strictEqual(serviceBoundary.metrics._top_level, 1)
     })
 
     it('should set _dd.compute_stats on next span when first span is malformed', () => {
