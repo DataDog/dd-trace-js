@@ -327,6 +327,10 @@ describe('no yarn dev references', function () {
         allGreenWorkflow.indexOf('uses: DataDog/dd-octo-sts-action@'),
       'all-green dependencies must be installed before minting the STS token'
     )
+    const allGreenConfig = yaml.parse(allGreenWorkflow)
+    const [allGreenCheckout] = allGreenConfig.jobs['all-green'].steps
+    assert.match(allGreenCheckout.uses, /^actions\/checkout@/)
+    assert.match(allGreenCheckout.with['sparse-checkout'], /^bunfig\.toml$/m)
     const allGreenPackage = JSON.parse(fs.readFileSync(
       path.join(repoRoot, '.github/all-green/package.json'),
       'utf8'
@@ -352,7 +356,7 @@ describe('no yarn dev references', function () {
     const buildArtifactSteps = systemTestsWorkflow.jobs['build-artifacts'].steps
     const packStep = buildArtifactSteps.find(step => step.name === 'Pack dd-trace-js')
     assert.ok(packStep)
-    assert.match(packStep.run, /filename=\$\(npm pack --silent --pack-destination binaries\)/)
+    assert.match(packStep.run, /filename=\$\(npm pack --silent --pack-destination binaries \.\/dd-trace-js\)/)
     assert.match(packStep.run, /test -f "binaries\/\$filename"/)
     const ociPackScript = fs.readFileSync(path.join(repoRoot, '.gitlab/prepare-oci-package.sh'), 'utf8')
     assert.match(ociPackScript, /^archive=\$\(npm pack --silent\)$/m)
