@@ -46,9 +46,7 @@ function formatSpan (span, isFirstSpan, isTopLevel) {
 function getSpanId (span) {
   try {
     return span.span_id?.toString(16)
-  } catch {
-    return undefined
-  }
+  } catch {}
 }
 
 function getTopLevelSpanIds (trace) {

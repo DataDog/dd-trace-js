@@ -145,7 +145,11 @@ describe('AgentlessJSONEncoder', () => {
       encoder.encode(data)
       encoder.encode([childSpan])
 
-      const decoded = JSON.parse(encoder.makePayload().toString())
+      const payload = encoder.makePayload()
+      assert.ok(payload.includes(Buffer.from('"start":1234567890000000000')))
+      assert.ok(payload.includes(Buffer.from('"start":1234567891000000000')))
+
+      const decoded = JSON.parse(payload.toString())
       const parent = decoded.traces[0].spans[0]
       const child = decoded.traces[1].spans[0]
 
@@ -153,6 +157,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(child.start, childSpan.start)
       assert.strictEqual(child.start - parent.start, 1_000_000_000)
       assert.ok(child.start < parent.start + parent.duration)
+      assert.strictEqual(child.metrics._top_level, 1)
     })
 
     it('should handle multiple spans in one trace', () => {
