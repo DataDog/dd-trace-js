@@ -303,24 +303,26 @@ function writeNewFile (filename, payload) {
  *
  * @param {string} directory directory path
  * @param {string} label directory label
- * @returns {{dev: number, ino: number}} stable directory identity
+ * @returns {{dev: number, ino: number, birthtimeMs?: number}} stable directory identity
  */
 function captureDirectory (directory, label) {
   const stat = fs.lstatSync(directory)
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(`Offline Test Optimization validation ${label} must be a regular directory.`)
   }
-  return { dev: stat.dev, ino: stat.ino }
+  const identity = { dev: stat.dev, ino: stat.ino }
+  if (process.platform === 'win32') identity.birthtimeMs = stat.birthtimeMs
+  return identity
 }
 
 /**
  * Creates or validates one child directory without accepting symbolic links.
  *
  * @param {string} parent parent directory path
- * @param {{dev: number, ino: number}} parentIdentity expected parent identity
+ * @param {{dev: number, ino: number, birthtimeMs?: number}} parentIdentity expected parent identity
  * @param {string} directory child directory path
  * @param {string} label directory label
- * @returns {{dev: number, ino: number}} stable child identity
+ * @returns {{dev: number, ino: number, birthtimeMs?: number}} stable child identity
  */
 function createDirectory (parent, parentIdentity, directory, label) {
   assertDirectoryUnchanged(parent, parentIdentity, 'parent output')
@@ -336,12 +338,14 @@ function createDirectory (parent, parentIdentity, directory, label) {
  * Rejects a directory that changed after sink construction.
  *
  * @param {string} directory directory path
- * @param {{dev: number, ino: number}} identity expected directory identity
+ * @param {{dev: number, ino: number, birthtimeMs?: number}} identity expected directory identity
  * @param {string} label directory label
  */
 function assertDirectoryUnchanged (directory, identity, label) {
   const current = captureDirectory(directory, label)
-  if (current.dev !== identity.dev || current.ino !== identity.ino) {
+  if (current.dev !== identity.dev ||
+    current.ino !== identity.ino ||
+    current.birthtimeMs !== identity.birthtimeMs) {
     throw new Error(`Offline Test Optimization validation ${label} changed during execution.`)
   }
 }
@@ -351,7 +355,7 @@ function assertDirectoryUnchanged (directory, identity, label) {
  *
  * @param {string} filename partial payload path
  * @param {string} directory expected parent directory
- * @param {{dev: number, ino: number}} identity expected parent identity
+ * @param {{dev: number, ino: number, birthtimeMs?: number}} identity expected parent identity
  */
 function removePartialFile (filename, directory, identity) {
   try {
