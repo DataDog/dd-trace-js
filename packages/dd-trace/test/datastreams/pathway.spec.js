@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 
+const { debugChannel } = require('../../src/log/channels')
 const {
   computePathwayHash,
   encodePathwayContext,
@@ -177,6 +178,17 @@ describe('encoding', () => {
 
     assert.ok(carrier)
     assert.strictEqual(typeof carrier['dd-pathway-ctx-base64'], 'string')
+  })
+
+  it('decodes a message that has no carrier while debug logging is active', () => {
+    const subscriber = () => {}
+    debugChannel.subscribe(subscriber)
+
+    try {
+      assert.strictEqual(DsmPathwayCodec.decode(undefined), undefined)
+    } finally {
+      debugChannel.unsubscribe(subscriber)
+    }
   })
 
   it('returns undefined when the pathway context has no hash', () => {
