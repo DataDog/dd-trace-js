@@ -3,6 +3,7 @@
 # Shared repository tooling
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
+/.cursor/ @DataDog/lang-platform-js
 /.github/actions/ @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
 /.gitlab/ @DataDog/lang-platform-js
@@ -61,6 +62,7 @@
 # Serverless
 /.agents/skills/serverless-integrations/ @DataDog/serverless-aws @DataDog/apm-serverless
 /.claude/skills/serverless-integrations @DataDog/serverless-aws @DataDog/apm-serverless
+/.cursor/skills/serverless-integrations @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/azure_metadata.js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless.js @DataDog/apm-serverless
@@ -72,6 +74,7 @@
 # IDM
 /.agents/skills/apm-integrations/ @DataDog/apm-idm-js
 /.claude/skills/apm-integrations @DataDog/apm-idm-js
+/.cursor/skills/apm-integrations @DataDog/apm-idm-js
 
 /benchmark/sirun/child_process/ @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
