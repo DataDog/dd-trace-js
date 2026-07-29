@@ -69,8 +69,10 @@ function instrumentBaseModule (module) {
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  const headers = convertHeaders(ctx.messages[0].headers)
-                  const result = produce.apply(this, [topic, partition, message, key, timestamp, opaque, headers])
+                  const producedHeaders = mergeHeaders(headers, ctx.messages[0].headers)
+                  const result = produce.apply(this, [
+                    topic, partition, message, key, timestamp, opaque, producedHeaders,
+                  ])
 
                   ctx.result = result
                   channels.producerCommit.publish(ctx)
@@ -435,4 +437,34 @@ function getLatestOffsets () {
 function convertHeaders (headers) {
   // convert headers from object to array of objects with 1 key and value per array entry
   return Object.entries(headers).map(([key, value]) => ({ [key.toString()]: value.toString() }))
+}
+
+/**
+ * Retain application headers while ensuring injected propagation headers have
+ * a single, authoritative value.
+ *
+ * @param {Array<Record<string, string | Buffer>> | undefined} headers
+ * @param {Record<string, string>} tracingHeaders
+ * @returns {Array<Record<string, string | Buffer>>}
+ */
+function mergeHeaders (headers, tracingHeaders) {
+  if (!Array.isArray(headers)) return convertHeaders(tracingHeaders)
+
+  const tracingHeaderNames = Object.keys(tracingHeaders)
+
+  const producedHeaders = []
+  for (const header of headers) {
+    let isOverridden = false
+    for (const headerName of Object.keys(header)) {
+      if (tracingHeaderNames.includes(headerName)) {
+        isOverridden = true
+        break
+      }
+    }
+    if (!isOverridden) {
+      producedHeaders.push(header)
+    }
+  }
+  producedHeaders.push(...convertHeaders(tracingHeaders))
+  return producedHeaders
 }
