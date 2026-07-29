@@ -20,11 +20,12 @@ const on = (level, ...args) => {
 const off = () => {}
 
 const threshold = LEVELS.indexOf(logLevel)
+const isEnabled = debug && typeof logPort?.postMessage === 'function'
 
 /** @type {Logger} */
 module.exports = Object.fromEntries(
   LEVELS.map(level => [
     level,
-    debug && threshold >= LEVELS.indexOf(level) ? on.bind(null, level) : off,
+    isEnabled && threshold >= LEVELS.indexOf(level) ? on.bind(null, level) : off,
   ])
 )

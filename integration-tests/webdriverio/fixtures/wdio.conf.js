@@ -27,6 +27,10 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  atr: {
+    maxInstances: 1,
+    specs: ['./atr.e2e.js'],
+  },
   bail: {
     maxInstances: 1,
     mochaOpts: {
@@ -48,6 +52,36 @@ const scenarioConfig = {
       delay: true,
     },
     specs: ['./delay.e2e.js'],
+  },
+  disabledEfd: {
+    maxInstances: 1,
+    specs: [[
+      './impacted.e2e.js',
+      './disabled-efd.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  efd: {
+    maxInstances: 1,
+    specs: ['./efd.e2e.js'],
+  },
+  efdAfterEachFailure: {
+    maxInstances: 1,
+    specs: ['./efd-after-each-fail.e2e.js'],
+  },
+  efdFaultySchedule: {
+    maxInstances: 1,
+    specs: [
+      [
+        './first.e2e.js',
+        './efd.e2e.js',
+      ],
+      './second.e2e.js',
+    ],
+  },
+  failedTestReplay: {
+    maxInstances: 1,
+    specs: ['./failed-test-replay.e2e.js'],
   },
   grep: {
     maxInstances: 1,
@@ -73,9 +107,17 @@ const scenarioConfig = {
       './first.e2e.js',
     ]],
   },
+  impacted: {
+    maxInstances: 1,
+    specs: ['./impacted.e2e.js'],
+  },
   loadFailure: {
     maxInstances: 1,
     specs: ['./load-fail.e2e.js'],
+  },
+  managedHookFailures: {
+    maxInstances: 1,
+    specs: ['./managed-hook-fail.e2e.js'],
   },
   multipleCapabilities: {
     capabilities: [
@@ -108,12 +150,20 @@ const scenarioConfig = {
     specFileRetriesDelay: 0,
     specs: ['./spec-file-retry.e2e.js'],
   },
+  suiteHookFailure: {
+    maxInstances: 1,
+    specs: ['./suite-hook-fail.e2e.js'],
+  },
   tdd: {
     maxInstances: 1,
     mochaOpts: {
       ui: 'tdd',
     },
     specs: ['./tdd.e2e.js'],
+  },
+  testManagement: {
+    maxInstances: 1,
+    specs: ['./test-management.e2e.js'],
   },
 }
 
