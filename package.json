@@ -207,7 +207,6 @@
     "@types/node": "^18.19.106",
     "@types/sinon": "^22.0.0",
     "@vercel/nft": "^1.10.2",
-    "@yarnpkg/lockfile": "^1.1.0",
     "axios": "^1.18.1",
     "benchmark": "^2.1.4",
     "body-parser": "^2.3.0",
