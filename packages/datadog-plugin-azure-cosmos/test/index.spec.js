@@ -21,7 +21,7 @@ describe('Plugin', () => {
 
       afterEach(async () => {
         await teardown(client)
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should create a span', async () => {
