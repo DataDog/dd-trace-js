@@ -1,5 +1,7 @@
 'use strict'
 
+// `ci/vitest-no-worker-init-setup.mjs` imports this module into test processes that never
+// initialize dd-trace, so it has to stay free of imports.
 const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
   { limitMs: 5000, key: '5s' },
   { limitMs: 10_000, key: '10s' },
@@ -46,9 +48,7 @@ function createEfdRetryPolicy (retriesByDuration = {}) {
   let schedulingRetryCount = 0
   for (const { limitMs: durationLimitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
     const configuredRetryCount = retriesByDuration[key]
-    const retryCount = typeof configuredRetryCount === 'number' &&
-      Number.isSafeInteger(configuredRetryCount) &&
-      configuredRetryCount >= 0
+    const retryCount = Number.isSafeInteger(configuredRetryCount) && configuredRetryCount >= 0
       ? configuredRetryCount
       : 0
     durationRetryCounts.push(Object.freeze({ durationLimitMs, retryCount }))

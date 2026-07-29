@@ -179,7 +179,7 @@ const handledJestEvents = new WeakSet()
  * @typedef {object} ConcurrentTestOptions
  * @property {(...args: unknown[]) => unknown} [concurrentTest]
  * @property {unknown} [concurrentTestThisArg]
- * @property {EfdRetryDecision} [efdRetryDecision]
+ * @property {EfdRetryGate[]} [efdRetryGates]
  * @property {boolean} [isAttemptToFixRetry]
  * @property {boolean} [isEfdRetry]
  * @property {number} [efdRetryIndex]
@@ -191,7 +191,7 @@ const handledJestEvents = new WeakSet()
 /**
  * @typedef {object} JestRetryOptions
  * @property {object} [concurrentTestState]
- * @property {EfdRetryDecision} [efdRetryDecision]
+ * @property {EfdRetryGate[]} [efdRetryGates]
  * @property {object} jestEvent
  * @property {object} state
  * @property {boolean} [isModified]
@@ -204,11 +204,6 @@ const handledJestEvents = new WeakSet()
  * @typedef {object} EfdRetryGate
  * @property {Promise<boolean>} promise
  * @property {(shouldRun: boolean) => void} resolve
- */
-
-/**
- * @typedef {object} EfdRetryDecision
- * @property {EfdRetryGate[]} gates
  */
 
 /**
@@ -561,10 +556,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #activeDetachedEfdRetries
     #detachedEfdRetryConcurrency
     #detachedEfdRetryQueue
-    #detachedEfdRetryQueueIndex
     #discardedEfdRetryTests
     #earlyFlakeDetectionRetryPolicy
-    #efdRetryDecisionsByName
+    #efdRetryGatesByName
     #efdRetryTestsByName
     #pendingPre30ConcurrentTests
 
@@ -609,7 +603,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.jestEachBind = undefined
       this.#activeDetachedEfdRetries = 0
       this.#detachedEfdRetryConcurrency = 1
-      this.#detachedEfdRetryQueueIndex = 0
       this.#pendingPre30ConcurrentTests = 0
       this.#earlyFlakeDetectionRetryPolicy =
         this.testEnvironmentOptions._ddEarlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
@@ -877,7 +870,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         frameworkVersion: jestVersion,
         isNew: isNewTest,
         isEfdRetry: options?.isEfdRetry === true,
-        efdRetryDecision: options?.efdRetryDecision,
+        efdRetryGates: options?.efdRetryGates,
         efdRetryIndex: options?.efdRetryIndex,
         isAttemptToFix,
         isAttemptToFixRetry: options?.isAttemptToFixRetry === true,
@@ -1079,11 +1072,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       while (
         this.#pendingPre30ConcurrentTests === 0 &&
         this.#activeDetachedEfdRetries < this.#detachedEfdRetryConcurrency &&
-        this.#detachedEfdRetryQueueIndex < queue.length
+        queue.length > 0
       ) {
-        const retry = queue[this.#detachedEfdRetryQueueIndex++]
         this.#activeDetachedEfdRetries++
-        retry.start()
+        queue.shift().start()
       }
     }
 
@@ -1094,13 +1086,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     finishDetachedEfdRetry (retry) {
       this.#activeDetachedEfdRetries--
       retry.resolve()
-      if (
-        this.#activeDetachedEfdRetries === 0 &&
-        this.#detachedEfdRetryQueueIndex === this.#detachedEfdRetryQueue?.length
-      ) {
-        this.#detachedEfdRetryQueue = undefined
-        this.#detachedEfdRetryQueueIndex = 0
-      }
       this.drainDetachedEfdRetries()
     }
 
@@ -1137,7 +1122,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ))
         }
       }
-      retryGate.promise.then(onDecision, done)
+      retryGate.promise.then(onDecision)
     }
 
     /**
@@ -1178,7 +1163,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         return result
       }
 
-      const retryGate = ctx.efdRetryDecision?.gates[ctx.efdRetryIndex - 1]
+      const retryGate = ctx.efdRetryGates?.[ctx.efdRetryIndex - 1]
       if (retryGate) {
         if (!hasConcurrentTestsStartEvent) {
           ctx.detachedEfdRetryPromise = this.enqueueDetachedEfdRetry(retryGate, ctx, runTestInContext)
@@ -1204,8 +1189,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         return runTestInContext()
       }
 
-      const shouldMeasureEfdDuration = efdCandidates.has(ctx.name)
-      const startedAt = shouldMeasureEfdDuration ? performance.now() : undefined
+      const startedAt = efdCandidates.has(ctx.name) ? performance.now() : undefined
       let result
       try {
         result = runTestInContext()
@@ -1349,9 +1333,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
     /**
      * @param {number} retryCount
-     * @returns {EfdRetryDecision}
+     * @returns {EfdRetryGate[]}
      */
-    createEfdRetryDecision (retryCount) {
+    createEfdRetryGates (retryCount) {
       const gates = []
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
         /** @type {(shouldRun: boolean) => void} */
@@ -1361,7 +1345,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
         gates.push({ promise, resolve: resolveGate })
       }
-      return { gates }
+      return gates
     }
 
     /**
@@ -1372,7 +1356,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     retryTest ({
       concurrentTestState: registeredConcurrentTestState,
-      efdRetryDecision,
+      efdRetryGates,
       jestEvent,
       state,
       isModified,
@@ -1402,7 +1386,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             {
               concurrentTest: concurrentTestState.concurrentTest,
               concurrentTestThisArg: concurrentTestState.concurrentTestThisArg,
-              efdRetryDecision,
+              efdRetryGates,
               efdRetryIndex: retryIndex,
               isAttemptToFixRetry,
               isEfdRetry,
@@ -1433,7 +1417,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             continue
           }
           efdRetryMetadataByTest.set(retryTest, { isModified: Boolean(isModified), retryIndex })
-          if (!efdRetryDecision) {
+          if (!efdRetryGates) {
             const retryTests = this.#efdRetryTestsByName?.get(testFullName)
             if (retryTests) {
               retryTests.push(retryTest)
@@ -1442,10 +1426,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               this.#efdRetryTestsByName.set(testFullName, [retryTest])
             }
           }
-          registeredRetryCount++
-        } else {
-          registeredRetryCount++
         }
+        registeredRetryCount++
       }
       return registeredRetryCount
     }
@@ -1482,7 +1464,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      this.#efdRetryDecisionsByName?.delete(retryOptions.testFullName)
+      this.#efdRetryGatesByName?.delete(retryOptions.testFullName)
       this.#efdRetryTestsByName?.delete(retryOptions.testFullName)
       log.error('%s did not register every retry', retryOptions.retryType)
       return false
@@ -1580,7 +1562,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {void}
      */
     orderConcurrentEfdRetries (tests) {
-      if (!this.#efdRetryDecisionsByName) return
+      if (!this.#efdRetryGatesByName) return
 
       const retryTests = []
       let originalTestIndex = 0
@@ -1606,10 +1588,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const retryCount = getEfdRetryCountForDuration(durationMs, this.#earlyFlakeDetectionRetryPolicy)
       efdDeterminedRetries.set(testName, retryCount)
-      const retryDecision = this.#efdRetryDecisionsByName?.get(testName)
-      if (retryDecision) {
-        for (let retryIndex = 0; retryIndex < retryDecision.gates.length; retryIndex++) {
-          retryDecision.gates[retryIndex].resolve(retryIndex < retryCount)
+      const retryGates = this.#efdRetryGatesByName?.get(testName)
+      if (retryGates) {
+        for (let retryIndex = 0; retryIndex < retryGates.length; retryIndex++) {
+          retryGates[retryIndex].resolve(retryIndex < retryCount)
         }
       }
       if (retryCount === 0) {
@@ -1712,16 +1694,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       retriedTestsToNumAttempts.set(testFullName, 0)
       testsToBeRetried.add(testFullName)
       const schedulingRetryCount = this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-      const efdRetryDecision = concurrentTestState
-        ? this.createEfdRetryDecision(schedulingRetryCount)
+      const efdRetryGates = concurrentTestState
+        ? this.createEfdRetryGates(schedulingRetryCount)
         : undefined
-      if (efdRetryDecision) {
-        this.#efdRetryDecisionsByName ??= new Map()
-        this.#efdRetryDecisionsByName.set(testFullName, efdRetryDecision)
+      if (efdRetryGates) {
+        this.#efdRetryGatesByName ??= new Map()
+        this.#efdRetryGatesByName.set(testFullName, efdRetryGates)
       }
       const retriesRegistered = this.registerRetryTests({
         concurrentTestState,
-        efdRetryDecision,
+        efdRetryGates,
         isModified,
         jestEvent: event,
         state,
@@ -1768,7 +1750,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.name === 'run_describe_start' &&
         !hasConcurrentTestsStartEvent &&
         !event.describeBlock.parent &&
-        this.#efdRetryDecisionsByName?.size > 0
+        this.#efdRetryGatesByName?.size > 0
       ) {
         this.preparePre30ConcurrentTests(event.describeBlock, state)
       }
@@ -2024,7 +2006,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           !efdDeterminedRetries.has(testName)
         ) {
           this.determineEfdRetries(testName, event.test.duration ?? 0)
-          if (!this.#efdRetryDecisionsByName?.has(testName)) {
+          if (!this.#efdRetryGatesByName?.has(testName)) {
             this.discardEfdRetries(testName, event.test, efdDeterminedRetries.get(testName))
           }
         }
@@ -2032,12 +2014,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const isEfdRetry = retryCtx?.isEfdRetry === true ||
           efdRetryMetadataByTest.has(event.test)
         if (efdCandidates.has(testName)) {
-          if (efdTestStatuses.has(testName)) {
-            efdTestStatuses.get(testName).push(status)
+          let testStatuses = efdTestStatuses.get(testName)
+          if (testStatuses) {
+            testStatuses.push(status)
           } else {
-            efdTestStatuses.set(testName, [status])
+            testStatuses = [status]
+            efdTestStatuses.set(testName, testStatuses)
           }
-          const testStatuses = efdTestStatuses.get(testName)
           const efdRetryCount = efdDeterminedRetries.get(testName) ?? 0
           if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
             testStatuses.every(status => status === 'fail')) {
@@ -2171,10 +2154,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         retriedTestsToNumAttempts.clear()
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
-        this.#efdRetryDecisionsByName = undefined
+        this.#efdRetryGatesByName = undefined
         this.#efdRetryTestsByName = undefined
         this.#detachedEfdRetryQueue = undefined
-        this.#detachedEfdRetryQueueIndex = 0
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -2184,9 +2166,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.#discardedEfdRetryTests.add(event.test)
           return
         }
-        const retryDecision = this.#efdRetryDecisionsByName?.get(testName)
-        if (retryDecision) {
-          for (const gate of retryDecision.gates) {
+        const retryGates = this.#efdRetryGatesByName?.get(testName)
+        if (retryGates) {
+          for (const gate of retryGates) {
             gate.resolve(false)
           }
         } else {

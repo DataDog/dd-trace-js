@@ -116,7 +116,6 @@ if (process.env.JEST_BAIL) {
 if (process.env.JEST_RANDOMIZE) {
   options.randomize = true
   options.seed = Number(process.env.JEST_SEED ?? 1)
-  options.showSeed = true
 }
 
 if (process.env.USE_JEST_RUN) {
