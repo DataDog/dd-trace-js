@@ -3,7 +3,6 @@
 # Default recursive ownership
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
-/.cursor/ @DataDog/lang-platform-js
 /.github/actions/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 
@@ -41,7 +40,6 @@
 # Serverless
 /.agents/skills/serverless-integrations/ @DataDog/serverless-aws @DataDog/apm-serverless
 /.claude/skills/serverless-integrations @DataDog/serverless-aws @DataDog/apm-serverless
-/.cursor/skills/serverless-integrations @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/apm-serverless
@@ -51,7 +49,6 @@
 # IDM
 /.agents/skills/apm-integrations/ @DataDog/apm-idm-js
 /.claude/skills/apm-integrations @DataDog/apm-idm-js
-/.cursor/skills/apm-integrations @DataDog/apm-idm-js
 
 /benchmark/sirun/child_process/ @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
