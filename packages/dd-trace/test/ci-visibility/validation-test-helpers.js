@@ -7,6 +7,8 @@ const path = require('node:path')
 const { createManifestScaffold } = require('../../../../ci/test-optimization-validation/manifest-scaffold')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
+const WINDOWS_SEQUENCE_NUMBER = 1024n
+
 const FRAMEWORKS = {
   cucumber: {
     bin: 'cucumber-js',
@@ -121,9 +123,44 @@ function removeFixture (root) {
   fs.rmSync(root, { force: true, recursive: true })
 }
 
+/**
+ * Emulates a volume whose file reference numbers carry a Windows sequence number above the 48-bit
+ * file index, so distinct paths round to one number outside the safe integer range.
+ *
+ * @param {Partial<import('node:fs')>} [overrides] further `node:fs` members to replace
+ * @returns {Partial<import('node:fs')>} `node:fs` replacement for proxyquire
+ */
+function createWindowsFileReferenceFs (overrides) {
+  const references = new Map()
+
+  /**
+   * @param {import('node:fs').Stats | import('node:fs').BigIntStats} stat real path status
+   * @param {boolean} [bigint] whether the caller asked for bigint values
+   */
+  const toWindowsStat = (stat, bigint) => {
+    const key = String(stat.ino)
+    if (!references.has(key)) {
+      references.set(key, (WINDOWS_SEQUENCE_NUMBER << 48n) + BigInt(references.size))
+    }
+    const reference = references.get(key)
+    const windowsStat = { ...stat, ino: bigint ? reference : Number(reference) }
+    windowsStat.isDirectory = () => stat.isDirectory()
+    windowsStat.isFile = () => stat.isFile()
+    windowsStat.isSymbolicLink = () => stat.isSymbolicLink()
+    return windowsStat
+  }
+
+  return {
+    lstatSync: (target, options) => toWindowsStat(fs.lstatSync(target, options), options?.bigint),
+    statSync: (target, options) => toWindowsStat(fs.statSync(target, options), options?.bigint),
+    ...overrides,
+  }
+}
+
 module.exports = {
   FRAMEWORKS,
   createLoadedManifest,
   createRepositoryFixture,
+  createWindowsFileReferenceFs,
   removeFixture,
 }
