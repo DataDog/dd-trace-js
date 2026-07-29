@@ -3,7 +3,7 @@
 const path = require('node:path')
 
 const CONFIG_PATTERN = /^playwright\.config\.[cm]?[jt]s$/
-const TEST_FILE_PATTERN = /(?:\.(?:spec|test)\.[cm]?[jt]sx?)$/
+const TEST_FILE_PATTERN = /\.(?:spec|test)\.[cm]?[jt]sx?$/
 const GENERATED_CONFIG_FILENAME = 'dd-test-optimization-validation.playwright.config.cjs'
 const VALIDATION_OUTPUT_DIRECTORY = '.dd-test-optimization-validation-playwright-output'
 const PLAYWRIGHT_PACKAGE = '@playwright/test'
@@ -139,12 +139,12 @@ function getOutputPath (filename) {
  */
 function getObservedTestCount (output) {
   const observed = sumLastMatchCounts(output, [
-    /^\s*(\d+)\s+passed\b/gim,
-    /^\s*(\d+)\s+failed\b/gim,
-    /^\s*(\d+)\s+flaky\b/gim,
+    /^[ \t]*(\d+)[ \t]+passed\b/gim,
+    /^[ \t]*(\d+)[ \t]+failed\b/gim,
+    /^[ \t]*(\d+)[ \t]+flaky\b/gim,
   ])
   if (observed !== null) return observed
-  return /^\s*\d+\s+skipped\b/im.test(output) ? 0 : null
+  return /^[ \t]*\d+[ \t]+skipped\b/im.test(output) ? 0 : null
 }
 
 /**
