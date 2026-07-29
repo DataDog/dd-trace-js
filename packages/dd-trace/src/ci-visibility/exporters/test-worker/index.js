@@ -5,6 +5,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
@@ -49,6 +50,9 @@ function getInterprocessCoverageCode () {
 function getInterprocessLogsCode () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_LOGS_PAYLOAD_CODE
+  }
+  if (getEnvironmentVariable('MOCHA_WORKER_ID') === 'webdriverio') {
+    return MOCHA_WORKER_LOGS_PAYLOAD_CODE
   }
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE

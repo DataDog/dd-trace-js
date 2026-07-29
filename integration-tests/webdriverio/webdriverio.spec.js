@@ -12,6 +12,14 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   MOCHA_IS_PARALLEL,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ENABLED,
@@ -33,26 +41,22 @@ const versions = requestedVersion
   ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
   : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
 
-const advancedSettings = {
-  code_coverage: true,
-  tests_skipping: true,
-  itr_enabled: true,
+const disabledSettings = {
+  code_coverage: false,
+  tests_skipping: false,
+  itr_enabled: false,
   require_git: false,
   early_flake_detection: {
-    enabled: true,
-    slow_test_retries: {
-      '5s': 5,
-    },
+    enabled: false,
   },
-  flaky_test_retries_enabled: true,
-  di_enabled: true,
-  known_tests_enabled: true,
+  flaky_test_retries_enabled: false,
+  di_enabled: false,
+  known_tests_enabled: false,
   test_management: {
-    enabled: true,
-    attempt_to_fix_retries: 5,
+    enabled: false,
   },
-  impacted_tests_enabled: true,
-  coverage_report_upload_enabled: true,
+  impacted_tests_enabled: false,
+  coverage_report_upload_enabled: false,
 }
 
 const advancedRequestPaths = [
@@ -167,13 +171,13 @@ function assertOneTestPerSuiteExecution (suites, tests) {
 }
 
 /**
- * Extracts events and verifies the WebdriverIO run stayed in basic-reporting mode.
+ * Extracts events and verifies the WebdriverIO run stayed in reporting-only mode.
  *
  * @param {object[]} payloads
  * @param {string} requestedVersion
  * @returns {{session: object, module: object, suites: object[], tests: object[]}}
  */
-function getBasicReportingEvents (payloads, requestedVersion) {
+function getReportingEvents (payloads, requestedVersion) {
   const settingsRequests = payloads.filter(({ url }) =>
     url.endsWith('/api/v2/libraries/tests/services/setting'))
   const advancedRequests = payloads.filter(({ url }) =>
@@ -204,9 +208,14 @@ function getBasicReportingEvents (payloads, requestedVersion) {
   const metadata = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
   assert.ok(metadata.length > 0)
   for (const metadataEntry of metadata) {
-    const capabilities = Object.keys(metadataEntry.test || {})
-      .filter(tag => tag.startsWith('_dd.library_capabilities.'))
-    assert.deepStrictEqual(capabilities, [])
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
   }
 
   for (const event of [sessions[0], modules[0], ...suites, ...tests]) {
@@ -258,7 +267,7 @@ for (const version of versions) {
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-      receiver.setSettings(advancedSettings)
+      receiver.setSettings(disabledSettings)
     })
 
     afterEach(async function () {
@@ -272,7 +281,7 @@ for (const version of versions) {
      *
      * @param {string} scenario
      * @param {number} expectedWebDriverSessions
-     * @param {(events: ReturnType<typeof getBasicReportingEvents>) => void} assertEvents
+     * @param {(events: ReturnType<typeof getReportingEvents>) => void} assertEvents
      * @param {number} [expectedExitCode]
      * @returns {Promise<void>}
      */
@@ -298,7 +307,7 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        payloads => assertEvents(getBasicReportingEvents(payloads, version)),
+        payloads => assertEvents(getReportingEvents(payloads, version)),
         { hardTimeout: 45_000 }
       )
 
@@ -322,7 +331,7 @@ for (const version of versions) {
       )
     }
 
-    it('reports parallel workers as one basic-reporting session', async () => {
+    it('reports parallel workers as one session', async () => {
       await runScenario('parallel', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
         assert.strictEqual(tests.length, 2)

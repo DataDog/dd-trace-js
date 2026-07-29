@@ -16,6 +16,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -178,6 +179,21 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(traceSecond)
       mochaWorkerExporter.flush()
       sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export DI logs', () => {
+      process.env.MOCHA_WORKER_ID = 'webdriverio'
+      const testEnvironmentMetadata = { testFramework: 'webdriverio' }
+      const logMessage = { message: 'test log' }
+      const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
+
+      mochaWorkerExporter.exportDiLogs(testEnvironmentMetadata, logMessage)
+      mochaWorkerExporter.flush()
+
+      sinon.assert.calledWith(send, [
+        MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+        JSON.stringify([{ testEnvironmentMetadata, logMessage }]),
+      ])
     })
 
     it('does not break if process.send is undefined', () => {
