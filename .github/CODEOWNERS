@@ -38,6 +38,7 @@
 /packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/debugger-nodejs
 
 # Serverless
+/docs/examples/vercel-nextjs/ @DataDog/apm-idm-js @DataDog/apm-serverless
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/azure_metadata.spec.js @DataDog/apm-serverless
