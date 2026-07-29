@@ -20,7 +20,6 @@ import { isMainThread } from 'worker_threads'
 
 import {
   iitmExclusionRegExp,
-  initialize as hookInitialize,
   load as hookLoad,
   resolve as hookResolve,
 } from './loader-hook.mjs?initialize'
@@ -67,20 +66,14 @@ const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 
-// Node calls `initialize` only through `module.register`, never for `--loader`; without it
-// import-in-the-middle keeps its default matcher and proxies every application module. Loaders
-// before Node 18.19 share the application thread, where `loader-hook.mjs` builds no matcher.
-let needsHookInitialize = !isMainThread && !brokenLoaders
-
 export async function load (url, context, nextLoad) {
-  if (needsHookInitialize) {
-    needsHookInitialize = false
-    hookInitialize()
-  }
-
   const loadHook = (brokenLoaders || iitmExclusionRegExp.test(url)) ? nextLoad : hookLoad
   return insertInit(await loadHook(url, context, nextLoad), url, context)
 }
+
+// Node calls `initialize` on a hook module it registers, `--loader` included. Without the
+// re-export import-in-the-middle keeps its default matcher, which wraps every module.
+export { initialize } from './loader-hook.mjs?initialize'
 
 export const resolve = brokenLoaders ? undefined : hookResolve
 
