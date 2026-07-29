@@ -20,6 +20,7 @@ const {
 } = require('../../packages/dd-trace/src/ci-visibility/rum')
 const {
   testStartCh,
+  testSuiteFinishCh,
   testSuiteStartCh,
 } = require('../../packages/datadog-instrumentations/src/vitest-util')
 const {
@@ -347,6 +348,16 @@ describe('vitest no-worker init instrumentation selection', () => {
       assert.strictEqual(setupContext.rumTestExecutionIdCookieName, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
     })
 
+    it('installs the Datadog setup before user setup files', () => {
+      const ctx = getNoWorkerReporterContext()
+      ctx.config.setupFiles = ['/repo/user-setup.mjs']
+
+      configureNoWorkerReporter(ctx)
+
+      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-setup.mjs')
+      assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
+    })
+
     it('disables RUM correlation when browser files can run in parallel', () => {
       const ctx = getNoWorkerReporterContext()
       const project = {
@@ -361,6 +372,26 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx, [
         [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
         [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('disables RUM correlation when browser setup files run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+          },
+          sequence: {
+            setupFiles: 'parallel',
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/test.mjs', pool: 'browser' }],
       ])
 
       assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
@@ -518,6 +549,37 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
 
       assert.deepStrictEqual(testAttemptRetries, [false, true, false])
+    })
+
+    it('finishes active suites before a watch rerun', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testSuiteStarts = []
+      const testSuiteFinishes = []
+      const onTestSuiteStart = context => testSuiteStarts.push(context.testSuiteAbsolutePath)
+      const onTestSuiteFinish = context => testSuiteFinishes.push(context)
+      testSuiteStartCh.subscribe(onTestSuiteStart)
+      testSuiteFinishCh.subscribe(onTestSuiteFinish)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const reporter = ctx.reporters[0]
+        const { file } = createReporterTestFile()
+        reporter.onTestModuleStart(file)
+
+        reporter.onWatcherRerun()
+        reporter.onFinished([file])
+      } finally {
+        testSuiteStartCh.unsubscribe(onTestSuiteStart)
+        testSuiteFinishCh.unsubscribe(onTestSuiteFinish)
+      }
+
+      assert.deepStrictEqual(testSuiteStarts, [
+        '/repo/watch-rerun.test.mjs',
+        '/repo/watch-rerun.test.mjs',
+      ])
+      assert.strictEqual(testSuiteFinishes.length, 2)
+      assert.strictEqual(testSuiteFinishes[0].status, 'skip')
+      assert.strictEqual(testSuiteFinishes[1].status, 'pass')
     })
   })
 

@@ -125,6 +125,7 @@ function applyExecutionChanges (suite) {
       task.repeats = earlyFlakeDetectionRetries
       task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
     }
+    wrapRetryCondition(task)
   }
 }
 
@@ -175,6 +176,7 @@ function prepareRumCorrelation (task, attemptIndex) {
   usedRumTestExecutionIds.add(testExecutionId)
   task.meta.__ddTestOptRumTestExecutionIds ||= []
   task.meta.__ddTestOptRumTestExecutionIds[attemptIndex] = testExecutionId
+  recordRumActivity(task, attemptIndex)
 }
 
 /**
@@ -188,14 +190,22 @@ function finishRumCorrelation (task, attemptIndex) {
   const testExecutionId = task.meta.__ddTestOptRumTestExecutionIds?.[attemptIndex]
   if (!testExecutionId) return
 
-  const rum = getRum()
-  const isRumActive = getIsRumActive(rum)
-  if (isRumActive) {
-    task.meta.__ddTestOptRumActive ||= []
-    task.meta.__ddTestOptRumActive[attemptIndex] = true
-  }
-
+  recordRumActivity(task, attemptIndex)
   clearRumCorrelationCookie(testExecutionId)
+}
+
+/**
+ * Retains evidence that RUM was active at any point observed during the attempt.
+ *
+ * @param {object} task
+ * @param {number} attemptIndex
+ * @returns {void}
+ */
+function recordRumActivity (task, attemptIndex) {
+  if (!getIsRumActive(getRum())) return
+
+  task.meta.__ddTestOptRumActive ||= []
+  task.meta.__ddTestOptRumActive[attemptIndex] = true
 }
 
 /**
@@ -435,6 +445,36 @@ function getRetryLimit (task) {
   return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
 }
 
+/**
+ * Wraps Vitest's retry condition so final-attempt handling follows the condition's actual result.
+ *
+ * @param {object} task
+ * @returns {void}
+ */
+function wrapRetryCondition (task) {
+  if (typeof task.retry !== 'object' || !task.retry?.condition || getRetryLimit(task) === 0) return
+
+  const condition = task.retry.condition
+  task.retry = {
+    ...task.retry,
+    condition (error) {
+      let shouldRetry = false
+      if (condition instanceof RegExp) {
+        shouldRetry = condition.test(error?.message || '')
+      } else if (typeof condition === 'function') {
+        shouldRetry = condition(error)
+      }
+
+      if (!shouldRetry && (task.result?.repeatCount || 0) >= (task.repeats || 0)) {
+        const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
+        recordTestOptimizationStatus(task, attemptIndex)
+        markQuarantinedFailure(task)
+      }
+      return shouldRetry
+    },
+  }
+}
+
 function restoreEarlyFlakeDetectionSkippedResult (task) {
   if (!task.meta.__ddTestOptEfdSkipCurrentAttempt) {
     return false
@@ -491,6 +531,26 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
   }
 
   if (attemptIndex < getFinalAttemptIndex(task)) {
+    return
+  }
+
+  markQuarantinedFailure(task)
+}
+
+/**
+ * Converts a quarantined failure into the passing runner state expected by Vitest.
+ *
+ * @param {object} task
+ * @returns {void}
+ */
+function markQuarantinedFailure (task) {
+  const testSuite = getTestSuite(task)
+  const testName = getTestName(task)
+  if (
+    !quarantinedTests[testSuite]?.[testName] ||
+    attemptToFixTests[testSuite]?.[testName] ||
+    task.result?.state !== 'fail'
+  ) {
     return
   }
 

@@ -332,6 +332,27 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('installs RUM correlation before user setup hooks and retains earlier RUM activity', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'user-setup')
+
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(test.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-user-setup.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-before-each-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('does not fail browser tests when correlation ID generation fails', async () => {
     const payloadsPromise = gatherEvents(events => {
       const tests = getEventContents(events, 'test')
@@ -368,7 +389,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
 
     const [exitCode] = await Promise.all([
       runVitest('browser-rum-crypto-reuse.mjs', {
-        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-failure-setup.mjs',
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-reuse-setup.mjs',
       }),
       payloadsPromise,
     ])
@@ -540,6 +561,47 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
 
       const [exitCode] = await Promise.all([
         runVitest('browser-object-retry-quarantine.mjs'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('quarantines failures when an object-form retry condition stops retries', async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+        },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [testSuite]: {
+              tests: {
+                'stops conditional retries before quarantining': {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const [test] = getEventContents(events, 'test')
+        assert.ok(test)
+        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.ok(!(TEST_IS_RETRY in test.meta))
+        assert.match(test.meta[ERROR_MESSAGE], /conditional retry attempt 1/)
+      })
+
+      const [exitCode] = await Promise.all([
+        runVitest('browser-conditional-retry-quarantine.mjs'),
         payloadsPromise,
       ])
 

@@ -243,8 +243,12 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
       config.setupFiles = [config.setupFiles]
     }
 
-    if (!config.setupFiles.includes(setupFile)) {
-      config.setupFiles.push(setupFile)
+    const setupFileIndex = config.setupFiles.indexOf(setupFile)
+    if (setupFileIndex !== 0) {
+      if (setupFileIndex > 0) {
+        config.setupFiles.splice(setupFileIndex, 1)
+      }
+      config.setupFiles.unshift(setupFile)
     }
   }
 }
@@ -358,6 +362,15 @@ function createMainProcessReporter (reporterState) {
     },
 
     onWatcherRerun () {
+      for (const testSuiteCtx of testSuiteContexts.values()) {
+        testSuiteFinishCh.publish({
+          status: 'skip',
+          deferFlush: true,
+          onDone: noop,
+          ...testSuiteCtx.currentStore,
+        })
+      }
+      testSuiteContexts.clear()
       finishedTestModules.clear()
       taskAttemptStatuses.clear()
       tasksWithRecordedFinalAttempt.clear()
@@ -1391,7 +1404,8 @@ function normalizeProjectName (name) {
  */
 function canRaceRumCorrelation (ctx, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
-    return safeConfig(ctx)?.sequence?.hooks === 'parallel'
+    const sequence = safeConfig(ctx)?.sequence
+    return sequence?.hooks === 'parallel' || sequence?.setupFiles === 'parallel'
   }
 
   let browserFileCount = 0
@@ -1407,7 +1421,7 @@ function canRaceRumCorrelation (ctx, testSpecifications) {
     }
 
     const config = getProjectReportingConfig(testProject) || safeConfig(ctx)
-    if (config?.sequence?.hooks === 'parallel') return true
+    if (config?.sequence?.hooks === 'parallel' || config?.sequence?.setupFiles === 'parallel') return true
 
     browserFileCount++
     if (hasBrowserProject && testProject !== project) return true
