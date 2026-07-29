@@ -685,6 +685,23 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('uses the browser performance clock when process.uptime is unavailable', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-partial-process-shim.mjs', {
+        VITEST_PARTIAL_PROCESS_SHIM: '1',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('applies Test Management execution changes to browser tests', async () => {
     const testSuite = 'ci-visibility/vitest-browser-tests/browser-test-management.mjs'
     receiver.setSettings({

@@ -36,7 +36,7 @@ const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let now
-if (globalThis.process?.versions?.node) {
+if (typeof globalThis.process?.uptime === 'function') {
   now = () => globalThis.process.uptime() * 1000
 } else {
   const clock = globalThis.window?.parent && globalThis.window.parent !== globalThis.window

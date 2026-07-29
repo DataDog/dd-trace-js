@@ -46,6 +46,17 @@ if (process.env.VITEST_SETUP_FILE) {
   config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }
 
+if (process.env.VITEST_PARTIAL_PROCESS_SHIM) {
+  config.define = {
+    'globalThis.process': JSON.stringify({
+      env: {},
+      versions: {
+        node: '20.0.0',
+      },
+    }),
+  }
+}
+
 if (process.env.CUSTOM_SEQUENCER) {
   config.test.sequence = {
     sequencer: CustomSequencer,
