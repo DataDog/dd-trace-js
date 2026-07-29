@@ -10,8 +10,11 @@ description: |
 
 # Serverless integrations
 
-Use this skill when the cloud runtime owns the unit of work or dd-trace-js manages its handler lifecycle. Use
-`apm-integrations` for a third-party library call that happens inside a function.
+This skill owns the serverless delta: invocation boundaries, runtime lifecycle, flushing, and deployed
+verification. Follow the [APM execution sequence](../apm-integrations/SKILL.md#execution-sequence) for shared
+instrumentation, plugin, registration, and test mechanics.
+
+Use `apm-integrations` alone for a third-party library call that happens inside a function.
 
 ## Classify the boundary
 
@@ -26,9 +29,9 @@ architecture.
 
 ## Read the runtime source first
 
-Do not infer lifecycle support from a provider's documentation. Read the runtime source for the supported version
-range, plus the matching in-repo instrumentation, plugin, integration test, and workflow job. The source answers
-what the design depends on:
+Use the [APM source-retrieval procedure](../apm-integrations/SKILL.md#read-upstream-source-first), then read the
+matching in-repo instrumentation, plugin, integration test, and workflow job. Do not infer lifecycle support from
+provider documentation. The serverless design depends on:
 
 1. How user handlers are registered, exported, or resolved.
 2. Which completion forms exist in that version range.
@@ -38,27 +41,8 @@ what the design depends on:
 
 ## Implemented shapes
 
-### Plugin-backed invocation
-
-Azure Functions is the current reference:
-
-- instrumentation wraps handler registration and calls a `tracingChannel` lifecycle named
-  `datadog:<platform>:<operation>`, so the plugin prefix starts with `tracing:datadog:` rather than `tracing:apm:`;
-- `AzureFunctionsPlugin` extends `TracingPlugin` with `kind = 'server'` and `type = 'serverless'`;
-- HTTP triggers use `web.patch`, `web.startServerlessSpanWithInferredProxy`, and `web.finishAll`;
-- non-HTTP triggers start the invocation span with `childOf: null` and add message links where the runtime exposes
-  upstream contexts;
-- service naming is registered in both `service-naming/schemas/*/serverless.js` files.
-
-### AWS Lambda bootstrap
-
-`packages/dd-trace/src/lambda/` resolves `DD_LAMBDA_HANDLER`, falls back to `datadog-lambda-js`, installs the runtime
-patch, and manages impending-timeout flushing. Read `index.js`, `runtime/patch.js`, `handler.js`, and the tests under
-`packages/dd-trace/test/lambda/` before changing this path.
-
-This Lambda path does not start an invocation span or use the serverless plugin model. It composes the existing
-handler or `datadog-lambda-js` wrapper with timeout protection. Preserve that distinction when reviewing or
-designing a new platform integration.
+The repository has plugin-backed invocation spans and the separate AWS Lambda bootstrap. Read
+[Architecture](references/architecture.md) before choosing a shape; do not combine their responsibilities.
 
 ## Invariants
 
@@ -77,25 +61,17 @@ designing a new platform integration.
 Do not prescribe callbacks, streams, or shutdown hooks unless the target runtime exposes them. The upstream source
 and supported version range define the matrix.
 
-## Change map
+## Apply shared mechanics
 
-For plugin-backed integrations, inspect and update the applicable surfaces:
+For plugin-backed integrations, follow the
+[APM execution sequence](../apm-integrations/SKILL.md#execution-sequence) and
+[testing reference](../apm-integrations/references/testing.md). The serverless additions are both serverless
+naming-schema files, the serverless workflow job, and a runtime-facing fixture.
 
-- `packages/datadog-instrumentations/src/<name>.js` and `helpers/hooks.js`, where `{ serverless: false, fn }` skips
-  a hook that must not load in serverless environments;
-- `packages/datadog-plugin-<name>/`;
-- `packages/dd-trace/src/plugins/index.js`;
-- both serverless service-naming schema files;
-- `versions/` fixtures, public plugin types/docs, CODEOWNERS, and the serverless workflow job.
-
-Use Orchestrion for a static source function. Use shimmer when handler registration or export resolution is dynamic,
-and leave a short comment naming that constraint.
+Apply the shared hook decision to the runtime source. Runtime-created handler registration is the common
+serverless reason shimmer wins.
 
 ## Verification
 
 Read [Architecture](references/architecture.md) for ownership and source paths. Read
-[Testing serverless integrations](references/testing-guide.md) for the real-runtime test shape and commands.
-
-Local tests must exercise the runtime-facing entry point. Add deployed verification only when the change depends on
-provider behavior the local runtime or emulator cannot reproduce; state the exact provider-only assumption being
-checked.
+[Testing serverless integrations](references/testing-guide.md) for the runtime and deployed verification contract.
