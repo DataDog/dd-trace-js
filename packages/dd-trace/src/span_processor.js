@@ -303,6 +303,8 @@ class SpanProcessor {
           }
 
           if (trace.isRecording !== false) {
+            span._syncMetaStructToNative?.()
+
             // Build the same final formatted span the legacy JS processor used.
             // Native storage has no delete/clear op, so all mutable tags are
             // materialized from this final snapshot rather than synced eagerly.

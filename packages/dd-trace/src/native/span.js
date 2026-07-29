@@ -496,7 +496,6 @@ class NativeDatadogSpan extends DatadogSpan {
     if (!exported) {
       this.#serializeSpanLinks()
       this.#serializeSpanEvents()
-      this.#serializeMetaStruct()
     }
 
     // Mirror the parent's normalization (opentracing/span.js line 292).
@@ -620,6 +619,16 @@ class NativeDatadogSpan extends DatadogSpan {
         )
       }
     }
+  }
+
+  /**
+   * Synchronize finish-time meta-struct mutations after span-finish subscribers run.
+   *
+   * LLMObs finalizes its canonical `_llmobs` structure on the finish channel,
+   * which is later than native span events and links are serialized.
+   */
+  _syncMetaStructToNative () {
+    this.#serializeMetaStruct()
   }
 }
 

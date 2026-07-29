@@ -198,6 +198,7 @@ class NativeSpansInterface {
     this._otlpEndpoint = null
     this._otlpProtocol = null
     this._otlpHeaders = null
+    this._llmobsConfig = null
     this._state = this.#createWasmState(options.agentUrl)
 
     // Get the WASM memory views for writing to the change queue buffer
@@ -240,6 +241,18 @@ class NativeSpansInterface {
     // value the native layer rejects is never re-applied on a setAgentUrl rebuild.
     this._state.setOtlpEndpoint(url)
     this._otlpEndpoint = url
+  }
+
+  /**
+   * Enable LLMObs routing in the native trace exporter.
+   *
+   * @param {string} agentlessEndpoint Full direct-intake fallback URL
+   * @param {string} apiKey API key for direct fallback
+   * @param {number} timeoutMs Request timeout in milliseconds
+   */
+  setLlmObs (agentlessEndpoint, apiKey, timeoutMs) {
+    this._state.setLlmObs(agentlessEndpoint, apiKey, timeoutMs)
+    this._llmobsConfig = { agentlessEndpoint, apiKey, timeoutMs }
   }
 
   /**
@@ -637,7 +650,7 @@ class NativeSpansInterface {
    */
   #createWasmState (url) {
     const opts = this._options
-    return new WasmSpanState(
+    const state = new WasmSpanState(
       normalizeAgentUrl(url),
       opts.tracerVersion,
       opts.lang,
@@ -654,6 +667,11 @@ class NativeSpansInterface {
       opts.runtimeId,
       opts.clientComputedStats,
     )
+    if (this._llmobsConfig) {
+      const { agentlessEndpoint, apiKey, timeoutMs } = this._llmobsConfig
+      state.setLlmObs(agentlessEndpoint, apiKey, timeoutMs)
+    }
+    return state
   }
 
   /**

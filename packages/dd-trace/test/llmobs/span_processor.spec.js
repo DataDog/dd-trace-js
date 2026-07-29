@@ -124,6 +124,132 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
+    it('stores canonical LLMObs data on native spans instead of using the span writer', () => {
+      const context = {
+        _nativeSpanId: 1,
+        _tags: {},
+        getTags () { return this._tags },
+        getTag (key) { return this._tags[key] },
+        setTag (key, value) { this._tags[key] = value },
+        toTraceId () { return '123' },
+        toSpanId () { return '456' },
+      }
+      span = {
+        _name: 'native-test',
+        _startTime: 0,
+        _duration: 1,
+        context () { return context },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
+        '_ml_obs.llmobs_parent_id': '1234',
+        '_ml_obs.trace_id': 'mlob123',
+      })
+
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct._llmobs, {
+        name: 'native-test',
+        parent_id: '1234',
+        trace_id: 'mlob123',
+        tags: {
+          version: '',
+          env: '',
+          service: '',
+          source: 'integration',
+          ml_app: 'myApp',
+          agent_service: 'myApp',
+          'ddtrace.version': 'x.y.z',
+          error: '0',
+          language: 'javascript',
+        },
+        meta: {
+          span: { kind: 'llm' },
+          model_name: 'custom',
+          model_provider: 'custom',
+          input: { messages: [{ role: 'user', content: 'hello' }] },
+          output: {},
+        },
+        metrics: {},
+        _dd: {},
+        ml_app: 'myApp',
+      })
+      assert.strictEqual(span.context().getTag('_dd.llmobs.submitted'), undefined)
+    })
+
+    it('keeps per-tenant native spans on the JS writer', () => {
+      const context = {
+        _nativeSpanId: 1,
+        _tags: {},
+        getTags () { return this._tags },
+        getTag (key) { return this._tags[key] },
+        setTag (key, value) { this._tags[key] = value },
+        toTraceId () { return '123' },
+        toSpanId () { return '456' },
+      }
+      span = {
+        _name: 'routed-native-test',
+        _startTime: 0,
+        _duration: 1,
+        context () { return context },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_dd.llmobs.routing.api_key': 'tenant-key',
+        '_dd.llmobs.routing.site': 'datadoghq.eu',
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.trace_id': 'mlob123',
+      })
+      writer.append.returns(true)
+
+      processor.process(span)
+
+      sinon.assert.calledOnceWithExactly(writer.append, sinon.match.object, {
+        apiKey: 'tenant-key',
+        site: 'datadoghq.eu',
+      })
+      assert.strictEqual(span.meta_struct, undefined)
+      assert.strictEqual(context.getTag('_dd.llmobs.submitted'), '1')
+    })
+
+    it('keeps native spans on the JS writer when traces use OTLP', () => {
+      processor = new LLMObsSpanProcessor({
+        llmobs: { DD_LLMOBS_ENABLED: true },
+        OTEL_TRACES_EXPORTER: 'otlp',
+      })
+      processor.setWriter(writer)
+      const context = {
+        _nativeSpanId: 1,
+        _tags: {},
+        getTags () { return this._tags },
+        getTag (key) { return this._tags[key] },
+        setTag (key, value) { this._tags[key] = value },
+        toTraceId () { return '123' },
+        toSpanId () { return '456' },
+      }
+      span = {
+        _name: 'otlp-native-test',
+        _startTime: 0,
+        _duration: 1,
+        context () { return context },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.trace_id': 'mlob123',
+      })
+      writer.append.returns(true)
+
+      processor.process(span)
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+      assert.strictEqual(context.getTag('_dd.llmobs.submitted'), '1')
+    })
+
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {

@@ -41,6 +41,7 @@ describe('NativeExporter', () => {
       setOtlpEndpoint: sinon.stub(),
       setOtlpProtocol: sinon.stub(),
       setOtlpHeaders: sinon.stub(),
+      setLlmObs: sinon.stub(),
     }
 
     logError = sinon.stub()
@@ -175,6 +176,27 @@ describe('NativeExporter', () => {
       new NativeExporter(config, prioritySampler, nativeSpans)
       sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
       sinon.assert.calledOnce(logWarn)
+    })
+  })
+
+  describe('LLMObs routing', () => {
+    it('configures direct fallback and keeps the trace protocol on v0.4', () => {
+      config.protocolVersion = '0.5'
+      config.site = 'datadoghq.com'
+      config.DD_API_KEY = 'test-key'
+      config.llmobs = { DD_LLMOBS_ENABLED: true }
+
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+
+      sinon.assert.calledOnceWithExactly(
+        nativeSpans.setLlmObs,
+        'https://llmobs-intake.datadoghq.com/api/v2/llmobs',
+        'test-key',
+        5000
+      )
+      sinon.assert.notCalled(fetchAgentInfo)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
     })
   })
 

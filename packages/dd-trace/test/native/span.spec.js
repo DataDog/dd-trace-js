@@ -561,6 +561,7 @@ describe('NativeDatadogSpan', () => {
       span.meta_struct = { obj: { a: 1 }, str: 'x', num: 5, nil: null, bool: true }
 
       span.finish()
+      span._syncMetaStructToNative()
 
       // string, number and non-null object are forwarded; null and boolean are
       // dropped (mirrors the legacy #encodeMetaStruct value filter).
@@ -585,6 +586,7 @@ describe('NativeDatadogSpan', () => {
       }
 
       span.finish()
+      span._syncMetaStructToNative()
 
       const call = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === '_dd.stack')
       assert.ok(call, 'expected _dd.stack to be forwarded')
@@ -601,6 +603,7 @@ describe('NativeDatadogSpan', () => {
       span.meta_struct = { arr: { list: ['keep', 7, true, null, { nested: 1 }] } }
 
       span.finish()
+      span._syncMetaStructToNative()
 
       const call = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === 'arr')
       assert.ok(call, 'expected arr to be forwarded')
@@ -610,6 +613,7 @@ describe('NativeDatadogSpan', () => {
 
     it('does not call setMetaStruct when the span has no meta_struct', () => {
       span.finish()
+      span._syncMetaStructToNative()
       sinon.assert.notCalled(nativeSpans.setMetaStruct)
     })
 
@@ -623,6 +627,7 @@ describe('NativeDatadogSpan', () => {
       nativeSpans.addSpanEvent.resetHistory()
 
       span.finish()
+      span._syncMetaStructToNative()
 
       sinon.assert.notCalled(nativeSpans.queueOp)
       sinon.assert.notCalled(nativeSpans.setMetaStruct)

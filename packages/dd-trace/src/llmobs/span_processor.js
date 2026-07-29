@@ -99,6 +99,18 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
+      // Per-tenant credentials cannot ride meta_struct. Keep that existing path
+      // on the JS writer until libdatadog has a credential side-channel.
+      if (
+        span.context()._nativeSpanId !== undefined &&
+        this.#config.OTEL_TRACES_EXPORTER !== 'otlp' &&
+        !routing.apiKey
+      ) {
+        span.meta_struct ??= {}
+        span.meta_struct._llmobs = this.#toMetaStruct(formattedEvent)
+        return
+      }
+
       const enqueued = this.#writer.append(formattedEvent, routing)
 
       // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
@@ -121,6 +133,50 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Convert the standalone event view into the canonical Python-compatible
+   * `_llmobs` meta-struct. Runtime APM fields are added by libdatadog only when
+   * it must create a standalone intake event.
+   *
+   * @param {object} event formatted LLMObs event
+   * @returns {object} canonical LLMObs span data
+   */
+  #toMetaStruct (event) {
+    const meta = { ...event.meta }
+    const kind = meta['span.kind']
+    delete meta['span.kind']
+    meta.span = { kind }
+
+    const tags = {}
+    for (const tag of event.tags) {
+      const separator = tag.indexOf(':')
+      tags[tag.slice(0, separator)] = tag.slice(separator + 1)
+    }
+    const mlApp = tags.ml_app
+    if (mlApp !== undefined) tags.agent_service = mlApp
+
+    const dd = {}
+    if (event._dd.sample_rate !== undefined) dd.sample_rate = event._dd.sample_rate
+    if (event._dd.sampling_decision !== undefined) dd.sampling_decision = event._dd.sampling_decision
+
+    const data = {
+      name: event.name,
+      parent_id: event.parent_id,
+      trace_id: event.trace_id,
+      tags,
+      meta,
+      metrics: event.metrics,
+      _dd: dd,
+    }
+
+    if (mlApp !== undefined) data.ml_app = mlApp
+    if (event.session_id) data.session_id = event.session_id
+    if (event.span_links) data.span_links = event.span_links
+    if (event.config) data.config = event.config
+
+    return data
   }
 
   format (span) {

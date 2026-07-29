@@ -119,6 +119,10 @@ class LLMObsTagger {
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
+    // Match Python's SpanTypes.LLM host span. The APM backend uses this type
+    // when recognizing `_llmobs` meta_struct data on kept traces.
+    span.setTag('span.type', 'llm')
+
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||

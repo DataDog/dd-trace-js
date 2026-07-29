@@ -83,6 +83,7 @@ describe('tagger', () => {
           '_ml_obs.sample_rate': '1',
           '_ml_obs.sampling_decision': '1',
         })
+        assert.strictEqual(spanContext._tags['span.type'], 'llm')
       })
 
       it('uses options passed in to set tags', () => {
@@ -227,6 +228,7 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: false })
 
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext._tags['span.type'], undefined)
       })
 
       it('creates a custom trace id', () => {
@@ -310,7 +312,10 @@ describe('tagger', () => {
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
 
           config.llmobs.sampleRate = 0
-          const nextSpan = { context () { return spanContext } }
+          const nextSpan = {
+            context () { return spanContext },
+            setTag (key, value) { this.context()._tags[key] = value },
+          }
           tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(nextSpan)
@@ -385,7 +390,10 @@ describe('tagger', () => {
             toTraceId () { return 'ffffffffffffffffffffffffffffffff' },
             toSpanId () { return '9999999999999999' },
           }
-          const secondSpan = { context () { return secondSpanContext } }
+          const secondSpan = {
+            context () { return secondSpanContext },
+            setTag (key, value) { this.context()._tags[key] = value },
+          }
 
           tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
 

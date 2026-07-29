@@ -5,6 +5,7 @@ const { URL, format } = require('url')
 const { channel } = require('dc-polyfill')
 
 const defaults = require('../../config/defaults')
+const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
@@ -89,6 +90,8 @@ class NativeExporter {
     // the agent v0.4/v0.5 path, so it takes precedence and v0.5 is not negotiated.
     if (config.OTEL_TRACES_EXPORTER === 'otlp') {
       this.#configureOtlp()
+    } else if (config.llmobs?.DD_LLMOBS_ENABLED) {
+      this.#configureLlmObs()
     } else if (config.protocolVersion === '0.5') {
       this.#negotiateV05()
     }
@@ -157,6 +160,20 @@ class NativeExporter {
         this._nativeSpans.setOtlpHeaders(flat)
       }
     }
+  }
+
+  /**
+   * Configure libdatadog to route `_llmobs` meta-struct entries.
+   *
+   * The Agent EVP proxy is always attempted first. The direct endpoint and API
+   * key are retained by libdatadog for request-failure fallback.
+   */
+  #configureLlmObs () {
+    const override = getEnvironmentVariable('_DD_LLMOBS_DIRECT_ENDPOINT')
+    const endpoint = override || `https://llmobs-intake.${this._config.site}/api/v2/llmobs`
+    const timeout = Number(getEnvironmentVariable('_DD_LLMOBS_TIMEOUT')) || 5000
+
+    this._nativeSpans.setLlmObs(endpoint, this._config.DD_API_KEY || '', timeout)
   }
 
   /**

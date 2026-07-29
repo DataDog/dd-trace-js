@@ -329,6 +329,7 @@ function handleTraceRequest (req, res) {
   for (const span of trace.flat(Infinity)) {
     if (span && span.error === undefined) span.error = 0
     if (span && span.parent_id === undefined) span.parent_id = 0n
+    captureNativeLlmObsEvent(span)
   }
   for (const { handler, spanResourceMatch } of traceHandlers) {
     const spans = trace.flatMap(span => span)
@@ -336,6 +337,53 @@ function handleTraceRequest (req, res) {
       handler(trace)
     }
   }
+}
+
+// The real Agent extracts `_llmobs` meta_struct data from kept APM spans and
+// forwards it to LLM Observability. The test Agent has no trace-indexer, so
+// emulate that boundary to keep LLMObs integration tests end-to-end when the
+// native exporter takes the new kept-trace route.
+function captureNativeLlmObsEvent (span) {
+  const encoded = span?.meta_struct?._llmobs
+  if (!encoded) return
+
+  const data = msgpack.decode(encoded)
+  const meta = { ...data.meta }
+  const kind = meta.span?.kind
+  delete meta.span
+  meta['span.kind'] = kind
+
+  const lowerTraceId = span.trace_id.toString(16).padStart(16, '0')
+  const apmTraceId = `${span.meta?.['_dd.p.tid'] || ''}${lowerTraceId}`
+  const event = {
+    trace_id: data.trace_id,
+    span_id: span.span_id.toString(),
+    parent_id: data.parent_id || '0',
+    name: data.name || span.name,
+    tags: Object.entries(data.tags || {}).map(([key, value]) => `${key}:${value}`),
+    start_ns: Number(span.start),
+    duration: Number(span.duration),
+    status: span.error ? 'error' : 'ok',
+    meta,
+    metrics: data.metrics || {},
+    _dd: {
+      ...(data._dd || {}),
+      span_id: span.span_id.toString(),
+      trace_id: apmTraceId,
+      apm_trace_id: apmTraceId,
+    },
+  }
+
+  if (data.session_id) event.session_id = data.session_id
+  if (data.span_links) event.span_links = data.span_links
+  if (data.config) event.config = data.config
+
+  llmobsSpanEventsRequests.push([{
+    '_dd.stage': 'raw',
+    '_dd.tracer_version': 'test-agent',
+    event_type: 'span',
+    spans: [event],
+  }])
 }
 
 function getDsmStats () {

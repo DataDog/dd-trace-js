@@ -82,6 +82,7 @@ describe('NativeSpansInterface', () => {
       setOtlpEndpoint: sinon.stub(),
       setOtlpProtocol: sinon.stub(),
       setOtlpHeaders: sinon.stub(),
+      setLlmObs: sinon.stub(),
     }
 
     metricsCount = sinon.stub()
@@ -724,6 +725,34 @@ describe('NativeSpansInterface', () => {
       WasmSpanState.returns(newState)
       nativeSpans.setAgentUrl('http://localhost:9999')
       sinon.assert.notCalled(newState.setUseV05)
+    })
+  })
+
+  describe('LLMObs config re-apply across setAgentUrl', () => {
+    it('forwards and preserves LLMObs fallback configuration', () => {
+      nativeSpans.setLlmObs('http://intake/api/v2/llmobs', 'key', 1234)
+      sinon.assert.calledOnceWithExactly(
+        mockState.setLlmObs,
+        'http://intake/api/v2/llmobs',
+        'key',
+        1234
+      )
+
+      const newState = {
+        ...mockState,
+        setLlmObs: sinon.stub(),
+        change_queue_ptr: sinon.stub().returns(0),
+      }
+      WasmSpanState.returns(newState)
+
+      nativeSpans.setAgentUrl('http://new-agent:8126')
+
+      sinon.assert.calledOnceWithExactly(
+        newState.setLlmObs,
+        'http://intake/api/v2/llmobs',
+        'key',
+        1234
+      )
     })
   })
 
