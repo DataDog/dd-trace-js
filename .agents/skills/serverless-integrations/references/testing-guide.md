@@ -1,113 +1,84 @@
-# Testing Guide
+# Testing serverless integrations
 
-Serverless integration tests need both local behavioral coverage and deployed verification when a platform integration
-is added or materially changed.
+Exercise the runtime-facing entry point. A direct call to an exported helper does not prove handler registration,
+loader behavior, context binding, or process-lifecycle handling.
 
-## Local Test Matrix
+## Choose the real local path
 
-Cover the runtime lifecycle, not only the happy path:
+- Azure Functions: launch `azure-functions-core-tools`, invoke the fixture endpoint, and assert traces through
+  `FakeAgent`.
+- Azure queue, event, database, and durable triggers: use the emulator and service setup from
+  `.github/workflows/serverless.yml`.
+- AWS Lambda: exercise `DD_LAMBDA_HANDLER` registration and the wrapped handler under `packages/dd-trace/test/lambda/`.
 
-- successful synchronous handler;
-- successful promise/async handler;
-- callback-style completion when the runtime supports callbacks;
-- thrown error and rejected promise;
-- timeout or near-timeout path when observable;
-- disabled instrumentation path;
-- child span parenting under the invocation span;
-- distributed context extraction for each trigger type;
-- span links for batch triggers with multiple upstream contexts;
-- HTTP trigger behavior, including inferred proxy spans, when applicable.
+Copy the nearest fixture and workflow job. The provider runtime decides the directory layout, launcher, environment,
+and completion forms; do not replace them with a hand-built fake unless the real launcher cannot reach the branch.
 
-Assert that the invocation span has:
+## Cases
 
-- operation name ending in `.invoke` or the established local pattern;
-- `type = 'serverless'`;
-- `span.kind = 'server'` where the plugin framework sets it;
-- expected service name from serverless service naming;
-- component/runtime tags;
-- resource naming that matches existing serverless conventions.
+Cover only lifecycle forms and trigger shapes the supported runtime exposes:
+
+- success, thrown error, and rejected promise;
+- callback or synchronous completion when that runtime version supports it;
+- timeout or crash-flush behavior when the runtime exposes a testable signal;
+- disabled instrumentation and unrelated plugin loading;
+- child-span parenting under the invocation span;
+- each distributed-context carrier and batch-link cardinality;
+- HTTP tags, inferred proxy spans, status, and AppSec behavior where applicable;
+- exactly one finish for each started span.
+
+Assert on the invocation span itself: the operation name the naming schema produces (`azure.functions.invoke` for
+both Azure plugins today), `type: 'serverless'`, the serverless service name, the platform tags the plugin sets
+(`aas.function.name`, `aas.function.trigger`), a low-cardinality resource, and one link per upstream context.
+
+Use fake timers for timeout scheduling. Assert the last safe point and first timeout point when changing a deadline.
 
 ## Commands
 
-Plugin tests in dd-trace-js must run with OpenTelemetry exporter environment variables unset:
+Unset OpenTelemetry exporters before plugin tests so traces reach `FakeAgent`:
 
 ```bash
 unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-PLUGINS="<plugin-name>" npm run test:plugins
 ```
 
-For a single spec:
+Run a serverless plugin with its version fixtures:
 
 ```bash
-unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-./node_modules/.bin/mocha packages/datadog-plugin-<name>/test/index.spec.js
+PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-Use targeted `--grep` when verifying a specific failing case. Do not run the full root test suite.
+For a single already-installed spec:
 
-## Test Shape
+```bash
+./node_modules/.bin/mocha --timeout 60000 packages/datadog-plugin-<name>/test/<path>.spec.js
+```
 
-Prefer blackbox tests that exercise the runtime-facing API or fixture app. Avoid production exports that exist only
-for tests. When a fake runtime is needed, keep it faithful to the real runtime's handler registration and completion
-semantics.
+Service-backed plugins need the `SERVICES`, containers, readiness checks, and setup steps from their
+`.github/workflows/serverless.yml` job. Running only `docker compose up` may omit emulator configuration copied by
+the workflow.
 
-Use fake timers for timeout logic. Do not wait for real time to pass in unit tests.
+Run Lambda specs directly:
 
-## Regression Rules
+```bash
+./node_modules/.bin/mocha packages/dd-trace/test/lambda/*.spec.js
+```
 
-Every bug fix should include:
+## Coverage and deployed checks
 
-- the failing lifecycle path;
-- sibling lifecycle paths that share the same completion or error code;
-- a disabled-instrumentation case if the bug touches registration or event publication.
+Sandboxed runtime processes do not contribute to nyc coverage. Add same-process coverage for changed production
+branches when the integration test cannot cover them in-process.
 
-## Deployed Verification
+Use deployed verification only for a provider-owned behavior the real local runtime or emulator cannot reproduce,
+such as freeze timing or platform-injected metadata. Record the runtime version, region, invocation identifier,
+trace query, expected parentage, and cleanup command. Confirm the trace reached Datadog; provider logs alone do not
+prove writer or flush behavior.
 
-Local tests cannot prove that a serverless integration works in the real provider lifecycle. When a platform
-integration is added or materially changed, include a deployed verification plan.
+## Localize a failure
 
-In this guide, a probe is a temporary deployed sample function or app used to verify provider behavior and Datadog
-ingestion. It is not a dd-trace-js runtime feature.
+The trace shape names the layer, so read it before rerunning:
 
-Use the narrowest mode that answers the risk:
-
-- Manual: document commands for a maintainer to deploy, invoke, query, and clean up.
-- Semi-automated: provide scripts that deploy and invoke, while the maintainer supplies credentials.
-- CI-automated: run only when repository policy and provider credentials already support it.
-
-Do not require permanent infrastructure for deployed verification unless the project already has that pattern.
-
-The deployed app should:
-
-- use the dd-trace-js version under test;
-- enable the new serverless integration explicitly when needed;
-- emit one deterministic child span inside the handler;
-- support success and error invocations;
-- include a unique probe id in tags, for example `dd.apm.probe_id:<uuid>`;
-- keep resource names and payloads low-cardinality;
-- clean up provider resources after the run.
-
-The verification must confirm traces reached Datadog, not only that invocation logs exist. Query by the unique probe
-id and assert:
-
-- one invocation root span exists per invocation;
-- the root span has `type:serverless` and the expected service/resource;
-- the deterministic child span is parented under the invocation span;
-- errors are tagged on failing invocations;
-- distributed context or span links appear for trigger types that carry upstream context;
-- no duplicate root spans are emitted for one invocation.
-
-If Datadog trace search is eventually consistent, poll with a bounded timeout and report the query window used.
-
-Record the provider, region, runtime version, deployed app commit or package version, invocation ids, probe id, and
-Datadog query used. When the verification is manual, include the expected trace shape and cleanup command in the
-workflow output or PR description.
-
-Classify deployed verification failures by layer:
-
-- deployment failed: provider or packaging issue;
-- invocation failed before user handler: runtime wrapper or bootstrap issue;
-- logs show spans but Datadog has no trace: writer, flush, or mini-agent issue;
-- root span exists without children: async context binding issue;
-- children exist without root: invocation start or parent extraction issue;
-- duplicate roots: handler wrapping or completion path issue.
+- no invocation span but the handler ran: registration or hook resolution;
+- invocation span without children: async context binding;
+- children without an invocation span: span start or parent extraction;
+- more than one invocation span: handler wrapped twice, or a second completion path finishing again;
+- spans in the process but no trace in Datadog: writer or flush against the runtime lifecycle.

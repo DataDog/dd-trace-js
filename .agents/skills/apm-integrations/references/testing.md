@@ -1,212 +1,92 @@
-# Testing Integrations
+# Testing integrations
 
-## Unit Tests
+Test through the library's public API. The test must load the same package entry point and module format a user
+loads; do not export instrumentation internals or bypass the package's build to make a unit test convenient.
 
-Create `packages/datadog-plugin-<name>/test/index.spec.js`:
+## Version fixtures
 
-```javascript
-'use strict'
+Plugin dependencies live under `versions/`, not the root `node_modules`. Add or update
+`versions/<package>/package.json` and use `withVersions(plugin, modules[, range], callback)` from
+`packages/dd-trace/test/setup/mocha`. `yarn services` installs the selected fixtures.
 
-const assert = require('node:assert/strict')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ANY_STRING } = require('../../../integration-tests/helpers')
+The same module exports `withNamingSchema` for v0/v1 operation and service names, and `withPeerService` for peer
+service computation. Outbound, storage, and messaging specs cover both.
 
-describe('Plugin', () => {
-  describe('<name>', () => {
-    withVersions('<name>', '<module-name>', (version) => {
-      let myLib
+Read the closest current plugin test before adding setup. Use the existing test agent:
 
-      beforeEach(() => {
-        return agent.load('<name>')
-      })
+- `agent.load(pluginNames, pluginConfig, tracerConfig)` enables the plugin and returns the live tracer; bind that
+  return value instead of requiring `dd-trace` separately.
+- `agent.assertFirstTraceSpan(expected)` handles a single span with `assertObjectContains`.
+- `agent.assertSomeTraces(callback)` exposes the full trace payload for relationships or several spans.
+- `agent.close()` tears down the agent and resets per-test expectations.
 
-      beforeEach(() => {
-        myLib = require(`../../../versions/<module-name>@${version}`)
-      })
+Start the assertion promise before triggering the operation, then await both sides when the operation is async.
 
-      afterEach(() => {
-        return agent.close({ ritmReset: false })
-      })
+## Cases
 
-      it('should create a span', async () => {
-        // Object-based assertion (preferred) — uses assertObjectContains internally
-        const expectedSpanPromise = agent.assertFirstTraceSpan({
-          name: '<name>.<operation>',
-          service: 'test',
-          type: 'sql',
-          resource: 'SELECT 1',
-          meta: {
-            component: '<name>',
-            'db.type': '<name>',
-          },
-        })
+Cover the branches the instrumentation owns:
 
-        // trigger the instrumented operation
-        myLib.someOperation()
+- success and error completion;
+- sync, promise, callback, stream, or iterator forms the upstream API actually supports;
+- enabled and disabled plugin paths;
+- context propagation and parent/child relationships;
+- each CJS and ESM build that has different source;
+- version boundaries where the hook path or payload shape changes.
 
-        await expectedSpanPromise
-      })
+A bug fix includes the reported case and sibling shapes that share the changed hook or completion path. Do not add
+permutations the upstream contract excludes.
 
-      it('should create spans with callback assertion', async () => {
+## ESM and sandbox tests
 
-        // Callback-based assertion — for complex multi-span assertions
-        const expectedSpanPromise = agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert.strictEqual(span.name, '<name>.<operation>')
-          assert.strictEqual(span.meta.component, '<name>')
-        })
+Use `useSandbox` for native ESM or package-export tests. Load `dd-trace/init.js` before the library and exercise the
+real export. The helpers live in `integration-tests/helpers`: `FakeAgent` plus `assertMessageReceived` or
+`curlAndAssertMessage` for assertions, `sandboxCwd` for the sandbox directory,
+`spawnPluginIntegrationTestProcAndExpectExit` to run a server file against the fake agent, and `stopProc` for
+teardown.
 
-        // trigger the instrumented operation
-        myLib.someOperation()
+`varySandbox(filename, { packageName, bindingName, defaultExport, namedExports })` runs after `useSandbox` and
+returns a map of variant name to generated filename, one per import form the package's exports allow. Describe the
+real exports, and copy a package-specific fixture instead when the runtime requires a directory layout or launcher
+`varySandbox` cannot model. Azure Functions is the current example.
 
-        await expectedSpanPromise
-      })
+Sandbox processes are integration tests and do not contribute to nyc coverage. Keep a same-process test for changed
+production branches when coverage would otherwise be missing.
 
-      it('should create spans if an error occurs', async () => {
-        // Callback-based assertion — for complex multi-span assertions
-        const expectedSpanPromise = agent.assertFirstTraceSpan({
-          name: '<name>.<operation>',
-          service: 'test',
-          type: 'sql',
-          resource: 'SELECT 1',
-          meta: {
-            component: '<name>',
-            'db.type': '<name>',
-            'error.message': '<some error message>',
-            'error.type': 'TypeError',
-            'error.stack': ANY_STRING
-          },
-        })
+## Commands
 
-        // trigger the instrumented operation with an error
-        myLib.someOperationError()
-
-        await expectedSpanPromise
-      })
-    })
-  })
-})
-```
-
-### Test Agent API
-
-- `agent.load(pluginNames, config, tracerConfig)` — starts test agent and loads plugin(s)
-- `agent.close({ ritmReset })` — tears down agent (use `ritmReset: false` to preserve require cache)
-- `agent.assertFirstTraceSpan(expectedObject)` — asserts `traces[0][0]` contains the expected properties via `assertObjectContains`. **Preferred for simple single-span assertions.**
-- `agent.assertFirstTraceSpan(callback)` — runs callback with `traces[0][0]` for custom assertions
-- `agent.assertSomeTraces(callback)` — runs callback with full `traces` array (array of traces, each an array of spans). Use for multi-span or multi-trace assertions.
-- `agent.subscribe(handler)` — register handler called on every trace payload
-- `agent.unsubscribe(handler)` — remove a subscribed handler
-- `agent.reload(pluginName, config)` — reload a plugin with new config
-- `agent.reset()` — clear all handlers
-
-### Other Test Helpers
-
-- `withVersions(pluginName, moduleName, cb)` — runs tests across installed versions
-- `withNamingSchema(agent, ...)` — tests naming schema conventions
-- `withPeerService(agent, ...)` — tests peer service tag
-
-## ESM Integration Tests
-
-ESM tests verify the plugin works with native ES module imports. They live in `packages/datadog-plugin-<name>/test/integration-test/`.
-
-### server.mjs
-
-Minimal ESM script that initializes the tracer and triggers the instrumented operation:
-
-```javascript
-import 'dd-trace/init.js'
-import myLib from '<module-name>'
-
-await myLib.someOperation()
-```
-
-### client.spec.js
-
-Test that spawns the ESM server and asserts spans arrive:
-
-```javascript
-'use strict'
-
-const assert = require('node:assert/strict')
-
-const {
-  FakeAgent,
-  sandboxCwd,
-  useSandbox,
-  checkSpansForServiceName,
-  spawnPluginIntegrationTestProcAndExpectExit,
-  varySandbox,
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-
-describe('esm', () => {
-  let agent
-  let proc
-
-  withVersions('<name>', '<module-name>', version => {
-    useSandbox([`'<module-name>@${version}'`], false, [
-      './packages/datadog-plugin-<name>/test/integration-test/*'])
-
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
-    })
-
-    const variants = varySandbox('server.mjs', {
-      bindingName: 'myLib',
-      packageName: '<module-name>',
-      defaultExport: true,
-      namedExports: ['<named-export>'],
-      namedExportBinding: 'namespace',
-    })
-
-    afterEach(async () => {
-      proc && proc.kill()
-      await agent.stop()
-    })
-
-    for (const variant of Object.keys(variants)) {
-      it(`is instrumented ${variant}`, async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
-          assert.strictEqual(checkSpansForServiceName(payload, '<name>.<operation>'), true)
-        })
-
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
-
-        await res
-      }).timeout(20000)
-    }
-  })
-})
-```
-
-### Key ESM Test Concepts
-
-- `varySandbox(filename, options)` generates the import variants supported by the package's export shape.
-- Set `defaultExport`, `namedExports`, and `namedExportBinding` from the installed package's real exports.
-- Iterate over `Object.keys(variants)`; the returned object maps each generated variant to its filename.
-- `useSandbox` installs package versions into a temp sandbox directory
-- `spawnPluginIntegrationTestProcAndExpectExit` spawns `node <script>` with `DD_TRACE_AGENT_PORT` set to FakeAgent port
-- Each `it` needs generous timeout (e.g., `20000`) for sandbox setup and process spawning
-
-## Running Tests
-
-dd-trace uses a non-standard dependency installation for plugin tests. Libraries under test are installed per-version via `yarn services`, not through the normal `node_modules`. The `:ci` script handles this automatically.
+Instrumented shells may export OpenTelemetry exporters that bypass the test agent:
 
 ```bash
-# CI command (preferred) — runs yarn services for dependency installation, then tests
-PLUGINS="<name>" npm run test:plugins:ci
-
-# Unit tests only (assumes yarn services already ran)
-PLUGINS="<name>" npm run test:plugins
-
-# With external services (e.g., databases, message brokers)
-docker compose up -d rabbitmq
-SERVICES="rabbitmq" PLUGINS="amqplib" npm run test:plugins:ci
-
-# Filter within plugin tests
-PLUGINS="<name>" SPEC="specific.spec.js" npm run test:plugins:ci
+unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 ```
+
+Install the selected version fixtures and run the plugin:
+
+```bash
+PLUGINS="<name>" npm run test:plugins:ci
+```
+
+When fixtures are already installed:
+
+```bash
+PLUGINS="<name>" npm run test:plugins
+PLUGINS="<name>" SPEC="<substring>" npm run test:plugins
+```
+
+For services, copy `SERVICES` and setup from the plugin's current workflow job. Do not invent a Docker service name:
+
+```bash
+export SERVICES="<service>" PLUGINS="<name>"
+docker compose up -d <service>
+yarn services
+npm run test:plugins
+```
+
+Run the structural contract:
+
+```bash
+./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
+```
+
+For changed production files, run nyc with `--include` scoped to those files and inspect changed-line and branch
+coverage before declaring the integration complete.
