@@ -1,0 +1,152 @@
+# Datadog APM For Next.js On Vercel
+
+This setup initializes `dd-trace` before Next.js in deployed Node functions,
+lets Next package the tracer dependency closure, and exports traces directly to
+Datadog without a trace drain or Datadog Agent.
+
+It has been validated with Next.js 16 App Router routes, a Node Proxy, and an
+Edge route. Edge continues to run but is not traced by `dd-trace`, which only
+supports Node.js.
+
+## 1. Install
+
+```bash
+npm install --save dd-trace
+```
+
+`dd-trace` must be a production dependency.
+
+## 2. Register Instrumentation
+
+Add [`instrumentation.js`](./instrumentation.js) to the application root. If
+one already exists, merge the import into its `register` function:
+
+```js
+export async function register () {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('dd-trace/initialize.mjs')
+  }
+}
+```
+
+This is both a standard Next.js instrumentation hook and the dependency edge
+used by Next output file tracing. Next automatically packages the tracer and
+its actual runtime dependencies into each Node function.
+
+## 3. Keep The Tracer External
+
+Merge this into `next.config.js`:
+
+```js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  serverExternalPackages: ['dd-trace'],
+}
+
+module.exports = nextConfig
+```
+
+Preserve existing `serverExternalPackages` entries. Do not list individual
+`dd-trace` files or transitive packages.
+
+## 4. Preload Only When Available
+
+Merge [`vercel.json`](./vercel.json) into the project configuration. Its
+runtime `NODE_OPTIONS` is a self-contained conditional import:
+
+- Node functions contain `dd-trace`, so it initializes before Next.
+- Edge functions do not contain `dd-trace`, so the import is a no-op.
+- `build.env.NODE_OPTIONS` prevents the runtime preload from affecting
+  dependency installation and the build.
+
+Remove any project-level `NODE_OPTIONS` tracing value from the Vercel dashboard
+so there is one source of truth. If the application already uses
+`NODE_OPTIONS`, preserve those options in the corresponding runtime and build
+values.
+
+The encoded module is equivalent to:
+
+```js
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+
+const require = createRequire(`${process.cwd()}/noop.js`)
+
+try {
+  const initializer = require.resolve('dd-trace/initialize.mjs')
+  await import(pathToFileURL(initializer))
+} catch (error) {
+  if (error?.code !== 'MODULE_NOT_FOUND') throw error
+}
+```
+
+It is inline because Vercel applies project runtime environment variables to
+Edge functions but does not copy application preload files into them. A file
+based `--require` fails before that file can check the runtime.
+
+## 5. Configure Datadog
+
+Link the repository to its Vercel project:
+
+```bash
+npx vercel@latest link
+```
+
+Set Production and Preview values:
+
+```bash
+npx vercel@latest env add _DD_APM_TRACING_AGENTLESS_ENABLED production,preview \
+  --value='true' --sensitive --yes --force
+npx vercel@latest env add DD_SITE production,preview \
+  --value='datadoghq.com' --sensitive --yes --force
+npx vercel@latest env add DD_SERVICE production,preview \
+  --value='<service-name>' --sensitive --yes --force
+npx vercel@latest env add DD_ENV production,preview \
+  --value='<environment-name>' --sensitive --yes --force
+```
+
+Add the API key interactively:
+
+```bash
+npx vercel@latest env add DD_API_KEY production,preview --sensitive
+```
+
+Never print, commit, or pass the API key with `--value`. Keep
+`DD_TRACE_DEBUG` disabled in production.
+
+`_DD_APM_TRACING_AGENTLESS_ENABLED` is experimental on this branch and must
+become a supported public configuration before release.
+
+## 6. Deploy And Verify
+
+```bash
+npm run build
+npx vercel@latest deploy --prod
+```
+
+Exercise real Node routes, including one that calls another route:
+
+```bash
+curl -fsS 'https://<production-domain>/<node-route>'
+```
+
+In Datadog APM Trace Explorer, query:
+
+```text
+service:<service-name> env:<environment-name>
+```
+
+Expected route-to-route shape:
+
+```text
+web.request  GET /api/flow
+  next.request  GET /api/flow
+    http.request
+      web.request  GET /api/ping
+        next.request  GET /api/ping
+          downstream integration spans
+```
+
+Completion requires successful routes, route-named roots, correctly parented
+Next and downstream spans, complete concurrent traces, and no credentials or
+serialized request headers in Vercel logs.
