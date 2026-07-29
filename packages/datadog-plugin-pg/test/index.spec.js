@@ -417,6 +417,61 @@ describe('Plugin', () => {
           { resource: 'pg.pool.acquire' }
         )
 
+        withNamingSchema(
+          async () => {
+            const client = await pool.connect()
+            client.release()
+          },
+          rawExpectedSchema.poolAcquire,
+          {
+            desc: 'pool acquire',
+            selectSpan: traces => traces[0].find(span => span.name.endsWith('.pool.acquire')),
+          }
+        )
+
+        it('resolves acquire tags for a pool configured with a connection string', async () => {
+          const connectionStringPool = new pg.Pool({
+            connectionString: 'postgres://postgres:postgres@127.0.0.1:5432/postgres',
+            max: 1,
+          })
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assertObjectContains(acquireSpan, {
+              meta: {
+                'db.name': 'postgres',
+                'db.user': 'postgres',
+                'out.host': '127.0.0.1',
+              },
+              metrics: {
+                'network.destination.port': 5432,
+              },
+            })
+          })
+
+          try {
+            const client = await connectionStringPool.connect()
+            client.release()
+
+            await tracePromise
+          } finally {
+            await connectionStringPool.end()
+          }
+        })
+
+        it('keeps tracing when an acquire finishes without a matching start', async () => {
+          dc.channel('apm:pg:pool:acquire:finish').publish({ poolWaitTime: 1 })
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+            }, { spanResourceMatch: /^SELECT 15 AS survivor$/ }),
+            pool.query('SELECT 15 AS survivor'),
+          ])
+        })
+
         it('keeps a query that waits for a busy pool parented to its own caller', done => {
           const root = tracer.startSpan('root')
           const parent1 = tracer.startSpan('parent1', { childOf: root })

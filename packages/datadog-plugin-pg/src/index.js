@@ -19,28 +19,33 @@ class PGPlugin extends DatabasePlugin {
 
     this.addSub('apm:pg:pool:acquire:start', ctx => {
       const params = ctx.poolOptions
+      const operationName = this.operationName({ operation: 'pool.acquire' })
 
-      this.startSpan('pg.pool.acquire', {
+      this.startSpan(operationName, {
         service: this.serviceName({ pluginConfig: this.config, params }),
-        resource: 'pg.pool.acquire',
+        resource: operationName,
         type: 'sql',
         kind: 'client',
         meta: {
           'db.type': 'postgres',
-          'db.name': params.database,
-          'db.user': params.user,
-          'out.host': params.host,
-          [CLIENT_PORT_KEY]: params.port,
+          ...connectionMeta(params),
         },
       }, ctx)
     })
     this.addSub('apm:pg:pool:acquire:finish', ctx => {
-      const span = ctx.currentStore.span
+      const span = ctx.currentStore?.span
+      if (span === undefined) return
 
       if (ctx.error) {
         this.addError(ctx.error, span)
       }
       span.setTag('db.pool.wait_time_ms', ctx.poolWaitTime)
+      // `Pool` options carry only what the caller passed, so anything pg resolves later - a
+      // connection string, the default port, `PG*` environment variables - is known once the
+      // client exists.
+      if (ctx.params !== undefined) {
+        span.addTags(connectionMeta(ctx.params))
+      }
       this.finish(ctx)
     })
   }
@@ -76,6 +81,18 @@ class PGPlugin extends DatabasePlugin {
     ctx.injected = this.injectDbmQuery(span, originalText, service.name, !!query.name)
 
     return ctx.currentStore
+  }
+}
+
+/**
+ * @param {{ database?: string, user?: string, host?: string, port?: number }} params
+ */
+function connectionMeta (params) {
+  return {
+    'db.name': params.database,
+    'db.user': params.user,
+    'out.host': params.host,
+    [CLIENT_PORT_KEY]: params.port,
   }
 }
 

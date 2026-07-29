@@ -60,6 +60,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       poolAcquireStartCh.publish(acquireCtx)
 
       return connect.apply(this, arguments).then(client => {
+        acquireCtx.params = client.connectionParameters
         finishAcquire(acquireCtx, start)
         return client
       }, error => {
@@ -98,6 +99,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
       arguments[0] = function (...args) {
         acquireCtx.error = args[0]
+        acquireCtx.params = args[1]?.connectionParameters
         finishAcquire(acquireCtx, start)
         return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
       }
