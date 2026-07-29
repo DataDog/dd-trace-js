@@ -254,7 +254,7 @@ function parseInlineAssignments (prefix) {
 /**
  * Find `**` occurrences in a script string that are NOT inside quotes.
  *
- * POSIX sh (which is what `npm run`/`yarn run` invokes) does NOT support globstar, so an
+ * POSIX sh (which is what `npm run` invokes) does NOT support globstar, so an
  * unquoted `**` collapses to `*` (single directory level). For recursive glob matching to
  * reach mocha/glob intact, the pattern must be quoted so the shell passes it through as a
  * literal string. This analyzer cannot rely on `globSync` alone for the check because it
