@@ -505,8 +505,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     })
 
     const payloadsPromise = gatherEvents(events => {
+      const [testSuite] = getEventContents(events, 'test_suite_end')
       const tests = getEventContents(events, 'test')
       assert.strictEqual(tests.length, 2)
+      const testSuiteEnd = BigInt(testSuite.start) + BigInt(testSuite.duration)
       assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
       assert.ok(!(TEST_IS_RETRY in tests[0].meta))
       assert.ok(Number(tests[0].duration) >= 30 * 1e6)
@@ -514,6 +516,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
       assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
       assert.ok(Number(tests[1].duration) >= 30 * 1e6)
+      for (const test of tests) {
+        const testEnd = BigInt(test.start) + BigInt(test.duration)
+        assert.ok(testEnd <= testSuiteEnd, 'Expected every test attempt to finish before its suite')
+      }
     })
 
     const [exitCode] = await Promise.all([

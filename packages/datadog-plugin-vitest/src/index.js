@@ -133,6 +133,7 @@ class VitestPlugin extends CiPlugin {
         browserProjectName,
         isRumActive,
         testExecutionId,
+        startTime,
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -191,7 +192,8 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         testSuiteSpan,
         extraTags,
-        testExecutionId
+        testExecutionId,
+        startTime
       )
 
       ctx.parentStore = store

@@ -1011,6 +1011,18 @@ function reportTestAttempt (testReport, attempt) {
     isRumActive,
     testExecutionId,
   } = getRumCorrelation(task, attempt.index)
+  let duration
+  if (status === 'pass') {
+    if (
+      attempt.duration !== undefined ||
+      (!attempt.isRetry && isFinalTestAttempt(testReport, attempt) && result?.duration !== undefined)
+    ) {
+      duration = attempt.duration ?? result.duration
+    }
+  } else {
+    duration = attempt.duration ??
+      (shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined)
+  }
   const testCtx = {
     ...browserEnvironment,
     currentStore: testSuiteStore,
@@ -1030,6 +1042,7 @@ function reportTestAttempt (testReport, attempt) {
     isRumActive,
     isTestFrameworkWorker: true,
     requestErrorTags: state.requestErrorTags,
+    startTime: Number.isFinite(duration) && duration >= 0 ? Date.now() - duration : undefined,
     testExecutionId,
   }
   if (testProperties.isAttemptToFix) {
@@ -1052,18 +1065,8 @@ function reportTestAttempt (testReport, attempt) {
   testStartCh.runStores(testCtx, () => {})
   testCtx.status = status
   testCtx.task = task
-  if (
-    status === 'pass' &&
-    (
-      attempt.duration !== undefined ||
-      (
-        !attempt.isRetry &&
-        isFinalTestAttempt(testReport, attempt) &&
-        result?.duration !== undefined
-      )
-    )
-  ) {
-    testCtx.duration = attempt.duration ?? result.duration
+  if (status === 'pass' && duration !== undefined) {
+    testCtx.duration = duration
   }
   testFinishTimeCh.runStores(testCtx, () => {})
 
@@ -1078,8 +1081,7 @@ function reportTestAttempt (testReport, attempt) {
   }
 
   testErrorCh.publish({
-    duration: attempt.duration ??
-      (shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined),
+    duration,
     error: attempt.error,
     earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
     finalStatus: attempt.finalStatus,
