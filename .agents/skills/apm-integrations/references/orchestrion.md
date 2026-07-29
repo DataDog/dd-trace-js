@@ -17,12 +17,10 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 > that exact package version, then inspect `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`, `#visit`) and
 > `lib/transforms.js`.
 
-## Decision Rule
+## Constraints
 
-Use orchestrion when the function to instrument exists in source: top-level
-declaration, class/object method, named expression, or assignment to a named
-receiver. Do **not** use shimmer just because users reach it through a decorated
-runtime handle; match the source function behind the handle instead.
+The [hook decision](../SKILL.md#choose-the-hook) and
+[registration sequence](../SKILL.md#execution-sequence) are canonical in the parent skill.
 
 Inactive-path cost is **not zero** in the vendored 0.18.0 templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
@@ -31,30 +29,12 @@ call's tracing body, not the wrapper's array/object/closure setup. For very hot
 idle methods, inspect the generated transform or microbench the path before
 claiming a perf win.
 
-Reach for shimmer only when no source node can be matched (for example, a method
-constructed entirely at runtime), arguments must be changed before Orchestrion's
-`bindStart` / subscribers can run, or the required result replacement is not
-supported below. Mutating `ctx.arguments` from `bindStart` is applied before the
-wrapped function runs; the GraphQL abort pattern below depends on that. When
-shimmer is still necessary, leave a code comment naming the reason.
+Mutating `ctx.arguments` from `bindStart` changes the array applied to the wrapped function. The GraphQL abort
+pattern below depends on that behavior.
 
-## Required Files
+## Hooks file
 
-```text
-packages/datadog-instrumentations/src/
-├── <name>.js                                 # Hooks file — triggers the rewriter
-└── helpers/
-    ├── hooks.js                              # Add: '<name>': () => require('../<name>')
-    └── rewriter/
-        └── instrumentations/
-            ├── index.js                      # Add: ...require('./<name>')
-            └── <name>.js                     # The config array
-```
-
-Add to `transforms.js` only when the built-in operators cannot express the
-required lifecycle.
-
-Hooks file (`src/<name>.js`):
+The instrumentation entry triggers the rewriter for every configured package:
 
 ```javascript
 'use strict'
@@ -65,9 +45,6 @@ for (const hook of getHooks('<npm-package>')) {
   addHook(hook, exports => exports)
 }
 ```
-
-`getHooks` reads the config and registers `addHook` entries so the rewriter
-runs on the matched files. Without this file the rewriter is never triggered.
 
 ## Config Schema
 
