@@ -2,8 +2,10 @@
 name: serverless-integrations
 description: |
   Use when adding, modifying, debugging, or reviewing dd-trace-js serverless platform integrations that own a cloud
-  function invocation. Triggers: serverless invocation spans, AWS Lambda bootstrap, Azure Functions, GCP Functions,
-  DD_LAMBDA_HANDLER, datadog-lambda-js, timeout flushes, and serverless runtime verification.
+  function invocation. Requests include "add a serverless integration", "instrument a function invocation", and
+  "run a manual serverless test". Also use for "fix Lambda tracing", "add Azure Functions tracing", and
+  "debug GCP Functions tracing". Trigger on serverless invocation spans, runtime bootstraps, DD_LAMBDA_HANDLER,
+  datadog-lambda-js, timeout flushes, and deployed checks.
 ---
 
 # Serverless integrations
