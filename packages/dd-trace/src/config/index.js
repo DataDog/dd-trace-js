@@ -193,9 +193,10 @@ class Config extends ConfigBase {
     // handling.
     this.debug = log.configure(options)
 
-    // Process stable config warnings, if any
-    for (const warning of this.stableConfig?.warnings ?? []) {
-      log.warn(warning)
+    if (this.stableConfig?.warnings) {
+      for (const warning of this.stableConfig.warnings) {
+        log.warn(warning)
+      }
     }
 
     this.#applyDefaults()

@@ -216,7 +216,7 @@ class AgentExporter extends EventSerializer {
             } else {
               // eslint-disable-next-line eslint-rules/eslint-log-printf-style
               log.debug(() => {
-                const bytes = (body.toString('hex').match(/../g) || []).join(' ')
+                const bytes = body.toString('hex').match(/../g)?.join(' ') ?? ''
                 return `Agent export response: ${bytes}`
               })
             }

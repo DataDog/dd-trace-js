@@ -99,6 +99,27 @@ const SRC_RESTRICTED_SYNTAX = [
   },
 ]
 
+// Only defaults consumed in place; a stored fallback (`const items = value ?? []`) stays legal.
+const EMPTY_DEFAULT_TRAVERSAL = [
+  {
+    selector:
+      "CallExpression[callee.object.name='Object'][callee.property.name=/^(entries|keys|values)$/]" +
+      " > LogicalExpression[right.type='ObjectExpression'][right.properties.length=0]",
+    message: 'Do not hand `Object.entries|keys|values` an empty-object default; the object and the array it ' +
+      'returns are allocated even when there is nothing to traverse. Guard the traversal with `if (value)`.',
+  },
+  {
+    selector: "ForOfStatement > LogicalExpression[right.type='ArrayExpression'][right.elements.length=0]",
+    message: 'Do not iterate an empty-array default; guard the loop with `if (value)` instead of allocating an ' +
+      'array to iterate zero times.',
+  },
+  {
+    selector: "MemberExpression > LogicalExpression[right.type='ArrayExpression'][right.elements.length=0]",
+    message: 'Do not read through an empty-array default; `value?.method()` yields the same result without ' +
+      'allocating for the absent case.',
+  },
+]
+
 // Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
 const OBJECT_KEYS_LENGTH_PROBE = {
   selector:
@@ -710,7 +731,7 @@ export default [
       'packages/*/src/**/*.mjs',
     ],
     rules: {
-      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE, ...EMPTY_DEFAULT_TRAVERSAL],
     },
   },
   {

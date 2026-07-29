@@ -77,6 +77,34 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
+      it('should reformat sampling rule tags into a plain object', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              lib_config: {
+                tracing_sampling_rules: [
+                  { service: 'tagged', tags: [{ key: 'region', value_glob: 'eu-*' }] },
+                  { service: 'untagged' },
+                ],
+              },
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+          samplingRules: [
+            { service: 'tagged', tags: { region: 'eu-*' } },
+            { service: 'untagged' },
+          ],
+        })
+      })
+
       it('should reset config on unapply action', () => {
         enable(rc, config, onConfigUpdated)
 

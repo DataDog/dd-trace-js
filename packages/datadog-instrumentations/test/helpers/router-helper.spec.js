@@ -309,6 +309,21 @@ describe('helpers/router-helper', () => {
         { method: '*', path: '/root/details' },
       ])
     })
+
+    it('should skip a route that carries no methods', () => {
+      const router = {
+        stack: [
+          { route: { path: '/no-methods' } },
+          { route: { path: '/ok', methods: { get: true } } },
+        ],
+      }
+
+      collectRoutesFromRouter(router, '/api')
+
+      assert.deepStrictEqual(published, [
+        { method: 'get', path: '/api/ok' },
+      ])
+    })
   })
 
   describe('wrapRouteMethodsAndPublish', () => {

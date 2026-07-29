@@ -63,11 +63,13 @@ class Experiments {
             'GET',
             `${API_BASE_PATH}/${projectId}/datasets?filter[name]=${encodeURIComponent(name)}`
           )
-          for (const item of listed?.data ?? []) {
-            if (item?.attributes?.name === name) {
-              datasetId = String(item?.id ?? '')
-              description = String(item?.attributes?.description ?? '')
-              break
+          if (listed?.data) {
+            for (const item of listed.data) {
+              if (item?.attributes?.name === name) {
+                datasetId = String(item?.id ?? '')
+                description = String(item?.attributes?.description ?? '')
+                break
+              }
             }
           }
           if (datasetId === null) return false
@@ -84,10 +86,12 @@ class Experiments {
             'GET',
             `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
           )
-          for (const item of resp?.data ?? []) {
-            const attrs = item?.attributes ?? item
-            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-            ids.push(String(item?.id ?? ''))
+          if (resp?.data) {
+            for (const item of resp.data) {
+              const attrs = item?.attributes ?? item
+              recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
+              ids.push(String(item?.id ?? ''))
+            }
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break

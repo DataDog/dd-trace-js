@@ -24,8 +24,10 @@ function stringify (value) {
 // Build the tag list, letting auto tags win over user tags on key conflict.
 function buildTags (userTags, autoTags) {
   const tags = new Map()
-  for (const [k, v] of Object.entries(userTags ?? {})) {
-    tags.set(k, `${k}:${v}`)
+  if (userTags) {
+    for (const [key, value] of Object.entries(userTags)) {
+      tags.set(key, `${key}:${value}`)
+    }
   }
   for (const [k, v] of Object.entries(autoTags)) {
     tags.set(k, `${k}:${v}`)
@@ -114,7 +116,7 @@ class Experiment {
     this.#description = options.description ?? ''
     this.#dataset = options.dataset
     this.#task = options.task
-    this.#evaluators = new Map(Object.entries(options.evaluators ?? {}))
+    this.#evaluators = new Map(options.evaluators && Object.entries(options.evaluators))
     this.#config = {}
     this.#hasConfig = false
     if (options.config) {

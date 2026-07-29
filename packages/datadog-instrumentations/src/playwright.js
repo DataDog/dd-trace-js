@@ -1136,7 +1136,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       _ddIsFinalExecution: isFinalExecution,
       _ddIsEfdManagedTest: isEfdManagedTest,
       _ddEarlyFlakeAbortReason: efdSlowAbortedTests.has(getTestEfdKey(test)) ? 'slow' : undefined,
-      _ddHasPassedAnyEfdAttempt: (testsToTestStatuses.get(getTestEfdKey(test)) || []).includes('pass'),
+      _ddHasPassedAnyEfdAttempt: testsToTestStatuses.get(getTestEfdKey(test))?.includes('pass') ?? false,
     }
 
     setDdPropertiesForTest(worker.process, test.id, ddProperties)
