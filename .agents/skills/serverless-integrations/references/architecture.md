@@ -1,7 +1,7 @@
 # Serverless architecture
 
-The ownership boundary distinguishes serverless integration work from ordinary APM. A cloud runtime owns the
-invocation; an npm package owns a library operation inside it.
+The [parent skill](../SKILL.md#classify-the-boundary) owns boundary classification. This reference maps each
+serverless shape to its current implementation owner.
 
 ## Runtime path
 
