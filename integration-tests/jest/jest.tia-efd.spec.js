@@ -4042,7 +4042,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('known tests without early flake detection', () => {
-    it('detects new tests without retrying them', (done) => {
+    it('detects new tests without retrying them', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -4057,8 +4057,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
+        }
+      )
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
@@ -4084,21 +4094,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           // no test has been retried
           assert.strictEqual(retriedTests.length, 0)
-        })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
         }
       )
-
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
     })
 
     // Regression test: without the fix, _ddKnownTests is not injected after worker restart,
@@ -4117,8 +4114,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
+            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
+            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
+            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
+            RUN_IN_PARALLEL: 'true',
+            MAX_WORKERS: '1',
+            WORKER_IDLE_MEMORY_LIMIT: '0',
+          },
+        }
+      )
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -4142,29 +4158,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
-        })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
-            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
-            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
-            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
-            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
-            RUN_IN_PARALLEL: 'true',
-            MAX_WORKERS: '1',
-            WORKER_IDLE_MEMORY_LIMIT: '0',
-          },
         }
       )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        eventsPromise,
-      ])
     })
   })
 })
