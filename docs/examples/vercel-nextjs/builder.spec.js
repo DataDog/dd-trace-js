@@ -2,11 +2,11 @@
 
 const assert = require('node:assert')
 const fs = require('node:fs/promises')
+const Module = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
-const { afterEach, beforeEach, describe, it } = require('node:test')
 
-const { instrumentBuildOutput } = require('./builder')
+const { build, instrumentBuildOutput } = require('./builder')
 
 describe('Vercel Next Builder prototype', () => {
   let outputPath
@@ -66,5 +66,46 @@ describe('Vercel Next Builder prototype', () => {
     await instrumentBuildOutput(outputPath)
 
     await assert.rejects(fs.access(path.join(functionPath, '___datadog_next_launcher.cjs')))
+  })
+
+  it('preserves a static-only Build Output directory', async () => {
+    await fs.mkdir(path.join(outputPath, 'static'), { recursive: true })
+
+    await instrumentBuildOutput(outputPath)
+
+    await fs.access(path.join(outputPath, 'static'))
+  })
+
+  it('instruments the public directory returned by the Next Builder', async () => {
+    const functionPath = path.join(outputPath, 'functions', 'api.func')
+    const originalLoad = Module._load
+    const options = { workPath: '/app' }
+    const result = { buildOutputPath: outputPath, buildOutputVersion: 3 }
+    await fs.mkdir(functionPath, { recursive: true })
+    await fs.writeFile(path.join(functionPath, '.vc-config.json'), JSON.stringify({
+      handler: '___next_launcher.cjs',
+      runtime: 'nodejs22.x',
+    }))
+
+    Module._load = (request, parent, isMain) => {
+      if (request === '@vercel/next') {
+        return {
+          build: async receivedOptions => {
+            assert.strictEqual(receivedOptions, options)
+            return result
+          },
+        }
+      }
+      return originalLoad(request, parent, isMain)
+    }
+
+    try {
+      assert.strictEqual(await build(options), result)
+    } finally {
+      Module._load = originalLoad
+    }
+
+    const config = JSON.parse(await fs.readFile(path.join(functionPath, '.vc-config.json'), 'utf8'))
+    assert.strictEqual(config.handler, '___datadog_next_launcher.cjs')
   })
 })
