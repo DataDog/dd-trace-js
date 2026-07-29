@@ -4,8 +4,9 @@ This setup initializes `dd-trace` before Next.js in deployed Node functions,
 lets Next package the tracer dependency closure, and exports traces directly to
 Datadog without a trace drain or Datadog Agent.
 
-It has been validated with Next.js 16 App Router routes and a Node Proxy.
-`dd-trace` does not run in the Edge runtime.
+It has been validated with Next.js 16 App Router routes, a Node Proxy, and an
+Edge route deployed in the same project. `dd-trace` instruments Node functions
+and leaves Edge functions unchanged.
 
 ## 1. Install
 
@@ -48,29 +49,34 @@ module.exports = nextConfig
 Preserve existing `serverExternalPackages` entries. Do not list individual
 `dd-trace` files or transitive packages.
 
-## 4. Preload Before Next
+## 4. Configure The Datadog Builder
 
-Merge [`vercel.json`](./vercel.json) into the project configuration. Its
-runtime `NODE_OPTIONS` initializes `dd-trace` before Vercel's Next launcher.
-`build.env.NODE_OPTIONS` prevents the runtime preload from affecting dependency
-installation and the build.
+Merge [`vercel.json`](./vercel.json) into the project configuration:
 
-Remove any project-level `NODE_OPTIONS` tracing value from the Vercel dashboard
-so there is one source of truth. If the application already uses
-`NODE_OPTIONS`, preserve those options in the corresponding runtime and build
-values.
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@datadog/vercel-next-builder"
+    }
+  ]
+}
+```
 
-Next.js supports choosing Node or Edge per route. Node is the default and
-Vercel recommends it for most workloads, but a project can legitimately contain
-both. Do not use this project-global preload in such a mixed project: Vercel
-applies it before the Edge handler starts, while Edge functions do not contain
-the Node tracer.
+The Datadog Builder delegates to Vercel's `@vercel/next` Builder. After Next
+produces its public Build Output API directory, it adds a small initialization
+wrapper only to Node function handlers. Edge functions and all other outputs
+remain unchanged.
 
-Mixed projects require the Datadog-owned Vercel Builder package. It delegates
-to `@vercel/next.build()`, wraps only generated Node handlers through the public
-Build Output API, and leaves Edge outputs unchanged. Customers configure the
-Builder once and continue using normal Git-triggered Preview and Production
-deployments; they do not run `vercel build` or deploy `--prebuilt`.
+This is configure-once behavior in Vercel's normal cloud source-build path. Do
+not run `vercel build` or deploy `--prebuilt`. Remove any project-level tracing
+`NODE_OPTIONS`.
+
+`@datadog/vercel-next-builder` is the intended package name. The verified
+prototype is included as [`builder.js`](./builder.js), but the package must be
+published before this setup is customer-ready.
 
 ## 5. Configure Datadog
 
@@ -107,10 +113,14 @@ become a supported public configuration before release.
 
 ## 6. Deploy And Verify
 
+The verified flow uses a manual source deployment:
+
 ```bash
-npm run build
 npx vercel@latest deploy --prod
 ```
+
+Git-connected Preview and Production deployment validation remains a release
+requirement for the Builder package.
 
 Exercise real Node routes, including one that calls another route:
 
@@ -127,12 +137,10 @@ service:<service-name> env:<environment-name>
 Expected route-to-route shape:
 
 ```text
-web.request  GET /api/flow
-  next.request  GET /api/flow
-    http.request
-      web.request  GET /api/ping
-        next.request  GET /api/ping
-          downstream integration spans
+next.request  GET /api/flow
+  http.request
+    next.request  GET /api/ping
+      downstream integration spans
 ```
 
 Completion requires successful routes, route-named roots, correctly parented

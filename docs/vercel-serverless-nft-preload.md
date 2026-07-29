@@ -19,13 +19,13 @@ The tested customer setup is documented in
 2. Import `dd-trace/initialize.mjs` from Next `instrumentation.js` for the
    Node runtime.
 3. Add `dd-trace` to `serverExternalPackages`.
-4. Set the runtime `NODE_OPTIONS` import in `vercel.json`, with a clean
-   build-time `NODE_OPTIONS`.
+4. Configure the Datadog Builder once in `vercel.json`.
 5. Configure agentless export and normal Datadog service tags.
 
-For Node-only projects, the project-level preload is a working MVP. It remains
-a broad override: every generated function must contain the tracer. Mixed Node
-and Edge projects need the Datadog Builder described below.
+The verified flow uses Vercel's normal cloud source build. Customers do not
+prebuild locally, mutate `.vercel/output`, or configure project-global
+`NODE_OPTIONS`. Git-triggered Preview and Production deployments remain a
+release-validation item.
 
 ## Why Both Initialization Paths Exist
 
@@ -33,12 +33,13 @@ The `instrumentation.js` import gives Next output file tracing a real dependency
 edge. Next's NFT manifest then discovers the exact `dd-trace` closure, and
 Vercel merges that closure into generated Node functions.
 
-The runtime `NODE_OPTIONS` import runs before the Vercel Next launcher. This is
-what lets `dd-trace` wrap Next itself rather than only modules loaded later by
-route code.
+The Builder adds a small CommonJS wrapper before each generated Node handler.
+The wrapper initializes `dd-trace` and then loads Vercel's unmodified Next
+launcher. This lets `dd-trace` wrap Next itself rather than only modules loaded
+later by route code.
 
-The instrumentation import packages the tracer. The preload establishes the
-correct initialization order.
+The instrumentation import packages the tracer. The Builder wrapper establishes
+the correct initialization order.
 
 ## Edge Runtime Boundary
 
@@ -76,7 +77,8 @@ name and security review.
 ### Next.js Request Lifecycle
 
 - Recognize Vercel Next Node functions.
-- Create route-named root `web.request` and child `next.request` spans.
+- Create route-named `next.request` roots when Vercel does not expose a parent
+  Node HTTP server span.
 - Preserve distributed context for route-to-route requests.
 - Flush at request completion so short-lived function execution does not lose
   traces.
@@ -136,8 +138,8 @@ prebuilt `.vercel/output`, depend on private file maps, use project-level
 `NODE_OPTIONS`, or require trace-drain cooperation. The verified prototype is
 [`docs/examples/vercel-nextjs/builder.js`](./examples/vercel-nextjs/builder.js).
 
-Vercel's `builds[].use` can register an npm Builder, although `builds` is a
-legacy configuration surface. The Datadog integration should own this
+Vercel's `builds[].use` registers the npm Builder, although `builds` is a legacy
+configuration surface. The Datadog integration should eventually own this
 configuration so customers do not maintain it manually.
 
 ## Remaining Work
@@ -166,6 +168,6 @@ configuration so customers do not maintain it manually.
 - Project-global package preload in mixed Edge projects: Edge does not contain
   the Node tracer and fails before application code can inspect the runtime.
 - A Vercel upstream patch: not required; the Datadog Builder can transform the
-  public Lambda objects returned by `@vercel/next.build()`.
+  public Build Output API directory returned by `@vercel/next.build()`.
 - Vercel trace drain as a requirement: adds a separate paid data path and is
   not needed for native Node spans.
