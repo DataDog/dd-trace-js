@@ -23,6 +23,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             .github
+            bunfig.toml
             scripts
       - uses: ./.github/actions/node
         with:
