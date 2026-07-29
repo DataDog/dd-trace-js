@@ -1095,9 +1095,11 @@ describe('Plugin', () => {
 
             assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
             assert.strictEqual(acquireSpan.service, 'test-postgres')
+            assert.strictEqual(acquireSpan.meta['_dd.svc_src'], 'postgres')
 
             assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
             assert.strictEqual(querySpan.service, acquireSpan.service)
+            assert.strictEqual(querySpan.meta['_dd.svc_src'], acquireSpan.meta['_dd.svc_src'])
           })
 
           try {

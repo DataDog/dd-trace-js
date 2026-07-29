@@ -4,8 +4,6 @@ const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
-const SERVICE_FALLBACK_CONFIG = {}
-
 class PGPlugin extends DatabasePlugin {
   static id = 'pg'
   static operation = 'query'
@@ -23,11 +21,13 @@ class PGPlugin extends DatabasePlugin {
       const params = ctx.poolOptions
       const operationName = this.operationName({ operation: 'pool.acquire' })
       const deferServiceResolution = typeof this.config.service === 'function'
-      const pluginConfig = deferServiceResolution ? SERVICE_FALLBACK_CONFIG : this.config
+      const service = deferServiceResolution
+        ? undefined
+        : this.serviceName({ pluginConfig: this.config, params })
       ctx.deferServiceResolution = deferServiceResolution
 
       this.startSpan(operationName, {
-        service: this.serviceName({ pluginConfig, params }),
+        service,
         resource: operationName,
         type: 'sql',
         kind: 'client',
