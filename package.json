@@ -216,7 +216,6 @@
     "@types/node": "^18.19.106",
     "@types/sinon": "^22.0.0",
     "@vercel/nft": "^1.11.0",
-    "@yarnpkg/lockfile": "^1.1.0",
     "benchmark": "^2.1.4",
     "body-parser": "^2.3.0",
     "bun": "1.4.3",
