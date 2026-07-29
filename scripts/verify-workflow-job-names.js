@@ -141,7 +141,7 @@ for (const jobRecord of allJobRecords) {
   workflowNameToWorkflowFiles.set(jobRecord.workflowName, workflowFileSet)
 }
 
-const workflowNameEntries = [...workflowNameToWorkflowFiles.entries()]
+const workflowNameEntries = [...workflowNameToWorkflowFiles]
 workflowNameEntries.sort((first, second) => first[0].localeCompare(second[0]))
 
 for (const [workflowName, workflowFileSet] of workflowNameEntries) {
@@ -168,7 +168,7 @@ for (const jobRecord of allJobRecords) {
   checkNameToJobRecords.set(jobRecord.checkName, jobRecordList)
 }
 
-const duplicateCheckNameGroups = [...checkNameToJobRecords.entries()].filter(([, jobRecordList]) => {
+const duplicateCheckNameGroups = [...checkNameToJobRecords].filter(([, jobRecordList]) => {
   return jobRecordList.length > 1
 })
 duplicateCheckNameGroups.sort((first, second) => {

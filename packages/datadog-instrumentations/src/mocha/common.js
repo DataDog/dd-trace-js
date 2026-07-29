@@ -41,11 +41,9 @@ addHook({
 }, (Suite) => {
   shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
     const callSites = getCallSites()
-    let startLine
     const testCallSite = callSites.find(site => site.getFileName() === test.file)
     if (testCallSite) {
-      startLine = testCallSite.getLineNumber()
-      testToStartLine.set(test, startLine)
+      testToStartLine.set(test, testCallSite.getLineNumber())
     }
     return addTest.apply(this, arguments)
   })

@@ -95,7 +95,7 @@ describe('release changelog', () => {
       '- **AppSec:** Avoid the possibility of sensitive data going to the telemetry logs backend ' +
         `via WAF strings ${prLink(3884)}`,
       '- **AppSec:** Treat cleared shared memory as no-config rather than an error in AppSec helper ' +
-        `${prLink(3876)}`,
+        prLink(3876),
       `- **General:** Encoder JSON number type fix ${prLink(38_799)}`,
       '- **LLM Observability:** Revert "Fan array-valued user tags out into one wire entry per element ' +
         `(${prLink(8689)})" ${prLink(8790)}`,

@@ -59,7 +59,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             const { delta } = chunk
             if (!delta) continue
 
-            const lastBlock = response.content[response.content.length - 1]
+            const lastBlock = response.content.at(-1)
             if (!lastBlock) continue
 
             if (delta.type === 'thinking_delta') {
@@ -77,7 +77,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             break
           }
           case 'content_block_stop': {
-            const lastBlock = response.content[response.content.length - 1]
+            const lastBlock = response.content.at(-1)
             if (!lastBlock) break
             if (lastBlock.type === 'tool_use') {
               const input = lastBlock.input ?? '{}'
@@ -93,7 +93,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
 
             const { usage } = chunk
             if (usage) {
-              const responseUsage = response.usage ?? (response.usage = { input_tokens: 0, output_tokens: 0 })
+              const responseUsage = (response.usage ??= { input_tokens: 0, output_tokens: 0 })
               responseUsage.output_tokens = usage.output_tokens
 
               const cacheCreationTokens = usage.cache_creation_input_tokens

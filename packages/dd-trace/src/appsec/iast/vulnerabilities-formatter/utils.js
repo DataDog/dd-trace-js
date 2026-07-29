@@ -35,7 +35,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
   let value
   const ranges = []
   const sensitiveRanges = []
-  objRanges = objRanges || {}
+  objRanges ||= {}
 
   if (objRanges || loadSensitiveRanges) {
     const cloneObj = Array.isArray(obj) ? [] : {}

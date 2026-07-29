@@ -72,7 +72,7 @@ echo -e "\tPLUGINS=$PLUGINS"
 echo -e "\tSERVICES=$SERVICES"
 echo -e "${YELLOW}The ${RESET}versions${YELLOW} directory has been populated, and any ${RESET}\$SERVICES${YELLOW} have been brought up if not already running."
 echo -e "You can now run the plugin's tests with:"
-echo -e "\t${RESET}yarn test:plugins"
+echo -e "\t${RESET}npm run test:plugins"
 echo -e "${YELLOW}To exit this shell, type 'exit' or do Ctrl+D."
 echo -e $RESET
 

@@ -16,6 +16,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -180,6 +181,21 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
+    it('can export DI logs', () => {
+      process.env.MOCHA_WORKER_ID = 'webdriverio'
+      const testEnvironmentMetadata = { testFramework: 'webdriverio' }
+      const logMessage = { message: 'test log' }
+      const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
+
+      mochaWorkerExporter.exportDiLogs(testEnvironmentMetadata, logMessage)
+      mochaWorkerExporter.flush()
+
+      sinon.assert.calledWith(send, [
+        MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+        JSON.stringify([{ testEnvironmentMetadata, logMessage }]),
+      ])
+    })
+
     it('does not break if process.send is undefined', () => {
       delete process.send
       const trace = [{ type: 'test' }]
@@ -187,6 +203,27 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(trace)
       mochaWorkerExporter.flush()
       sinon.assert.notCalled(send)
+    })
+  })
+
+  context('when writing from a WebdriverIO worker', () => {
+    it('wraps traces in a filtered WebdriverIO worker event', () => {
+      const trace = [{ type: 'test' }]
+      const WebdriverioWriter = proxyquire('../../../../src/ci-visibility/exporters/test-worker/writer', {
+        '../../../config/helper': {
+          getEnvironmentVariable: name =>
+            name === '_DD_TEST_OPTIMIZATION_WEBDRIVERIO_WORKER' ? 'true' : undefined,
+        },
+      })
+      const writer = new WebdriverioWriter(MOCHA_WORKER_TRACE_PAYLOAD_CODE)
+      writer.append(trace)
+      writer.flush()
+
+      sinon.assert.calledWith(send, {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])],
+      })
     })
   })
 

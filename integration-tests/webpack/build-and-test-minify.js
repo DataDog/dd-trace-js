@@ -8,6 +8,7 @@ const path = require('path')
 const assert = require('assert')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
+const experiments = require('./webpack-experiments')
 
 const OUTFILE = path.join(__dirname, 'minify-out.js')
 
@@ -17,6 +18,7 @@ try {
     // optimization.minimize is enabled by default in production mode
     entry: path.join(__dirname, 'basic-test.js'),
     target: 'node',
+    ...(experiments && { experiments }),
     output: {
       filename: 'minify-out.js',
       path: __dirname,

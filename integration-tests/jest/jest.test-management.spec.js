@@ -53,6 +53,7 @@ const {
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
+const { getBabelDependencies } = require('./babel-dependencies')
 
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
@@ -75,8 +76,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
-    '@babel/core',
-    '@babel/preset-typescript',
+    ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -3157,6 +3157,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
           assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.deepStrictEqual(
+            coverageReport.eventFile.content['report.flags'],
+            ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+          )
           assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
           assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
@@ -3172,6 +3176,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
             DD_GIT_COMMIT_SHA: gitCommitSha,
             DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            DD_CODE_COVERAGE_FLAGS: ' type:unit-tests, ,jvm-21,type:unit-tests, ',
           },
         }
       )
