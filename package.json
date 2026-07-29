@@ -27,7 +27,7 @@
     "verify:carrier-fields": "node scripts/verify-carrier-fields.mjs",
     "lint:inspect": "npx @eslint/config-inspector@latest",
     "lint:codeowners": "codeowners-audit",
-    "lint:codeowners:ci": "codeowners-audit --glob='**/*.spec.js' --glob='benchmark/sirun/**' --glob='.agents/**' --glob='.claude/**' --glob='integration-tests/**' --glob='packages/dd-trace/src/guardrails/**'",
+    "lint:codeowners:ci": "codeowners-audit --glob='**/*.spec.js' --glob='benchmark/sirun/**' --glob='.agents/**' --glob='.claude/**' --glob='.cursor/**' --glob='integration-tests/**' --glob='packages/dd-trace/src/guardrails/**'",
     "lint:editorconfig": "docker build -q -t ec .github/editorconfig-checker && docker run --rm --volume=$PWD:/check ec",
     "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",

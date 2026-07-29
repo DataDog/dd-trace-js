@@ -33,6 +33,8 @@ configured deadline. This path does not start an invocation span and is not a `T
 - `packages/dd-trace/src/serverless.js` detects AWS, GCP, and Azure environments.
 - `packages/dd-trace/src/config/index.js` derives the service fallback and applies serverless defaults for telemetry,
   crash tracking, and remote configuration.
+- In AWS Lambda, that config sets `flushInterval` to `0` when `DATADOG_MINI_AGENT_PATH` is absent; the exporter then
+  flushes each write instead of waiting on a timer.
 - `packages/dd-trace/src/service-naming/schemas/v0/serverless.js` and `v1/serverless.js` own plugin-backed operation
   and service names.
 - `packages/dd-trace/src/plugins/util/web.js` owns shared HTTP and inferred-proxy behavior.

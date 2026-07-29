@@ -2,8 +2,10 @@
 name: apm-integrations
 description: |
   Use when adding, debugging, fixing, reviewing, or modifying instrumentation and plugins for third-party libraries
-  in dd-trace-js. Triggers: integration, instrumentation, plugin base classes, addHook, shimmer, Orchestrion,
-  diagnostic channels, bindStart, runStores, subscriber cardinality, and channel publish gates.
+  in dd-trace-js. Requests include "add a new integration", "instrument a library", "add tracing for",
+  "fix an instrumentation", "debug a plugin", "find a reference plugin", and "read upstream source". Also trigger
+  on plugin base classes, addHook, shimmer, Orchestrion, diagnostic channels, bindStart, runStores, and channel
+  publish gates.
 ---
 
 # APM integrations
@@ -23,6 +25,30 @@ Before editing either layer:
 2. Trace the real call from the public API to the source function, callback, stream, or runtime-created object.
 3. Read one or two current in-repo integrations with the same hook shape and plugin base class.
 4. List every subscriber to a channel before moving or gating its publish.
+
+## Fetch upstream source
+
+Use the exact version under test. When the repository and release tag are known, make a shallow clone:
+
+```bash
+git clone --depth 1 --branch "<tag>" "<repository-url>" "/tmp/<slug>-versions/<tag>"
+```
+
+When the published package is the authoritative artifact, unpack that artifact instead:
+
+```bash
+root="/tmp/<slug>-versions"
+mkdir -p "$root/<version>"
+cd "$root"
+archive=$(npm pack --silent "<package>@<version>")
+tar -xzf "$archive" -C "<version>" --strip-components=1
+rm "$archive"
+```
+
+Read the package exports, every distinct CJS and ESM implementation, and the call chain from the public entry point
+to the hooked function. Compare the oldest and newest supported versions at each hook path; check argument, return,
+error, callback, promise, stream, iterator, and runtime-created-object behavior only where the upstream API exposes
+those forms.
 
 ## Choose the hook
 
@@ -83,11 +109,19 @@ it descends from `Plugin` through `WebPlugin` and has no `bindStart` / `startSpa
 Plugin
 ├── LogPlugin
 ├── CompositePlugin
-├── WebPlugin ── RouterPlugin
+├── WebPlugin
+│   └── RouterPlugin
 └── TracingPlugin
-    ├── InboundPlugin ── ServerPlugin, ConsumerPlugin
-    └── OutboundPlugin ── ClientPlugin ── HttpClientPlugin
-                                      └── StoragePlugin ── DatabasePlugin, CachePlugin
+    ├── InboundPlugin
+    │   ├── ServerPlugin
+    │   └── ConsumerPlugin
+    └── OutboundPlugin
+        ├── ProducerPlugin
+        └── ClientPlugin
+            ├── HttpClientPlugin
+            └── StoragePlugin
+                ├── DatabasePlugin
+                └── CachePlugin
 ```
 
 | Library role | Base class (require path) | Current reference |
@@ -106,6 +140,41 @@ Plugin
 
 The base class is behavior, not taxonomy. Read its implementation and a current subclass before choosing it.
 
+## Minimal plugin shape
+
+For a synchronous Orchestrion operation, start with this shape in
+`packages/datadog-plugin-<name>/src/index.js`:
+
+```js
+'use strict'
+
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+
+class ExamplePlugin extends TracingPlugin {
+  static id = '<name>'
+  static operation = '<operation>'
+  static prefix = 'tracing:orchestrion:<package>:<channel>'
+
+  bindStart (ctx) {
+    this.startSpan('<name>.<operation>', {
+      resource: '<low-cardinality-resource>',
+      type: '<span-type>',
+    }, ctx)
+    return ctx.currentStore
+  }
+
+  end (ctx) {
+    this.finish(ctx)
+  }
+}
+
+module.exports = ExamplePlugin
+```
+
+Replace `TracingPlugin` with the role-specific base when one applies. Use `asyncEnd` instead of `end` when the
+instrumentation reports promise or callback completion, and add lifecycle overrides only for behavior the base
+class does not provide.
+
 ## Subscriber cardinality
 
 A publish site may serve tracing, AppSec, IAST, telemetry, or other subscribers. A tracing plugin may need one event
@@ -123,7 +192,7 @@ Before moving a publish behind deduplication, caching, depth filtering, or an ea
 
 ## New-integration checklist
 
-Copy the current structure of the closest reference instead of using a static template.
+Start with the minimal shape above, then copy the role-specific behavior of the closest current reference.
 
 - Add the instrumentation file and one entry per npm package name in
   `packages/datadog-instrumentations/src/helpers/hooks.js`. The plain form is `() => require('../<name>')`;
