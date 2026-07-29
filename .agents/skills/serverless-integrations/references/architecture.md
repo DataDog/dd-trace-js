@@ -1,54 +1,40 @@
-# Serverless Architecture
+# Serverless architecture
 
-## Mental Model
+The ownership boundary distinguishes serverless integration work from ordinary APM. A cloud runtime owns the
+invocation; an npm package owns a library operation inside it.
 
-Serverless APM is a thin, platform-aware layer over the normal dd-trace-js tracer and plugin system. The main
-difference is ownership: a serverless platform integration owns the function invocation as the root operation, while
-ordinary APM integrations create child spans for library calls that happen during that invocation.
+## Runtime path
 
-The normal dd-trace-js path is:
+A plugin-backed invocation follows the normal instrumentation boundary:
 
-1. Instrumentation hooks a library or runtime boundary.
-2. Instrumentation publishes trace-agnostic diagnostic-channel events.
-3. A plugin subscribes to events and starts, tags, and finishes spans.
-4. The tracer encodes and flushes spans through the configured writer.
+1. Runtime-facing instrumentation wraps handler registration or execution.
+2. A diagnostic `tracingChannel` carries context without importing the tracer.
+3. A plugin starts the invocation span before user code.
+4. Child integrations inherit the invocation context.
+5. The plugin tags and finishes the span on the runtime's completion event.
 
-The serverless root path adds stricter lifecycle constraints:
+HTTP triggers may add an inferred proxy span above the invocation span. Batch triggers keep one invocation span and
+link the upstream message contexts the runtime exposes.
 
-1. Detect the cloud runtime and load only the needed integration path.
-2. Wrap or bind the platform handler before user code executes.
-3. Start the invocation span at the platform boundary.
-4. Extract distributed context from the trigger.
-5. Run user code and any child instrumentation under the invocation context.
-6. Finish or mark the span on every success, error, timeout, or shutdown path.
-7. Flush before the provider freezes or terminates the process.
+## Current references
 
-## Classification
+| Shape | Instrumentation | dd-trace-js responsibility | Tests |
+| --- | --- | --- | --- |
+| Azure Functions | `datadog-instrumentations/src/azure-functions.js` | invocation spans in `datadog-plugin-azure-functions` | plugin integration tests with Azure Functions Core Tools |
+| Azure Durable Functions | `datadog-instrumentations/src/azure-durable-functions.js` | invocation spans in `datadog-plugin-azure-durable-functions` | plugin integration tests with Core Tools and Azurite |
+| AWS Lambda bootstrap | `dd-trace/src/lambda/index.js` | handler loading and timeout flush | `dd-trace/test/lambda/` |
 
-Ask "what owns the unit of work?"
+AWS Lambda is the exception. Its loader resolves `DD_LAMBDA_HANDLER` or hooks `datadog-lambda-js`, then installs the
+runtime patch. `lambda/handler.js` schedules the impending-timeout channel and flushes unfinished spans before the
+configured deadline. This path does not start an invocation span and is not a `TracingPlugin` integration.
 
-- If the cloud provider owns it, this is a serverless platform integration.
-- If a third-party npm package owns it, this is a normal APM integration even when used in a function.
-- If one platform invocation can contain multiple upstream contexts, keep one invocation span and represent the
-  upstream relationships with extraction plus span links where applicable.
+## Shared serverless behavior
 
-## Existing Runtime Shapes
+- `packages/dd-trace/src/serverless.js` detects AWS, GCP, and Azure environments.
+- `packages/dd-trace/src/config/index.js` derives the service fallback and applies serverless defaults for telemetry,
+  crash tracking, and remote configuration.
+- `packages/dd-trace/src/service-naming/schemas/v0/serverless.js` and `v1/serverless.js` own plugin-backed operation
+  and service names.
+- `packages/dd-trace/src/plugins/util/web.js` owns shared HTTP and inferred-proxy behavior.
 
-AWS Lambda is currently special-cased in `packages/dd-trace/src/lambda/`. It resolves `DD_LAMBDA_HANDLER` when
-available, otherwise hooks `datadog-lambda-js`, then wraps the handler to manage timeout protection and crash flush.
-Treat this as legacy/runtime bootstrap behavior rather than the template for ordinary integrations.
-
-Azure Functions is closer to the preferred plugin model. `packages/datadog-plugin-azure-functions` extends
-`TracingPlugin`, declares `kind = 'server'` and `type = 'serverless'`, handles HTTP and non-HTTP triggers, and uses
-web helpers for inferred proxy behavior.
-
-## Serverless Configuration Effects
-
-Serverless detection and configuration live primarily in:
-
-- `packages/dd-trace/src/serverless.js`
-- `packages/dd-trace/src/config/index.js`
-- `packages/dd-trace/src/service-naming/schemas/*/serverless.js`
-
-Important effects include serverless service-name fallback, immediate flush behavior when no mini-agent ready file is
-available, and reduced startup work in code paths that must stay cheap during cold start.
+Read these owners before adding a parallel runtime check, naming rule, context extractor, or flush mechanism.

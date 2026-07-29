@@ -12,7 +12,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
-> the vendored version (currently 0.16.0); confirm anything below against the
+> the vendored version (currently 0.18.0); confirm anything below against the
 > package source: `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
 > `#visit`) and `lib/transforms.js`.
 
@@ -23,7 +23,7 @@ declaration, class/object method, named expression, or assignment to a named
 receiver. Do **not** use shimmer just because users reach it through a decorated
 runtime handle; match the source function behind the handle instead.
 
-Inactive-path cost is **not zero** in the vendored 0.16.0 templates. The wrapper
+Inactive-path cost is **not zero** in the vendored 0.18.0 templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
 operator checks `hasSubscribers`. The check skips channel work and the wrapped
 call's tracing body, not the wrapper's array/object/closure setup. For very hot
@@ -141,7 +141,7 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 
 ## Result Mutation
 
-Code-transformer 0.16 lets a subscriber replace the value returned to the
+Code-transformer 0.18 lets a subscriber replace the value returned to the
 caller:
 
 - For `kind: 'Sync'`, reassign `ctx.result` in `end`.
