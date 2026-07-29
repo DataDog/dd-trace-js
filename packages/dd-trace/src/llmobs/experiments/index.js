@@ -39,21 +39,38 @@ class Experiments {
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.
-  createDataset (name, description = '') {
-    return new Dataset(this.#client, name, description)
+  createDataset (name, descriptionOrOptions = '') {
+    const options = typeof descriptionOrOptions === 'string'
+      ? { description: descriptionOrOptions }
+      : (descriptionOrOptions ?? {})
+    const dataset = new Dataset(this.#client, name, options.description ?? '')
+    const recordIds = new Set()
+    for (const record of options.records ?? []) {
+      if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+        throw new Error('record id must be a non-empty string')
+      }
+      if (record.id !== undefined) {
+        if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
+        recordIds.add(record.id)
+      }
+      dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
+    }
+    return dataset
   }
 
   // Pull an existing dataset by name (with its records). Polls with exponential
   // backoff to absorb read-after-write lag; pass `expectedRecordCount` to also
   // wait until that many records are readable.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000 } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, version } = options
     const projectId = await this.#client.ensureProjectId()
 
     let datasetId = null
     let description = ''
     let records = []
     let recordIds = []
+    let datasetVersion = version ?? null
+    let latestVersion = null
     let lastError = ''
 
     const succeeded = await retryWithBackoff(async () => {
@@ -67,6 +84,8 @@ class Experiments {
             if (item?.attributes?.name === name) {
               datasetId = String(item?.id ?? '')
               description = String(item?.attributes?.description ?? '')
+              latestVersion = item?.attributes?.current_version ?? null
+              datasetVersion = version ?? latestVersion
               break
             }
           }
@@ -78,16 +97,24 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = cursor ? `?page[cursor]=${encodeURIComponent(cursor)}` : ''
+          const query = new URLSearchParams()
+          if (cursor) query.set('page[cursor]', cursor)
+          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
-            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-            ids.push(String(item?.id ?? ''))
+            const recordId = String(item?.id ?? attrs?.id ?? '')
+            recs.push(new DatasetRecord(
+              attrs?.input ?? null,
+              attrs?.expected_output ?? null,
+              attrs?.metadata ?? {},
+              recordId === '' ? null : recordId
+            ))
+            ids.push(recordId)
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break
@@ -119,7 +146,17 @@ class Experiments {
       )
     }
 
-    return Dataset.fromExisting(this.#client, name, description, datasetId, projectId, records, recordIds)
+    return Dataset.fromExisting(
+      this.#client,
+      name,
+      description,
+      datasetId,
+      projectId,
+      records,
+      recordIds,
+      datasetVersion,
+      latestVersion
+    )
   }
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.

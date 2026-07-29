@@ -58,6 +58,17 @@ const transformers = {
   toLowerCase (value) {
     return toCase(value, 'toLowerCase')
   },
+  /**
+   * Normalizes a Feature Flagging configuration source.
+   * A blank value is treated as unset so legacy configuration can still apply.
+   *
+   * @param {string} value
+   * @returns {string | undefined}
+   */
+  configurationSource (value) {
+    const normalized = value.trim().toLowerCase()
+    return normalized || undefined
+  },
   toUpperCase (value) {
     return toCase(value, 'toUpperCase')
   },
