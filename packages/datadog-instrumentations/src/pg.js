@@ -26,17 +26,13 @@ const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
 
-// pg dispatches the pooled query synchronously from the connect callback, so the acquire wait
-// reaches `wrapQuery` through this stack: `_release` pulses the pending queue synchronously, which
-// nests acquires, and the client pins each wait to the connection that actually waited for it.
-// Each entry is popped by the frame that pushed it, so no client outlives its callback.
+// Pool.query dispatches its client query synchronously from the connect callback, including nested
+// `_release` queue pulses, so the wait can cross that callback without retaining the client.
 const poolWaitClients = []
 const poolWaitTimes = []
 
-// `Pool.prototype.query` acquires a client internally via `connect`. That acquire is reported as a
-// tag on the resulting query span, so the connect wrap must not also open a standalone acquire span
-// for it; an explicit user `pool.connect()` gets the standalone span instead. `connect` is invoked
-// synchronously from within `query`, so a module flag set around the call reliably distinguishes them.
+// Pool.query reports its internal acquire on the query span; explicit connects get an acquire span.
+// Pool.query calls connect synchronously, so a module flag reliably distinguishes the two.
 let acquiringForPoolQuery = false
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
@@ -53,9 +49,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
   // capture the caller's context and restore it around the callback so spans attach to the caller.
   shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
-    // `await pool.connect()`: no callback, so the caller's async context is preserved by the await
-    // itself and only the standalone acquire span is needed. `Pool.query` always acquires with a
-    // callback, so a missing callback is always an explicit caller-initiated acquire.
+    // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
     if (typeof cb !== 'function') {
       if (!poolAcquireStartCh.hasSubscribers) {
         return connect.apply(this, arguments)
@@ -260,18 +254,37 @@ function wrapQuery (query) {
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
+
 // pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
 // outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
+/**
+ * @param {import('pg').Pool} pool
+ */
 function acquireStart (pool) {
-  return pool.idleCount > pool.waitingCount ? 0 : performance.now()
+  return pool.idleCount > pool.waitingCount ? undefined : performance.now()
 }
+
+/**
+ * @param {number | undefined} start
+ */
 function acquireWait (start) {
-  return start === 0 ? 0 : performance.now() - start
+  return start === undefined ? 0 : performance.now() - start
 }
+
+/**
+ * @param {{ poolWaitTime?: number }} ctx
+ * @param {number | undefined} start
+ */
 function finishAcquire (ctx, start) {
   ctx.poolWaitTime = acquireWait(start)
   poolAcquireFinishCh.publish(ctx)
 }
+
+/**
+ * @param {import('pg').Pool['query']} query
+ * @param {import('pg').Pool} pool
+ * @param {Parameters<import('pg').Pool['query']>} args
+ */
 function acquireForPoolQuery (query, pool, args) {
   acquiringForPoolQuery = true
   try {
@@ -283,7 +296,9 @@ function acquireForPoolQuery (query, pool, args) {
 function wrapPoolQuery (query) {
   return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return acquireForPoolQuery(query, this, args)
+      return poolConnectStartCh.hasSubscribers
+        ? acquireForPoolQuery(query, this, args)
+        : query.apply(this, args)
     }
 
     const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
@@ -313,7 +328,9 @@ function wrapPoolQuery (query) {
         })
       }
 
-      const retval = acquireForPoolQuery(query, this, args)
+      const retval = poolConnectStartCh.hasSubscribers
+        ? acquireForPoolQuery(query, this, args)
+        : query.apply(this, args)
 
       if (retval?.then) {
         retval.then(() => {
