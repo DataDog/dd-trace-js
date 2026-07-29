@@ -311,6 +311,17 @@ module.exports = {
       forced: true,
     },
   ],
+  // The lambda spec reads `@aws-sdk/core`'s version to decide whether the clock-skew guard is
+  // still in place. That transitive is only reachable from the client's own store entry under
+  // bun's isolated linker, so inject it; v3 clients always pair with the v3 line.
+  '@aws-sdk/client-lambda': [
+    {
+      name: '@aws-sdk/core',
+      version: '^3.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   // The vertex-ai test stubs `GoogleAuth.prototype.getAccessToken` via
   // `require('versions/@google-cloud/vertexai@<ver>').get('google-auth-library/...')`.
   // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
@@ -678,6 +689,33 @@ module.exports = {
       name: '@openai/agents-openai',
       versions: ['>=0.7.0'],
       node: '>=22',
+    },
+  ],
+  // Every `@openai/agents*` package declares `zod` as a peer and imports it at load time. Bun's
+  // isolated linker skips unmet peers, so each sandbox has to declare it for the store entry it
+  // resolves to carry `zod`; without it the SDK throws `Cannot find module 'zod'` on first require.
+  '@openai/agents': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
+  '@openai/agents-core': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
+  '@openai/agents-openai': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
     },
   ],
   passport: [
