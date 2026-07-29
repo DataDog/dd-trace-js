@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runUpload } from './run-upload.mjs'
 
+const INPUT_DIR = 'junit-results'
 const OUTPUT_DIR = 'junit-upload'
 
 // One sibling workflow's upload bundles every matrix cell's (e.g. per-Node-version) junit XML
@@ -13,7 +14,8 @@ const NODE_VERSION_XPATH_TAG = "test.node_version=/testcase/..//property[@name='
 
 /**
  * Recursively collect every junit XML file beneath a directory. `download-artifacts.mjs` lays
- * files out as `junit-results/<run-id>/<artifact-name>/*.xml`, one artifact per matrix cell.
+ * files out as `junit-results/<run-id>/<artifact-name>/*.xml`, one artifact per matrix cell across
+ * every sibling workflow run.
  *
  * @param {string} dir
  * @param {string[]} out
@@ -85,28 +87,24 @@ function mergeJunit (reportPaths) {
 }
 
 /**
- * Upload one workflow run's downloaded junit reports to Datadog, if it produced any. Every matrix
- * cell's report is merged into a single file before upload instead of letting `--auto-discovery`
- * upload each cell's file separately — one HTTP request per uploaded file, capped at
- * datadog-ci's default concurrency of 20, was the dominant cost for workflows with hundreds of
- * matrix cells.
+ * Merge every sibling workflow's downloaded junit reports into one file and upload it to Datadog in
+ * a single call, instead of uploading each workflow run's reports separately. Junit results have no
+ * per-run tag that would require keeping uploads separate (unlike Codecov's per-workflow coverage
+ * flag — see `upload-coverage.mjs`), so every matrix cell across every run is merged down to one
+ * document; each testcase's `node_version` property (see `NODE_VERSION_XPATH_TAG`) is what keeps
+ * cells distinguishable afterward, not which run or file they came from.
  *
- * @param {{ id: number, name: string }} run
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
-export async function uploadJunit (run) {
-  const junitDir = join('junit-results', String(run.id))
-  if (!existsSync(junitDir)) return []
-
-  const reportPaths = collectJunitFiles(junitDir)
+export async function uploadAllJunit () {
+  const reportPaths = collectJunitFiles(INPUT_DIR)
   if (reportPaths.length === 0) return []
 
-  const outputDir = join(OUTPUT_DIR, String(run.id))
-  mkdirSync(outputDir, { recursive: true })
-  writeFileSync(join(outputDir, 'junit.xml'), mergeJunit(reportPaths))
+  mkdirSync(OUTPUT_DIR, { recursive: true })
+  writeFileSync(join(OUTPUT_DIR, 'junit.xml'), mergeJunit(reportPaths))
 
   const result = await runUpload('datadog-ci', [
-    'junit', 'upload', '--service', 'dd-trace-js-tests', '--auto-discovery', outputDir,
+    'junit', 'upload', '--service', 'dd-trace-js-tests', '--auto-discovery', OUTPUT_DIR,
     '--xpath-tag', NODE_VERSION_XPATH_TAG,
   ])
   return [result]

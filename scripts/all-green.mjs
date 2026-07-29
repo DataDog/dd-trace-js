@@ -4,8 +4,10 @@ import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads } from './run-upload.mjs'
-import { uploadJunit } from './upload-junit.mjs'
-import { uploadCoverage, sendCodecovNotifications, hasCodecovCommit } from './upload-coverage.mjs'
+import { uploadAllJunit } from './upload-junit.mjs'
+import {
+  uploadAllCoverageToDatadog, uploadCoverage, sendCodecovNotifications, hasCodecovCommit,
+} from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
 
@@ -102,15 +104,18 @@ async function getRuns () {
   }
 }
 
-// Runs whose reports have already been downloaded/merged/uploaded, and the resulting promises —
-// each sibling workflow's coverage and junit reports go out as soon as that workflow reaches a
-// final state, instead of waiting for every workflow to finish before downloading or uploading
-// anything, so a fast workflow's reports land while slower ones are still running.
+// Runs whose reports have already been downloaded/merged, and the resulting promises — each
+// sibling workflow's reports are downloaded and its Codecov upload goes out as soon as that
+// workflow reaches a final state, instead of waiting for every workflow to finish, so a fast
+// workflow's Codecov coverage lands while slower ones are still running. The junit and Datadog
+// coverage uploads don't have Codecov's per-workflow flag constraint, so they're batched into one
+// call each after every run is done instead — see `uploadAllJunit`/`uploadAllCoverageToDatadog`.
 const processedRunIds = new Set()
 const processingPromises = []
 
 /**
- * Download, merge, and upload a single finished workflow run's junit and coverage reports.
+ * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
+ * the coverage merge to Codecov.
  *
  * @param {{ id: number, name: string }} run
  * @returns {Promise<void>}
@@ -118,18 +123,15 @@ const processingPromises = []
 async function processRun (run) {
   const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
 
-  const [junitResults, coverageResults] = await Promise.all([
-    uploadJunit(run),
-    uploadCoverage(run, {
-      sha: HEAD_SHA,
-      branch: HEAD_BRANCH,
-      prNumber: PR_NUMBER,
-      eventName: GITHUB_EVENT_NAME,
-      baseRef: BASE_REF,
-    }),
-  ])
+  const coverageResults = await uploadCoverage(run, {
+    sha: HEAD_SHA,
+    branch: HEAD_BRANCH,
+    prNumber: PR_NUMBER,
+    eventName: GITHUB_EVENT_NAME,
+    baseRef: BASE_REF,
+  })
   const downloadSummary = failed > 0 ? `${downloaded} artifact(s), ${failed} failed` : `${downloaded} artifact(s)`
-  logUploads(`${run.name} (${downloadSummary})`, [...junitResults, ...coverageResults])
+  logUploads(`${run.name} (${downloadSummary})`, coverageResults)
 }
 
 /**
@@ -267,6 +269,9 @@ async function checkAllGreen () {
 
   console.log(`Waiting for ${processingPromises.length} workflow run report upload(s) to finish.`)
   await Promise.all(processingPromises)
+
+  const [junitResults, coverageResults] = await Promise.all([uploadAllJunit(), uploadAllCoverageToDatadog()])
+  logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
