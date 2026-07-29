@@ -1688,7 +1688,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       )
       const isNew = this.isKnownTestsEnabled && !this.knownTestsForThisSuite.includes(testFullName)
 
-      if (isNew && !isSkipped) {
+      if (isNew && !isSkipped && !isAttemptToFix) {
         newTests.add(testFullName)
         if (DYNAMIC_NAME_RE.test(testFullName)) {
           // Populated directly for runInBand; for parallel workers the main process
