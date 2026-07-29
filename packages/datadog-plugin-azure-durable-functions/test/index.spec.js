@@ -111,6 +111,26 @@ describe('azure-durable-functions plugin', () => {
     sinon.assert.calledWith(span.setTag, 'resource.name', 'Entity counter add_n')
   })
 
+  it('names orchestration spans from the Orchestration trigger', () => {
+    bindStart({
+      trigger: 'Orchestration',
+      functionName: 'PizzaOrderOrchestration',
+      instanceId: 'abc-123',
+    })
+
+    sinon.assert.calledWith(
+      startSpan,
+      'azure.functions.invoke',
+      sinon.match({
+        meta: sinon.match({
+          'aas.function.name': 'PizzaOrderOrchestration',
+          'aas.function.trigger': 'Orchestration',
+          'resource.name': 'Orchestration PizzaOrderOrchestration',
+        }),
+      })
+    )
+  })
+
   it('re-applies propagated keep when the host cleared the sampled flag', () => {
     const parent = { _traceId: 'parent' }
     extract.returns(parent)
