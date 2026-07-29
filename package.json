@@ -109,6 +109,7 @@
     "test:integration:plugins:coverage": "yarn services && node ./integration-tests/coverage/run-suite.js \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/${SPEC:-*}*.spec.js\"",
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:release": "mocha \"scripts/release/**/*.spec.js\"",
+    "test:examples": "mocha \"docs/examples/**/*.spec.js\"",
     "test:scripts": "mocha \"scripts/helpers/**/*.spec.js\" \"scripts/*.spec.mjs\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "node scripts/c8-ci.js test:shimmer",
