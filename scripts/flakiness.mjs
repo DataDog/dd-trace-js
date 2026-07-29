@@ -140,7 +140,7 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
 
     const workflow = job.workflow_name
     // Merge matrix runs of same job together.
-    const name = MERGE === 'true' ? job.name.split(' ')[0] : job.name
+    const name = MERGE === 'true' ? job.name.split(' ', 1)[0] : job.name
 
     flaky[workflow] ??= {}
     flaky[workflow][name] ??= []

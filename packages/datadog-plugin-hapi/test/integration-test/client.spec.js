@@ -19,7 +19,6 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('hapi', '@hapi/hapi', version => {
     useSandbox([`'@hapi/hapi@${version}'`], false, [
@@ -29,8 +28,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async () => {
-      variants = varySandbox('server.mjs', 'Hapi', 'server', '@hapi/hapi')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Hapi',
+      packageName: '@hapi/hapi',
+      defaultExport: true,
+      namedExports: ['server'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
@@ -38,7 +41,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

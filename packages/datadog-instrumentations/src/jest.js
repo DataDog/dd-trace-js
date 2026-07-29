@@ -46,6 +46,10 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const {
+  getChannelPromise,
+  publishWithCompletion,
+} = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -92,7 +96,7 @@ const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-even
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
-const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
+const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
@@ -1188,9 +1192,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.testParameters = testParameters
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
-        ctx.isEfdRetry = ctx.isEfdRetry || numEfdRetry > 0
+        ctx.isEfdRetry ||= numEfdRetry > 0
         ctx.isAttemptToFix = isAttemptToFix
-        ctx.isAttemptToFixRetry = ctx.isAttemptToFixRetry || numOfAttemptsToFixRetries > 0
+        ctx.isAttemptToFixRetry ||= numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
@@ -1357,8 +1361,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
-      }
-      if (event.name === 'test_done') {
+      } else if (event.name === 'test_done') {
         const originalError = event.test?.errors?.[0]
         let status = 'pass'
         if (event.test.errors && event.test.errors.length) {
@@ -1561,8 +1564,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (ctx.concurrentTestState) {
           ctx.currentStore = undefined
         }
-      }
-      if (event.name === 'run_finish') {
+      } else if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
@@ -1591,8 +1593,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
-      }
-      if (event.name === 'test_skip' || event.name === 'test_todo') {
+      } else if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {
@@ -1971,6 +1972,9 @@ function shouldFinishBailTestSession (globalConfig, results) {
   return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
 }
 
+/**
+ * @param {Record<string, unknown> & { onDone?: () => void }} payload
+ */
 async function waitForTestSessionFinish (payload) {
   if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
 
@@ -1978,8 +1982,9 @@ async function waitForTestSessionFinish (payload) {
 
   let timeoutId
 
+  let onDone
   const flushPromise = new Promise((resolve) => {
-    payload.onDone = () => {
+    onDone = () => {
       clearTimeout(timeoutId)
       resolve()
     }
@@ -1992,7 +1997,7 @@ async function waitForTestSessionFinish (payload) {
     timeoutId.unref?.()
   })
 
-  testSessionFinishCh.publish(payload)
+  publishWithCompletion(testSessionFinishCh, payload, onDone)
 
   const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
@@ -2157,12 +2162,6 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, payload = {}) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ ...payload, onDone: resolve })
-  })
-}
-
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
@@ -2296,12 +2295,11 @@ function getCliWrapper (isNewJestVersion) {
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
             skippableSuitesCoverage = {}
-            skippedSuitesCoverage = {}
           } else {
             skippableSuites = receivedSkippableSuites
             skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
-            skippedSuitesCoverage = {}
           }
+          skippedSuitesCoverage = {}
         } catch (err) {
           log.error('Jest test-suite skippable error', err)
         }
@@ -2517,9 +2515,7 @@ function getCliWrapper (isNewJestVersion) {
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
-        await new Promise((resolve) => {
-          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
-        })
+        await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
@@ -2537,6 +2533,10 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {boolean} waitForFinish
+ */
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2545,12 +2545,9 @@ function publishTestSuiteFinish (payload, waitForFinish) {
     return
   }
 
-  return new Promise(resolve => {
-    testSuiteFinishCh.publish({
-      ...payload,
-      waitForFinish,
-      onDone: resolve,
-    })
+  return getChannelPromise(testSuiteFinishCh, {
+    ...payload,
+    waitForFinish,
   })
 }
 
@@ -3036,9 +3033,7 @@ function wrapJestObject (jestObject, suiteFilePath) {
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
     // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    }
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
   })

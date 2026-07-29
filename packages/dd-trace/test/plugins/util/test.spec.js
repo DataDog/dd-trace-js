@@ -10,7 +10,10 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+const { SPAN_TYPE } = require('../../../../../ext/tags')
 require('../../setup/core')
+const getConfig = require('../../../src/config')
+const Span = require('../../../src/opentracing/span')
 
 const {
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
@@ -43,10 +46,16 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getTestParentSpan,
+  setRumTestCorrelation,
+  setRumTestTags,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
 } = require('../../../src/plugins/util/test')
 
 const {
   CI_JOB_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   GIT_COMMIT_SHA,
@@ -56,6 +65,100 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('RUM test correlation', () => {
+  const tracer = { _config: getConfig() }
+  const processor = { process () {} }
+  const prioritySampler = { sample () {} }
+
+  /**
+   * @param {import('../../../src/opentracing/span_context')|undefined} parent
+   * @param {Record<string, string>} [tags]
+   */
+  function createSpan (parent, tags) {
+    return new Span(tracer, processor, prioritySampler, {
+      operationName: 'test',
+      parent,
+      tags,
+    })
+  }
+
+  it('sets correlation metadata on an active test span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const context = {
+      isRumActive: false,
+      browserVersion: undefined,
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, testSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets correlation metadata on the test ancestor of an active child span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const childSpan = createSpan(testSpan.context())
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, childSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), '1.2.3')
+    assert.strictEqual(childSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(childSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('does not mutate context without an active span', () => {
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, undefined), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+  })
+
+  it('does not mutate context when the active trace has no test span', () => {
+    const span = createSpan()
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, span), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+    assert.strictEqual(span.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(span.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets only the available RUM tags', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+
+    setRumTestTags(testSpan, true, undefined)
+
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('uses a preallocated test execution ID for the test trace', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }, '123456789'), parentSpan)
+    sinon.assert.calledOnceWithExactly(extract, 'text_map', {
+      'x-datadog-trace-id': '123456789',
+      'x-datadog-parent-id': '0000000000000000',
+    })
+  })
+})
 
 describe('getTestOptimizationRequestResults', () => {
   it('starts known tests, test management, and skippable requests together when enabled', async () => {
@@ -207,6 +310,7 @@ describe('getTestLevelsMetadataTags', () => {
   it('keeps only allowlisted CI and Git tags', () => {
     const testLevelsMetadataTags = getTestLevelsMetadataTags({
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
@@ -218,6 +322,7 @@ describe('getTestLevelsMetadataTags', () => {
 
     assert.deepStrictEqual(testLevelsMetadataTags, {
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
@@ -671,6 +776,11 @@ describe('getCodeOwnersForFilename', () => {
         matches: ['file1.js', 'packages/dd-trace/fileA.js'],
         misses: ['file10.js', 'packages/dd-trace/file/name.js'],
       },
+      {
+        pattern: String.raw`file\*.js`,
+        matches: ['file*.js', 'packages/dd-trace/file*.js'],
+        misses: ['file1.js', 'packages/dd-trace/fileA.js'],
+      },
     ]
 
     for (const { pattern, matches = [], misses = [] } of patternTests) {
@@ -685,6 +795,14 @@ describe('getCodeOwnersForFilename', () => {
         assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
       }
     }
+  })
+
+  it('treats a trailing backslash as a literal instead of throwing', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'docs\\', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(getCodeOwnersForFilename('docs/README.md', codeOwnersFileEntries), null)
   })
 
   it('keeps CODEOWNERS matching case-sensitive', () => {

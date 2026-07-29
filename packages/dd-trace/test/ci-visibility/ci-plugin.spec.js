@@ -27,6 +27,16 @@ const {
   GIT_REPOSITORY_URL,
   GIT_TAG,
 } = require('../../src/plugins/util/tags')
+const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+} = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
   let CiPlugin
@@ -126,6 +136,146 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('disables advanced features for basic-reporting library configuration requests', () => {
+    const libraryConfig = {
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      basicReportingOnly: true,
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {})
+    assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('disables only TIA for WebdriverIO library configuration requests', () => {
+    const libraryConfig = {
+      isCodeCoverageEnabled: true,
+      isCoverageReportUploadEnabled: true,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isImpactedTestsEnabled: true,
+      isItrEnabled: true,
+      isKnownTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'mocha',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      disableTestImpactAnalysis: true,
+      frameworkVersion: '9.0.0',
+      onDone,
+      testFramework: 'webdriverio',
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {
+      ...libraryConfig,
+      isCodeCoverageEnabled: false,
+      isCoverageReportUploadEnabled: false,
+      isItrEnabled: false,
+      isSuitesSkippingEnabled: false,
+    })
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, plugin.libraryConfig)
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], {
+      test: {
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: undefined,
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+        [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+        [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+      },
+    })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('tags telemetry with the effective test framework', () => {
+    const exportTelemetry = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter.exportTelemetry = exportTelemetry
+
+    plugin.telemetry.ciVisEvent('event_created', 'session')
+    plugin.testFramework = 'webdriverio'
+    plugin.telemetry.ciVisEvent('event_finished', 'session')
+
+    assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
+    assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
@@ -162,6 +312,56 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
     assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('adds a new DI probe after removing one from the same location', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onFirstCall().returns(['probe-1', setProbePromise])
+      .onSecondCall().returns(['probe-2', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const file = `${plugin.repositoryRoot}/test.js`
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+
+    const firstProbe = plugin.addDiProbe(error)
+    await plugin.removeDiProbe({ file, line })
+    const secondProbe = plugin.addDiProbe(error)
+
+    assert.strictEqual(firstProbe.probeId, 'probe-1')
+    assert.strictEqual(secondProbe.probeId, 'probe-2')
+    sinon.assert.calledTwice(addLineProbe)
+    sinon.assert.calledOnceWithExactly(removeProbe, 'probe-1')
+  })
+
+  it('removes all DI probes with Windows-style file paths', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onCall(0).returns(['probe-1', setProbePromise])
+      .onCall(1).returns(['probe-2', setProbePromise])
+      .onCall(2).returns(['probe-3', setProbePromise])
+      .onCall(3).returns(['probe-4', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const firstFile = 'C:\\repo\\first.spec.js'
+    const secondFile = 'C:\\repo\\second.spec.js'
+    const firstError = { stack: `Error: first failure\n    at first (${firstFile}:23:5)` }
+    const secondError = { stack: `Error: second failure\n    at second (${secondFile}:42:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+    plugin._setRepositoryRoot('C:\\repo', [])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+    await plugin.removeAllDiProbes()
+
+    assert.deepStrictEqual(removeProbe.args, [['probe-1'], ['probe-2']])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+
+    sinon.assert.callCount(addLineProbe, 4)
   })
 
   it('exports DI breakpoint hits with the debugger log envelope', () => {
@@ -207,14 +407,14 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
-  function createPlugin (exporter) {
+  function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
     }
 
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
-      enabled: false,
+      enabled,
       experimental: {
         exporter,
       },

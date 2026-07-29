@@ -6,7 +6,7 @@ class PoissonProcessSamplingFilter {
   #samplingInterval
   #resetInterval
   #now
-  #lastNow = Number.NEGATIVE_INFINITY
+  #lastNow = -Infinity
   #samplingInstantCount = 0
 
   constructor ({ samplingInterval, now, resetInterval }) {

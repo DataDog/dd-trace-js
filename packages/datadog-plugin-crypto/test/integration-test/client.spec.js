@@ -12,13 +12,17 @@ const {
 } = require('../../../../integration-tests/helpers')
 
 describe('ESM', () => {
-  let variants, proc, agent
+  let proc, agent
 
   useSandbox(['crypto', 'express'], false,
     ['./packages/datadog-plugin-crypto/test/integration-test/*'])
 
-  before(function () {
-    variants = varySandbox('server.mjs', 'crypto', 'createHash', 'node:crypto')
+  const variants = varySandbox('server.mjs', {
+    bindingName: 'crypto',
+    packageName: 'node:crypto',
+    defaultExport: true,
+    namedExports: ['createHash'],
+    namedExportBinding: 'namespace',
   })
 
   beforeEach(async () => {
@@ -30,7 +34,7 @@ describe('ESM', () => {
     await agent.stop()
   })
 
-  for (const variant of varySandbox.VARIANTS) {
+  for (const variant of Object.keys(variants)) {
     it(`is instrumented loaded with ${variant}`, async () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
       const response = await curl(proc)

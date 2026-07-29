@@ -3,6 +3,11 @@
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
+const {
+  getRunStoresPromise,
+  publishWithCompletion,
+  runStoresWithCompletion,
+} = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
@@ -48,6 +53,7 @@ const {
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
 
 require('./common')
@@ -107,17 +113,6 @@ function warnDeprecatedMochaVersion (frameworkVersion) {
     'dd-trace support for Mocha<8.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Mocha to >=8.0.0.'
   )
-}
-
-// Tests from workers do not come with `isFailed` method
-function isTestFailed (test) {
-  if (test.isFailed) {
-    return test.isFailed()
-  }
-  if (test.isPending) {
-    return !test.isPending() && test.state === 'failed'
-  }
-  return false
 }
 
 function getRootSuiteStatus (rootTests) {
@@ -240,6 +235,41 @@ function resetSuiteSkippingRunState () {
   writeCoverageBackfillToCache({})
 }
 
+/**
+ * @param {((failures: number) => void) | undefined} callback
+ * @returns {{ onRunDone: (failures: number) => void, onFlushDone: () => void }}
+ */
+function getRunCompletionCallbacks (callback) {
+  let failures
+  let hasRunFinished = false
+  let hasFlushFinished = false
+  let hasCompleted = false
+  const onDone = callback || (() => {})
+
+  const completeIfReady = () => {
+    if (hasCompleted || !hasRunFinished || !hasFlushFinished) return
+
+    hasCompleted = true
+    onDone(failures)
+  }
+
+  return {
+    onRunDone: (runFailures) => {
+      if (hasRunFinished) return
+
+      failures = runFailures
+      hasRunFinished = true
+      completeIfReady()
+    },
+    onFlushDone: () => {
+      if (hasFlushFinished) return
+
+      hasFlushFinished = true
+      completeIfReady()
+    },
+  }
+}
+
 function getOnStartHandler (frameworkVersion) {
   return function () {
     const processArgv = process.argv.slice(2).join(' ')
@@ -251,7 +281,12 @@ function getOnStartHandler (frameworkVersion) {
   }
 }
 
-function getOnEndHandler (isParallel) {
+/**
+ * @param {boolean} isParallel
+ * @param {() => void} onDone
+ * @returns {() => void}
+ */
+function getOnEndHandler (isParallel, onDone) {
   return function () {
     let status = 'pass'
     let error
@@ -264,37 +299,7 @@ function getOnEndHandler (isParallel) {
       status = 'fail'
     }
 
-    if (config.isEarlyFlakeDetectionEnabled) {
-      /**
-       * If Early Flake Detection (EFD) is enabled the logic is as follows:
-       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
-       * - If just a single attempt passes, we will prevent the test process from failing.
-       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
-       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
-       */
-      for (const tests of Object.values(efdTests)) {
-        const failingEfdTests = tests.filter(test => isTestFailed(test))
-        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
-        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
-        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
-          this.stats.failures -= nonQuarantinedFailingEfdTests.length
-          this.failures -= nonQuarantinedFailingEfdTests.length
-        }
-      }
-    }
-
-    // We subtract the errors from quarantined tests from the total number of failures.
-    // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
-    if (config.isTestManagementTestsEnabled) {
-      let numFailedQuarantinedTests = 0
-      for (const test of testsQuarantined) {
-        if (isTestFailed(test)) {
-          numFailedQuarantinedTests++
-        }
-      }
-      this.stats.failures -= numFailedQuarantinedTests
-      this.failures -= numFailedQuarantinedTests
-    }
+    adjustRunnerFailuresForTestOptimization(this, config)
 
     // Recompute status after EFD and quarantine adjustments have reduced failure counts
     if (status === 'fail') {
@@ -337,7 +342,7 @@ function getOnEndHandler (isParallel) {
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    testSessionFinishCh.publish({
+    publishWithCompletion(testSessionFinishCh, {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
@@ -350,17 +355,11 @@ function getOnEndHandler (isParallel) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
-    })
+    }, onDone)
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
   }
-}
-
-function getRunStoresPromise (channelToPublishTo, ctx) {
-  return new Promise(resolve => {
-    channelToPublishTo.runStores({ ...ctx, onDone: resolve }, () => {})
-  })
 }
 
 function applyKnownTestsResponse ({ err, knownTests }) {
@@ -395,13 +394,14 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   let skippableSuitesResponse
   resetSuiteSkippingRunState()
 
-  const onReceivedSkippableSuites = ({
-    err,
-    skippableSuites,
-    itrCorrelationId: responseItrCorrelationId,
-    skippableSuitesCoverage: responseSkippableSuitesCoverage,
-  }) => {
-    if (err) {
+  const onReceivedSkippableSuites = (response) => {
+    const {
+      err,
+      skippableSuites,
+      itrCorrelationId: responseItrCorrelationId,
+      skippableSuitesCoverage: responseSkippableSuitesCoverage,
+    } = response || {}
+    if (!response || err) {
       suitesToSkip = []
       skippableSuitesCoverage = {}
     } else {
@@ -443,12 +443,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
-    ctx.onDone = onReceivedSkippableSuites
-    skippableSuitesCh.runStores(ctx, () => {})
+    runStoresWithCompletion(skippableSuitesCh, ctx, onReceivedSkippableSuites)
   }
 
-  const onReceivedImpactedTests = ({ err, modifiedFiles: receivedModifiedFiles }) => {
-    if (err) {
+  const onReceivedImpactedTests = (response) => {
+    const { err, modifiedFiles: receivedModifiedFiles } = response || {}
+    if (!response || err) {
       config.modifiedFiles = []
       config.isImpactedTestsEnabled = false
     } else {
@@ -465,8 +465,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
   const continueAfterTestRequests = () => {
     if (config.isImpactedTestsEnabled) {
-      ctx.onDone = onReceivedImpactedTests
-      modifiedFilesCh.runStores(ctx, () => {})
+      runStoresWithCompletion(modifiedFilesCh, ctx, onReceivedImpactedTests)
     } else if (config.isSuitesSkippingEnabled) {
       requestSkippableSuites()
     } else {
@@ -476,8 +475,14 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, isTestDynamicInstrumentationEnabled, libraryConfig, repositoryRoot }) => {
-    if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
+  const onReceivedConfiguration = (response) => {
+    const {
+      err,
+      isTestDynamicInstrumentationEnabled,
+      libraryConfig,
+      repositoryRoot,
+    } = response || {}
+    if (!response || err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
@@ -526,9 +531,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     })
   }
 
-  ctx.onDone = onReceivedConfiguration
-
-  libraryConfigurationCh.runStores(ctx, () => {})
+  runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
 }
 
 // In this hook we delay the execution with options.delay to grab library configuration,
@@ -553,7 +556,6 @@ addHook({
 
     const runner = run.apply(this, args)
 
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
@@ -641,6 +643,9 @@ addHook({
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
+
+    const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
+    args[0] = onRunDone
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
@@ -753,7 +758,7 @@ addHook({
       finishRootSuiteForFile(test.file)
     }
 
-    const onEnd = getOnEndHandler(false)
+    const onEnd = getOnEndHandler(false, onFlushDone)
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
@@ -915,7 +920,6 @@ addHook({
         status = 'skip'
       } else {
         // has to check every test in the test file
-        // eslint-disable-next-line unicorn/no-array-for-each
         suitesInTestFile.forEach(suite => {
           suite.eachTest(test => {
             if (test.state === 'failed' || test.timedOut) {
@@ -1043,8 +1047,11 @@ addHook({
       return run.apply(this, arguments)
     }
 
+    const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
+    arguments[0] = onRunDone
+
     this.once('start', getOnStartHandler(frameworkVersion))
-    this.once('end', getOnEndHandler(true))
+    this.once('end', getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
     for (const filePath of files) {
@@ -1084,7 +1091,7 @@ addHook({
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
-        run.apply(this, [cb, { files: filteredFiles }])
+        run.apply(this, [onRunDone, { files: filteredFiles }])
       } else {
         run.apply(this, arguments)
       }

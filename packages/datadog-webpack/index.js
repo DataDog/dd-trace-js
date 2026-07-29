@@ -141,7 +141,7 @@ class DatadogWebpackPlugin {
         // (#8980); absent peers stay opaque, so a build that does not opt into the feature does
         // not follow their dependency chain (#8635).
         if (matchesOptionalPeerFile(normalizedResource)) {
-          createData.loaders = createData.loaders || []
+          createData.loaders ||= []
           createData.loaders.push({ loader: require.resolve('./src/optional-peer-loader') })
           log.debug('INLINE: optional-peer loader applied to %s', normalizedResource)
           return
@@ -188,7 +188,7 @@ class DatadogWebpackPlugin {
         const version = packageJson.version
         const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
 
-        createData.loaders = createData.loaders || []
+        createData.loaders ||= []
         createData.loaders.unshift({
           loader: require.resolve('./src/loader'),
           options: { pkg, version, path: pkgPath },

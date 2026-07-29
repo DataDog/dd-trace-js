@@ -127,7 +127,7 @@ function wrapTracer (tracer) {
     return function (...args) {
       const name = args[0]
       const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
 
       const ctx = {
         name,
@@ -230,7 +230,13 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithLifecycle(ctx.result)
+        const model = ctx.arguments[0]
+        if (typeof model !== 'string' && model !== ctx.result) {
+          wrapModelWithLifecycle(model)
+          wrappedModels.add(ctx.result)
+        } else {
+          wrapModelWithLifecycle(ctx.result)
+        }
       },
     })
 

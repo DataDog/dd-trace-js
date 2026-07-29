@@ -9,6 +9,7 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../dd-trace/src/plugins/util/test')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
 const {
   testStartCh,
@@ -661,11 +662,6 @@ addHook({
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
-    let onFinish = null
-    const onFinishPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
-
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
     const testEventPromises = []
 
@@ -811,9 +807,10 @@ addHook({
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
-    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
-
-    await onFinishPromise
+    await getChannelPromise(testSuiteFinishCh, {
+      status: testSuiteResult.state,
+      ...testSuiteCtx.currentStore,
+    })
 
     return startTestsResponse
   })

@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
@@ -16,6 +17,7 @@ const {
   getTestSuitePath,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
 const noWorkerInit = require('./vitest-main-no-worker-init')
 const {
@@ -38,7 +40,6 @@ const {
   workerReportLogsCh,
   codeCoverageReportCh,
   findExportByName,
-  getChannelPromise,
   getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
@@ -67,6 +68,7 @@ let coverageRootDir
 let requestErrorTags = {}
 let isSessionStarted = false
 let isVitestNoWorkerInitActive = false
+let isVitestBrowserModeActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
@@ -197,7 +199,21 @@ function getTestFilepaths (ctx, testSpecifications) {
  */
 function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   const testSuiteAbsolutePath = path.isAbsolute(testFilepath) ? testFilepath : path.join(repositoryRoot, testFilepath)
-  return getTestSuitePath(testSuiteAbsolutePath, repositoryRoot)
+  return getTestSuitePath(realpath(testSuiteAbsolutePath), realpath(repositoryRoot))
+}
+
+/**
+ * Resolves a path without failing Test Optimization when the path is unavailable.
+ *
+ * @param {string} filepath
+ * @returns {string}
+ */
+function realpath (filepath) {
+  try {
+    return fs.realpathSync(filepath)
+  } catch {
+    return filepath
+  }
 }
 
 /**
@@ -281,6 +297,10 @@ function getTestPropertiesByFilepath (
   for (const testFilepath of testFilepaths) {
     if (typeof testFilepath !== 'string') continue
 
+    const testSuiteAbsolutePath = path.isAbsolute(testFilepath)
+      ? testFilepath
+      : path.join(repositoryRoot, testFilepath)
+    const realTestFilepath = realpath(testSuiteAbsolutePath)
     const testSuite = getNormalizedTestSuitePath(testFilepath, repositoryRoot)
     const testProperties = { testSuite }
     const hasProperties = knownTestsBySuite !== undefined ||
@@ -299,6 +319,8 @@ function getTestPropertiesByFilepath (
 
     if (hasProperties) {
       testPropertiesByFilepath[testFilepath] = testProperties
+      testPropertiesByFilepath[testSuiteAbsolutePath] = testProperties
+      testPropertiesByFilepath[realTestFilepath] = testProperties
     }
   }
 
@@ -405,11 +427,18 @@ function mergeRequestErrorTags (requestResponse) {
   }
 }
 
-async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
+async function runMainProcessSetup (
+  ctx,
+  frameworkVersion,
+  testSpecifications,
+  shouldInstallNoWorkerInit,
+  shouldInstallBrowserReporter
+) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
   }
 
+  isVitestBrowserModeActive ||= shouldInstallBrowserReporter
   let repositoryRoot = process.cwd()
   let testSessionConfiguration
   let testFilepaths
@@ -433,8 +462,9 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       err,
       libraryConfig,
       requestErrorTags: receivedRequestErrorTags = {},
-    } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
-      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
+    } = await getChannelPromise(libraryConfigurationCh, {
+      frameworkVersion,
+      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || isVitestBrowserModeActive,
     })
     requestErrorTags = receivedRequestErrorTags
     if (err) {
@@ -450,7 +480,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   resetMainProcessProvidedContext(ctx)
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     const {
       testSessionId,
       testModuleId,
@@ -458,7 +488,11 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       repositoryRoot: receivedRepositoryRoot,
       codeOwnersEntries,
     } = testSessionConfiguration
-    repositoryRoot = receivedRepositoryRoot || repositoryRoot
+    repositoryRoot = realpath(receivedRepositoryRoot || repositoryRoot)
+    testSessionConfiguration = {
+      ...testSessionConfiguration,
+      repositoryRoot,
+    }
     if (!shouldInstallNoWorkerInit) {
       setProvidedContext(ctx, {
         _ddTestSessionId: testSessionId,
@@ -494,7 +528,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 
   if (isKnownTestsEnabled) {
     const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
-    if (currentKnownTestsResponse.err) {
+    if (!currentKnownTestsResponse || currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
     } else {
       knownTests = currentKnownTestsResponse.knownTests
@@ -538,12 +572,13 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   if (isTestManagementTestsEnabled) {
-    const { err, testManagementTests: receivedTestManagementTests } =
+    const testManagementResponse =
       testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
-    if (err) {
+    if (!testManagementResponse || testManagementResponse.err) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
     } else {
+      const { testManagementTests: receivedTestManagementTests } = testManagementResponse
       testManagementTests = receivedTestManagementTests
       testManagementTestsBySuite = getTestManagementTestsBySuite(receivedTestManagementTests)
       shouldSendTestProperties = true
@@ -558,8 +593,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 
   if (isImpactedTestsEnabled) {
     const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
-    const { err } = modifiedFilesResponse
-    if (err) {
+    if (!modifiedFilesResponse || modifiedFilesResponse.err) {
       log.error('Could not get modified tests.')
     } else {
       modifiedFiles = modifiedFilesResponse.modifiedFiles
@@ -588,8 +622,11 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
     }
   }
 
-  if (shouldInstallNoWorkerInit) {
-    noWorkerInit.configure(ctx, frameworkVersion, testSpecifications, {
+  if (shouldInstallNoWorkerInit || shouldInstallBrowserReporter) {
+    const reporterTestSpecifications = shouldInstallNoWorkerInit
+      ? testSpecifications
+      : getBrowserTestSpecifications(testSpecifications)
+    noWorkerInit.configure(ctx, frameworkVersion, reporterTestSpecifications, {
       knownTests,
       knownTestsBySuite,
       modifiedFiles,
@@ -601,6 +638,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       testSessionConfiguration,
     }, {
       getConfiguredEfdRetryCount,
+      shouldReportTestModule: shouldInstallBrowserReporter ? isBrowserTestModule : undefined,
       state: getNoWorkerInitState(),
     })
   }
@@ -627,18 +665,29 @@ function getNoWorkerInitState () {
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
   const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
+  const shouldInstallBrowserReporter = shouldUseBrowserReporter(frameworkVersion, testSpecifications)
+  const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
-  if (shouldDeactivateOnFallback && setupState?.shouldInstallNoWorkerInit && !shouldInstallNoWorkerInit) {
+  if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
     noWorkerInit.deactivate(ctx)
   }
   if (
     !setupState ||
     setupState.specificationsKey !== specificationsKey ||
-    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit
+    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit ||
+    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter
   ) {
     setupState = {
-      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
+      setupPromise: runMainProcessSetup(
+        ctx,
+        frameworkVersion,
+        testSpecifications,
+        shouldInstallNoWorkerInit,
+        shouldInstallBrowserReporter
+      ),
+      shouldInstallBrowserReporter,
+      shouldInstallMainReporter,
       shouldInstallNoWorkerInit,
       specificationsKey,
     }
@@ -652,6 +701,12 @@ function shouldUseNoWorkerInit (ctx, frameworkVersion, testSpecifications) {
     hasVitestWorkerPoolTestSpecification,
     isVitestWorkerPool,
   })
+}
+
+function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
+  return noWorkerInit.isSupportedVersion(frameworkVersion) &&
+    Array.isArray(testSpecifications) &&
+    testSpecifications.some(isBrowserTestSpecification)
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
@@ -812,18 +867,13 @@ function getFinishWrapper (exitOrClose) {
       return exitOrClose.apply(this, arguments)
     }
 
-    let onFinish
-
-    const flushPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
     const failedSuites = this.state.getFailedFilepaths()
     let error
     if (failedSuites.length) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
-    testSessionFinishCh.publish({
+    const flushPromise = getChannelPromise(testSessionFinishCh, {
       status: getSessionStatus(this.state),
       testCodeCoverageLinesTotal,
       error,
@@ -832,8 +882,7 @@ function getFinishWrapper (exitOrClose) {
       isTestManagementTestsEnabled,
       requestErrorTags,
       vitestPool,
-      isVitestNoWorkerInitActive,
-      onFinish,
+      isVitestNoWorkerInitActive: isVitestNoWorkerInitActive || isVitestBrowserModeActive,
     })
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
@@ -842,9 +891,7 @@ function getFinishWrapper (exitOrClose) {
 
     // If coverage was generated, publish coverage report channel for upload
     if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
-      await new Promise((resolve) => {
-        codeCoverageReportCh.publish({ rootDir: coverageRootDir, onDone: resolve })
-      })
+      await getChannelPromise(codeCoverageReportCh, { rootDir: coverageRootDir })
     }
 
     return exitOrClose.apply(this, arguments)
@@ -876,6 +923,15 @@ function isVitestWorkerPool (pool) {
   return isForkPool(pool) || isThreadPool(pool)
 }
 
+function isBrowserProject (project) {
+  try {
+    if (project?.isBrowserEnabled?.()) return true
+  } catch {}
+
+  return safeConfig(project)?.browser?.enabled === true ||
+    project?.serializedConfig?.browser?.enabled === true
+}
+
 function getTestSpecificationProject (testSpecification) {
   if (Array.isArray(testSpecification)) {
     return testSpecification[0]
@@ -895,6 +951,23 @@ function getTestSpecificationPool (testSpecification) {
   const project = getTestSpecificationProject(testSpecification)
   return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
     testSpecification?.pool
+}
+
+function isBrowserTestSpecification (testSpecification) {
+  return getTestSpecificationPool(testSpecification) === 'browser' ||
+    isBrowserProject(getTestSpecificationProject(testSpecification))
+}
+
+function getBrowserTestSpecifications (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return testSpecifications
+
+  return testSpecifications.filter(isBrowserTestSpecification)
+}
+
+function isBrowserTestModule (testModule) {
+  return testModule?.task?.pool === 'browser' ||
+    testModule?.pool === 'browser' ||
+    isBrowserProject(testModule?.project)
 }
 
 function hasVitestWorkerPoolTestSpecification (testSpecifications) {
@@ -1213,16 +1286,11 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
     testSuiteErrorCh.runStores(testSuiteCtx, () => {})
   }
 
-  let onFinish
-  const onFinishPromise = new Promise(resolve => {
-    onFinish = resolve
-  })
-  testSuiteFinishCh.publish({
+  await getChannelPromise(testSuiteFinishCh, {
+    frameworkVersion,
     status: getTypecheckTaskStatus(file),
-    onFinish,
     ...testSuiteCtx.currentStore,
   })
-  await onFinishPromise
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
@@ -1234,7 +1302,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
   }
   const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
-    ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    ? await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     : {}
 
   await Promise.all(result.files.map(file => reportTypecheckFile(
@@ -1343,10 +1411,8 @@ function wrapTinyPoolRun (TinyPool) {
 
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     const runResult = await run.apply(this, arguments)
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     return runResult
   })
