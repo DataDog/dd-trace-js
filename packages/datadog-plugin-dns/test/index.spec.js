@@ -436,10 +436,7 @@ describe('Plugin', () => {
 
         // Loading both `dns` and `dns/promises` reaches the same exports object through
         // two ritm hooks. Without a WeakSet guard, the second hook to fire would stack a
-        // second wrap layer and publish `apm:dns:*` events twice per call. The mocha test
-        // agent resets ritm between tests (default `ritmReset: true` in `agent.close`),
-        // so the assertions that prove "one hook fire per call" have to run inside a
-        // single `it` body to share one ritm lifecycle.
+        // second wrap layer and publish `apm:dns:*` events twice per call.
         it('does not double-wrap when both dns and dns/promises are loaded', async () => {
           const startCh = dc.channel('apm:dns:lookup:start')
           let startCount = 0
