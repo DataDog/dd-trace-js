@@ -1350,7 +1350,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
-      for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
+      for (const [fqn, testStatuses] of testsToTestStatuses) {
         // Only count as failed if the final status (after retries) is 'fail'
         const lastStatus = testStatuses.at(-1)
         if (lastStatus === 'fail') {
@@ -1494,7 +1494,8 @@ createRootSuiteCh.subscribe({
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
-    ctx.asyncEndPromise = handlePageGoto(ctx.self)
+    const rumDetectionPromise = handlePageGoto(ctx.self)
+    ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
   },
 })
 

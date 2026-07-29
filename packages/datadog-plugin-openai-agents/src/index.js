@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { OpenAIAgentsIntegration } = require('./integration')
+const { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
 
 const legacyStorage = storage('legacy')
@@ -13,9 +13,6 @@ const legacyStorage = storage('legacy')
  * loaded `@openai/agents` module on a channel; this plugin subscribes
  * during its constructor (which runs synchronously between `loadChannel`'s
  * publish and the addHook callback) and registers the processor.
- *
- * The instrumentation also publishes the OpenAI-compatible client's baseURL on
- * each model response call, so the integration can resolve `model_provider`.
  *
  * The integration's `enabled` flag follows this plugin's configure()
  * lifecycle. Each loaded version of the agents package replaces all processors
@@ -48,26 +45,29 @@ class OpenaiAgentsPlugin extends Plugin {
       }
     })
 
-    this.addSub('apm:openai-agents:response:client', ({ baseURL }) => {
-      if (!this.#integration.enabled) return
-      this.#integration.setClientBaseURL(baseURL)
-    })
-
     // Activate the current agent's dd-trace span in legacyStorage for the
     // duration of model response calls and stream iterator advancement. This
     // makes the openai plugin's shimmer see the correct parent when it creates its
     // openai.request span, so all spans land in the same trace.
-    this.addBind('apm:openai-agents:model:start', ({ agentsCoreSpanId }) => {
-      if (!this.#integration.enabled || !agentsCoreSpanId) return legacyStorage.getStore()
+    this.addBind('apm:openai-agents:model:start', ({ agentsCoreSpanId, baseURL }) => {
+      const store = legacyStorage.getStore()
+      if (!this.#integration.enabled || !agentsCoreSpanId) return store
       const ddSpan = this.#integration.getDDSpan(agentsCoreSpanId)
-      if (!ddSpan) return legacyStorage.getStore()
-      return { ...legacyStorage.getStore(), span: ddSpan }
+      if (!ddSpan) return store
+      return { ...store, [MODEL_BASE_URL_STORE_KEY]: baseURL, span: ddSpan }
+    })
+
+    this.addBind('apm:openai-agents:tool:start', ({ agentsCoreSpan }) => {
+      const store = legacyStorage.getStore()
+      if (!this.#integration.enabled || !agentsCoreSpan) return store
+      const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
+      return ddSpan ? { ...store, span: ddSpan } : store
     })
   }
 
   configure (config) {
     super.configure(config)
-    this.#integration.setEnabled(!!config?.enabled)
+    this.#integration.configure(config)
   }
 }
 

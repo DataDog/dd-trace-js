@@ -258,7 +258,7 @@ function applyHttpOtelSemantics (formattedSpan) {
   // type): server spans are errors on 5xx only (4xx MUST be left unset per the
   // spec); client spans on any status >= 400.
   if (status !== undefined && newMeta[ERROR_TYPE] === undefined) {
-    const isError = kind === 'server' ? statusCode >= 500 : statusCode >= 400
+    const isError = statusCode >= (kind === 'server' ? 500 : 400)
     if (isError) {
       newMeta[ERROR_TYPE] = status
       formattedSpan.error = 1

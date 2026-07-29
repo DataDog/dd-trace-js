@@ -67,9 +67,7 @@ function getMeta (resourceName, commandArgs) {
     const [ns, set, bin, exp, index] = commandArgs
 
     // The `ext` argument was added to IndexCreate in 6.3.0
-    meta = commandArgs.length > 8
-      ? getMetaForIndex(ns, set, bin, index)
-      : getMetaForIndex(ns, set, bin, exp)
+    meta = getMetaForIndex(ns, set, bin, commandArgs.length > 8 ? index : exp)
   } else if (resourceName === 'Query') {
     const { ns, set } = commandArgs[2]
     meta = getMetaForQuery({ ns, set })

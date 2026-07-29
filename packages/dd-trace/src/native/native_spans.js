@@ -584,14 +584,13 @@ class NativeSpansInterface {
               idx += 8
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
-              idx += 8
             } else {
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
               idx += 8
               view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-              idx += 8
             }
+            idx += 8
             break
           }
           case 'ns': {
@@ -702,14 +701,13 @@ class NativeSpansInterface {
       idx += 8
       buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
       buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
-      idx += 8
     } else {
       buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
       buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
       idx += 8
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-      idx += 8
     }
+    idx += 8
 
     // segment_id u64 LE
     view.setUint32(idx, segmentId % 0x1_00_00_00_00, true)

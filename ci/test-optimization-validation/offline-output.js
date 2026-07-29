@@ -57,8 +57,8 @@ function readOfflineOutput (outputRoot) {
   if (!exporterInitialized) return emptyOutput()
 
   const state = {
-    bytes: 0,
-    completionBytes: 0,
+    bytes: 0n,
+    completionBytes: 0n,
     decodedEntries: 0,
     files: 0,
   }
@@ -150,7 +150,7 @@ function readPayloadFiles (payloadsRoot, kind, state, consume) {
 }
 
 function readRegularFile (filename, individualLimit, state, completion) {
-  const stat = fs.lstatSync(filename)
+  const stat = fs.lstatSync(filename, { bigint: true })
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) {
     throw new Error('Offline validation artifact must be a regular, unlinked file.')
   }
@@ -163,16 +163,16 @@ function readRegularFile (filename, individualLimit, state, completion) {
 
   const file = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))
   try {
-    const opened = fs.fstatSync(file)
+    const opened = fs.fstatSync(file, { bigint: true })
     if (!opened.isFile() || opened.nlink > 1 || opened.dev !== stat.dev || opened.ino !== stat.ino) {
       throw new Error('Offline validation artifact changed while it was opened.')
     }
     const buffer = fs.readFileSync(file)
-    const completed = fs.fstatSync(file)
+    const completed = fs.fstatSync(file, { bigint: true })
     if (completed.size !== opened.size || completed.mtimeMs !== opened.mtimeMs) {
       throw new Error('Offline validation artifact changed while it was read.')
     }
-    state[totalKey] += buffer.length
+    state[totalKey] += BigInt(buffer.length)
     return buffer
   } finally {
     fs.closeSync(file)

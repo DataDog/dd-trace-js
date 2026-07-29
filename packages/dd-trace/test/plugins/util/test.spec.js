@@ -46,6 +46,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
   TEST_BROWSER_VERSION,
@@ -54,6 +55,7 @@ const {
 
 const {
   CI_JOB_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   GIT_COMMIT_SHA,
@@ -144,6 +146,17 @@ describe('RUM test correlation', () => {
 
     assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
     assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('uses a preallocated test execution ID for the test trace', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }, '123456789'), parentSpan)
+    sinon.assert.calledOnceWithExactly(extract, 'text_map', {
+      'x-datadog-trace-id': '123456789',
+      'x-datadog-parent-id': '0000000000000000',
+    })
   })
 })
 
@@ -297,6 +310,7 @@ describe('getTestLevelsMetadataTags', () => {
   it('keeps only allowlisted CI and Git tags', () => {
     const testLevelsMetadataTags = getTestLevelsMetadataTags({
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
@@ -308,6 +322,7 @@ describe('getTestLevelsMetadataTags', () => {
 
     assert.deepStrictEqual(testLevelsMetadataTags, {
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
@@ -761,6 +776,11 @@ describe('getCodeOwnersForFilename', () => {
         matches: ['file1.js', 'packages/dd-trace/fileA.js'],
         misses: ['file10.js', 'packages/dd-trace/file/name.js'],
       },
+      {
+        pattern: String.raw`file\*.js`,
+        matches: ['file*.js', 'packages/dd-trace/file*.js'],
+        misses: ['file1.js', 'packages/dd-trace/fileA.js'],
+      },
     ]
 
     for (const { pattern, matches = [], misses = [] } of patternTests) {
@@ -775,6 +795,14 @@ describe('getCodeOwnersForFilename', () => {
         assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
       }
     }
+  })
+
+  it('treats a trailing backslash as a literal instead of throwing', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'docs\\', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(getCodeOwnersForFilename('docs/README.md', codeOwnersFileEntries), null)
   })
 
   it('keeps CODEOWNERS matching case-sensitive', () => {

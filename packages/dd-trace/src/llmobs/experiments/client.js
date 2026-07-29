@@ -14,9 +14,11 @@ function apiHost (site) {
 }
 
 // Web-app host for dashboard URLs. Single-level sites (datadoghq.com,
-// ddog-gov.com) are served from the `app.` subdomain; regional sites
-// (us3.datadoghq.com, ap1.datadoghq.com) are used as-is.
+// ddog-gov.com) are served from the `app.` subdomain; staging uses
+// dd.datad0g.com; regional sites (us3.datadoghq.com, ap1.datadoghq.com)
+// are used as-is.
 function appHost (site) {
+  if (site === 'datad0g.com') return 'dd.datad0g.com'
   return site.split('.').length === 2 ? `app.${site}` : site
 }
 

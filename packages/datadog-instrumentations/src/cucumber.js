@@ -6,6 +6,7 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
@@ -342,7 +343,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
   }
 
   const testFileAbsolutePath = pickle.uri
-  const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
+  const finished = (pickleResultByFile[testFileAbsolutePath] ||= [])
 
   if (isEarlyFlakeDetectionEnabled && isNew) {
     const testFullname = `${pickle.uri}:${pickle.name}`
@@ -555,8 +556,7 @@ function getErrorFromCucumberResult (cucumberResult) {
     return
   }
 
-  const [message] = cucumberResult.message.split('\n')
-  const error = new Error(message)
+  const error = new Error(getSegment(cucumberResult.message, '\n', 0))
   if (cucumberResult.exception) {
     error.type = cucumberResult.exception.type
   }
@@ -793,7 +793,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testFnCh.runStores(ctx, () => {
         promise = run.apply(this, args)
       })
-      promise.finally(async () => {
+      const finalize = async () => {
         if (!canAwaitRetries) {
           this.eventBroadcaster.removeListener('envelope', onEnvelope)
         }
@@ -966,6 +966,9 @@ function wrapRun (pl, isLatestVersion, version) {
           ...attemptCtx.currentStore,
           finalStatus,
         })
+      }
+      promise.then(finalize, finalize).catch(error => {
+        log.error('Cucumber test finalization error', error)
       })
       return promise
     } catch (err) {

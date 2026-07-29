@@ -5036,16 +5036,26 @@ rules:
           expected: { enabled: true, source: 'remote_config' },
         },
         {
-          name: 'falls back from an invalid source to legacy enablement',
+          name: 'disables the provider for an invalid source',
           source: 'other',
-          legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: false },
         },
         {
-          name: 'falls back from the reserved offline source to legacy enablement',
+          name: 'disables the provider for the reserved offline source',
+          source: 'offline',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for an invalid source despite legacy enablement',
+          source: 'other',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for the reserved offline source despite legacy enablement',
           source: 'offline',
           legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: false },
         },
       ]) {
       it(name, () => {
@@ -5071,27 +5081,48 @@ rules:
       })
     }
 
-    it('falls back from an invalid source through calculated legacy precedence', () => {
+    it('disables an explicit unsupported source while preserving diagnostic context', () => {
       process.env.DD_FEATURE_FLAGS_ENABLED = 'true'
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
       process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
 
       const config = getConfig()
+      const warning = 'Unsupported Feature Flagging configuration source: ' +
+        "'offline' for DD_FEATURE_FLAGS_CONFIGURATION_SOURCE (source: env_var), provider disabled"
 
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
       assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
-      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'env_var')
-      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
       assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
-        { name: 'DD_FEATURE_FLAGS_ENABLED', value: true, origin: 'env_var' },
-        { name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', value: 'remote_config', origin: 'calculated' },
+        { name: 'DD_FEATURE_FLAGS_ENABLED', value: false, origin: 'calculated' },
+        {
+          name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
+          value: 'offline',
+          origin: 'env_var',
+          error: { message: warning },
+        },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])
+      sinon.assert.calledOnceWithExactly(log.warn, warning)
 
       config.setRemoteConfig({})
 
+      sinon.assert.calledOnce(log.warn)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('does not warn for an unsupported source when the stable kill switch disables the provider', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'false'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
+      sinon.assert.notCalled(log.warn)
       sinon.assert.notCalled(log.error)
     })
 

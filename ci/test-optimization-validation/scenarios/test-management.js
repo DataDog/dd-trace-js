@@ -149,7 +149,7 @@ function buildQuarantinedResponse (framework, scenario, discoveredIdentities = [
   for (const identity of identities) {
     for (const suite of getSuiteCandidates(identity, scenario)) {
       for (const name of getNameCandidates(identity)) {
-        suites[suite] = suites[suite] || { tests: {} }
+        suites[suite] ||= { tests: {} }
         suites[suite].tests[name] = {
           properties: {
             quarantined: true,
@@ -210,7 +210,7 @@ function summarizeManagedTests (testManagementTests) {
     }
     summary.set(displaySuite, testNames)
   }
-  return [...summary.entries()].slice(0, 5).map(([suite, tests]) => ({
+  return [...summary].slice(0, 5).map(([suite, tests]) => ({
     suite,
     tests: [...tests].slice(0, 5),
   }))

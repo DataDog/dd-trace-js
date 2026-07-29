@@ -303,10 +303,11 @@ function writeNewFile (filename, payload) {
  *
  * @param {string} directory directory path
  * @param {string} label directory label
- * @returns {{dev: number, ino: number, birthtimeMs?: number}} stable directory identity
+ * @returns {{dev: bigint, ino: bigint, birthtimeMs?: bigint}} stable directory identity
  */
 function captureDirectory (directory, label) {
-  const stat = fs.lstatSync(directory)
+  // Windows file reference numbers exceed 2^53, where distinct directories round to one number.
+  const stat = fs.lstatSync(directory, { bigint: true })
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(`Offline Test Optimization validation ${label} must be a regular directory.`)
   }
@@ -319,10 +320,10 @@ function captureDirectory (directory, label) {
  * Creates or validates one child directory without accepting symbolic links.
  *
  * @param {string} parent parent directory path
- * @param {{dev: number, ino: number, birthtimeMs?: number}} parentIdentity expected parent identity
+ * @param {{dev: bigint, ino: bigint, birthtimeMs?: bigint}} parentIdentity expected parent identity
  * @param {string} directory child directory path
  * @param {string} label directory label
- * @returns {{dev: number, ino: number, birthtimeMs?: number}} stable child identity
+ * @returns {{dev: bigint, ino: bigint, birthtimeMs?: bigint}} stable child identity
  */
 function createDirectory (parent, parentIdentity, directory, label) {
   assertDirectoryUnchanged(parent, parentIdentity, 'parent output')
@@ -338,7 +339,7 @@ function createDirectory (parent, parentIdentity, directory, label) {
  * Rejects a directory that changed after sink construction.
  *
  * @param {string} directory directory path
- * @param {{dev: number, ino: number, birthtimeMs?: number}} identity expected directory identity
+ * @param {{dev: bigint, ino: bigint, birthtimeMs?: bigint}} identity expected directory identity
  * @param {string} label directory label
  */
 function assertDirectoryUnchanged (directory, identity, label) {
@@ -355,7 +356,7 @@ function assertDirectoryUnchanged (directory, identity, label) {
  *
  * @param {string} filename partial payload path
  * @param {string} directory expected parent directory
- * @param {{dev: number, ino: number, birthtimeMs?: number}} identity expected parent identity
+ * @param {{dev: bigint, ino: bigint, birthtimeMs?: bigint}} identity expected parent identity
  */
 function removePartialFile (filename, directory, identity) {
   try {
