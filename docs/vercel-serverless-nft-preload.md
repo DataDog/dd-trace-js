@@ -29,6 +29,30 @@ incorrectly reported that Vercel had dropped the NFT entries.
 No custom tracer bundle, handler wrapper, OTel bridge, or physical post-build
 copy is required.
 
+## Customer-Committed Flow
+
+For applications without Next Proxy or Middleware, the customer can use the
+same mechanism today without mutating Vercel's build output:
+
+1. Commit a small `datadog-preload.mjs` that imports
+   `dd-trace/initialize.mjs` when `dd-trace` is available and otherwise exits
+   cleanly.
+2. Add the preload, `dd-trace`, and its runtime dependency closure to
+   `outputFileTracingIncludes`.
+3. Keep `dd-trace` external with `serverExternalPackages`.
+4. Configure the Vercel project with
+   `NODE_OPTIONS=--import=./datadog-preload.mjs`.
+
+The conditional import is required because Vercel applies `NODE_OPTIONS` to
+dependency installation before `dd-trace` exists. Once dependencies are
+installed, the same preload initializes the tracer during the build and in
+each Node route function.
+
+This does not support Next Proxy or Middleware. Vercel applies the global
+`NODE_OPTIONS` there too, but does not include the app-owned preload through
+route-level `outputFileTracingIncludes`. The process then fails before the
+conditional loader can run because `/var/task/datadog-preload.mjs` is absent.
+
 ## MVP Flow
 
 The first supported version can package the proven build behavior in the
@@ -90,6 +114,18 @@ The upstream contract should:
 - Trace `5043974407832829254` contains routed native spans:
   `web.request -> next.request -> http.request -> web.request -> next.request`,
   including two parallel downstream calls and their DNS/TCP children.
+- Project `conti-next-conditional-loader` verified the customer-committed flow
+  on Next 16.2.10. The install phase skipped the unavailable tracer, normal
+  routes returned successfully, and no build-output mutation was used.
+- Trace `1427389653325595070` contains the complete distributed route:
+  `GET /api/flow -> GET /api/ping -> example.com`, including native
+  `next.request`, HTTP, DNS, and TCP spans with coherent parent IDs.
+- A concurrent exercise produced 47 indexed spans across 12 traces, including
+  complete flow and ping traces. This confirms request-lifetime flushing under
+  burst traffic after allowing for backend indexing delay.
+- The same deployment reproduced the Proxy limitation as
+  `MIDDLEWARE_INVOCATION_FAILED`: Node could not import the app-owned preload
+  from `/var/task` because it was absent from the Proxy function.
 
 ## Product Work
 
