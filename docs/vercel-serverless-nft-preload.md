@@ -23,9 +23,9 @@ The tested customer setup is documented in
    build-time `NODE_OPTIONS`.
 5. Configure agentless export and normal Datadog service tags.
 
-For Node-only projects, no build mutation, custom launcher, copied tracer tree,
-hard-coded transitive dependency list, trace drain, or custom Vercel adapter is
-required. Mixed Node and Edge projects need the Datadog Builder described below.
+For Node-only projects, the project-level preload is a working MVP. It remains
+a broad override: every generated function must contain the tracer. Mixed Node
+and Edge projects need the Datadog Builder described below.
 
 ## Why Both Initialization Paths Exist
 
@@ -53,9 +53,10 @@ do not. A project-global `--import=dd-trace/initialize.mjs` therefore fails an
 Edge function before application code can check `NEXT_RUNTIME`.
 
 There is no clean application-side conditional around that resolution step.
-Mixed Node and Edge projects need a Datadog-owned Vercel Builder to set
-`NODE_OPTIONS` only on generated Node functions. This belongs at the public
-Build Runtime output boundary, not in customer route code or an encoded loader.
+Mixed Node and Edge projects need a Datadog-owned Vercel Builder to wrap only
+generated Node function handlers. This belongs at the public Build Output API
+boundary, not in customer route code, project-global `NODE_OPTIONS`, or an
+encoded loader.
 
 ## Required Tracer Changes
 
@@ -90,22 +91,22 @@ Proxy, and an Edge route.
   `/proxy-check`, but failed Edge before application code.
 - Copying a loader into an Edge `.func` did not work because Vercel bundles
   Edge source and does not expose the extra file to the Node host preload.
-- A Datadog Builder proof added the loader and function-local `NODE_OPTIONS`
-  only to generated Node functions and left Edge unchanged.
+- A Datadog Builder delegated to `@vercel/next`, wrapped only generated Node
+  handlers in the returned Build Output API directory, and left Edge unchanged.
 - `/api/ping`, `/api/flow`, `/proxy-check`, and `/api/edge` then returned 200.
 - Node route traces exported directly to Datadog.
 - Edge started without initializing `dd-trace`.
-- Trace `1335212614691370750` contained:
+- Clean source deployment `dpl_GCTbVjHZj5cC9ymCVyaRLqGXp4kE` required no
+  customer prebuild and instrumented 11 Node function bundles.
+- Trace `1764132629899357976` contained:
 
 ```text
-web.request  GET /api/flow
-  next.request  GET /api/flow
-    http.request  GET
-      web.request  GET /api/ping
-        next.request  GET /api/ping
-          http.request  GET
-            tcp.connect  example.com:443
-              dns.lookup  example.com
+next.request  GET /api/flow
+  http.request  GET
+    next.request  GET /api/ping
+      http.request  GET
+    tcp.connect  conti-next-conditional-loader.vercel.app:443
+      dns.lookup  conti-next-conditional-loader.vercel.app
 ```
 
 Every displayed parent ID was present in the same trace, route resources were
@@ -119,16 +120,21 @@ The preferred Vercel integration is a Datadog-owned Builder:
 2. Vercel invokes the Datadog Builder instead of the default Next Builder.
 3. The Datadog Builder calls the published `@vercel/next.build()` implementation.
 4. It preserves all official output, routes, caching, and framework behavior.
-5. For each returned `NodejsLambda`, it merges the function-local
-   `NODE_OPTIONS=--import=dd-trace/initialize.mjs` preload.
-6. It leaves returned `EdgeFunction` objects unchanged.
-7. Next instrumentation NFT supplies the tracer dependency closure.
-8. Datadog injects secrets through the existing Vercel integration settings.
+5. On Next 16 cloud builds, it receives `buildOutputPath`, adds a small CommonJS
+   wrapper to each Node `.func`, and changes only that function's public
+   `.vc-config.json` handler.
+6. On local or older Builder output, it performs the equivalent change to each
+   returned `NodejsLambda`.
+7. It leaves Edge functions unchanged.
+8. Next instrumentation NFT supplies the tracer dependency closure.
+9. Datadog injects secrets through the existing Vercel integration settings.
 
-`@vercel/next` already exposes `build()`, and its public `NodejsLambda` output
-supports both `files` and `environment`. The wrapper therefore does not patch
-Vercel source, mutate `.vercel/output`, depend on private file maps, or require
-trace-drain cooperation.
+`@vercel/next` exposes `build()` and Next 16 returns its public
+`buildOutputPath`. The wrapper modifies the documented Build Output API handler
+contract before deployment. It does not patch Vercel source, mutate a customer's
+prebuilt `.vercel/output`, depend on private file maps, use project-level
+`NODE_OPTIONS`, or require trace-drain cooperation. The verified prototype is
+[`docs/examples/vercel-nextjs/builder.js`](./examples/vercel-nextjs/builder.js).
 
 Vercel's `builds[].use` can register an npm Builder, although `builds` is a
 legacy configuration surface. The Datadog integration should own this
@@ -142,8 +148,8 @@ configuration so customers do not maintain it manually.
    route-to-route propagation, concurrency, Proxy, and mixed Edge projects.
 3. Confirm supported Next.js version ranges rather than pinning one sample
    version.
-4. Package and deploy the Datadog Builder wrapper around `@vercel/next`, then
-   validate source and Git-connected Preview and Production deployments.
+4. Publish the Datadog Builder wrapper around `@vercel/next`, then validate
+   Git-connected Preview and Production deployments.
 5. Define Edge telemetry separately through supported Vercel or OpenTelemetry
    ingestion; do not load the Node tracer into Edge.
 
@@ -152,7 +158,7 @@ configuration so customers do not maintain it manually.
 - Route-local `dd-trace` initialization: too late to instrument Next.
 - `serverExternalPackages` alone: does not create a dependency edge.
 - Manual tracer or transitive dependency lists: brittle and unnecessary.
-- Post-build mutation or custom function launchers: coupled to private output.
+- Customer-run post-build mutation: requires prebuilt deployments.
 - Encoded `data:` preload: can skip missing packages, but is opaque and not an
   acceptable customer configuration.
 - Copying a preload into an Edge `.func`: the Edge compiler does not preserve

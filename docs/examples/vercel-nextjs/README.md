@@ -66,10 +66,11 @@ both. Do not use this project-global preload in such a mixed project: Vercel
 applies it before the Edge handler starts, while Edge functions do not contain
 the Node tracer.
 
-Mixed projects require the Datadog-owned Vercel Builder package. It wraps
-`@vercel/next.build()`, adds the preload only to generated Node functions, and
-leaves Edge outputs unchanged. An application-side runtime check cannot run
-before Node resolves a project-global preload.
+Mixed projects require the Datadog-owned Vercel Builder package. It delegates
+to `@vercel/next.build()`, wraps only generated Node handlers through the public
+Build Output API, and leaves Edge outputs unchanged. Customers configure the
+Builder once and continue using normal Git-triggered Preview and Production
+deployments; they do not run `vercel build` or deploy `--prebuilt`.
 
 ## 5. Configure Datadog
 
