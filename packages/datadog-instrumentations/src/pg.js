@@ -262,10 +262,27 @@ const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
 
+/**
+ * @typedef {{ database?: string, user?: string, host?: string, port?: number }} PoolConnectionParameters
+ * @typedef {{ connectionParameters?: PoolConnectionParameters }} PoolClient
+ * @typedef {{
+ *   options: PoolConnectionParameters,
+ *   idleCount: number,
+ *   waitingCount: number,
+ *   _clients?: PoolClient[]
+ * }} InstrumentedPool
+ * @typedef {{
+ *   poolOptions: PoolConnectionParameters,
+ *   params?: PoolConnectionParameters,
+ *   error?: unknown,
+ *   poolWaitTime?: number
+ * }} AcquireContext
+ */
+
 // pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
 // outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
 /**
- * @param {import('pg').Pool} pool
+ * @param {InstrumentedPool} pool
  */
 function acquireStart (pool) {
   return pool.idleCount > pool.waitingCount ? undefined : performance.now()
@@ -279,7 +296,7 @@ function acquireWait (start) {
 }
 
 /**
- * @param {import('pg').Pool} pool
+ * @param {InstrumentedPool} pool
  */
 function latestPoolConnectionParameters (pool) {
   // pg-pool removes a failed client before invoking the acquire callback, so snapshot it while
@@ -289,10 +306,10 @@ function latestPoolConnectionParameters (pool) {
 }
 
 /**
- * @param {import('pg').Pool['connect']} connect
- * @param {import('pg').Pool} pool
+ * @param {Function} connect
+ * @param {InstrumentedPool} pool
  * @param {IArguments} args
- * @param {{ params?: object, error?: unknown }} acquireCtx
+ * @param {AcquireContext} acquireCtx
  * @param {number | undefined} start
  */
 function connectForAcquire (connect, pool, args, acquireCtx, start) {
@@ -312,7 +329,7 @@ function connectForAcquire (connect, pool, args, acquireCtx, start) {
 }
 
 /**
- * @param {{ poolWaitTime?: number }} ctx
+ * @param {AcquireContext} ctx
  * @param {number | undefined} start
  */
 function finishAcquire (ctx, start) {
@@ -321,9 +338,9 @@ function finishAcquire (ctx, start) {
 }
 
 /**
- * @param {import('pg').Pool['query']} query
- * @param {import('pg').Pool} pool
- * @param {Parameters<import('pg').Pool['query']>} args
+ * @param {Function} query
+ * @param {InstrumentedPool} pool
+ * @param {unknown[]} args
  */
 function acquireForPoolQuery (query, pool, args) {
   acquiringForPoolQuery = true
