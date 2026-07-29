@@ -4,6 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { scheduleVercelFlush } = require('../../dd-trace/src/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
@@ -96,6 +97,7 @@ class NextPlugin extends ServerPlugin {
     this.config.hooks.request(span, req, res)
 
     span.finish()
+    scheduleVercelFlush(this.tracer)
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false, isFilesystemPath = isAppPath }) {
