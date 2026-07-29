@@ -590,6 +590,9 @@ class Config extends ConfigBase {
     const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
     if (agentlessEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
+      if (getEnvironmentVariable('VERCEL') === '1') {
+        setAndTrack(this, 'flushInterval', 0)
+      }
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
