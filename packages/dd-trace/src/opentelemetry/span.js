@@ -1,9 +1,5 @@
 'use strict'
 
-const { performance } = require('perf_hooks')
-
-const { timeOrigin } = performance
-
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
@@ -150,8 +146,8 @@ class Span extends BridgeSpanBase {
   ) {
     const { _tracer } = tracer
 
-    const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
-    const startTime = hrTimeToMilliseconds(hrStartTime)
+    const hrStartTime = timeInput === undefined ? undefined : timeInputToHrTime(timeInput)
+    const startTime = hrStartTime === undefined ? undefined : hrTimeToMilliseconds(hrStartTime)
 
     const ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
       operationName: spanNameMapper(spanName, kind, attributes),
@@ -186,7 +182,7 @@ class Span extends BridgeSpanBase {
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
-    this.startTime = hrStartTime
+    this.startTime = hrStartTime ?? timeInputToHrTime(ddSpan._startTime)
     this.kind = kind
     this._spanProcessor.onStart(this, context)
 
@@ -265,14 +261,15 @@ class Span extends BridgeSpanBase {
       return
     }
 
-    const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
-    const endTime = hrTimeToMilliseconds(hrEndTime)
-
     // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
     if (spanEndingHook.hook !== undefined) {
       spanEndingHook.hook(this._ddSpan)
     }
-    this._ddSpan.finish(endTime)
+    if (timeInput === undefined) {
+      this._ddSpan.finish()
+    } else {
+      this._ddSpan.finish(hrTimeToMilliseconds(timeInputToHrTime(timeInput)))
+    }
     this._spanProcessor.onEnd(this)
 
     if (this.instrumentationLibrary.name === 'next.js' &&

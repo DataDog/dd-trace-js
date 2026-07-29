@@ -16,6 +16,7 @@ require('./use-otel-api')
 
 const tracer = require('../../').init()
 
+const DatadogSpan = require('../../src/opentracing/span')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
@@ -307,6 +308,23 @@ describe('OTel Span', () => {
     span.end()
 
     assert.strictEqual(span.duration, span._ddSpan._duration)
+  })
+
+  it('should use the Datadog trace clock when start and end times are omitted', () => {
+    const clock = sinon.stub(DatadogSpan.prototype, '_getTime')
+    clock.onFirstCall().returns(100)
+    clock.onSecondCall().returns(125)
+
+    try {
+      const span = makeSpan('name')
+      span.end()
+
+      assert.strictEqual(span._ddSpan._startTime, 100)
+      assert.strictEqual(span._ddSpan._duration, 25)
+      sinon.assert.calledTwice(clock)
+    } finally {
+      clock.restore()
+    }
   })
 
   it('should expose trace provider resource', () => {
