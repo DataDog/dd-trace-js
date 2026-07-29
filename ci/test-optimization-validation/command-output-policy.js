@@ -77,21 +77,21 @@ function cleanupCommandOutputs (states) {
  *
  * @param {string} outputPath output path
  * @param {string} repositoryRoot repository root
- * @returns {{path: string, dev: number, ino: number}[]} parent identities
+ * @returns {{path: string, dev: bigint, ino: bigint}[]} parent identities
  */
 function captureExistingParentIdentities (outputPath, repositoryRoot) {
   const identities = []
   const relative = path.relative(repositoryRoot, path.dirname(outputPath))
   let current = repositoryRoot
   for (const segment of relative ? relative.split(path.sep) : []) {
-    const stat = fs.lstatSync(current)
+    const stat = fs.lstatSync(current, { bigint: true })
     assertRegularDirectory(stat, current)
     identities.push({ path: current, dev: stat.dev, ino: stat.ino })
     current = path.join(current, segment)
     if (!pathExists(current)) return identities
   }
 
-  const stat = fs.lstatSync(current)
+  const stat = fs.lstatSync(current, { bigint: true })
   assertRegularDirectory(stat, current)
   identities.push({ path: current, dev: stat.dev, ino: stat.ino })
   return identities
@@ -104,7 +104,7 @@ function captureExistingParentIdentities (outputPath, repositoryRoot) {
  */
 function assertOutputParentsUnchanged (state) {
   for (const identity of state.parentIdentities) {
-    const stat = fs.lstatSync(identity.path)
+    const stat = fs.lstatSync(identity.path, { bigint: true })
     assertRegularDirectory(stat, identity.path)
     if (stat.dev !== identity.dev || stat.ino !== identity.ino) {
       throw new Error(`Refusing command output cleanup because a parent directory changed: ${identity.path}`)
@@ -124,7 +124,7 @@ function assertOutputParentsUnchanged (state) {
 /**
  * Refuses symbolic links and non-directory parent components.
  *
- * @param {fs.Stats} stat path status
+ * @param {fs.Stats | fs.BigIntStats} stat path status
  * @param {string} directory directory path
  */
 function assertRegularDirectory (stat, directory) {

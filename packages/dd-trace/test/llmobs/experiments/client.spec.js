@@ -7,11 +7,20 @@ const sinon = require('sinon')
 const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
 
 describe('LLMObs Experiments control-plane client', () => {
+  let fetchError
+  let fetchResponse
+  let fetchStub
   let originalFetch
 
   beforeEach(() => {
     originalFetch = global.fetch
-    global.fetch = sinon.stub()
+    fetchError = undefined
+    fetchResponse = undefined
+    fetchStub = sinon.stub().callsFake(async () => {
+      if (fetchError) throw fetchError
+      return fetchResponse
+    })
+    global.fetch = fetchStub
   })
 
   afterEach(() => {
@@ -19,12 +28,16 @@ describe('LLMObs Experiments control-plane client', () => {
     sinon.restore()
   })
 
+  const rejectWith = (error) => {
+    fetchError = error
+  }
+
   const resolveWith = (status, body) => {
-    global.fetch.resolves({
+    fetchResponse = {
       ok: status >= 200 && status < 300,
       status,
       text: sinon.stub().resolves(JSON.stringify(body)),
-    })
+    }
   }
 
   it('resolves the control-plane host from the site', () => {
@@ -33,12 +46,13 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.equal(apiHost('datad0g.com'), 'api.datad0g.com')
   })
 
-  it('resolves the web-app host (app.<site> for single-level, regional as-is)', () => {
+  it('resolves the web-app host (app.<site> for single-level, staging override, regional as-is)', () => {
     assert.equal(appHost('datadoghq.com'), 'app.datadoghq.com')
+    assert.equal(appHost('datad0g.com'), 'dd.datad0g.com')
     assert.equal(appHost('us3.datadoghq.com'), 'us3.datadoghq.com')
-    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com' })
-    assert.equal(client.appBase, 'https://app.datadoghq.com')
-    assert.equal(client.site, 'datadoghq.com')
+    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datad0g.com' })
+    assert.equal(client.appBase, 'https://dd.datad0g.com')
+    assert.equal(client.site, 'datad0g.com')
   })
 
   it('ensureProjectId resolves the configured project name', async () => {
@@ -46,7 +60,7 @@ describe('LLMObs Experiments control-plane client', () => {
     const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com', projectName: 'cfg-app' })
     const id = await client.ensureProjectId()
     assert.equal(id, 'proj-9')
-    assert.deepEqual(JSON.parse(global.fetch.firstCall.args[1].body), {
+    assert.deepEqual(JSON.parse(fetchStub.firstCall.args[1].body), {
       data: { type: 'projects', attributes: { name: 'cfg-app' } },
     })
   })
@@ -64,9 +78,9 @@ describe('LLMObs Experiments control-plane client', () => {
     const id = await client.getOrCreateProject('my-project')
 
     assert.equal(id, 'proj-123')
-    sinon.assert.calledOnce(global.fetch)
+    sinon.assert.calledOnce(fetchStub)
 
-    const [url, opts] = global.fetch.firstCall.args
+    const [url, opts] = fetchStub.firstCall.args
     assert.equal(url, 'https://api.datadoghq.com/api/v2/llm-obs/v1/projects')
     assert.equal(opts.method, 'POST')
     assert.equal(opts.headers['DD-API-KEY'], 'key')
@@ -86,7 +100,7 @@ describe('LLMObs Experiments control-plane client', () => {
 
     assert.equal(first, 'proj-123')
     assert.equal(second, 'proj-123')
-    sinon.assert.calledOnce(global.fetch)
+    sinon.assert.calledOnce(fetchStub)
   })
 
   it('routes regional sites to api.<region>.<site>', async () => {
@@ -95,7 +109,7 @@ describe('LLMObs Experiments control-plane client', () => {
     const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'us3.datadoghq.com' })
     await client.getOrCreateProject('p')
 
-    assert.equal(global.fetch.firstCall.args[0], 'https://api.us3.datadoghq.com/api/v2/llm-obs/v1/projects')
+    assert.equal(fetchStub.firstCall.args[0], 'https://api.us3.datadoghq.com/api/v2/llm-obs/v1/projects')
   })
 
   it('throws a clear error on a non-2xx response', async () => {
@@ -109,7 +123,7 @@ describe('LLMObs Experiments control-plane client', () => {
   })
 
   it('throws a clear error when the request itself fails', async () => {
-    global.fetch.rejects(new Error('network down'))
+    rejectWith(new Error('network down'))
 
     const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com' })
     await assert.rejects(

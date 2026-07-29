@@ -53,6 +53,7 @@ const {
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
 
 require('./common')
@@ -112,17 +113,6 @@ function warnDeprecatedMochaVersion (frameworkVersion) {
     'dd-trace support for Mocha<8.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Mocha to >=8.0.0.'
   )
-}
-
-// Tests from workers do not come with `isFailed` method
-function isTestFailed (test) {
-  if (test.isFailed) {
-    return test.isFailed()
-  }
-  if (test.isPending) {
-    return !test.isPending() && test.state === 'failed'
-  }
-  return false
 }
 
 function getRootSuiteStatus (rootTests) {
@@ -309,37 +299,7 @@ function getOnEndHandler (isParallel, onDone) {
       status = 'fail'
     }
 
-    if (config.isEarlyFlakeDetectionEnabled) {
-      /**
-       * If Early Flake Detection (EFD) is enabled the logic is as follows:
-       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
-       * - If just a single attempt passes, we will prevent the test process from failing.
-       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
-       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
-       */
-      for (const tests of Object.values(efdTests)) {
-        const failingEfdTests = tests.filter(test => isTestFailed(test))
-        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
-        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
-        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
-          this.stats.failures -= nonQuarantinedFailingEfdTests.length
-          this.failures -= nonQuarantinedFailingEfdTests.length
-        }
-      }
-    }
-
-    // We subtract the errors from quarantined tests from the total number of failures.
-    // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
-    if (config.isTestManagementTestsEnabled) {
-      let numFailedQuarantinedTests = 0
-      for (const test of testsQuarantined) {
-        if (isTestFailed(test)) {
-          numFailedQuarantinedTests++
-        }
-      }
-      this.stats.failures -= numFailedQuarantinedTests
-      this.failures -= numFailedQuarantinedTests
-    }
+    adjustRunnerFailuresForTestOptimization(this, config)
 
     // Recompute status after EFD and quarantine adjustments have reduced failure counts
     if (status === 'fail') {

@@ -26,6 +26,7 @@ const { getBasicCommand } = require('../../../../ci/test-optimization-validation
 const {
   createLoadedManifest,
   createRepositoryFixture,
+  createWindowsFileReferenceFs,
   removeFixture,
 } = require('./validation-test-helpers')
 
@@ -677,7 +678,52 @@ describe('test optimization validation execution boundary', () => {
       serializeApprovalCommand({ argv: ['/path with spaces/node', 'a\'b', '--flag'] }),
       expectedCommand
     )
-    assert.match(withCiPreloads('', framework).replaceAll('\\', '/'), /dd-trace-js\/ci\/init\.js/)
+    assert.match(withCiPreloads('', framework).replaceAll('\\', '/'), /-r "?[^"]*\/ci\/init\.js"?$/)
+  })
+
+  it('refuses command output cleanup when a parent is swapped and reuses a file reference above 2^53', () => {
+    const { cleanupCommandOutputs, prepareCommandOutputs } =
+      proxyquire('../../../../ci/test-optimization-validation/command-output-policy', {
+        'node:fs': createWindowsFileReferenceFs(),
+      })
+    const outputParent = path.join(fixture.root, 'command-output')
+    fs.mkdirSync(outputParent)
+    const states = prepareCommandOutputs({
+      artifactRoot: out,
+      command: { cwd: fixture.root, outputPaths: [path.join(outputParent, 'result.json')] },
+      repositoryRoot: fixture.root,
+    })
+
+    fs.renameSync(outputParent, `${outputParent}-original`)
+    fs.mkdirSync(outputParent)
+
+    assert.throws(() => cleanupCommandOutputs(states), /parent directory changed/)
+  })
+
+  it('refuses to publish a report when its parent is swapped and reuses a file reference above 2^53', () => {
+    const parent = path.join(fixture.root, 'safe-write')
+    fs.mkdirSync(parent)
+    let swapped = false
+    const { writeFileSafely } = proxyquire('../../../../ci/test-optimization-validation/safe-files', {
+      'node:fs': createWindowsFileReferenceFs({
+        // Windows refuses to rename a directory that still holds an open handle, so the swap waits
+        // until the temporary file is closed.
+        closeSync: (file) => {
+          fs.closeSync(file)
+          if (!swapped) {
+            swapped = true
+            fs.renameSync(parent, `${parent}-original`)
+            fs.mkdirSync(parent)
+          }
+        },
+      }),
+    })
+
+    assert.throws(
+      () => writeFileSafely(fixture.root, path.join(parent, 'report.json'), '{}', 'validation report'),
+      /parent directory changed during the write/
+    )
+    assert.strictEqual(swapped, true)
   })
 
   /**

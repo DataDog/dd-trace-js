@@ -45,6 +45,7 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
@@ -182,6 +183,7 @@ const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
 
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
+const MOCHA_WORKER_LOGS_PAYLOAD_CODE = 81
 
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
@@ -209,7 +211,7 @@ const DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS = '_dd.ci.library_configurat
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS =
   '_dd.ci.library_configuration_error.test_management_tests'
 
-const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest', 'webdriverio'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -246,6 +248,7 @@ const TEST_LEVELS_METADATA_TAGS = [
   CI_NODE_NAME,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
@@ -470,6 +473,7 @@ module.exports = {
   JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
@@ -876,9 +880,16 @@ function setRumTestCorrelation (context, activeSpan) {
   return testSpan
 }
 
-function getTestParentSpan (tracer) {
+/**
+ * Returns the synthetic parent that makes a test event the root of its trace.
+ *
+ * @param {import('../../tracer')} tracer
+ * @param {string} [testExecutionId]
+ * @returns {import('../../opentracing/span_context')}
+ */
+function getTestParentSpan (tracer, testExecutionId) {
   return tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-trace-id': testExecutionId || id().toString(10),
     'x-datadog-parent-id': '0000000000000000',
   })
 }

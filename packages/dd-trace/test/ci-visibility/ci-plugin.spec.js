@@ -27,6 +27,16 @@ const {
   GIT_REPOSITORY_URL,
   GIT_TAG,
 } = require('../../src/plugins/util/tags')
+const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+} = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
   let CiPlugin
@@ -190,6 +200,65 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
     assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
     assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('disables only TIA for WebdriverIO library configuration requests', () => {
+    const libraryConfig = {
+      isCodeCoverageEnabled: true,
+      isCoverageReportUploadEnabled: true,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isImpactedTestsEnabled: true,
+      isItrEnabled: true,
+      isKnownTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'mocha',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      disableTestImpactAnalysis: true,
+      frameworkVersion: '9.0.0',
+      onDone,
+      testFramework: 'webdriverio',
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {
+      ...libraryConfig,
+      isCodeCoverageEnabled: false,
+      isCoverageReportUploadEnabled: false,
+      isItrEnabled: false,
+      isSuitesSkippingEnabled: false,
+    })
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, plugin.libraryConfig)
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], {
+      test: {
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: undefined,
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+        [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+        [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+      },
+    })
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
   })
