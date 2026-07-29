@@ -31,6 +31,7 @@ import istanbulLibCoverage from 'istanbul-lib-coverage'
 
 const INPUT_DIR = 'coverage-results'
 const OUTPUT_DIR = 'coverage-upload'
+const FINAL_OUTPUT_DIR = 'coverage-upload-final'
 const ARTIFACT_PREFIX = 'coverage-'
 
 const REPORTS = new Map([
@@ -282,4 +283,50 @@ function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) 
   return { lcovDir, jsonDir }
 }
 
-export { mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups }
+/**
+ * Recursively collect every already-per-run-merged `lcov.info` file under `coverage-upload/<run-id>/lcov/`.
+ *
+ * @param {string} dir
+ * @param {string[]} out
+ * @returns {string[]}
+ */
+function collectMergedLcovFiles (dir, out = []) {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return out
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      collectMergedLcovFiles(full, out)
+    } else if (entry.name === 'lcov.info') {
+      out.push(full)
+    }
+  }
+  return out
+}
+
+/**
+ * Merge every sibling workflow's already-per-run-merged lcov file into one final lcov file, for a
+ * single Datadog coverage upload covering the whole commit instead of one upload per workflow run.
+ * Unlike Codecov, whose per-workflow flag keeps its upload scoped to one run at a time (see
+ * `upload-coverage.mjs`), Datadog's coverage flag is the same for every run, so there's no reason
+ * to pay for a separate upload call per workflow.
+ *
+ * @param {string} [inputDir]
+ * @param {string} [outputDir]
+ * @returns {string|null} Directory containing the merged `lcov.info`, or null if no run produced one.
+ */
+function mergeAllRunsCoverage (inputDir = OUTPUT_DIR, outputDir = FINAL_OUTPUT_DIR) {
+  const reportPaths = collectMergedLcovFiles(inputDir)
+  if (reportPaths.length === 0) return null
+
+  const lcovDir = join(outputDir, 'lcov')
+  mkdirSync(lcovDir, { recursive: true })
+  writeFileSync(join(lcovDir, 'lcov.info'), mergeLcov(reportPaths))
+  return lcovDir
+}
+
+export { mergeAllRunsCoverage, mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups }
