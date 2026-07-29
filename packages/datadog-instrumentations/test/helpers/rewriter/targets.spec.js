@@ -1,20 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { readFileSync } = require('node:fs')
 
-const instrumentations = require('../../../src/helpers/rewriter/instrumentations')
+const { generateRewriterTargets, OUTPUT_PATH } = require('../../../../../scripts/generate-rewriter-targets')
 const { getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
-const targets = require('../../../src/helpers/rewriter/targets.json')
 
 describe('rewriter targets', () => {
-  it('matches the instrumentation descriptors', () => {
-    const expectedTargets = {}
-
-    for (const { module: { name, filePath } } of instrumentations) {
-      expectedTargets[`${name}/${filePath}`] = name
-    }
-
-    assert.deepStrictEqual(targets, expectedTargets)
+  it('stays in sync with the instrumentation descriptors', () => {
+    assert.strictEqual(
+      readFileSync(OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n'),
+      generateRewriterTargets()
+    )
   })
 
   it('finds nested rewrite targets', () => {
