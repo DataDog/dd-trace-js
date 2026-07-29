@@ -3610,6 +3610,57 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
+    it('picks the retry budget of a concurrent test from its own execution time', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3,
+            '10s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.resource?.includes('concurrent-slow-test'))
+
+          const executionsByName = {}
+          for (const test of tests) {
+            executionsByName[test.meta[TEST_NAME]] ??= 0
+            executionsByName[test.meta[TEST_NAME]]++
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in test.meta))
+          }
+          assert.deepStrictEqual(executionsByName, {
+            'efd concurrent slow retries slower concurrent sibling': 1,
+            'efd concurrent slow retries slow concurrent test': 1,
+          })
+        }, 30_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-slow-test',
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
     it('tags new tests with dynamic names and logs a warning', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // No known tests, so both will be considered new
