@@ -6,6 +6,20 @@ const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastre
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
+/**
+ * @param {Record<string, string | Buffer | Array<string | Buffer>>} headers
+ */
+function getRepeatedHeaderKeysSize (headers) {
+  let size = 0
+  for (const key of Object.keys(headers)) {
+    const value = headers[key]
+    if (Array.isArray(value) && value.length > 1) {
+      size += Buffer.byteLength(key) * (value.length - 1)
+    }
+  }
+  return size
+}
+
 class KafkajsProducerPlugin extends ProducerPlugin {
   static id = 'kafkajs'
   static operation = 'produce'
@@ -77,7 +91,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        const payloadSize = getMessageSize(message)
+        let payloadSize = getMessageSize(message)
+        if (ctx.countRepeatedHeaderKeys) {
+          payloadSize += getRepeatedHeaderKeysSize(message.headers)
+        }
         const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
         if (clusterId) {

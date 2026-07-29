@@ -9,6 +9,30 @@ require('../../dd-trace/test/setup/core')
 const KafkajsConsumerPlugin = require('../src/consumer')
 const KafkajsProducerPlugin = require('../src/producer')
 
+describe('kafkajs producer start', () => {
+  it('counts every repeated native header key when requested by the instrumentation', () => {
+    const setCheckpoint = sinon.stub()
+    const plugin = new KafkajsProducerPlugin({ setCheckpoint }, {})
+    plugin.config = { dsmEnabled: true }
+    const message = {
+      key: 'key',
+      value: 'value',
+      headers: {
+        'content-type': ['text', 'application/json'],
+      },
+    }
+
+    plugin.start({
+      topic: 'topic',
+      messages: [message],
+      countRepeatedHeaderKeys: true,
+      currentStore: { span: {} },
+    })
+
+    assert.strictEqual(setCheckpoint.firstCall.args[2], 52)
+  })
+})
+
 describe('kafkajs producer finish', () => {
   /**
    * Build a fake span whose setTag records the tags applied.
