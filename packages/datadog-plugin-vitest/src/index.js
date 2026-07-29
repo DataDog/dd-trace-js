@@ -133,6 +133,7 @@ class VitestPlugin extends CiPlugin {
         browserProjectName,
         isRumActive,
         testExecutionId,
+        testStartLine,
         startTime,
       } = ctx
 
@@ -143,6 +144,7 @@ class VitestPlugin extends CiPlugin {
       const extraTags = {
         ...requestErrorTags,
         [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: testStartLine || 1,
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
@@ -351,12 +353,13 @@ class VitestPlugin extends CiPlugin {
       browserName,
       browserProjectName,
       testExecutionId,
+      testStartLine,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const extraTags = {
         ...requestErrorTags,
         [TEST_SOURCE_FILE]: testSuite,
-        [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
+        [TEST_SOURCE_START]: testStartLine || 1,
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
         ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),

@@ -19,6 +19,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME,
 } = require('../../packages/dd-trace/src/ci-visibility/rum')
 const {
+  testErrorCh,
   testStartCh,
   testSuiteFinishCh,
   testSuiteStartCh,
@@ -354,8 +355,67 @@ describe('vitest no-worker init instrumentation selection', () => {
 
       configureNoWorkerReporter(ctx)
 
+      assert.strictEqual(ctx.config.includeTaskLocation, true)
       assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-setup.mjs')
       assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
+    })
+
+    it('allows Vite to serve the Datadog setup when dd-trace is linked outside the browser project', () => {
+      const ctx = getNoWorkerReporterContext()
+      const userPlugin = { name: 'user-plugin' }
+      const parentProject = {
+        options: {
+          plugins: [userPlugin],
+        },
+      }
+      const project = {
+        _parent: parentProject,
+        config: {
+          browser: {
+            enabled: true,
+          },
+        },
+      }
+      const testSpecifications = [[project, { filepath: '/repo/test.mjs', pool: 'browser' }]]
+
+      configureNoWorkerReporter(ctx, testSpecifications)
+      configureNoWorkerReporter(ctx, testSpecifications)
+
+      assert.strictEqual(parentProject.options.plugins[0], userPlugin)
+      assert.strictEqual(parentProject.options.plugins.length, 2)
+      const accessPlugin = parentProject.options.plugins[1]
+      assert.strictEqual(accessPlugin.name, 'datadog:vitest-browser-setup-file')
+
+      const viteConfig = {
+        resolve: {
+          dedupe: ['user-dependency'],
+        },
+        server: {
+          fs: {
+            allow: ['/repo/user-setup.mjs'],
+          },
+        },
+      }
+      accessPlugin.config(viteConfig)
+      accessPlugin.config(viteConfig)
+
+      assert.deepStrictEqual(viteConfig.resolve.dedupe, ['user-dependency', '@vitest/runner'])
+      assert.strictEqual(viteConfig.server.fs.allow[0], '/repo/user-setup.mjs')
+      assert.strictEqual(viteConfig.server.fs.allow.length, 2)
+      assert.strictEqual(path.basename(viteConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
+    })
+
+    it('does not install the Vite access plugin for Node test projects', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          pool: 'forks',
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs', pool: 'forks' }]])
+
+      assert.strictEqual(project.options, undefined)
     })
 
     it('disables RUM correlation when browser files can run in parallel', () => {
@@ -493,6 +553,75 @@ describe('vitest no-worker init instrumentation selection', () => {
         browserName: 'chromium',
         isBrowserMode: true,
       }])
+    })
+
+    it('reports the source line collected by Vitest', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testStartLines = []
+      const onTestStart = context => testStartLines.push(context.testStartLine)
+      testStartCh.subscribe(onTestStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const { file, task } = createReporterTestFile()
+        task.location = {
+          column: 3,
+          line: 42,
+        }
+        ctx.reporters[0].onTestCaseResult({ task })
+        ctx.reporters[0].onFinished([file])
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+      }
+
+      assert.deepStrictEqual(testStartLines, [42])
+    })
+
+    it('removes Vitest browser URL metadata from reported errors', () => {
+      const ctx = getNoWorkerReporterContext()
+      const reportedErrors = []
+      const onTestError = context => reportedErrors.push(context.error)
+      const error = {
+        message: 'failed at http://localhost:63315/repo/test.mjs?import&browserv=1785328307188:60:13',
+        name: 'Error',
+        stack: [
+          'Error: failed',
+          '    at http://localhost:63315/repo/test.mjs?import&browserv=1785328307188:60:13',
+          '    at http://localhost:63315/repo/helper.mjs?foo=bar:10:5',
+        ].join('\n'),
+        stacks: [{
+          column: 13,
+          file: '/repo/test.mjs',
+          line: 60,
+          method: '',
+        }, {
+          column: 5,
+          file: '/repo/helper.mjs?foo=bar',
+          line: 10,
+          method: 'runHelper',
+        }],
+      }
+      testErrorCh.subscribe(onTestError)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const { file, task } = createReporterTestFile(0, [error])
+        task.result.state = 'fail'
+        file.result.state = 'fail'
+        ctx.reporters[0].onTestCaseResult({ task })
+        ctx.reporters[0].onFinished([file])
+      } finally {
+        testErrorCh.unsubscribe(onTestError)
+      }
+
+      assert.strictEqual(reportedErrors.length, 1)
+      assert.strictEqual(reportedErrors[0].message, 'failed at http://localhost:63315/repo/test.mjs:60:13')
+      assert.strictEqual(reportedErrors[0].stack, [
+        'Error: failed',
+        '    at /repo/test.mjs:60:13',
+        '    at runHelper (/repo/helper.mjs?foo=bar:10:5)',
+      ].join('\n'))
+      assert.match(error.stack, /[?]import&browserv=/)
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

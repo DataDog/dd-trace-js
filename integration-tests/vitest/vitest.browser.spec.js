@@ -13,7 +13,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_BROWSER_DRIVER,
@@ -23,6 +23,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_IS_RUM_ACTIVE,
+  TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
@@ -32,6 +33,7 @@ const {
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_STATUS,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -150,6 +152,10 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], 'chromium')
       assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], 'playwright')
       assert.strictEqual(passedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(passedTest.meta[TEST_FINAL_STATUS], 'pass')
+      assert.strictEqual(passedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+      assert.strictEqual(passedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-browser-tests/browser-reporting.mjs')
+      assert.strictEqual(passedTest.metrics[TEST_SOURCE_START], 4)
       assert.ok(!(TEST_IS_RUM_ACTIVE in passedTest.meta))
       assert.deepStrictEqual(JSON.parse(passedTest.meta[TEST_PARAMETERS]), {
         arguments: {
@@ -164,7 +170,12 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(skippedTest.meta[TEST_TYPE], 'browser')
       assert.strictEqual(skippedTest.meta[TEST_BROWSER_NAME], 'chromium')
       assert.strictEqual(skippedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
+      assert.strictEqual(skippedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+      assert.strictEqual(skippedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-browser-tests/browser-reporting.mjs')
+      assert.strictEqual(skippedTest.metrics[TEST_SOURCE_START], 11)
       assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
     })
 
     const [exitCode] = await Promise.all([
@@ -183,6 +194,12 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.ok(!(TEST_IS_RETRY in tests[0].meta))
       assert.match(tests[0].meta[ERROR_MESSAGE], /test attempt 1 failed/)
       assert.doesNotMatch(tests[0].meta[ERROR_MESSAGE], /cleanup for attempt 1 failed/)
+      assert.match(tests[0].meta[ERROR_STACK], /browser-multiple-errors\.mjs:\d+:\d+/)
+      assert.doesNotMatch(tests[0].meta[ERROR_STACK], /[?&](?:import|browserv)(?:[=&]|$)/)
+      assert.doesNotMatch(tests[0].meta[ERROR_STACK], /https?:\/\/localhost:\d+/)
+      if (!isLegacyBrowserProvider) {
+        assert.doesNotMatch(tests[0].meta[ERROR_STACK], /node_modules\/@vitest\/runner/)
+      }
     })
 
     const [exitCode] = await Promise.all([

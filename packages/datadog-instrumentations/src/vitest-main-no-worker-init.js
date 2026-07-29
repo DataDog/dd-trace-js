@@ -54,15 +54,179 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
+  name: 'datadog:vitest-browser-setup-file',
+  config: configureVitestBrowserSetupFile,
+}
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
   'The lighter Vitest worker path only works when each test file runs in an isolated worker.'
 const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
+const VITEST_BROWSER_STACK_LOCATION_RE = /:\d+:\d+$/
+const VITEST_BROWSER_URL_RE = /https?:\/\/[^\s)"'>\]]+/g
 let hasWarnedDisabledIsolate = false
 let hasWarnedUnsupportedVersion = false
 let nodeOptionsBeforeNoWorkerInit
 
 function noop () {}
+
+/**
+ * Removes Vite and Vitest runtime query parameters from browser error URLs.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function removeVitestBrowserUrlMetadata (url) {
+  const locationMatch = url.match(VITEST_BROWSER_STACK_LOCATION_RE)
+  const location = locationMatch?.[0] || ''
+  const urlWithoutLocation = location ? url.slice(0, -location.length) : url
+  const queryStart = urlWithoutLocation.indexOf('?')
+  if (queryStart === -1) return url
+
+  const fragmentStart = urlWithoutLocation.indexOf('#', queryStart)
+  const queryEnd = fragmentStart === -1 ? urlWithoutLocation.length : fragmentStart
+  const parameters = urlWithoutLocation.slice(queryStart + 1, queryEnd).split('&')
+  const keptParameters = []
+  let removedParameter = false
+
+  for (const parameter of parameters) {
+    const valueSeparator = parameter.indexOf('=')
+    const name = valueSeparator === -1 ? parameter : parameter.slice(0, valueSeparator)
+    if (name === 'import' || name === 'browserv') {
+      removedParameter = true
+    } else {
+      keptParameters.push(parameter)
+    }
+  }
+
+  if (!removedParameter) return url
+
+  const query = keptParameters.length ? `?${keptParameters.join('&')}` : ''
+  return urlWithoutLocation.slice(0, queryStart) + query + urlWithoutLocation.slice(queryEnd) + location
+}
+
+/**
+ * Removes Vite and Vitest runtime URL metadata from browser error text.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeVitestBrowserErrorText (value) {
+  return value.replaceAll(VITEST_BROWSER_URL_RE, removeVitestBrowserUrlMetadata)
+}
+
+/**
+ * Removes the ephemeral Vite server origin in addition to its runtime query parameters.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function normalizeVitestBrowserStackUrl (url) {
+  const normalizedUrl = removeVitestBrowserUrlMetadata(url)
+  const protocolEnd = normalizedUrl.indexOf('://')
+  const pathStart = normalizedUrl.indexOf('/', protocolEnd + 3)
+  return pathStart === -1 ? normalizedUrl : normalizedUrl.slice(pathStart)
+}
+
+/**
+ * Normalizes browser URLs in a stack when Vitest does not provide parsed frames.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeVitestBrowserStackText (value) {
+  return value.replaceAll(VITEST_BROWSER_URL_RE, normalizeVitestBrowserStackUrl)
+}
+
+/**
+ * Rebuilds an error stack from the source-mapped frames already parsed by Vitest.
+ *
+ * @param {{
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }} error
+ * @returns {string|undefined}
+ */
+function normalizeVitestBrowserErrorStack (error) {
+  if (typeof error.stack !== 'string') return error.stack
+  if (!Array.isArray(error.stacks)) {
+    return normalizeVitestBrowserStackText(error.stack)
+  }
+
+  const firstLineEnd = error.stack.indexOf('\n')
+  const stackLines = new Array(error.stacks.length + 1)
+  stackLines[0] = normalizeVitestBrowserErrorText(
+    firstLineEnd === -1 ? error.stack : error.stack.slice(0, firstLineEnd)
+  )
+
+  for (let index = 0; index < error.stacks.length; index++) {
+    const frame = error.stacks[index]
+    const location = `${frame.file}:${frame.line}:${frame.column}`
+    stackLines[index + 1] = frame.method
+      ? `    at ${frame.method} (${location})`
+      : `    at ${location}`
+  }
+
+  return stackLines.join('\n')
+}
+
+/**
+ * Returns an error copy with browser-only URL metadata removed.
+ *
+ * @param {{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }|undefined} error
+ * @returns {{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }|undefined}
+ */
+function normalizeVitestBrowserError (error) {
+  if (!error) return error
+
+  const message = typeof error.message === 'string'
+    ? normalizeVitestBrowserErrorText(error.message)
+    : error.message
+  const stack = normalizeVitestBrowserErrorStack(error)
+  if (message === error.message && stack === error.stack) return error
+
+  const normalizedError = { ...error }
+  if (error.name !== undefined) normalizedError.name = error.name
+  if (message !== undefined) normalizedError.message = message
+  if (stack !== undefined) normalizedError.stack = stack
+  return normalizedError
+}
+
+/**
+ * Normalizes browser errors without mutating Vitest's task result.
+ *
+ * @param {Array<{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }>|undefined} errors
+ * @returns {Array<{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }>}
+ */
+function normalizeVitestBrowserErrors (errors) {
+  if (!errors?.length) return []
+
+  const normalizedErrors = new Array(errors.length)
+  for (let index = 0; index < errors.length; index++) {
+    normalizedErrors[index] = normalizeVitestBrowserError(errors[index])
+  }
+  return normalizedErrors
+}
 
 function isRequested () {
   return getValueFromEnvSources(VITEST_NO_WORKER_INIT_REQUEST_ENV) === true
@@ -147,6 +311,7 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
   const { getConfiguredEfdRetryCount, shouldReportTestModule, state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
+  addVitestBrowserSetupFileAccess(testSpecifications)
 
   const {
     knownTestsBySuite,
@@ -237,6 +402,7 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
   for (const config of configs) {
     if (!config) continue
 
+    config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []
     } else if (typeof config.setupFiles === 'string') {
@@ -249,6 +415,61 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
         config.setupFiles.splice(setupFileIndex, 1)
       }
       config.setupFiles.unshift(setupFile)
+    }
+  }
+}
+
+/**
+ * Allows Vite to serve and resolve imports from the Datadog setup file when dd-trace is linked externally.
+ *
+ * @param {{
+ *   resolve?: { dedupe?: string[] },
+ *   server?: { fs?: { allow?: string[] } }
+ * }} viteConfig
+ * @returns {void}
+ */
+function configureVitestBrowserSetupFile (viteConfig) {
+  viteConfig.resolve ||= {}
+  viteConfig.resolve.dedupe ||= []
+  viteConfig.server ||= {}
+  viteConfig.server.fs ||= {}
+  viteConfig.server.fs.allow ||= []
+
+  if (!viteConfig.resolve.dedupe.includes('@vitest/runner')) {
+    viteConfig.resolve.dedupe.push('@vitest/runner')
+  }
+  if (!viteConfig.server.fs.allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
+    viteConfig.server.fs.allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
+  }
+}
+
+/**
+ * Installs the Vite access plugin on each parent project that owns a Browser Mode server.
+ *
+ * @param {object[]|undefined} testSpecifications
+ * @returns {void}
+ */
+function addVitestBrowserSetupFileAccess (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return
+
+  const configuredProjects = new Set()
+  for (const testSpecification of testSpecifications) {
+    const project = getTestSpecificationProject(testSpecification)
+    if (
+      getTestSpecificationPool(testSpecification) !== 'browser' &&
+      safeConfig(project)?.browser?.enabled !== true
+    ) {
+      continue
+    }
+
+    const browserServerProject = project?._parent || project
+    if (!browserServerProject || configuredProjects.has(browserServerProject)) continue
+
+    configuredProjects.add(browserServerProject)
+    browserServerProject.options ||= {}
+    browserServerProject.options.plugins ||= []
+    if (!browserServerProject.options.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
+      browserServerProject.options.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
     }
   }
 }
@@ -457,7 +678,7 @@ function createMainProcessReporter (reporterState) {
     }
 
     if (testSuiteError) {
-      testSuiteCtx.error = testSuiteError
+      testSuiteCtx.error = normalizeVitestBrowserError(testSuiteError)
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
@@ -584,7 +805,7 @@ function createMainProcessReporter (reporterState) {
       result.state = 'pass'
     }
 
-    const errors = result?.errors || []
+    const errors = normalizeVitestBrowserErrors(result?.errors)
 
     return {
       browserEnvironment,
@@ -693,6 +914,7 @@ function createTaskFromReportedTask (reportedTask, file, suite) {
     id: reportedTask.id,
     type: reportedTask.type,
     name: reportedTask.name || reportedTask.relativeModuleId || reportedTask.moduleId,
+    location: reportedTask.location,
     mode: reportedTask.options?.mode,
     meta: getReportedTaskMeta(reportedTask),
     result: getReportedTaskResult(reportedTask),
@@ -781,7 +1003,7 @@ function getTestModuleProjectName (testModule) {
 
 function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
   const result = task.result
-  const errors = result?.errors || []
+  const errors = normalizeVitestBrowserErrors(result?.errors)
   const { browserEnvironment, errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
   const finalAttemptStatus = finalStatus(statuses)
   const hasFailure = finalAttemptStatus === 'fail'
@@ -959,6 +1181,7 @@ function reportFinalTestAttempt (testReport) {
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
+      testStartLine: task.location?.line,
       testExecutionId,
       ...testSuiteStore,
     })
@@ -1048,6 +1271,7 @@ function reportTestAttempt (testReport, attempt) {
     startTime: Number.isFinite(attemptStartTime)
       ? attemptStartTime
       : (Number.isFinite(duration) && duration >= 0 ? Date.now() - duration : undefined),
+    testStartLine: task.location?.line,
     testExecutionId,
   }
   if (testProperties.isAttemptToFix) {
