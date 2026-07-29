@@ -30,6 +30,8 @@ const channels = {
 const disabledHeaderWeakSet = new WeakSet()
 
 const EMPTY_CARRIER = Object.create(null)
+const EMPTY_HEADER_KEYS = Object.freeze([])
+const INVALID_HEADER_VALUE = Symbol('invalid-header-value')
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -63,17 +65,23 @@ function instrumentBaseModule (module) {
 
               const brokers = this.globalConfig?.['bootstrap.servers']
 
-              const headerKeys = nativeHeaderKeys(headers)
-              let carrier = {}
+              let carrier
+              let deferHeaderValidation = false
               let applicationValues = EMPTY_CARRIER
-              if (headerKeys.length !== 0) {
+              let headerKeys = EMPTY_HEADER_KEYS
+              if (Array.isArray(headers) && headers.length !== 0) {
                 // `__proto__` is a legal Kafka header key and propagation never
                 // writes it, so only the seeded carrier needs a null prototype.
-                applicationValues = Object.create(null)
-                for (let i = 0; i < headerKeys.length; i++) {
-                  applicationValues[headerKeys[i]] = headers[i][headerKeys[i]]
+                const candidateCarrier = Object.create(null)
+                const candidateValues = Object.create(null)
+                const candidateKeys = seedNativeHeaderCarrier(headers, candidateCarrier, candidateValues)
+                if (candidateKeys === INVALID_HEADER_VALUE) {
+                  deferHeaderValidation = true
+                } else if (candidateKeys.length !== 0) {
+                  carrier = candidateCarrier
+                  applicationValues = candidateValues
+                  headerKeys = candidateKeys
                 }
-                carrier = Object.assign(Object.create(null), applicationValues)
               }
 
               const ctx = {
@@ -88,9 +96,11 @@ function instrumentBaseModule (module) {
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  const producedHeaders = mergeNativeHeaders(
-                    headers, headerKeys, applicationValues, ctx.messages[0].headers
-                  )
+                  const producedHeaders = deferHeaderValidation
+                    ? headers
+                    : mergeNativeHeaders(
+                      headers, headerKeys, applicationValues, ctx.messages[0].headers ?? EMPTY_CARRIER
+                    )
                   const result = produce.apply(this, [
                     topic, partition, message, key, timestamp, opaque, producedHeaders,
                   ])
@@ -456,28 +466,31 @@ function getLatestOffsets () {
 }
 
 /**
- * `Producer::NodeProduce` reads only the first own key of each entry, so a key
- * may legitimately repeat and multi-key entries are the binding's business.
- * Values are left alone for the same reason: it throws on anything it cannot
- * serialize.
+ * Mirrors `Producer::NodeProduce`'s first-own-key lookup. Invalid values return
+ * a sentinel so the binding can validate the original array unchanged.
  *
- * @param {unknown} headers Seventh `produce()` argument, caller-owned.
- * @returns {string[]} Empty when there is nothing to preserve — no headers, or a
- *   shape the binding cannot consume, since a `null` entry aborts it.
+ * @param {Array<Record<string, string | Buffer>>} headers Caller-owned.
+ * @param {Record<string, string | Buffer>} carrier
+ * @param {Record<string, string | Buffer>} applicationValues
+ * @returns {ReadonlyArray<string> | symbol} Empty when the binding cannot
+ *   consume the shape; a symbol when it must validate the values itself.
  * @see https://github.com/confluentinc/confluent-kafka-javascript/blob/v1.9.1/src/producer.cc
  */
-function nativeHeaderKeys (headers) {
-  if (!Array.isArray(headers)) return []
-
+function seedNativeHeaderCarrier (headers, carrier, applicationValues) {
   const keys = new Array(headers.length)
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i]
-    if (typeof header !== 'object' || header === null) return []
+    if (typeof header !== 'object' || header === null) return EMPTY_HEADER_KEYS
 
-    const key = Object.keys(header)[0]
-    if (key === undefined) return []
+    const key = Object.getOwnPropertyNames(header)[0]
+    if (key === undefined) return EMPTY_HEADER_KEYS
 
     keys[i] = key
+    const value = header[key]
+    if (typeof value !== 'string' && !Buffer.isBuffer(value)) return INVALID_HEADER_VALUE
+
+    carrier[key] = value
+    applicationValues[key] = value
   }
   return keys
 }
@@ -485,7 +498,7 @@ function nativeHeaderKeys (headers) {
 /**
  * @param {Array<Record<string, string | Buffer>>} headers Caller-owned; surviving
  *   entries are forwarded by reference, never copied or mutated.
- * @param {string[]} headerKeys Parallel to `headers`.
+ * @param {ReadonlyArray<string>} headerKeys Parallel to `headers`.
  * @param {Record<string, string | Buffer>} applicationValues Carrier contents
  *   before propagation ran.
  * @param {Record<string, string | Buffer>} carrier
