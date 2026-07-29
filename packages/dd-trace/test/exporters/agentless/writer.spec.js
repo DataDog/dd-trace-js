@@ -310,6 +310,7 @@ describe('AgentlessWriter', () => {
         assert.strictEqual(req.url, '/api/v2/spans')
         assert.strictEqual(req.headers['dd-api-key'], 'test-api-key')
         assert.strictEqual(flushed, false)
+        res.setHeader('Connection', 'close')
         res.end('accepted')
       })
 
