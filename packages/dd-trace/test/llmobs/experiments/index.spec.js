@@ -17,17 +17,27 @@ const enabledConfig = (overrides = {}) => ({
 })
 
 describe('LLMObs Experiments facade', () => {
+  let fetchHandler
+  let fetchStub
   let originalFetch
 
   beforeEach(() => {
     originalFetch = global.fetch
-    global.fetch = sinon.stub()
+    fetchHandler = async (url) => {
+      throw new Error(`Unexpected fetch ${url}`)
+    }
+    fetchStub = sinon.stub().callsFake((...args) => fetchHandler(...args))
+    global.fetch = fetchStub
   })
 
   afterEach(() => {
     global.fetch = originalFetch
     sinon.restore()
   })
+
+  const resolveFetchWith = (handler) => {
+    fetchHandler = handler
+  }
 
   describe('createExperiments gating', () => {
     it('returns a no-op when LLM Obs is disabled', () => {
@@ -69,7 +79,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
-      global.fetch.callsFake(async () => ({
+      resolveFetchWith(async () => ({
         ok: true,
         status: 200,
         text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })),
@@ -78,7 +88,7 @@ describe('LLMObs Experiments facade', () => {
       const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
       await exp.createDataset('d').push()
 
-      const [url, opts] = global.fetch.getCall(0).args
+      const [url, opts] = fetchStub.getCall(0).args
       assert.equal(new URL(url).pathname, '/api/v2/llm-obs/v1/projects')
       assert.equal(JSON.parse(opts.body).data.attributes.name, 'my-service')
     })
@@ -162,7 +172,7 @@ describe('LLMObs Experiments facade', () => {
   describe('pullDataset', () => {
     const resolveRoutes = (recordsResponses) => {
       let recordsCall = 0
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
@@ -198,7 +208,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('passes explicit dataset version when reading records', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
@@ -220,7 +230,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('pins the current version when pulling latest records', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
@@ -254,7 +264,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws when the dataset is absent (no wait)', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         const payload = u.pathname === '/api/v2/llm-obs/v1/projects' ? { data: { id: 'proj' } } : { data: [] }
         return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
@@ -266,7 +276,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws with the underlying error when listing datasets fails', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
           return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
@@ -288,7 +298,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws the underlying error when fetching records fails, even without expectedRecordCount', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
           return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
@@ -310,7 +320,7 @@ describe('LLMObs Experiments facade', () => {
         '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
         cursor1: { data: [{ id: 'r2', attributes: { input: 'i2' } }], meta: { after: '' } },
       }
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {

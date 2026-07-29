@@ -158,8 +158,7 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId ||
-      registry.get(parent)?.[SESSION_ID] ||
+    sessionId ||= registry.get(parent)?.[SESSION_ID] ||
       traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
       traceTags[PROPAGATED_SESSION_ID_KEY]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)

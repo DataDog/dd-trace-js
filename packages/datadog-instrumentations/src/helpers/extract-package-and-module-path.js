@@ -3,10 +3,20 @@
 const NM = 'node_modules/'
 
 /**
+ * @typedef {object} PackageAndModulePath
+ * @property {string|null} pkg
+ * @property {string|null} path
+ * @property {string} [pkgJson]
+ */
+
+/**
  * For a given full path to a module,
  *   return the package name it belongs to and the local path to the module
  *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
  *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js',  pkgJson: '/foo/node_modules/@co/stuff/package.json' }
+ *
+ * @param {string} fullPath
+ * @returns {PackageAndModulePath}
  */
 module.exports = function extractPackageAndModulePath (fullPath) {
   const nm = fullPath.lastIndexOf(NM)

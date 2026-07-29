@@ -16,6 +16,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
@@ -40,18 +41,99 @@ class CiVisibilityExporter extends CiVisibilityExporterBase {
 
 describe('CI Visibility Exporter', () => {
   const url = new URL(`http://${hostname}:${port}`)
+  let originalApiKey
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
     sinon.stub(fs, 'readFileSync').returns('')
-    process.env.DD_API_KEY = '1'
+    const config = getConfig()
+    originalApiKey = config.DD_API_KEY
+    config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
   })
 
   afterEach(() => {
+    getConfig().DD_API_KEY = originalApiKey
     sinon.restore()
+  })
+
+  describe('filterConfiguration', () => {
+    const testOptimization = {
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: true,
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 5,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: true,
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED: true,
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: 20,
+      DD_TEST_MANAGEMENT_ENABLED: true,
+    }
+
+    it('creates a complete frozen policy from remote and local settings', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
+      const policy = ciVisibilityExporter.filterConfiguration({
+        isCodeCoverageEnabled: true,
+        isSuitesSkippingEnabled: true,
+        isItrEnabled: true,
+        requireGit: true,
+        isEarlyFlakeDetectionEnabled: true,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionFaultyThreshold: 0,
+        isFlakyTestRetriesEnabled: true,
+        isDiEnabled: true,
+        isKnownTestsEnabled: true,
+        isTestManagementEnabled: true,
+        testManagementAttemptToFixRetries: 0,
+        isImpactedTestsEnabled: true,
+        isCoverageReportUploadEnabled: true,
+      })
+
+      assert.deepStrictEqual(policy, {
+        isCodeCoverageEnabled: true,
+        isSuitesSkippingEnabled: true,
+        isItrEnabled: true,
+        requireGit: true,
+        isEarlyFlakeDetectionEnabled: true,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionFaultyThreshold: 0,
+        isFlakyTestRetriesEnabled: true,
+        flakyTestRetriesCount: 5,
+        isDiEnabled: true,
+        isKnownTestsEnabled: true,
+        isTestManagementEnabled: true,
+        testManagementAttemptToFixRetries: 0,
+        isImpactedTestsEnabled: true,
+        isCoverageReportUploadEnabled: true,
+      })
+      assert.strictEqual(Object.isFrozen(policy), true)
+      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionSlowTestRetries), true)
+    })
+
+    it('creates a complete disabled policy when remote settings are unavailable', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
+
+      assert.deepStrictEqual(ciVisibilityExporter.filterConfiguration(), {
+        isCodeCoverageEnabled: false,
+        isSuitesSkippingEnabled: false,
+        isItrEnabled: false,
+        requireGit: false,
+        isEarlyFlakeDetectionEnabled: false,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: {},
+        earlyFlakeDetectionFaultyThreshold: 30,
+        isFlakyTestRetriesEnabled: false,
+        flakyTestRetriesCount: 5,
+        isDiEnabled: false,
+        isKnownTestsEnabled: false,
+        isTestManagementEnabled: false,
+        testManagementAttemptToFixRetries: 20,
+        isImpactedTestsEnabled: false,
+        isCoverageReportUploadEnabled: false,
+      })
+    })
   })
 
   describe('sendGitMetadata', () => {

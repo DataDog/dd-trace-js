@@ -60,11 +60,11 @@ function eventTimeNano (event) {
 }
 
 function normalizeSpan (span) {
-  span.service = span.service || DEFAULT_SERVICE_NAME
+  span.service ||= DEFAULT_SERVICE_NAME
   if (span.service.length > MAX_SERVICE_LENGTH) {
     span.service = span.service.slice(0, MAX_SERVICE_LENGTH)
   }
-  span.name = span.name || DEFAULT_SPAN_NAME
+  span.name ||= DEFAULT_SPAN_NAME
   if (span.name.length > MAX_NAME_LENGTH) {
     span.name = span.name.slice(0, MAX_NAME_LENGTH)
   }

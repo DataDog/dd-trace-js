@@ -147,7 +147,7 @@ class Dataset {
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map((rec) => {
       const out = { input: rec.input }
-      if (rec.id !== null && rec.id !== undefined) {
+      if (rec.id != null) {
         out.id = rec.id
       }
       if (rec.expectedOutput !== null && rec.expectedOutput !== undefined) {
@@ -185,11 +185,11 @@ class Dataset {
     }
 
     let pushedCount = 0
-    for (let i = 0; i < created.length; i++) {
-      const recordId = recordIdFromCreatedRecord(created[i])
+    for (const [index, node] of created.entries()) {
+      const recordId = recordIdFromCreatedRecord(node)
       if (recordId !== '') {
         pushedCount++
-        pending[i].id = recordId
+        pending[index].id = recordId
       }
       this.#recordIds.push(recordId)
     }

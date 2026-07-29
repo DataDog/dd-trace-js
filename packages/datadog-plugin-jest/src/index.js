@@ -237,9 +237,8 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
-        // requestErrorTags from test env options may be undefined
-        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
-        ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),
+        ...requestErrorTags,
+        ...itrSkippingEnabledTags,
       }
 
       if (_ddUnskippable) {
