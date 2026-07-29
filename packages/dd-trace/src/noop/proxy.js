@@ -77,6 +77,22 @@ class NoopProxy {
     return this
   }
 
+  flush () {
+    return new Promise((resolve, reject) => {
+      const flush = this._tracer?._exporter?.flush
+      if (typeof flush !== 'function') {
+        resolve()
+        return
+      }
+
+      try {
+        flush.call(this._tracer._exporter, resolve)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
   startSpan () {
     return this._tracer.startSpan.apply(this._tracer, arguments)
   }

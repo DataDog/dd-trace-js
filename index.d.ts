@@ -67,6 +67,12 @@ interface Tracer extends opentracing.Tracer {
   setUrl (url: string): this;
 
   /**
+   * Flushes pending trace data and resolves after active export requests complete.
+   * @experimental
+   */
+  flush (): Promise<void>;
+
+  /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
