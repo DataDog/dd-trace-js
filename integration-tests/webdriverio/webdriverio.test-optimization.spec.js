@@ -307,6 +307,71 @@ for (const version of versions) {
       })
     })
 
+    it('does not retry disabled modified or new tests with EFD', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          faulty_session_threshold: 100,
+          slow_test_retries: { '5s': 2 },
+        },
+        impacted_tests_enabled: true,
+        known_tests_enabled: true,
+        test_management: { enabled: true },
+      })
+      receiver.setKnownTests({
+        webdriverio: {
+          'first.e2e.js': ['WebdriverIO first worker runs with an active Test Optimization span'],
+          'impacted.e2e.js': ['WebdriverIO impacted tests marks a modified test'],
+        },
+      })
+      receiver.setTestManagementTests({
+        webdriverio: {
+          suites: {
+            'disabled-efd.e2e.js': {
+              tests: {
+                'WebdriverIO disabled EFD is new': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+            'impacted.e2e.js': {
+              tests: {
+                'WebdriverIO impacted tests marks a modified test': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      await runScenario('disabledEfd', 1, payloads => {
+        const events = getEvents(payloads)
+        const session = events.find(event => event.type === 'test_session_end').content
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const disabledTests = tests.filter(test => test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true')
+        const modified = disabledTests.find(test => test.meta[TEST_SUITE] === 'impacted.e2e.js')
+        const newTest = disabledTests.find(test => test.meta[TEST_SUITE] === 'disabled-efd.e2e.js')
+
+        assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+        assert.strictEqual(session.meta[TEST_MANAGEMENT_ENABLED], 'true')
+        assert.deepStrictEqual(
+          tests.map(test => test.meta[TEST_SUITE]).sort(),
+          ['disabled-efd.e2e.js', 'first.e2e.js', 'impacted.e2e.js']
+        )
+        assert.strictEqual(disabledTests.length, 2)
+        for (const test of disabledTests) {
+          assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(test.meta[TEST_IS_RETRY], undefined)
+        }
+        assert.strictEqual(modified.meta[TEST_IS_MODIFIED], 'true')
+        assert.strictEqual(modified.meta[TEST_IS_NEW], undefined)
+        assert.strictEqual(newTest.meta[TEST_IS_MODIFIED], undefined)
+        assert.strictEqual(newTest.meta[TEST_IS_NEW], 'true')
+      })
+    })
+
     it('stops EFD when the run exceeds the faulty-session threshold', async () => {
       receiver.setSettings({
         early_flake_detection: {
@@ -342,7 +407,7 @@ for (const version of versions) {
       })
       receiver.setKnownTests({
         webdriverio: {
-          'first.e2e.js': ['WebdriverIO first worker reports one test'],
+          'first.e2e.js': ['WebdriverIO first worker runs with an active Test Optimization span'],
         },
       })
 

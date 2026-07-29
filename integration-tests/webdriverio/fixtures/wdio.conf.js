@@ -53,6 +53,14 @@ const scenarioConfig = {
     },
     specs: ['./delay.e2e.js'],
   },
+  disabledEfd: {
+    maxInstances: 1,
+    specs: [[
+      './impacted.e2e.js',
+      './disabled-efd.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
   efd: {
     maxInstances: 1,
     specs: ['./efd.e2e.js'],

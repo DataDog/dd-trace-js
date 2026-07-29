@@ -218,6 +218,7 @@ function isDatadogManagedRetryTest (test, config) {
  * Checks whether a runnable belongs to an Early Flake Detection execution.
  * @param {{
  *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsDisabled?: boolean,
  *   _ddIsEfdRetry?: boolean,
  *   _ddIsModified?: boolean,
  *   _ddIsNew?: boolean
@@ -227,6 +228,7 @@ function isDatadogManagedRetryTest (test, config) {
  */
 function isEarlyFlakeDetectionTest (test, config) {
   return !test._ddIsAttemptToFix &&
+    !test._ddIsDisabled &&
     config.isEarlyFlakeDetectionEnabled &&
     (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
 }
@@ -1002,7 +1004,12 @@ function getRunTestsWrapper (runTests, config) {
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
-              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+              if (
+                !test.isPending() &&
+                !test._ddIsDisabled &&
+                !test._ddIsAttemptToFix &&
+                config.isEarlyFlakeDetectionEnabled
+              ) {
                 retryTest(
                   test,
                   getConfiguredEfdRetryCount(config),
@@ -1021,7 +1028,12 @@ function getRunTestsWrapper (runTests, config) {
       suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
+          if (
+            config.isEarlyFlakeDetectionEnabled &&
+            !test._ddIsDisabled &&
+            !test._ddIsAttemptToFix &&
+            !test._ddIsModified
+          ) {
             retryTest(
               test,
               getConfiguredEfdRetryCount(config),
