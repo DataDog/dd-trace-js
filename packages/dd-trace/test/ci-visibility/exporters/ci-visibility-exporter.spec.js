@@ -16,6 +16,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
@@ -40,17 +41,21 @@ class CiVisibilityExporter extends CiVisibilityExporterBase {
 
 describe('CI Visibility Exporter', () => {
   const url = new URL(`http://${hostname}:${port}`)
+  let originalApiKey
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
     sinon.stub(fs, 'readFileSync').returns('')
-    process.env.DD_API_KEY = '1'
+    const config = getConfig()
+    originalApiKey = config.DD_API_KEY
+    config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
   })
 
   afterEach(() => {
+    getConfig().DD_API_KEY = originalApiKey
     sinon.restore()
   })
 
