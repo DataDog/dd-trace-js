@@ -472,7 +472,7 @@ function createMainProcessReporter (reporterState) {
       testModuleId: testSessionConfiguration.testModuleId,
       testCommand: testSessionConfiguration.testCommand,
       repositoryRoot: testSessionConfiguration.repositoryRoot,
-      codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
+      codeOwnersEntries: testSessionConfiguration.codeOwnersEntries ?? undefined,
       requestErrorTags: reporterState.state.requestErrorTags,
       isTestFrameworkWorker: true,
       isBrowserMode: browserEnvironment !== undefined,
@@ -523,7 +523,7 @@ function createMainProcessReporter (reporterState) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         browserEnvironment,
         errorCounts: task.meta.__ddTestOptRepeatErrorCounts,
-        finalStatus: () => status,
+        finalStatus: () => getExternalFinalStatus(status, testProperties),
         state,
         statuses: task.meta.__ddTestOptRepeatStatuses,
         testSuiteStore,
@@ -541,7 +541,7 @@ function createMainProcessReporter (reporterState) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         browserEnvironment,
         errorCounts: task.meta?.__ddTestOptRetryErrorCounts,
-        finalStatus: () => status,
+        finalStatus: () => getExternalFinalStatus(status, testProperties),
         state,
         statuses: getRetriedTaskStatuses(attemptStatuses, retryCount, status),
         testSuiteStore,
@@ -881,6 +881,17 @@ function getEarlyFlakeDetectionFinalStatus (statuses) {
   return statuses.includes('pass') ? 'pass' : 'fail'
 }
 
+/**
+ * Returns the final status for user-configured retries and repeats.
+ *
+ * @param {string} status
+ * @param {{ isDisabled?: boolean, isQuarantined?: boolean }} testProperties
+ * @returns {string}
+ */
+function getExternalFinalStatus (status, testProperties) {
+  return testProperties.isDisabled || testProperties.isQuarantined ? 'skip' : status
+}
+
 function getRepeatedTaskStatuses (task, status) {
   const repeatedStatuses = []
   const repeatCount = task.result?.repeatCount || 0
@@ -922,14 +933,20 @@ function reportFinalTestAttempt (testReport) {
   } = testReport
 
   if (status === 'skip') {
+    const {
+      isRumActive,
+      testExecutionId,
+    } = getRumCorrelation(task)
     testSkipCh.publish({
       ...browserEnvironment,
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
       isDisabled: testProperties.isDisabled,
+      isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
+      testExecutionId,
       ...testSuiteStore,
     })
     return

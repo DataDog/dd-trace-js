@@ -18,6 +18,7 @@ const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_NAME,
+  TEST_CODE_OWNERS,
   TEST_FINAL_STATUS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -148,6 +149,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(passedTest.meta[TEST_TYPE], 'browser')
       assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], 'chromium')
       assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], 'playwright')
+      assert.strictEqual(passedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       assert.ok(!(TEST_IS_RUM_ACTIVE in passedTest.meta))
       assert.deepStrictEqual(JSON.parse(passedTest.meta[TEST_PARAMETERS]), {
         arguments: {
@@ -161,6 +163,8 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
       assert.strictEqual(skippedTest.meta[TEST_TYPE], 'browser')
       assert.strictEqual(skippedTest.meta[TEST_BROWSER_NAME], 'chromium')
+      assert.strictEqual(skippedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
     })
 
     const [exitCode] = await Promise.all([
@@ -212,6 +216,54 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     ])
 
     assert.strictEqual(exitCode, 1, testOutput)
+  })
+
+  it('waits for retries within repeated browser tests before quarantining', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-retry-repeat-quarantine.mjs'
+    receiver.setSettings({
+      test_management: {
+        enabled: true,
+      },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'waits for every retry and repeat before quarantining': {
+                properties: {
+                  quarantined: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 4)
+      for (let index = 0; index < tests.length; index++) {
+        const test = tests[index]
+        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.match(test.meta[ERROR_MESSAGE], new RegExp(`retry and repeat attempt ${index + 1}`))
+        if (index === 0) {
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        } else {
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+        }
+      }
+      assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-retry-repeat-quarantine.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
   })
 
   it('correlates sequential browser tests with RUM', async () => {
@@ -294,6 +346,49 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       runVitest('browser-rum-crypto-failure.mjs', {
         VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-failure-setup.mjs',
       }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate browser tests with a reused correlation ID', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      const firstTest = getTestByName(tests, 'correlates the first fixed browser crypto value')
+      const secondTest = getTestByName(tests, 'does not reuse a fixed browser crypto value')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'fixed')
+
+      assert.strictEqual(firstTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(firstTest.trace_id.toString(), testExecutionId)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in secondTest.meta))
+      assert.notStrictEqual(secondTest.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-crypto-reuse.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-failure-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('correlates dynamically skipped browser tests with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'dynamic-skip')
+
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(test.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-dynamic-skip.mjs'),
       payloadsPromise,
     ])
 

@@ -7,7 +7,7 @@ beforeEach(({ task }) => {
     if (task.name.includes('throws') || calls > 1) {
       throw new Error('mock getRandomValues failure')
     }
-    words.fill(0)
+    words.fill(task.name.includes('fixed') ? 1 : 0)
     return words
   })
 })

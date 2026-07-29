@@ -340,6 +340,7 @@ class VitestPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       isNew,
       isDisabled,
+      isRumActive,
       isTestFrameworkWorker,
       requestErrorTags,
       testSuiteSpan,
@@ -347,6 +348,7 @@ class VitestPlugin extends CiPlugin {
       browserDriver,
       browserName,
       browserProjectName,
+      testExecutionId,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const extraTags = {
@@ -357,6 +359,7 @@ class VitestPlugin extends CiPlugin {
         [TEST_FINAL_STATUS]: 'skip',
         ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
         ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
+        ...(isRumActive ? { [TEST_IS_RUM_ACTIVE]: 'true' } : {}),
         ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
       }
       setBrowserTags(extraTags, {
@@ -369,7 +372,8 @@ class VitestPlugin extends CiPlugin {
         testName,
         testSuite,
         testSuiteSpan || this.testSuiteSpan,
-        extraTags
+        extraTags,
+        testExecutionId
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish()

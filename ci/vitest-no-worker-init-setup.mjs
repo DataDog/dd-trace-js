@@ -33,6 +33,8 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
+const retryAttemptIndexByTask = new WeakMap()
+const usedRumTestExecutionIds = new Set()
 let now
 if (globalThis.process?.versions?.node) {
   now = () => globalThis.process.uptime() * 1000
@@ -130,6 +132,15 @@ function getNextAttemptIndex (task) {
   const attemptIndex = nextAttemptIndexByTask.get(task) || 0
   nextAttemptIndexByTask.set(task, attemptIndex + 1)
   task.meta.__ddTestOptCurrentAttemptIndex = attemptIndex
+
+  const repeatCount = task.result?.repeatCount || 0
+  const retryAttempt = retryAttemptIndexByTask.get(task)
+  const retryAttemptIndex = retryAttempt?.repeatCount === repeatCount ? retryAttempt.index + 1 : 0
+  retryAttemptIndexByTask.set(task, {
+    index: retryAttemptIndex,
+    repeatCount,
+  })
+
   return attemptIndex
 }
 
@@ -153,8 +164,15 @@ function prepareRumCorrelation (task, attemptIndex) {
   }
 
   const testExecutionId = generateTestExecutionId()
-  if (!testExecutionId || !setRumCorrelationCookie(testExecutionId)) return
+  if (
+    !testExecutionId ||
+    usedRumTestExecutionIds.has(testExecutionId) ||
+    !setRumCorrelationCookie(testExecutionId)
+  ) {
+    return
+  }
 
+  usedRumTestExecutionIds.add(testExecutionId)
   task.meta.__ddTestOptRumTestExecutionIds ||= []
   task.meta.__ddTestOptRumTestExecutionIds[attemptIndex] = testExecutionId
 }
@@ -447,7 +465,18 @@ function getFinalAttemptIndex (task) {
   if (isEarlyFlakeDetectionTest(testSuite, testName)) {
     return getEarlyFlakeDetectionRetryCountForTask(task)
   }
-  return task.repeats
+
+  const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
+  const repeatCount = task.result?.repeatCount || 0
+  const repeatLimit = task.repeats || 0
+  const retryAttemptIndex = retryAttemptIndexByTask.get(task)?.index || 0
+  const retryLimit = getRetryLimit(task)
+  const retriesRemaining = task.result?.state === 'fail' || task.result?.state === 'run'
+    ? Math.max(retryLimit - retryAttemptIndex, 0)
+    : 0
+  const repeatsRemaining = Math.max(repeatLimit - repeatCount, 0)
+
+  return attemptIndex + retriesRemaining + (repeatsRemaining * (retryLimit + 1))
 }
 
 function switchQuarantinedFinalFailure (task, attemptIndex) {
@@ -461,9 +490,7 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
     return
   }
 
-  const retryCount = task.result?.retryCount || 0
-  const retryLimit = getRetryLimit(task)
-  if (retryCount < retryLimit || attemptIndex < getFinalAttemptIndex(task)) {
+  if (attemptIndex < getFinalAttemptIndex(task)) {
     return
   }
 
