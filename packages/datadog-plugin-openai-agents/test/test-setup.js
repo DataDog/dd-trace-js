@@ -1,5 +1,6 @@
 'use strict'
 
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
 function createStreamResponse (status) {
@@ -196,9 +197,9 @@ class OpenaiAgentsTestSetup {
       'openaiChatCompletionsModel.js'
     )
     const { OpenAIChatCompletionsModel: DirectOpenAIChatCompletionsModel } = require(directModelPath)
-    const openaiPath = require.resolve('openai', {
-      paths: [path.join(__dirname, '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
-    })
+    // Resolve from the loaded package so the client class comes from the `openai` copy this
+    // `@openai/agents-openai` build uses, rather than whichever copy the layout happens to hoist.
+    const openaiPath = createRequire(require(agentsOpenaiDir).getPath()).resolve('openai')
     const { OpenAI } = require(openaiPath)
 
     this.chatCompletionsModelClass = OpenAIChatCompletionsModel
