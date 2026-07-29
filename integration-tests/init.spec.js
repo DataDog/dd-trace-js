@@ -340,7 +340,8 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
         process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
 
-      if (currentVersionIsSupported) {
+      // Only off-thread loaders install the matcher; see initialize.mjs.
+      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
         context('import-in-the-middle include matcher', () => {
           useEnv({ NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs' })
 
