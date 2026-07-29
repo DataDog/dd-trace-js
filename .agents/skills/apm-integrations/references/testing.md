@@ -5,9 +5,10 @@ loads; do not export instrumentation internals or bypass the package's build to 
 
 ## Version fixtures
 
-Plugin dependencies live under `versions/`, not the root `node_modules`. Add or update
-`versions/<package>/package.json` and use `withVersions(plugin, modules[, range], callback)` from
-`packages/dd-trace/test/setup/mocha`. `yarn services` installs the selected fixtures.
+Supported ranges come from the instrumentation declarations. Pin the latest tested release in
+`packages/dd-trace/test/plugins/versions/package.json`; `yarn services` uses both sources to generate the gitignored
+`versions/` workspaces. Use `withVersions(plugin, modules[, range], callback)` from
+`packages/dd-trace/test/setup/mocha`.
 
 The same module exports `withNamingSchema` for v0/v1 operation and service names, and `withPeerService` for peer
 service computation. Outbound, storage, and messaging specs cover both.
@@ -44,10 +45,11 @@ the payload assertion, plus `curlAndAssertMessage`, `sandboxCwd` for the sandbox
 `spawnPluginIntegrationTestProcAndExpectExit` to run a server file against the fake agent, and `stopProc` for
 teardown.
 
-`varySandbox(filename, { packageName, bindingName, defaultExport, namedExports })` runs after `useSandbox` and
-returns a map of variant name to generated filename, one per import form the package's exports allow. Describe the
-real exports, and copy a package-specific fixture instead when the runtime requires a directory layout or launcher
-`varySandbox` cannot model. Azure Functions is the current example.
+`varySandbox(filename, { packageName, bindingName, defaultExport, namedExports, namedExportBinding })` runs after
+`useSandbox` and returns a map of variant name to generated filename, one per import form the package's exports
+allow. A non-empty `namedExports` array requires `namedExportBinding`: `destructure`, `direct`, or `namespace`;
+`direct` accepts exactly one export. Describe the real exports, and copy a package-specific fixture instead when the
+runtime requires a directory layout or launcher `varySandbox` cannot model. Azure Functions is the current example.
 
 Sandbox processes are integration tests and do not contribute to nyc coverage. Keep a same-process test for changed
 production branches when coverage would otherwise be missing.
