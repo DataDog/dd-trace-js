@@ -13,11 +13,7 @@ const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
 
 /** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
 /** @typedef {Record<string, string | Buffer | Array<string | Buffer>>} NativeHeaderCarrier */
-/**
- * @typedef {object} ProduceContext
- * @property {Array<{ headers: NativeHeaderCarrier }>} messages
- * @property {boolean} [countRepeatedHeaderKeys]
- */
+/** @typedef {{ messages: Array<{ headers: NativeHeaderCarrier }> }} ProduceContext */
 
 function stageProducer () {
   class Producer {
@@ -180,7 +176,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       assert.strictEqual(carriers[0]['binary-header'], binary)
     })
 
-    it('publishes repeated application values for exact DSM sizing', () => {
+    it('publishes every repeated application value on the carrier', () => {
       /** @type {ProduceContext | undefined} */
       let context
       trackSubscriber((ctx) => { context = ctx })
@@ -188,11 +184,15 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       produce(stageProducer(), [
         { 'content-type': 'text' },
         { 'content-type': 'application/json' },
+        { 'content-type': 'application/octet-stream' },
       ])
 
       assert.ok(context)
-      assert.deepStrictEqual(context.messages[0].headers['content-type'], ['text', 'application/json'])
-      assert.strictEqual(context.countRepeatedHeaderKeys, true)
+      assert.deepStrictEqual(context.messages[0].headers['content-type'], [
+        'text',
+        'application/json',
+        'application/octet-stream',
+      ])
     })
 
     it('sends generated headers only for shapes the binding cannot consume', () => {

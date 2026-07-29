@@ -74,7 +74,6 @@ function instrumentBaseModule (module) {
               const nativeHeaders = Array.isArray(headers) ? headers : EMPTY_NATIVE_HEADERS
 
               let carrier
-              let countRepeatedHeaderKeys = false
               let forwardCallerHeaders = false
               let applicationValues = EMPTY_CARRIER
               let headerKeys = NO_MERGEABLE_KEYS
@@ -88,7 +87,6 @@ function instrumentBaseModule (module) {
                   forwardCallerHeaders = true
                 } else if (candidateKeys.length !== 0) {
                   carrier = candidateCarrier
-                  countRepeatedHeaderKeys = candidateKeys.length > 1
                   applicationValues = candidateValues
                   headerKeys = candidateKeys
                 }
@@ -102,7 +100,6 @@ function instrumentBaseModule (module) {
                   headers: carrier,
                 }],
                 bootstrapServers: brokers,
-                countRepeatedHeaderKeys,
               }
 
               return channels.producerStart.runStores(ctx, () => {
