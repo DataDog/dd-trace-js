@@ -57,6 +57,7 @@ describe('test optimization validation approval', () => {
       fs.realpathSync(fixture.runner),
       fixture.testFile,
     ].sort())
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
     assert.doesNotMatch(json, /npm (?:run |test)|shellCommand|setupCommands/)
   })
 
@@ -69,11 +70,25 @@ describe('test optimization validation approval', () => {
     assert.deepStrictEqual(material.executables, [])
     assert.deepStrictEqual(material.fixtureRecipeDigests, [])
     assert.deepStrictEqual(material.generatedFiles, [])
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
     assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
       path.join(fixture.root, 'package.json'),
     ])
     fs.appendFileSync(path.join(fixture.root, 'package.json'), ' ')
     assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
+  })
+
+  it('binds required browser and localhost capabilities without managing permissions', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.browserRequired = true
+    framework.localSocketRequired = true
+
+    const material = getApprovalMaterial(input)
+
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [
+      'browser_process',
+      'localhost_socket',
+    ])
   })
 
   it('binds a CI file when local framework validation is unavailable', () => {
@@ -124,6 +139,16 @@ describe('test optimization validation approval', () => {
     const loaded = loadApprovedPlan(written.approvalJsonPath, written.digest)
 
     assert.strictEqual(loaded.path, written.approvalJsonPath)
+    const originalApproval = fs.readFileSync(written.approvalJsonPath)
+    const invalidApproval = JSON.parse(originalApproval)
+    invalidApproval.validation.requiredCapabilities = ['network_access']
+    fs.writeFileSync(written.approvalJsonPath, `${JSON.stringify(invalidApproval)}\n`)
+    const invalidDigest = crypto.createHash('sha256').update(fs.readFileSync(written.approvalJsonPath)).digest('hex')
+    assert.throws(
+      () => loadApprovedPlan(written.approvalJsonPath, invalidDigest),
+      /validation.requiredCapabilities/
+    )
+    fs.writeFileSync(written.approvalJsonPath, originalApproval)
     fs.appendFileSync(written.approvalJsonPath, ' ')
     assert.throws(
       () => loadApprovedPlan(written.approvalJsonPath, written.digest),

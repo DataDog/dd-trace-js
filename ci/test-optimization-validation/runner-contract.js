@@ -7,10 +7,10 @@ const { environmentNamesEqual, setEnvironmentValue } = require('./environment')
 
 const RUNNER_OPTIONS = {
   cucumber: {
-    flags: new Set(),
+    flags: new Set(['--backtrace', '--fail-fast', '--no-strict', '--strict']),
     values: new Set([
       '-p', '--config', '--import', '--language', '--loader', '--profile', '--require', '--require-module',
-      '--world-parameters',
+      '--parallel', '--world-parameters',
     ]),
   },
   cypress: {
@@ -18,7 +18,7 @@ const RUNNER_OPTIONS = {
     values: new Set(['--browser', '--config-file']),
   },
   jest: {
-    flags: new Set(['--detectLeaks']),
+    flags: new Set(['--color', '--colors', '--detectLeaks']),
     values: new Set(['-c', '--config', '--env', '--runner', '--testEnvironment']),
   },
   mocha: {
@@ -168,6 +168,34 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
 }
 
 /**
+ * Validates adapter-expanded runner configuration without reparsing a shell command.
+ *
+ * @param {string} framework framework name
+ * @param {string[]} runnerArgs statically expanded runner arguments
+ * @param {Record<string, string>} environment retained runner environment
+ * @param {string} projectRoot detected project root
+ * @param {string} repositoryRoot repository root
+ * @returns {{environment: Record<string, string>, error?: string, inputFiles: string[], runnerArgs: string[]}}
+ * runner contract
+ */
+function getRunnerConfigurationContract (framework, runnerArgs, environment, projectRoot, repositoryRoot) {
+  const runnerArgsError = getRunnerArgsError(framework, runnerArgs)
+  if (runnerArgsError) {
+    return {
+      environment: {},
+      error: `runner arguments ${runnerArgsError}`,
+      inputFiles: [],
+      runnerArgs: [],
+    }
+  }
+  const inputs = getRunnerInputs(runnerArgs, environment, projectRoot, repositoryRoot)
+  if (inputs.error) {
+    return { environment: {}, error: inputs.error, inputFiles: [], runnerArgs: [] }
+  }
+  return { environment, inputFiles: inputs.files, runnerArgs }
+}
+
+/**
  * Rejects shell-expanded allowlisted environment assignments before command tokenization.
  *
  * @param {string} command detected package script
@@ -305,9 +333,15 @@ function getUnknownRunnerOption (framework, invocation) {
 
 function getOmittedRunnerOptions (framework, invocation) {
   const omitted = OMITTED_RUNNER_OPTIONS[framework] || new Set()
+  const ignored = IGNORED_RUNNER_OPTIONS[framework] || { flags: new Set(), values: new Set() }
   return [...new Set(invocation.tokens
     .slice(invocation.runnerIndex + 1)
-    .filter(token => token.startsWith('-') && omitted.has(token.split('=', 1)[0])))]
+    .filter(token => {
+      if (!token.startsWith('-')) return false
+      const option = token.split('=', 1)[0]
+      return omitted.has(option) || ignored.flags.has(option) || ignored.values.has(option)
+    })
+    .map(token => token.split('=', 1)[0]))]
 }
 
 function getOptionValue (invocation, expected) {
@@ -361,7 +395,8 @@ function getRunnerArgsError (framework, args) {
     }
     const option = token.split('=', 1)[0]
     if (options.flags.has(option)) {
-      if (token !== option && !/^--detectLeaks=(?:true|false)$/.test(token)) {
+      if (token !== option &&
+        !/^--(?:color|colors|detectLeaks)=(?:true|false)$/.test(token)) {
         return `contain an invalid value for ${option}`
       }
       continue
@@ -439,26 +474,40 @@ function getFrameworkInvocation (command, framework) {
   })
   if (runnerIndex === -1) return
 
-  const prefix = tokens.slice(0, runnerIndex)
-  const firstCommand = prefix.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))
-  if (firstCommand && !RUNNER_LAUNCHERS.has(path.basename(firstCommand).toLowerCase())) {
-    return {
-      error: `runner launch wrapper ${path.basename(firstCommand)} is not allowlisted`,
-      runnerIndex,
-      tokens,
-    }
-  }
-  for (const token of prefix) {
-    if (RUNNER_LAUNCHERS.has(path.basename(token).toLowerCase())) continue
-    if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
-    return {
-      error: 'runner launch wrapper contains options or positional arguments whose semantics the validator does not ' +
-        'preserve',
-      runnerIndex,
-      tokens,
-    }
-  }
+  const prefixError = getRunnerPrefixError(tokens.slice(0, runnerIndex))
+  if (prefixError) return { error: prefixError, runnerIndex, tokens }
   return { runnerIndex, tokens }
+}
+
+/**
+ * Validates inert launchers before a direct framework executable.
+ *
+ * @param {string[]} prefix invocation tokens before the runner
+ * @returns {string|undefined} validation error
+ */
+function getRunnerPrefixError (prefix) {
+  let coverageLauncher = false
+  for (let index = 0; index < prefix.length; index++) {
+    const token = prefix[index]
+    if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
+
+    const basename = path.basename(token).toLowerCase()
+    if (RUNNER_LAUNCHERS.has(basename)) {
+      coverageLauncher = basename === 'c8' || basename === 'nyc'
+      continue
+    }
+    if (coverageLauncher && /^(?:-r|--reporter)=\S+$/.test(token)) continue
+    if (coverageLauncher && /^(?:-r|--reporter)$/.test(token) &&
+      prefix[index + 1] && !prefix[index + 1].startsWith('-')) {
+      index++
+      continue
+    }
+    if (!prefix.some(candidate => RUNNER_LAUNCHERS.has(path.basename(candidate).toLowerCase()))) {
+      return `runner launch wrapper ${path.basename(token)} is not allowlisted`
+    }
+    return 'runner launch wrapper contains options or positional arguments whose semantics the validator does not ' +
+      'preserve'
+  }
 }
 
 /**
@@ -612,6 +661,10 @@ function resolveInputFile (input, projectRoot) {
   if (!input.module || path.isAbsolute(input.value) || input.value.startsWith('.')) {
     return path.resolve(projectRoot, input.value)
   }
+  const projectRelative = path.resolve(projectRoot, input.value)
+  try {
+    return require.resolve(projectRelative)
+  } catch {}
   try {
     return require.resolve(input.value, { paths: [projectRoot] })
   } catch {}
@@ -657,6 +710,7 @@ function isPathInside (root, filename) {
 module.exports = {
   getProjectNodeRunner,
   getRunnerArgsError,
+  getRunnerConfigurationContract,
   getRunnerContract,
   getRunnerEnvironmentError,
   getRunnerInputError,

@@ -4,9 +4,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { runDiagnosis } = require('../diagnose')
+const { BLOCKER_CATEGORIES } = require('./blocker-category')
 const cucumber = require('./framework-adapters/cucumber')
 const cypress = require('./framework-adapters/cypress')
 const playwright = require('./framework-adapters/playwright')
+const vitest = require('./framework-adapters/vitest')
 const {
   GENERATED_SCENARIOS,
   getGeneratedRetryStatePath,
@@ -15,6 +17,7 @@ const {
 const { validateManifest } = require('./manifest-schema')
 const {
   getProjectNodeRunner,
+  getRunnerConfigurationContract,
   getRunnerContract,
   getRunnerSearchRoots,
 } = require('./runner-contract')
@@ -54,7 +57,7 @@ const CONFIG_PATTERNS = {
   jest: /^(?:jest|config-jest)\.config\.(?:[cm]?[jt]s|json)$/,
   mocha: /^\.mocharc\.(?:json|ya?ml|[cm]?js)$/,
   playwright: playwright.CONFIG_PATTERN,
-  vitest: /^(?:vite|vitest)\.config\.[cm]?[jt]s$/,
+  vitest: /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/,
 }
 const JS_CONFIG_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts']
 const IMPLICIT_CONFIG_FILENAMES = {
@@ -72,6 +75,7 @@ const IMPLICIT_CONFIG_FILENAMES = {
   vitest: JS_CONFIG_EXTENSIONS.flatMap(extension => [
     `vite.config.${extension}`,
     `vitest.config.${extension}`,
+    `vitest.workspace.${extension}`,
   ]),
 }
 const TEST_FILE_PATTERN = /^.+[._-](?:test|spec)\.[cm]?[jt]sx?$/
@@ -79,7 +83,13 @@ const BARE_TEST_FILE_PATTERN = /^test\.[cm]?[jt]sx?$/
 const TYPE_ONLY_TEST_PATTERN = /\.(?:test|spec)-d\.[cm]?tsx?$|\.d\.[cm]?ts$/i
 const TYPE_ONLY_DIRECTORY_PATTERN = /(?:^|\/)(?:type[-_]?tests?|typetests?|test-dts?)(?:\/|$)/i
 const LOCAL_SOCKET_PATTERN =
-  /(?:\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1)\b|\bcy\.(?:visit|request)\s*\()/
+  /(?:\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1|supertest)\b|\bcy\.(?:visit|request)\s*\()/
+const BUILD_ARTIFACT_PATTERN =
+  /(?:from\s+|require\s*\(\s*|import\s*\(\s*)['"][^'"]*(?:^|\/)(?:build|dist)(?:\/|['"])/
+const CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN =
+  /(?:^|\/)(?:features?|helpers?|step_definitions|steps?|support)(?:\/|$)/i
+const CUCUMBER_BROWSER_DRIVER_PATTERN =
+  /(?:from\s+|require\s*\(\s*)['"](?:@playwright\/test|nightwatch|playwright(?:-core)?|puppeteer(?:-core)?|selenium-webdriver|webdriverio)['"]/
 const CYPRESS_LOCAL_ORIGIN_PATTERN =
   /\bcy\.(?:visit|request)\s*\([\s\S]{0,512}\b(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?=[:/'"`\s}])/i
 
@@ -121,7 +131,11 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     ciDiscovery,
     frameworks: [
       ...eligible.map(detection => buildFramework(repositoryRoot, detection, ciDiscovery)),
-      ...detectedOnly.map(detection => buildDetectedOnlyFramework(repositoryRoot, detection, ciDiscovery)),
+      ...detectedOnly.map(detection => {
+        return detection.supportedVersion && SUPPORTED_FRAMEWORKS.has(detection.id)
+          ? buildFramework(repositoryRoot, detection, ciDiscovery)
+          : buildDetectedOnlyFramework(repositoryRoot, detection, ciDiscovery)
+      }),
       ...unsupported.map(detection => buildUnsupportedFramework(repositoryRoot, detection, ciDiscovery)),
     ],
     omitted: [],
@@ -158,8 +172,23 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   if (!SUPPORTED_FRAMEWORKS.has(framework)) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
       status: 'unsupported_by_validator',
       notes: [`${detection.name} is supported by dd-trace, but this validator has no direct-runner adapter.`],
+    }
+  }
+
+  if (framework === 'cucumber' && !cucumber.supportsConfigIsolation(base.frameworkVersion)) {
+    return {
+      ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+      status: 'requires_manual_setup',
+      notes: [
+        `${detection.name} ${base.frameworkVersion || 'with an unknown version'} is supported by dd-trace, but its ` +
+          'CLI cannot bypass customer profiles with a validator-owned config. Live validation is unavailable because ' +
+          'changing the working directory or loading the profile dynamically would weaken isolation. The static CI ' +
+          'audit can still run.',
+      ],
     }
   }
 
@@ -168,6 +197,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   if (!runner) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED,
       status: 'requires_manual_setup',
       notes: [
         `${detection.name} is detected, but its repository-contained executable is unavailable. Install this ` +
@@ -176,10 +206,12 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     }
   }
 
-  const runnerContract = getRunnerContract(framework, detection.command, projectRoot, repositoryRoot)
+  const projectFiles = collectProjectFiles(projectRoot)
+  let runnerContract = getRunnerContract(framework, detection.command, projectRoot, repositoryRoot)
   if (runnerContract.error) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
       status: 'requires_manual_setup',
       notes: [
         `${detection.name} runner configuration was not retained because ${runnerContract.error}. ` +
@@ -187,23 +219,85 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       ],
     }
   }
+  const implicitConfigFiles = getImplicitConfigFiles(framework, projectRoot, repositoryRoot)
+  if (framework === 'cucumber') {
+    const expanded = cucumber.expandProfiles({
+      configFiles: [...new Set([...runnerContract.inputFiles, ...implicitConfigFiles])],
+      projectFiles,
+      projectRoot,
+      runnerArgs: runnerContract.runnerArgs,
+    })
+    if (expanded.error) {
+      return {
+        ...base,
+        blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+        status: 'requires_manual_setup',
+        notes: [
+          `${detection.name} runner configuration was not retained because ${expanded.error}. ` +
+            'Use a literal Cucumber profile or a direct command with bounded support-code options, then create a ' +
+            'fresh plan.',
+        ],
+      }
+    }
+    const expandedContract = getRunnerConfigurationContract(
+      framework,
+      expanded.runnerArgs,
+      runnerContract.environment,
+      projectRoot,
+      repositoryRoot
+    )
+    if (expandedContract.error) {
+      return {
+        ...base,
+        blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+        status: 'requires_manual_setup',
+        notes: [
+          `${detection.name} profile configuration was not retained because ${expandedContract.error}. ` +
+            'Use repository-contained support-code inputs, then create a fresh plan.',
+        ],
+      }
+    }
+    runnerContract = {
+      ...expandedContract,
+      omittedOptions: runnerContract.omittedOptions,
+    }
+  }
+  const vitestProject = framework === 'vitest'
+    ? vitest.bindLiteralProject({
+      projectFiles,
+      projectRoot,
+      runnerArgs: runnerContract.runnerArgs,
+    })
+    : undefined
+  if (vitestProject?.error) {
+    return {
+      ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+      status: 'requires_manual_setup',
+      notes: [
+        `${detection.name} runner configuration was not retained because ${vitestProject.error}. ` +
+          'Use one literal, uniquely named Vitest project with static configuration, then create a fresh plan.',
+      ],
+    }
+  }
   const commandRoots = getRunnerSearchRoots(framework, detection.command, projectRoot, repositoryRoot)
-  const representativeRoot = commandRoots[0] || findPreferredRepresentativeRoot(projectRoot, repositoryRoot)
+  const representativeRoot = vitestProject?.root ||
+    commandRoots[0] ||
+    findPreferredRepresentativeRoot(projectRoot, repositoryRoot)
   const representativePackage = readJson(path.join(representativeRoot, 'package.json')) || packageJson.json
-  const projectFiles = collectProjectFiles(projectRoot)
-  const candidateFiles = representativeRoot === projectRoot
-    ? projectFiles
-    : collectProjectFiles(representativeRoot)
-  const candidate = selectRepresentativeTest(
+  const candidateFiles = vitestProject?.files ||
+    (representativeRoot === projectRoot ? projectFiles : collectProjectFiles(representativeRoot))
+  const candidates = selectRepresentativeTests(
     candidateFiles,
     framework,
     representativeRoot,
-    representativePackage.name,
-    commandRoots.length > 0
+    representativePackage.name
   )
+  const candidate = candidates[0]
   if (!candidate) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
       status: 'requires_manual_setup',
       notes: [
         `No single ${detection.name} test file could be selected confidently. Choose a normal framework-owned ` +
@@ -214,6 +308,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   if (candidate.requiresExternalService) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED,
       status: 'requires_manual_setup',
       notes: [
         `No self-contained ${detection.name} spec could be selected. The available spec accesses a localhost ` +
@@ -230,7 +325,8 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   })
   const configFiles = [...new Set([
     ...runnerContract.inputFiles,
-    ...getImplicitConfigFiles(framework, projectRoot, repositoryRoot),
+    ...(vitestProject?.configFile ? [vitestProject.configFile] : []),
+    ...implicitConfigFiles,
     ...(representativeRoot === projectRoot
       ? []
       : getImplicitConfigFiles(framework, representativeRoot, repositoryRoot)),
@@ -239,6 +335,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   if (configFiles.length > 20) {
     return {
       ...base,
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
       status: 'requires_manual_setup',
       notes: [
         `${detection.name} loads more configuration files than the validator can approval-bind safely. ` +
@@ -247,13 +344,29 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     }
   }
   const runnerDescription = projectRunner ? 'repository test wrapper' : `installed ${framework} runner`
+  const runnerConfigurationNote = detection.command
+    ? 'The validator retained only allowlisted runner configuration from the detected package script.'
+    : 'The validator uses the installed runner with repository-contained configuration files; the unresolved ' +
+      'package wrapper is not executed.'
+  const cucumberBrowserRequired = framework === 'cucumber' &&
+    hasCucumberBrowserSupport(candidateFiles, representativeRoot)
   const browserRequired = framework === 'cypress' ||
     framework === 'playwright' ||
+    cucumberBrowserRequired ||
     (framework === 'vitest' && runnerContract.runnerArgs.includes('--browser'))
+  const fallbackTests = candidates.slice(1).map(candidate => ({
+    buildArtifactRequired: candidate.requiresBuildArtifact,
+    localSocketRequired: candidate.requiresLocalSocket,
+    testFile: candidate.path,
+  }))
+  const allCandidatesRequireLocalSocket =
+    candidates.length > 0 && candidates.every(candidate => candidate.requiresLocalSocket)
 
   return {
     ...base,
+    allCandidatesRequireLocalSocket,
     browserRequired,
+    buildArtifactRequired: candidate.requiresBuildArtifact,
     language: /\.[cm]?tsx?$/.test(candidate.path) ? 'typescript' : 'javascript',
     localSocketRequired: candidate.requiresLocalSocket,
     status: 'runnable',
@@ -272,6 +385,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       runnerArgs: runnerContract.runnerArgs,
       selectorScope: projectRunner ? 'instrumented_event_identity' : 'bounded_direct_runner',
       testFile: candidate.path,
+      ...(fallbackTests.length > 0 ? { fallbackTests } : {}),
       timeoutMs: browserRequired ? 300_000 : 180_000,
     },
     preflight: { status: 'pending' },
@@ -280,7 +394,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       `Basic Reporting will invoke the ${runnerDescription} ` +
         'directly for ' +
         `${path.relative(repositoryRoot, candidate.path)}.`,
-      'The validator retained only allowlisted runner configuration from the detected package script.',
+      runnerConfigurationNote,
       ...(projectRunner
         ? [
             'Basic Reporting will remain incomplete unless captured test events identify only the approved ' +
@@ -289,8 +403,20 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
         : []),
       ...(candidate.requiresLocalSocket
         ? [
-            'The selected test appears to require localhost. A restricted sandbox may leave local validation ' +
-              'incomplete.',
+            `${allCandidatesRequireLocalSocket ? 'Every approved candidate appears' : 'The selected test appears'} ` +
+              'to require localhost. A restricted execution environment may leave local validation incomplete.',
+          ]
+        : []),
+      ...(candidate.requiresBuildArtifact
+        ? [
+            'The selected test appears to load a build or dist artifact. Complete the project\'s normal build before ' +
+              'validation if that artifact is not already present.',
+          ]
+        : []),
+      ...(cucumberBrowserRequired
+        ? [
+            'The selected Cucumber support code imports a browser driver. The approved validation command may launch ' +
+              'the project browser.',
           ]
         : []),
     ],
@@ -326,6 +452,8 @@ function buildDetectedOnlyFramework (repositoryRoot, detection, ciDiscovery) {
   const version = detection.supportedVersion?.version ||
     detection.versionDetections?.[0]?.version ||
     detection.versionDetections?.[0]?.rawVersion
+  const unsupportedVersion = !detection.supportedVersion &&
+    (detection.versionDetections?.[0]?.version || detection.versionDetections?.[0]?.rawVersion)
   return {
     ...getFrameworkBase({
       ciDiscovery,
@@ -335,11 +463,18 @@ function buildDetectedOnlyFramework (repositoryRoot, detection, ciDiscovery) {
       projectRoot,
       repositoryRoot,
     }),
+    blockerCategory: unsupportedVersion
+      ? BLOCKER_CATEGORIES.UNSUPPORTED_VERSION
+      : BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
     status: 'detected_not_runnable',
     notes: [
-      detection.supportedVersion
-        ? `A supported ${detection.name} installation was detected, but no project-local validation target was found.`
-        : `${detection.name} was detected, but no supported installed version was confirmed.`,
+      unsupportedVersion
+        ? `${detection.name} ${unsupportedVersion} was detected, but live validation requires ` +
+          `${detection.supportedRange}. Upgrade ${detection.name} through the project's normal dependency workflow ` +
+          'before creating a fresh validation plan.'
+        : detection.supportedVersion
+          ? `A supported ${detection.name} installation was detected, but no project-local validation target was found.`
+          : `${detection.name} was detected, but no supported installed version was confirmed.`,
     ],
   }
 }
@@ -365,6 +500,7 @@ function buildUnsupportedFramework (repositoryRoot, detection, ciDiscovery) {
       projectRoot,
       repositoryRoot,
     }),
+    blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
     status: 'unsupported_by_validator',
     notes: [`${detection.name} is not supported by this Test Optimization validator.`],
   }
@@ -499,39 +635,63 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
 }
 
 /**
- * Selects one representative framework-owned test file.
+ * Selects up to three representative framework-owned test files.
  *
  * @param {string[]} files bounded project files
  * @param {string} framework framework name
  * @param {string} projectRoot project root
  * @param {string} packageName project package name
- * @param {boolean} allowDirectoryConvention whether a literal runner selector chose this root
- * @returns {{path: string, requiresExternalService: boolean, requiresLocalSocket: boolean}|undefined} selected test
+ * @returns {Array<{
+ *   path: string,
+ *   requiresBuildArtifact: boolean,
+ *   requiresExternalService: boolean,
+ *   requiresLocalSocket: boolean
+ * }>} selected tests
  */
-function selectRepresentativeTest (files, framework, projectRoot, packageName, allowDirectoryConvention) {
+function selectRepresentativeTests (files, framework, projectRoot, packageName) {
   const candidates = []
   for (const filename of files) {
     const source = readText(filename)
     if (source === undefined ||
-      !isTestFile(filename, source, framework, projectRoot, allowDirectoryConvention) ||
+      !isTestFile(filename, source, framework, projectRoot) ||
       hasConflictingFramework(source, framework)) continue
     if (framework === 'cucumber'
       ? cucumber.getScenarioCount(source) === 0
       : getStaticTestCount(source) === 0) continue
     if (!hasFrameworkOwnership(filename, source, framework, packageName)) continue
     candidates.push({
+      explicitFilename: TEST_FILE_PATTERN.test(path.basename(filename)),
       path: filename,
       rank: getTestRank(filename, source, projectRoot),
+      requiresBuildArtifact: BUILD_ARTIFACT_PATTERN.test(source),
       requiresExternalService: framework === 'cypress' && CYPRESS_LOCAL_ORIGIN_PATTERN.test(source),
       requiresLocalSocket: LOCAL_SOCKET_PATTERN.test(source),
     })
   }
   candidates.sort((left, right) => {
     return Number(left.requiresExternalService) - Number(right.requiresExternalService) ||
+      Number(right.explicitFilename) - Number(left.explicitFilename) ||
       left.rank - right.rank ||
       left.path.localeCompare(right.path)
   })
-  return candidates[0]
+  return candidates.slice(0, 3)
+}
+
+/**
+ * Reports whether bounded Cucumber support code visibly imports a browser driver.
+ *
+ * @param {string[]} files bounded project files
+ * @param {string} projectRoot selected project root
+ * @returns {boolean} whether Cucumber may launch a project browser
+ */
+function hasCucumberBrowserSupport (files, projectRoot) {
+  for (const filename of files) {
+    const relative = path.relative(projectRoot, filename).replaceAll('\\', '/')
+    if (!CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN.test(relative)) continue
+    const source = readText(filename)
+    if (source !== undefined && CUCUMBER_BROWSER_DRIVER_PATTERN.test(source)) return true
+  }
+  return false
 }
 
 /**
@@ -541,10 +701,9 @@ function selectRepresentativeTest (files, framework, projectRoot, packageName, a
  * @param {string} source candidate source
  * @param {string} framework framework name
  * @param {string} projectRoot project root
- * @param {boolean} allowDirectoryConvention whether a literal runner selector chose this root
  * @returns {boolean} whether the file is a candidate
  */
-function isTestFile (filename, source, framework, projectRoot, allowDirectoryConvention) {
+function isTestFile (filename, source, framework, projectRoot) {
   const basename = path.basename(filename)
   const normalized = filename.replaceAll('\\', '/')
   if (normalized.includes('/dd-test-optimization-validation-')) return false
@@ -563,7 +722,7 @@ function isTestFile (filename, source, framework, projectRoot, allowDirectoryCon
   if (BARE_TEST_FILE_PATTERN.test(basename)) {
     return inTestDirectory || hasExplicitFrameworkImport(source, framework)
   }
-  return allowDirectoryConvention && inTestDirectory && /\.[cm]?[jt]sx?$/.test(basename)
+  return inTestDirectory && /\.[cm]?[jt]sx?$/.test(basename)
 }
 
 /**
@@ -656,7 +815,7 @@ function getTestRank (filename, source, projectRoot) {
  * @returns {number} approximate test declaration count
  */
 function getStaticTestCount (source) {
-  return [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(/g)]
+  return [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g)]
     .filter(match => !/\.(?:skip|todo)\b/.test(match[1]))
     .length
 }

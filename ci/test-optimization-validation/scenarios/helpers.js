@@ -19,6 +19,7 @@ const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport, sanitizeString } = require('../redaction')
 const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
+const { getValidationBlockerEvidence } = require('../validation-blocker')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
@@ -442,6 +443,8 @@ function copy (target, source, key) {
 
 function summarizeDebugRerun ({ result, events, offline, outDir }) {
   const output = `${result.stdout}\n${result.stderr}`
+  const testEvents = eventsOfType(events, 'test')
+  const sourceFiles = new Set(testEvents.map(test => test.testSourceFile).filter(Boolean))
 
   return {
     ran: true,
@@ -449,8 +452,12 @@ function summarizeDebugRerun ({ result, events, offline, outDir }) {
     commandTimedOut: result.timedOut,
     debugCommandFailed: result.exitCode !== 0 || result.timedOut === true,
     offlineExporterInitialized: offline.initialized,
+    settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
     artifactDirectory: outDir,
     ...basicEventEvidence(events),
+    testEventsWithoutSourceFile: testEvents.length - testEvents.filter(test => test.testSourceFile).length,
+    testSourceFileCount: sourceFiles.size,
+    testSourceFiles: [...sourceFiles].slice(0, 5),
     debugLines: findInterestingLines(output, [
       /dd-trace/i,
       /test optimization/i,
@@ -541,7 +548,15 @@ function inconclusive (framework, scenario, diagnosis, evidence = {}, outDir, ex
 }
 
 function error (framework, scenario, err, outDir = err?.artifactDirectory) {
-  return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
+  const blockerEvidence = getValidationBlockerEvidence(err)
+  return result(
+    framework,
+    scenario,
+    blockerEvidence ? 'blocked' : 'error',
+    blockerEvidence ? err.message : (err && err.stack ? err.stack : String(err)),
+    blockerEvidence || {},
+    outDir
+  )
 }
 
 function result (framework, scenario, status, diagnosis, evidence, outDir, extraArtifacts) {

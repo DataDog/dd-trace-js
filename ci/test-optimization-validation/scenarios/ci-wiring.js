@@ -47,6 +47,32 @@ function runCiWiring ({ manifest, framework }) {
     domain: 'ci_configuration',
     evidenceStrength: 'unknown',
   }
+  if (hasNoSupportedCiConfiguration(manifest, ci)) {
+    return getIncomplete(
+      framework,
+      'No supported CI configuration file was found by bounded repository discovery. The CI audit is incomplete; ' +
+        'this does not prove that the repository has no external CI configuration.',
+      {
+        ...evidence,
+        reasonCode: 'no-supported-ci-configuration',
+        recommendation: 'Identify the CI system and one repository-controlled test job. If CI is configured outside ' +
+          'this repository, review that configuration separately.',
+      }
+    )
+  }
+  if (hasUnavailableRemoteCiCommand(ci)) {
+    return getIncomplete(
+      framework,
+      'The selected CI path delegates test execution to a remote action or reusable workflow whose command is not ' +
+        'available in this repository. The CI audit is incomplete.',
+      {
+        ...evidence,
+        reasonCode: 'remote-ci-command-unavailable',
+        recommendation: 'Review the referenced action or reusable workflow at its pinned revision. Keep the result ' +
+          'incomplete when its final test command and effective environment cannot be bound statically.',
+      }
+    )
+  }
   const missing = getMissingReviewFields(ci)
   if (missing.length > 0) {
     return getIncomplete(
@@ -138,12 +164,16 @@ function runCiWiring ({ manifest, framework }) {
   if (initialization.status === 'missing' &&
     resolution.status === 'confirmed' &&
     unresolved.relevant.length === 0) {
+    const transportMissing = ciFacts.transport.status === 'missing'
     return getFailure(
       framework,
       'The checksum-bound CI job reaches the selected test framework through a bounded static command path, but ' +
-        'does not configure the dd-trace/ci/init preload. Test Optimization is not initialized in that job.',
+        `does not configure the dd-trace/ci/init preload${
+          transportMissing ? ' and declares no visible Datadog Agent or agentless reporting transport' : ''
+        }. Test Optimization is not configured in that job.`,
       {
         ...evidence,
+        ciConfigurationStatus: 'not_configured',
         ciRemediation: remediation,
         conclusion: 'confirmed_misconfigured',
         evidenceStrength: 'confirmed_static',
@@ -153,17 +183,25 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   if (resolution.status !== 'confirmed') {
-    const partial = initialization.status === 'missing'
-      ? 'The selected job has no visible dd-trace/ci/init preload. '
-      : ''
+    const visibleFacts = []
+    if (initialization.status === 'missing') {
+      visibleFacts.push('The selected job has no visible dd-trace/ci/init preload.')
+    }
+    if (ciFacts.transport.status === 'missing') {
+      visibleFacts.push('The recorded review found no visible Datadog Agent or agentless reporting transport.')
+    }
+    const recommendation = /working directory/i.test(resolution.reason)
+      ? 'Keep the CI job\'s actual working directory. Resolve the repository-root wrapper to the selected test ' +
+        'runner statically; do not substitute the framework package directory merely to make the audit conclusive.'
+      : 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective NODE_OPTIONS value ' +
+        'in the final test process with DD_TRACE_DEBUG=1.'
     return getIncomplete(
       framework,
-      `${partial}The CI audit remains incomplete because the selected command could not be resolved to the ` +
-        `${framework.framework} runner: ${resolution.reason}.`,
+      'The CI audit remains incomplete because the selected command could not be resolved to the ' +
+        `${framework.framework} runner: ${resolution.reason}. ${visibleFacts.join(' ')}`.trim(),
       {
         ...evidence,
-        recommendation: 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective ' +
-          'NODE_OPTIONS value in the final test process with DD_TRACE_DEBUG=1.',
+        recommendation,
       }
     )
   }
@@ -350,8 +388,9 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
 
   for (const item of unresolved) {
     const isMatrix = /\bmatrix\b/i.test(item)
-    const isResolvedPackagePath = resolution.source === 'local_package_script' &&
-      /\b(?:lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
+    const isResolvedPackagePath = resolution.status === 'confirmed' &&
+      resolution.source === 'local_package_script' &&
+      /\b(?:bun|lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
     const isAmbientGithubSettings = githubHosted &&
       /\b(?:repository|organization|environment)[-\s,\w]*\b(?:secrets?|variables?)\b/i.test(item) &&
       /\b(?:inject|inherit|outside)\b/i.test(item)
@@ -371,6 +410,22 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
     relevant.push('the CI evidence review is not marked complete')
   }
   return { ignored, relevant }
+}
+
+function hasNoSupportedCiConfiguration (manifest, ci) {
+  if (ci.configFile || ci.job || ci.command) return false
+  const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
+  return manifest.ciDiscovery?.found?.length === 0 ||
+    unresolved.some(item => /No supported CI configuration file was found/i.test(item))
+}
+
+function hasUnavailableRemoteCiCommand (ci) {
+  if (ci.command) return false
+  const evidence = [
+    ci.step,
+    ...(Array.isArray(ci.unresolved) ? ci.unresolved : []),
+  ].filter(Boolean).join('\n')
+  return /\b(?:remote|external|third-party)\s+(?:action|workflow)\b|\breusable workflow\b|^\s*uses:/im.test(evidence)
 }
 
 function matrixAffectsCiFacts (jobSource, command) {
@@ -407,6 +462,8 @@ function normalizeDirectCommand (command) {
     assignments.push(...crossEnv.assignments)
     source = source.slice(crossEnv.length)
   }
+  source = source.replace(/^(?:(?:bunx|npx)(?:\.cmd)?|(?:pnpm|yarn)(?:\.cmd)?\s+exec)\s+/, '')
+    .replace(/^bun x\s+/, '')
   return { assignments, index: prefix.length, source }
 }
 
@@ -519,11 +576,30 @@ function containsLiteral (source, value) {
 
 function containsExecutionCommand (source, value) {
   const command = String(value).replaceAll('\r\n', '\n').trim()
-  if (!command || command.includes('\n')) return false
-  return source.split(/\r?\n/).some(line => {
+  if (!command) return false
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
+  return lines.some((line, index) => {
     if (/^\s*#/.test(line)) return false
     const match = /^\s*(?:-\s*)?(?:run|script):\s*(.*?)\s*$/.exec(line)
-    return match?.[1] === command
+    if (!match) return false
+    if (!/^\|[+-]?$/.test(match[1])) return match[1] === command
+
+    const indent = /^\s*/.exec(line)[0].length
+    const block = []
+    for (let next = index + 1; next < lines.length; next++) {
+      if (!lines[next].trim()) {
+        block.push('')
+        continue
+      }
+      const nextIndent = /^\s*/.exec(lines[next])[0].length
+      if (nextIndent <= indent) break
+      block.push(lines[next])
+    }
+    const contentLines = block.filter(candidate => candidate.trim())
+    if (contentLines.length === 0) return false
+    const contentIndent = Math.min(...contentLines.map(candidate => /^\s*/.exec(candidate)[0].length))
+    const blockCommand = block.map(candidate => candidate.slice(contentIndent)).join('\n').trim()
+    return blockCommand === command
   })
 }
 

@@ -45,7 +45,7 @@ function expandCommand (command, scripts, path, stack, state) {
     if (stack.has(invocation.script)) {
       return { error: `local package-script cycle includes ${invocation.script}` }
     }
-    const lifecycleNames = invocation.manager === 'npm'
+    const lifecycleNames = invocation.manager === 'npm' || invocation.manager === 'bun'
       ? [`pre${invocation.script}`, `post${invocation.script}`]
           .filter(name => typeof scripts[name] === 'string')
       : []
@@ -60,8 +60,11 @@ function expandCommand (command, scripts, path, stack, state) {
       const nextStack = new Set(stack)
       nextStack.add(invocation.script)
       nextStack.add(scriptName)
+      const scriptCommand = scriptName === invocation.script && invocation.arguments
+        ? `${scripts[scriptName]} ${invocation.arguments}`
+        : scripts[scriptName]
       const expanded = expandCommand(
-        scripts[scriptName],
+        scriptCommand,
         scripts,
         [...path, segment],
         nextStack,
@@ -129,13 +132,19 @@ function getPackageScriptInvocation (command) {
   const literalPrefix = parseLiteralEnvironmentPrefix(command)
   const source = command.slice(literalPrefix.length).trim()
     .replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
-  const match = /^(npm(?:\.cmd)?|pnpm(?:\.cmd)?|yarn(?:pkg)?(?:\.cmd)?)\s+(?:(run|run-script)\s+)?([\w:-]+)$/
+  const match = /^(bun|npm(?:\.cmd)?|pnpm(?:\.cmd)?|yarn(?:pkg)?(?:\.cmd)?)\s+(?:(run|run-script)\s+)?([\w:-]+)(?:\s+(.+))?$/
     .exec(source)
   if (!match) return
 
-  const manager = match[1].replace(/\.cmd$/i, '')
+  const manager = match[1].replace(/\.cmd$/i, '').replace(/^yarnpkg$/, 'yarn')
   if (manager === 'npm' && !match[2] && !['restart', 'start', 'stop', 'test'].includes(match[3])) return
-  return { manager, script: match[3] }
+  const args = match[4]?.trim()
+  if (args && !splitLiteralAndChain(args)) return
+  return {
+    ...(args ? { arguments: args.replace(/^--\s+/, '') } : {}),
+    manager,
+    script: match[3],
+  }
 }
 
 module.exports = { expandLocalPackageScripts }

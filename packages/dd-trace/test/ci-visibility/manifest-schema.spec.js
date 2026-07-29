@@ -30,6 +30,25 @@ describe('test optimization validation manifest schema', () => {
     assert.strictEqual(JSON.stringify(manifest).includes('"argv"'), false)
   })
 
+  it('rejects an unknown blocker category', () => {
+    manifest.frameworks[0].blockerCategory = 'SOMETHING_ELSE'
+
+    assert.match(validateManifest(manifest).join('\n'), /blockerCategory must be one of/)
+  })
+
+  it('accepts emoji presentation selectors in inert CI labels', () => {
+    manifest.frameworks[0].ciWiring.job = 'test'
+    manifest.frameworks[0].ciWiring.step = '▶️ Run validate script'
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('continues to reject bidirectional controls in inert CI labels', () => {
+    manifest.frameworks[0].ciWiring.step = 'Run\u202Ehidden'
+
+    assert.match(validateManifest(manifest).join('\n'), /unsafe invisible character/)
+  })
+
   it('accepts a detected framework that the validator does not support', () => {
     const unsupported = structuredClone(manifest.frameworks[0])
     unsupported.id = 'karma:root'
@@ -73,6 +92,40 @@ describe('test optimization validation manifest schema', () => {
       'an outside test',
       value => { value.frameworks[0].validation.testFile = path.join(os.tmpdir(), 'outside-test.js') },
       /validation\.testFile must be inside repository\.root/,
+    ],
+    [
+      'an outside fallback test',
+      value => {
+        value.frameworks[0].validation.fallbackTests = [{
+          buildArtifactRequired: false,
+          localSocketRequired: false,
+          testFile: path.join(os.tmpdir(), 'outside-test.js'),
+        }]
+      },
+      /validation\.fallbackTests\[0\]\.testFile must be inside repository\.root/,
+    ],
+    [
+      'an excessive fallback set',
+      value => {
+        value.frameworks[0].validation.fallbackTests = [1, 2, 3].map(index => ({
+          buildArtifactRequired: false,
+          localSocketRequired: false,
+          testFile: path.join(value.repository.root, 'test', `fallback-${index}.js`),
+        }))
+      },
+      /validation\.fallbackTests must contain at most 2 entries/,
+    ],
+    [
+      'an executable field in fallback metadata',
+      value => {
+        value.frameworks[0].validation.fallbackTests = [{
+          argv: ['npm', 'test'],
+          buildArtifactRequired: false,
+          localSocketRequired: false,
+          testFile: path.join(value.repository.root, 'test', 'fallback.js'),
+        }]
+      },
+      /validation\.fallbackTests\[0\]\.argv is not supported/,
     ],
     [
       'an unsupported selector scope',
@@ -153,6 +206,16 @@ describe('test optimization validation manifest schema', () => {
       'a non-boolean review result',
       value => { value.frameworks[0].ciWiring.reviewComplete = 'yes' },
       /reviewComplete must be a boolean/,
+    ],
+    [
+      'a non-boolean shared localhost prerequisite',
+      value => { value.frameworks[0].allCandidatesRequireLocalSocket = 'yes' },
+      /allCandidatesRequireLocalSocket must be a boolean/,
+    ],
+    [
+      'a non-boolean build prerequisite',
+      value => { value.frameworks[0].buildArtifactRequired = 'yes' },
+      /buildArtifactRequired must be a boolean/,
     ],
   ]) {
     it(`rejects ${label}`, () => {

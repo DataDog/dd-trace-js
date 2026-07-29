@@ -45,11 +45,13 @@ describe('test optimization validation CI audit', () => {
     assert.strictEqual(result.status, 'fail')
     assert.strictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
     assert.strictEqual(result.evidence.evidenceStrength, 'confirmed_static')
-    assert.match(result.diagnosis, /Test Optimization is not initialized/)
+    assert.strictEqual(result.evidence.ciConfigurationStatus, 'not_configured')
+    assert.match(result.diagnosis, /does not configure the dd-trace\/ci\/init preload/)
+    assert.match(result.diagnosis, /no visible Datadog Agent or agentless reporting transport/)
+    assert.match(result.diagnosis, /Test Optimization is not configured/)
   })
 
   for (const wrapped of [
-    'npx mocha test/example.spec.js',
     'npx --no-install mocha test/example.spec.js',
     'pnpm run test:unit',
     'nx test project',
@@ -68,6 +70,17 @@ describe('test optimization validation CI audit', () => {
       assert.match(result.diagnosis, /could not be resolved/)
     })
   }
+
+  it('resolves a direct runner through a simple npx launcher', () => {
+    const npxCommand = 'npx mocha test/example.spec.js'
+    fs.writeFileSync(workflow, workflowSource({ command: npxCommand }))
+    completeReview({ command: npxCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.source, 'direct_ci_command')
+  })
 
   for (const wrapped of ['npm test', 'pnpm test', 'pnpm run test', 'yarn test', 'yarn run test']) {
     it(`resolves a local package script without executing it: ${wrapped}`, () => {
@@ -96,6 +109,80 @@ describe('test optimization validation CI audit', () => {
       result.evidence.ciFacts.runnerInvocation.commandPath,
       ['npm test', 'npm run test:unit', `c8 ${command}`]
     )
+  })
+
+  it('resolves literal arguments passed through a nested Yarn script', () => {
+    writeScripts({
+      'test:coverage': 'yarn test --coverage',
+      test: command,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'yarn test:coverage' }))
+    completeReview({ command: 'yarn test:coverage', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--coverage$/)
+  })
+
+  it('resolves a Bun package script with literal runner arguments', () => {
+    framework.framework = 'cypress'
+    framework.id = 'cypress:fixture'
+    writeScripts({ test: 'cypress run --headless' })
+    const bunCommand = 'bun run test --browser chrome'
+    fs.writeFileSync(workflow, workflowSource({ command: bunCommand }))
+    completeReview({ command: bunCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.strictEqual(
+      result.evidence.ciFacts.runnerInvocation.resolvedCommand,
+      'cypress run --headless --browser chrome'
+    )
+  })
+
+  it('discards stale Bun wrapper uncertainty only after resolving the local package script', () => {
+    framework.framework = 'cypress'
+    framework.id = 'cypress:fixture'
+    writeScripts({ test: 'cypress run --headless' })
+    const bunCommand = 'bun run test --browser chrome'
+    fs.writeFileSync(workflow, workflowSource({ command: bunCommand }))
+    completeReview({
+      command: bunCommand,
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['The literal bun run test package-script wrapper cannot be statically expanded.'],
+    })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [])
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.ignored, [
+      'The literal bun run test package-script wrapper cannot be statically expanded.',
+    ])
+  })
+
+  it('binds an exact command from a YAML literal run block', () => {
+    const blockCommand = ['node ./scripts/prepare.js', command].join('\n')
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    steps:',
+      '      - run: |',
+      '          node ./scripts/prepare.js',
+      `          ${command}`,
+      '',
+    ].join('\n'))
+    completeReview({ command: blockCommand, initialization: 'not_configured', transport: 'none' })
+    framework.ciWiring.step = 'run: |'
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.diagnosis, /could not be resolved/)
+    assert.doesNotMatch(result.diagnosis, /could not be bound structurally/)
   })
 
   it('resolves coverage-wrapped package scripts and literal cross-env assignments', () => {
@@ -278,7 +365,47 @@ describe('test optimization validation CI audit', () => {
 
     assert.strictEqual(result.status, 'fail')
     assert.strictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
-    assert.match(result.diagnosis, /not initialized/)
+    assert.match(result.diagnosis, /not configured/)
+  })
+
+  it('uses a dedicated incomplete outcome when no supported CI file was found', () => {
+    framework.ciWiring = {
+      command: null,
+      configFile: null,
+      initialization: { evidence: [], status: 'unknown' },
+      job: null,
+      reviewComplete: false,
+      step: null,
+      transport: { evidence: [], mode: 'unknown' },
+      unresolved: ['No supported CI configuration file was found by bounded discovery.'],
+      workingDirectory: null,
+    }
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.reasonCode, 'no-supported-ci-configuration')
+    assert.match(result.diagnosis, /does not prove that the repository has no external CI configuration/)
+  })
+
+  it('keeps an unavailable remote action command explicitly incomplete', () => {
+    framework.ciWiring = {
+      command: null,
+      configFile: workflow,
+      initialization: { evidence: [], status: 'unknown' },
+      job: 'test:',
+      reviewComplete: false,
+      step: 'uses: vendor/test-action@0123456789abcdef',
+      transport: { evidence: [], mode: 'unknown' },
+      unresolved: ['The remote action command is unavailable in this repository.'],
+      workingDirectory: fixture.root,
+    }
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.reasonCode, 'remote-ci-command-unavailable')
+    assert.match(result.diagnosis, /remote action or reusable workflow/)
   })
 
   it('does not bind a selected job to a command found only in another job', () => {
@@ -327,6 +454,19 @@ describe('test optimization validation CI audit', () => {
 
     assert.strictEqual(result.status, 'error')
     assert.match(result.evidence.ciFacts.runnerInvocation.reason, /no approval-bound effective working directory/)
+  })
+
+  it('keeps the actual CI working directory when a repository wrapper cannot be resolved', () => {
+    fs.writeFileSync(workflow, workflowSource({ command: 'pnpm -r test' }))
+    completeReview({ command: 'pnpm -r test', initialization: 'not_configured', transport: 'none' })
+    framework.ciWiring.workingDirectory = path.dirname(fixture.root)
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.evidence.recommendation, /Keep the CI job's actual working directory/)
+    assert.match(result.evidence.recommendation, /do not substitute the framework package directory/)
   })
 
   it('confirms a reset in the selected direct command', () => {

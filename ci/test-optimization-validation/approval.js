@@ -117,6 +117,11 @@ function getApprovalMaterial ({
       outputDirectory: path.resolve(out),
       offlineFixtureNonce,
       keepTemporaryFiles: keepTempFiles,
+      requiredCapabilities: getRequiredCapabilities({
+        manifest,
+        requestedScenario,
+        selectedFrameworkIds,
+      }),
       verbose,
     },
     fixtureRecipeDigests: includeLocal
@@ -131,6 +136,34 @@ function getApprovalMaterial ({
     generatedFiles: getGeneratedFileMaterial(manifest, requestedScenario),
     executables: executableIdentities,
   }
+}
+
+/**
+ * Describes host capabilities required by the selected project tests.
+ *
+ * This is approval metadata only. The validator does not request permissions or start prerequisites.
+ *
+ * @param {object} input approval selection
+ * @param {object} input.manifest validation manifest
+ * @param {string|null} input.requestedScenario requested scenario
+ * @param {string[]} input.selectedFrameworkIds selected framework ids
+ * @returns {string[]} sorted capability ids
+ */
+function getRequiredCapabilities ({ manifest, requestedScenario, selectedFrameworkIds = [] }) {
+  if (requestedScenario === 'ci-wiring') return []
+  const selected = new Set(selectedFrameworkIds)
+  const frameworks = (manifest.frameworks || []).filter(framework => {
+    return framework.status === 'runnable' && (selected.size === 0 || selected.has(framework.id))
+  })
+  const capabilities = new Set()
+  if (frameworks.some(framework => framework.browserRequired === true)) {
+    capabilities.add('browser_process')
+  }
+  if (frameworks.some(framework => framework.localSocketRequired === true ||
+    (framework.validation?.fallbackTests || []).some(fallback => fallback.localSocketRequired === true))) {
+    capabilities.add('localhost_socket')
+  }
+  return [...capabilities].sort()
 }
 
 /**
@@ -332,5 +365,6 @@ module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getRequiredCapabilities,
   serializeApprovalMaterial,
 }

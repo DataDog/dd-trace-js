@@ -13,6 +13,7 @@ const {
   serializeApprovalCommand,
   withCiPreloads,
 } = require('../../../../ci/test-optimization-validation/command-runner')
+const { getCommandBlocker } = require('../../../../ci/test-optimization-validation/command-blocker')
 const {
   bindManifestExecutables,
   getExecutableForSpawn,
@@ -56,6 +57,62 @@ describe('test optimization validation execution boundary', () => {
     assert.strictEqual(result.exitCode, 0)
     assert.match(result.stdout, /1 passing/)
     assert.strictEqual(result.commandDetails.executionBoundary, 'validator-owned-direct-runner')
+  })
+
+  it('classifies a concrete missing build output without executing the build script', () => {
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.scripts.build = 'node ./scripts/build.js'
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+
+    const blocker = getCommandBlocker({
+      exitCode: 1,
+      stderr: "Error: Cannot find module '../dist/generated/schema.js'",
+      stdout: '',
+    }, {
+      framework: 'mocha',
+      packageJson: packageJsonPath,
+      testsRan: false,
+    })
+
+    assert.strictEqual(blocker.kind, 'project-build-artifact-missing')
+    assert.strictEqual(blocker.blockerCategory, 'PROJECT_SETUP_REQUIRED')
+    assert.match(blocker.recommendation, /"build": "node \.\/scripts\/build\.js"/)
+    assert.match(blocker.summary, /does not run project build commands/)
+  })
+
+  it('classifies a missing dist artifact from a Cypress setup hook after tests were collected', () => {
+    const blocker = getCommandBlocker({
+      exitCode: 1,
+      stderr: '',
+      stdout: [
+        'Tests: 274',
+        '1) "before all" hook for "should restore focus"',
+        'Error: /dist/sweetalert2.css is not found',
+      ].join('\n'),
+    }, {
+      framework: 'cypress',
+      packageJson: path.join(fixture.root, 'package.json'),
+      testsRan: true,
+    })
+
+    assert.strictEqual(blocker.kind, 'project-build-artifact-missing')
+    assert.strictEqual(blocker.blockerCategory, 'PROJECT_SETUP_REQUIRED')
+  })
+
+  it('classifies a validator-owned Cucumber config rejection as a validator limitation', () => {
+    const blocker = getCommandBlocker({
+      exitCode: 1,
+      stderr: "error: unknown option '--config'",
+      stdout: '',
+    }, {
+      framework: 'cucumber',
+      testsRan: false,
+    })
+
+    assert.strictEqual(blocker.kind, 'cucumber-config-isolation-unsupported')
+    assert.strictEqual(blocker.blockerCategory, 'VALIDATOR_LIMITATION')
+    assert.match(blocker.summary, /not a project test or Test Optimization failure/)
   })
 
   for (const command of [
@@ -258,7 +315,15 @@ describe('test optimization validation execution boundary', () => {
     assert.strictEqual(fs.existsSync(outputPath), false)
 
     fs.mkdirSync(outputPath)
-    assert.throws(() => execute(command, 'output-preexisting'), /already exists/)
+    assert.throws(
+      () => execute(command, 'output-preexisting'),
+      error => {
+        assert.strictEqual(error.validationExitCode, 2)
+        assert.strictEqual(error.validationBlocker.kind, 'command-output-exists')
+        assert.match(error.validationBlocker.recommendation, /Remove it manually only if it is disposable/)
+        return true
+      }
+    )
   })
 
   it('accepts a bounded direct-runner preflight when the output has no parseable count', async () => {
@@ -290,7 +355,7 @@ describe('test optimization validation execution boundary', () => {
     )
   })
 
-  it('classifies a representative that the runner does not collect as project setup', async () => {
+  it('classifies a representative that the runner does not collect as a validator limitation', async () => {
     fs.writeFileSync(fixture.runner, "console.error('No tests found')\nprocess.exit(1)\n")
     const result = await runFrameworkPreflight({
       framework,
@@ -299,9 +364,158 @@ describe('test optimization validation execution boundary', () => {
     })
 
     assert.strictEqual(result.ok, false)
-    assert.strictEqual(result.failure.evidence.domain, 'project_setup')
+    assert.strictEqual(result.failure.evidence.blockerCategory, 'VALIDATOR_LIMITATION')
+    assert.strictEqual(result.failure.evidence.domain, 'validator_adapter')
     assert.strictEqual(result.failure.evidence.commandFailure.kind, 'no-tests-collected')
     assert.match(result.failure.evidence.commandFailure.recommendation, /runtime test collectible/)
+  })
+
+  it('tries only disclosed fallbacks and selects the first clean candidate', async () => {
+    const first = path.join(fixture.root, 'test', 'a-first.spec.js')
+    const second = path.join(fixture.root, 'test', 'b-second.spec.js')
+    fs.writeFileSync(first, "describe('first', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(second, "describe('second', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(fixture.runner, [
+      "if (process.argv.at(-1).includes('a-first')) {",
+      "  console.error('Error: missing generated build output')",
+      '  process.exit(1)',
+      '}',
+      "console.log('1 passing')",
+    ].join('\n'))
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.scripts.test = 'mocha'
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    manifest = createLoadedManifest(fixture.root, 'mocha')
+    framework = manifest.frameworks[0]
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(result.preflight.attempts.length, 2)
+    assert.strictEqual(result.preflight.attempts[0].testFile, first)
+    assert.strictEqual(result.preflight.selectedTestFile, second)
+    assert.strictEqual(framework.validation.testFile, second)
+  })
+
+  it('tries a self-contained fallback after a candidate-specific localhost denial', async () => {
+    const first = path.join(fixture.root, 'test', 'a-socket.spec.js')
+    const second = path.join(fixture.root, 'test', 'b-plain.spec.js')
+    fs.writeFileSync(first, "describe('socket', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(second, "describe('plain', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(fixture.runner, [
+      "if (process.argv.at(-1).includes('a-socket')) {",
+      "  console.error('listen EPERM 127.0.0.1')",
+      '  process.exit(1)',
+      '}',
+      "console.log('1 passing')",
+    ].join('\n'))
+    framework.validation.testFile = first
+    framework.validation.fallbackTests = [{
+      buildArtifactRequired: false,
+      localSocketRequired: false,
+      testFile: second,
+    }]
+    framework.allCandidatesRequireLocalSocket = false
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(result.preflight.attempts.length, 2)
+    assert.strictEqual(result.preflight.selectedTestFile, second)
+  })
+
+  it('stops disclosed fallbacks after an execution-environment browser blocker', async () => {
+    const first = path.join(fixture.root, 'test', 'a-first.spec.js')
+    const second = path.join(fixture.root, 'test', 'b-second.spec.js')
+    fs.writeFileSync(first, "describe('first', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(second, "describe('second', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(fixture.runner, [
+      "console.error('browserType.launch: Failed to launch the browser process')",
+      "console.error('Operation not permitted: bootstrap_check_in')",
+      'process.exit(1)',
+    ].join('\n'))
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.scripts.test = 'mocha'
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    manifest = createLoadedManifest(fixture.root, 'mocha')
+    framework = manifest.frameworks[0]
+    framework.framework = 'playwright'
+    framework.browserRequired = true
+    framework.allCandidatesRequireLocalSocket = true
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.preflight.attempts.length, 1)
+    assert.strictEqual(result.failure.evidence.domain, 'execution_environment')
+    assert.strictEqual(
+      result.failure.evidence.commandFailure.kind,
+      'playwright-browser-launch-blocked'
+    )
+    assert.doesNotMatch(result.failure.diagnosis, /Every approved candidate appears to require localhost/)
+  })
+
+  it('includes the concrete project failure when every disclosed candidate fails', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.error('Error: missing generated build output')",
+      'process.exit(1)',
+    ].join('\n'))
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.match(result.failure.diagnosis, /missing generated build output/)
+    assert.match(result.failure.evidence.recommendation, /missing generated build output/)
+  })
+
+  it('includes a TypeError from project output when every disclosed candidate fails', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.log(\"TypeError: Cannot read properties of null (reading 'port')\")",
+      'process.exit(1)',
+    ].join('\n'))
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.match(result.failure.diagnosis, /Cannot read properties of null/)
+    assert.match(result.failure.evidence.recommendation, /Cannot read properties of null/)
+  })
+
+  it('explains when every disclosed candidate shares a localhost prerequisite', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.log(\"TypeError: Cannot read properties of null (reading 'port')\")",
+      'process.exit(1)',
+    ].join('\n'))
+    framework.allCandidatesRequireLocalSocket = true
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.match(result.failure.diagnosis, /Every approved candidate appears to require localhost/)
   })
 
   it('classifies a refused Cypress application connection as project setup', async () => {
@@ -329,6 +543,68 @@ describe('test optimization validation execution boundary', () => {
     } finally {
       removeFixture(cypressFixture.root)
     }
+  })
+
+  it('classifies an aborted Cucumber browser as a local runtime blocker', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.error('Error: Failed to launch the browser process!')",
+      "console.error('Received signal 6')",
+      'process.exit(1)',
+    ].join('\n'))
+    framework.framework = 'cucumber'
+    framework.browserRequired = true
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
+    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cucumber-browser-process-aborted')
+    assert.match(result.failure.evidence.commandFailure.recommendation, /Cucumber browser tests can launch/)
+  })
+
+  it('keeps a Cucumber formatter exception unclassified without browser failure evidence', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.error(\"TypeError: Cannot read properties of undefined (reading 'line')\")",
+      'process.exit(1)',
+    ].join('\n'))
+    framework.framework = 'cucumber'
+    framework.browserRequired = true
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.failure.evidence.blockerCategory, 'CLEAN_TEST_FAILED')
+    assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
+    assert.strictEqual(result.failure.evidence.commandFailure, undefined)
+    assert.match(result.failure.diagnosis, /Cannot read properties of undefined/)
+  })
+
+  it('classifies a Cucumber formatter exception only with browser failure evidence', async () => {
+    fs.writeFileSync(fixture.runner, [
+      "console.error('Browser session closed before formatter completion')",
+      "console.error(\"TypeError: Cannot read properties of undefined (reading 'line')\")",
+      'process.exit(1)',
+    ].join('\n'))
+    framework.framework = 'cucumber'
+    framework.browserRequired = true
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
+    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cucumber-browser-execution-incomplete')
   })
 
   it('accepts an exact generated test when the reporter omits the test count', async () => {

@@ -15,6 +15,7 @@ const MAX_APPROVAL_BYTES = 5 * 1024 * 1024
 const MAX_APPROVAL_COLLECTION_ENTRIES = 100_000
 const MAX_APPROVAL_NESTING_DEPTH = 64
 const MAX_APPROVAL_STRING_BYTES = 256 * 1024
+const REQUIRED_CAPABILITIES = new Set(['browser_process', 'localhost_socket'])
 
 /**
  * Writes inspectable approval material without running project code.
@@ -97,6 +98,7 @@ function validateApprovedPlanShape (material, approvalPath) {
   const outputDirectory = material?.validation?.outputDirectory
   const frameworks = material?.selection?.frameworks
   const scenario = material?.selection?.scenario
+  const requiredCapabilities = material?.validation?.requiredCapabilities
   if (typeof manifestPath !== 'string' || !path.isAbsolute(manifestPath)) {
     throw new Error('Approved plan manifest.path must be an absolute path.')
   }
@@ -108,6 +110,13 @@ function validateApprovedPlanShape (material, approvalPath) {
   }
   if (scenario !== null && typeof scenario !== 'string') {
     throw new Error('Approved plan selection.scenario must be a string or null.')
+  }
+  if (!Array.isArray(requiredCapabilities) ||
+    requiredCapabilities.some(capability => !REQUIRED_CAPABILITIES.has(capability)) ||
+    new Set(requiredCapabilities).size !== requiredCapabilities.length) {
+    throw new Error(
+      'Approved plan validation.requiredCapabilities must contain unique browser_process or localhost_socket values.'
+    )
   }
   if (path.resolve(approvalPath) !== path.join(path.resolve(outputDirectory), APPROVAL_FILENAME)) {
     throw new Error(`Approved plan must be ${APPROVAL_FILENAME} inside validation.outputDirectory.`)

@@ -15,6 +15,7 @@ const {
   getBasicCommand,
   getGeneratedCommand,
   getManifestCommands,
+  getManifestInputFiles,
 } = require('../../../../ci/test-optimization-validation/runner-command')
 const { getRunnerContract } = require('../../../../ci/test-optimization-validation/runner-contract')
 const {
@@ -84,6 +85,313 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.status, 'runnable')
       assert.strictEqual(framework.validation.testFile, fixture.testFile)
       assert.match(framework.validation.runner, /cucumber-js\.js$/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('isolates generated Cucumber checks from project profiles', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile ci',
+    })
+    fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+      'module.exports = {',
+      "  ci: 'features/**/*.feature --require features/**/*.js',",
+      '}',
+      '',
+    ].join('\n'))
+    const supportFile = path.join(fixture.root, 'features', 'steps.js')
+    fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+      const basic = getBasicCommand(framework)
+      const generated = getGeneratedCommand(framework, framework.generatedTestStrategy.scenarios[0])
+      const selectedFeatures = generated.argv.filter(argument => argument.endsWith('.feature'))
+
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--require', supportFile])
+      assert.strictEqual(basic.argv.includes('--profile'), false)
+      assert.ok(basic.argv.some(argument => argument.endsWith('cucumber-validation.json')))
+      assert.strictEqual(generated.argv.includes('--profile'), false)
+      assert.ok(generated.argv.includes(supportFile))
+      assert.ok(generated.argv.includes('json'))
+      assert.deepStrictEqual(selectedFeatures, [
+        framework.generatedTestStrategy.scenarios[0].testIdentities[0].file,
+      ])
+      assert.strictEqual(generated.cwd, framework.project.root)
+      assert.ok(generated.argv.includes(
+        path.join(
+          framework.generatedTestStrategy.testDirectory,
+          'dd-test-optimization-validation.steps.cjs'
+        )
+      ))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('keeps Cucumber 7 static-only because its CLI cannot isolate customer profiles', () => {
+    const fixture = createRepositoryFixture({ framework: 'cucumber' })
+    const version = '7.3.2'
+    const rootPackagePath = path.join(fixture.root, 'package.json')
+    const installedPackagePath = path.join(
+      fixture.root,
+      'node_modules',
+      ...fixture.definition.packageName.split('/'),
+      'package.json'
+    )
+    for (const filename of [rootPackagePath, installedPackagePath]) {
+      const packageJson = JSON.parse(fs.readFileSync(filename))
+      packageJson.version = filename === installedPackagePath ? version : packageJson.version
+      if (filename === rootPackagePath) packageJson.devDependencies[fixture.definition.packageName] = version
+      fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
+    }
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.strictEqual(framework.validation, undefined)
+      assert.match(framework.notes.join(' '), /cannot bypass customer profiles/)
+      assert.match(framework.notes.join(' '), /static CI audit can still run/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('recognizes a Cucumber Example declared inside a Rule', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      testSource: [
+        'Feature: example',
+        '  Rule: example rule',
+        '    Example: works',
+        '      Given it works',
+        '',
+      ].join('\n'),
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, fixture.testFile)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('marks Cucumber browser support as browser-required', () => {
+    const fixture = createRepositoryFixture({ framework: 'cucumber' })
+    const supportFile = path.join(fixture.root, 'features', 'support', 'hooks.js')
+    fs.mkdirSync(path.dirname(supportFile), { recursive: true })
+    fs.writeFileSync(supportFile, [
+      "const puppeteer = require('puppeteer')",
+      'module.exports = () => puppeteer.launch()',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.browserRequired, true)
+      assert.strictEqual(framework.validation.timeoutMs, 300_000)
+      assert.match(framework.notes.join(' '), /support code imports a browser driver/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('does not mark ordinary Cucumber support as browser-required', () => {
+    const fixture = createRepositoryFixture({ framework: 'cucumber' })
+    const supportFile = path.join(fixture.root, 'features', 'support', 'hooks.js')
+    fs.mkdirSync(path.dirname(supportFile), { recursive: true })
+    fs.writeFileSync(supportFile, "const { Before } = require('@cucumber/cucumber')\nBefore(() => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.browserRequired, false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('selects a non-suffixed Jest test inside a conventional test directory', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest' })
+    const representative = path.join(fixture.root, 'src', '__tests__', 'events.js')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(representative), { recursive: true })
+    fs.writeFileSync(representative, "test('works', () => { expect(true).toBe(true) })\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, representative)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('uses an installed Jest runner when the package script is an unresolved wrapper', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest', script: 'kcd-scripts test' })
+    const representative = path.join(fixture.root, 'src', '__tests__', 'events.js')
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    delete packageJson.devDependencies.jest
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    fs.writeFileSync(path.join(fixture.root, 'jest.config.js'), 'module.exports = {}\n')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(representative), { recursive: true })
+    fs.writeFileSync(representative, "test('works', () => { expect(true).toBe(true) })\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, representative)
+      assert.strictEqual(framework.validation.runnerArgs.length, 0)
+      assert.match(framework.notes.join(' '), /unresolved package wrapper is not executed/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('keeps generated CommonJS Jest globals module-scoped for TypeScript tests', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest' })
+    const representative = path.join(fixture.root, 'test', 'example.test.ts')
+    fs.renameSync(fixture.testFile, representative)
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+      const generated = framework.generatedTestStrategy.files[0].contentLines.join('\n')
+
+      assert.ok(generated.includes("const jestGlobals = require('@jest/globals')"))
+      assert.ok(generated.includes('jestGlobals.describe'))
+      assert.ok(generated.includes('jestGlobals.test'))
+      assert.ok(generated.includes('jestGlobals.expect'))
+      assert.strictEqual(generated.includes('const { describe, expect, test }'), false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('prefers explicit test filenames over helper methods in a conventional directory', () => {
+    const fixture = createRepositoryFixture({ framework: 'vitest', script: 'vitest run' })
+    const helper = path.join(fixture.root, 'test', 'snapshot-helper.ts')
+    const representative = path.join(fixture.root, 'test', 'nested', 'behavior.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(representative), { recursive: true })
+    fs.writeFileSync(helper, 'module.exports = { test(value) { return value } }\n')
+    fs.writeFileSync(representative, "test('works', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, representative)
+      assert.deepStrictEqual(framework.validation.fallbackTests, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('approval-binds two disclosed representative fallbacks', () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha' })
+    const first = path.join(fixture.root, 'test', 'a-first.spec.js')
+    const second = path.join(fixture.root, 'test', 'b-second.spec.js')
+    fs.writeFileSync(first, "describe('first', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(second, "describe('second', () => { it('works', () => {}) })\n")
+    try {
+      const manifest = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      })
+      const framework = manifest.frameworks[0]
+      const approvedCommands = getManifestCommands(manifest).map(([, command]) => command.argv.at(-1))
+      const approvedInputs = getManifestInputFiles(manifest)
+
+      assert.strictEqual(framework.validation.testFile, first)
+      assert.deepStrictEqual(framework.validation.fallbackTests, [
+        {
+          buildArtifactRequired: false,
+          localSocketRequired: false,
+          testFile: second,
+        },
+        {
+          buildArtifactRequired: false,
+          localSocketRequired: false,
+          testFile: fixture.testFile,
+        },
+      ])
+      assert.deepStrictEqual(approvedCommands.slice(0, 3), [first, second, fixture.testFile])
+      assert.ok(approvedInputs.includes(first))
+      assert.ok(approvedInputs.includes(second))
+      assert.ok(approvedInputs.includes(fixture.testFile))
+      assert.deepStrictEqual(validateManifest(manifest), [])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('retains Jest color because it can affect snapshot output', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest --color=true' })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.omittedRunnerOptions, undefined)
+      assert.strictEqual(getBasicCommand(framework).argv.includes('--color=true'), true)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('accepts inert nyc reporters while retaining Mocha configuration', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      script: 'nyc --reporter=lcov --reporter=text mocha --require test/support/env',
+    })
+    const representative = path.join(fixture.root, 'test', 'test.js')
+    const preload = path.join(fixture.root, 'test', 'support', 'env.js')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(preload), { recursive: true })
+    fs.writeFileSync(representative, "describe('works', () => { it('passes', () => {}) })\n")
+    fs.writeFileSync(preload, 'void 0\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, representative)
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--require', 'test/support/env'])
+      assert.ok(framework.project.configFiles.includes(preload))
     } finally {
       removeFixture(fixture.root)
     }
@@ -181,6 +489,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes.join('\n'), /--config has configuration semantics/)
     } finally {
       removeFixture(fixture.root)
@@ -317,6 +626,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes[0], /resolves outside the repository/)
       assert.strictEqual(framework.validation, undefined)
     } finally {
@@ -507,6 +817,67 @@ describe('test optimization validation manifest scaffold', () => {
     })
   }
 
+  it('fails closed when a Vitest project cannot be bound to one static scope', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const selected = path.join(fixture.root, 'runtime-tests', 'shared', 'color.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('binds one literal Vitest project to its static include scope', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const selected = path.join(fixture.root, 'runtime-tests', 'shared', 'color.test.ts')
+    const outside = path.join(fixture.root, 'runtime-tests', 'other', 'outside.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.mkdirSync(path.dirname(outside), { recursive: true })
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    fs.writeFileSync(outside, "test('outside', () => {})\n")
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      "      test: { name: 'fastly', include: ['runtime-tests/shared/**/*.test.ts'] },",
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'fastly'])
+      assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'vitest.config.ts')))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('keeps Jest suffixes and disables retained leak detection for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',
@@ -651,6 +1022,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'PROJECT_SETUP_REQUIRED')
       assert.match(framework.notes[0], /localhost application/)
       assert.match(framework.notes[0], /discovery will not start/)
       assert.strictEqual(framework.validation, undefined)
@@ -674,6 +1046,32 @@ describe('test optimization validation manifest scaffold', () => {
 
       assert.strictEqual(framework.status, 'runnable')
       assert.strictEqual(framework.validation.testFile, selfContained)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('explains how to retry an unsupported installed Cypress version', () => {
+    const fixture = createRepositoryFixture({ framework: 'cypress' })
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const installedPackageJsonPath = path.join(fixture.root, 'node_modules', 'cypress', 'package.json')
+    for (const filename of [packageJsonPath, installedPackageJsonPath]) {
+      const packageJson = JSON.parse(fs.readFileSync(filename))
+      packageJson.version = filename === installedPackageJsonPath ? '11.2.0' : packageJson.version
+      if (filename === packageJsonPath) packageJson.devDependencies.cypress = '11.2.0'
+      fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
+    }
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cypress']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'detected_not_runnable')
+      assert.strictEqual(framework.blockerCategory, 'UNSUPPORTED_VERSION')
+      assert.match(framework.notes[0], /Cypress 11\.2\.0 was detected/)
+      assert.match(framework.notes[0], /live validation requires >=12\.0\.0/)
+      assert.match(framework.notes[0], /normal dependency workflow/)
     } finally {
       removeFixture(fixture.root)
     }
@@ -711,6 +1109,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes[0], /runner launch wrapper contains options or positional arguments/)
       assert.strictEqual(framework.validation, undefined)
     } finally {
@@ -730,6 +1129,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes[0], /runner launch wrapper dotenvx is not allowlisted/)
       assert.strictEqual(framework.validation, undefined)
     } finally {
@@ -811,6 +1211,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'PROJECT_SETUP_REQUIRED')
       assert.match(framework.notes[0], /executable is unavailable/)
       assert.strictEqual(framework.validation, undefined)
     } finally {
@@ -830,6 +1231,7 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes[0], /No single Vitest test file/)
     } finally {
       removeFixture(fixture.root)
@@ -852,7 +1254,40 @@ describe('test optimization validation manifest scaffold', () => {
 
       assert.strictEqual(framework.status, 'runnable')
       assert.strictEqual(framework.localSocketRequired, true)
-      assert.match(framework.notes.join(' '), /require localhost/)
+      assert.strictEqual(framework.allCandidatesRequireLocalSocket, true)
+      assert.match(framework.notes.join(' '), /Every approved candidate appears to require localhost/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('does not describe localhost as shared when a fallback does not use it', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      testSource: [
+        "const http = require('node:http')",
+        "describe('server', () => { it('works', () => http.createServer().listen(0)) })",
+      ].join('\n'),
+    })
+    const socketTest = path.join(fixture.root, 'test', 'a-socket.spec.js')
+    const fallback = path.join(fixture.root, 'test', 'z-no-socket.spec.js')
+    fs.renameSync(fixture.testFile, socketTest)
+    fs.writeFileSync(fallback, "describe('plain', () => { it('works', () => {}) })\n")
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.scripts.test = 'mocha'
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.localSocketRequired, false)
+      assert.strictEqual(framework.allCandidatesRequireLocalSocket, false)
+      assert.strictEqual(framework.validation.fallbackTests[0].testFile, socketTest)
+      assert.strictEqual(framework.validation.fallbackTests[0].localSocketRequired, true)
+      assert.doesNotMatch(framework.notes.join(' '), /Every approved candidate appears to require localhost/)
     } finally {
       removeFixture(fixture.root)
     }
