@@ -115,19 +115,36 @@ describe('azure-durable-functions plugin', () => {
     bindStart({
       trigger: 'Orchestration',
       functionName: 'PizzaOrderOrchestration',
-      instanceId: 'abc-123',
     })
 
     sinon.assert.calledWith(
       startSpan,
       'azure.functions.invoke',
       sinon.match({
-        meta: sinon.match({
+        tags: sinon.match({
           'aas.function.name': 'PizzaOrderOrchestration',
           'aas.function.trigger': 'Orchestration',
           'resource.name': 'Orchestration PizzaOrderOrchestration',
         }),
       })
+    )
+  })
+
+  it('continues the host trace for orchestration invocations', () => {
+    const parent = { _traceId: 'parent' }
+    extract.returns(parent)
+
+    bindStart({
+      trigger: 'Orchestration',
+      functionName: 'PizzaOrderOrchestration',
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+      tracestate: 'dd=s:1',
+    })
+
+    sinon.assert.calledWith(
+      startSpan,
+      'azure.functions.invoke',
+      sinon.match({ childOf: parent })
     )
   })
 

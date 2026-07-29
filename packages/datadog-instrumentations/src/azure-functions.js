@@ -8,9 +8,7 @@ const {
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
-// Durable Functions orchestrators are registered through `app.generic`, so they
-// are instrumented here rather than in the `durable-functions` hook. Spans are
-// described by the azure-durable-functions plugin, which owns this channel.
+// Orchestrators register via app.generic; activities/entities use the durable-functions hook.
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
 
 const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
@@ -42,9 +40,6 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   return azureFunction
 })
 
-// `durable-functions` registers orchestrators, activities and entities through
-// `app.generic`. Activities and entities are wrapped at the `durable-functions`
-// API instead, so only orchestration triggers are handled here.
 function wrapGeneric (method) {
   return function (name, options) {
     if (options?.trigger?.type === ORCHESTRATION_TRIGGER_TYPE && typeof options.handler === 'function') {
@@ -54,20 +49,12 @@ function wrapGeneric (method) {
   }
 }
 
-// The registered orchestration handler is the only boundary that reliably starts
-// and settles once per orchestrator invocation. The orchestrator body itself is a
-// generator that the durable runtime abandons mid-yield whenever the orchestration
-// suspends on a pending task, so a span started around the generator would never
-// be finished.
+// Span the registered handler (not the generator body), and skip replays.
 function traceOrchestrationHandler (handler, functionName) {
   return function (...args) {
     if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, args)
 
     const orchestrationBinding = args[0]
-
-    // Orchestrators replay their entire history on every invocation. Tracing only
-    // the invocations that make forward progress keeps replays from duplicating
-    // spans, and keeps the tracer off the replay path entirely.
     if (orchestrationBinding?.isReplaying !== false) return handler.apply(this, args)
 
     const traceContext = args[1]?.traceContext
