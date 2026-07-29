@@ -22,6 +22,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/generated-verifier')
 const { runFrameworkPreflight } = require('../../../../ci/test-optimization-validation/preflight-runner')
 const { getBasicCommand } = require('../../../../ci/test-optimization-validation/runner-command')
+const { getObservedTestCount } = require('../../../../ci/test-optimization-validation/test-output')
 const {
   createLoadedManifest,
   createRepositoryFixture,
@@ -466,6 +467,21 @@ describe('test optimization validation execution boundary', () => {
       repositoryRoot: fixture.root,
     })
   }
+})
+
+describe('test optimization validation observed test counts', () => {
+  it('reads playwright summaries per line and treats a skipped-only run as zero', () => {
+    const summary = ['Running 3 tests using 1 worker', '', '  2 passed (1.2s)', '  1 flaky (0.4s)'].join('\n')
+
+    assert.strictEqual(getObservedTestCount('playwright', summary), 3)
+    assert.strictEqual(getObservedTestCount('playwright', '  4 skipped (0.1s)'), 0)
+    assert.strictEqual(getObservedTestCount('playwright', 'no summary here'), null)
+  })
+
+  it('does not join a count and its outcome across a line break', () => {
+    assert.strictEqual(getObservedTestCount('playwright', '2\npassed'), null)
+    assert.strictEqual(getObservedTestCount('playwright', '2\nskipped'), null)
+  })
 })
 
 /**
