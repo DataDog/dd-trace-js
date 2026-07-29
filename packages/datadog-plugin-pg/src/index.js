@@ -52,6 +52,8 @@ class PGPlugin extends DatabasePlugin {
         span.addTags(connectionMeta(ctx.params))
         if (ctx.deferServiceResolution) {
           const service = this.serviceName({ pluginConfig: this.config, params: ctx.params })
+          // A `service` callback may return no name, and the start-time fallback already carries
+          // the schema default every other pg span falls back to.
           if (service.name) {
             this.setServiceName(span, service.name)
             span.setTag(SVC_SRC_KEY, service.source)

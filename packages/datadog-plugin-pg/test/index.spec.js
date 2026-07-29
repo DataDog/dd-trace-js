@@ -902,6 +902,29 @@ describe('Plugin', () => {
           }
         })
 
+        it('finishes the acquire span when connecting throws synchronously', async () => {
+          const throwingPool = new pg.Pool({ connectionString: 'postgres://[invalid' })
+          const parent = tracer.startSpan('sync-throw-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.error, 1)
+          })
+
+          await Promise.all([
+            tracePromise,
+            tracer.scope().activate(parent, async () => {
+              try {
+                assert.throws(() => throwingPool.connect(), { message: 'Invalid URL' })
+              } finally {
+                parent.finish()
+              }
+            }),
+          ])
+        })
+
         it('does not create an acquire span for pool.query', async () => {
           await Promise.all([
             agent.assertSomeTraces(traces => {
@@ -975,9 +998,11 @@ describe('Plugin', () => {
       describe('with a service name callback', () => {
         before(() => {
           return agent.load('pg', {
-            service: params => params.application_name === 'tracer-service'
-              ? 'test'
-              : `${params.host.toUpperCase()}-${params.database}`,
+            service (params) {
+              if (params.application_name === 'tracer-service') return 'test'
+              if (params.application_name === 'no-service') return undefined
+              return `${params.host.toUpperCase()}-${params.database}`
+            },
           })
         })
 
@@ -1043,6 +1068,46 @@ describe('Plugin', () => {
                 try {
                   poolClient = await connectionStringPool.connect()
                   await poolClient.query('SELECT 16 AS service_probe')
+                } finally {
+                  poolClient?.release()
+                  parent.finish()
+                }
+              }),
+            ])
+          } finally {
+            await connectionStringPool.end()
+          }
+        })
+
+        it('keeps the schema fallback when a pool callback returns no name', async () => {
+          await client.end()
+
+          const connectionStringPool = new pg.Pool({
+            connectionString: 'postgres://postgres:postgres@127.0.0.1:5432/postgres',
+            application_name: 'no-service',
+            max: 1,
+          })
+          const parent = tracer.startSpan('no-service-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+            const querySpan = traces[0].find(span => span.resource === 'SELECT 17 AS fallback_probe')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.service, 'test-postgres')
+
+            assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+            assert.strictEqual(querySpan.service, acquireSpan.service)
+          })
+
+          try {
+            await Promise.all([
+              tracePromise,
+              tracer.scope().activate(parent, async () => {
+                let poolClient
+                try {
+                  poolClient = await connectionStringPool.connect()
+                  await poolClient.query('SELECT 17 AS fallback_probe')
                 } finally {
                   poolClient?.release()
                   parent.finish()

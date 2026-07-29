@@ -59,10 +59,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       const acquireCtx = { poolOptions: this.options }
       poolAcquireStartCh.publish(acquireCtx)
 
-      const connectResult = connect.apply(this, arguments)
-      acquireCtx.params = latestPoolConnectionParameters(this)
-
-      return connectResult.then(client => {
+      return connectForAcquire(connect, this, arguments, acquireCtx, start).then(client => {
         acquireCtx.params = client.connectionParameters
         finishAcquire(acquireCtx, start)
         return client
@@ -111,11 +108,11 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
     poolConnectStartCh.publish(ctx)
 
-    const connectResult = connect.apply(this, arguments)
-    if (acquireCtx !== undefined && acquireCtx.params === undefined) {
-      acquireCtx.params = latestPoolConnectionParameters(this)
+    if (acquireCtx === undefined) {
+      return connect.apply(this, arguments)
     }
-    return connectResult
+
+    return connectForAcquire(connect, this, arguments, acquireCtx, start)
   })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
   return pg
@@ -289,6 +286,29 @@ function latestPoolConnectionParameters (pool) {
   // connect is still pending.
   const clients = pool._clients
   return clients?.at(-1)?.connectionParameters
+}
+
+/**
+ * @param {import('pg').Pool['connect']} connect
+ * @param {import('pg').Pool} pool
+ * @param {IArguments} args
+ * @param {{ params?: object, error?: unknown }} acquireCtx
+ * @param {number | undefined} start
+ */
+function connectForAcquire (connect, pool, args, acquireCtx, start) {
+  let result
+  try {
+    result = connect.apply(pool, args)
+  } catch (error) {
+    // pg throws synchronously when it cannot even build a client, from a malformed connection
+    // string or a caller-supplied `Client` constructor, so the span needs finishing here.
+    acquireCtx.error = error
+    finishAcquire(acquireCtx, start)
+    throw error
+  }
+
+  acquireCtx.params = latestPoolConnectionParameters(pool)
+  return result
 }
 
 /**
