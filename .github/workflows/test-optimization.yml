@@ -558,6 +558,9 @@ jobs:
       - uses: ./.github/actions/install
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: npm run test:instrumentations
+        env:
+          PLUGINS: vitest-main
       - run: npm run test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
