@@ -318,14 +318,11 @@ class Experiment {
     }
     const tags = buildExperimentTagObject(this.#tags, autoTags)
 
-    const execute = async () => {
-      output = await this.#runWithRetries(
-        () => this.#task(record.input, this.#config, record.metadata),
-        maxRetries,
-        retryDelay
-      )
-      return output
-    }
+    const execute = () => this.#runWithRetries(
+      () => this.#task(record.input, this.#config, record.metadata),
+      maxRetries,
+      retryDelay
+    )
 
     if (this.#llmobs?.enabled) {
       try {
