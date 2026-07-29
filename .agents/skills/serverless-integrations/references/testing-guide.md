@@ -32,6 +32,8 @@ both Azure plugins today), `type: 'serverless'`, the serverless service name, th
 (`aas.function.name`, `aas.function.trigger`), a low-cardinality resource, and one link per upstream context.
 
 Use fake timers for timeout scheduling. Assert the last safe point and first timeout point when changing a deadline.
+A bug fix covers the reported lifecycle path and sibling paths that share its completion code; include the disabled
+path when registration or event publication changed.
 
 ## Commands
 
@@ -72,6 +74,9 @@ Use deployed verification only for a provider-owned behavior the real local runt
 such as freeze timing or platform-injected metadata. Record the runtime version, region, invocation identifier,
 trace query, expected parentage, and cleanup command. Confirm the trace reached Datadog; provider logs alone do not
 prove writer or flush behavior.
+
+Tag a deterministic child span with a unique temporary probe id. Poll trace search for that id with a bounded
+timeout, then verify one invocation root, the expected parentage, errors or links, and no duplicate root span.
 
 ## Localize a failure
 
