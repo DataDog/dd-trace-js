@@ -10,7 +10,6 @@
     "strictBuiltinIteratorReturn": true,
     "strictFunctionTypes": true,
 
-    "alwaysStrict": false,
     "exactOptionalPropertyTypes": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
@@ -28,7 +27,6 @@
     "moduleDetection": "force",
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
-    "baseUrl": ".",
 
     "types": ["node"],
     "typeRoots": ["./types", "./node_modules/@types"],
