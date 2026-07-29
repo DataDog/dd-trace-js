@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const {
   MAX_GENERATED_FILES,
@@ -251,7 +251,7 @@ function forgetWrittenGeneratedFiles (filenames) {
 function authorizePathForCleanup (root, filename) {
   const lexicalRoot = path.resolve(root)
   const physicalRoot = fs.realpathSync(lexicalRoot)
-  const rootStat = fs.statSync(physicalRoot)
+  const rootStat = fs.statSync(physicalRoot, { bigint: true })
   const authorization = {
     lexicalRoot,
     physicalRoot,
@@ -276,7 +276,7 @@ function pinCleanupParent (authorization, filename) {
   try {
     const physicalParent = fs.realpathSync(path.dirname(filename))
     if (!isPathInside(authorization.physicalRoot, physicalParent)) return
-    const parentStat = fs.statSync(physicalParent)
+    const parentStat = fs.statSync(physicalParent, { bigint: true })
     authorization.physicalParent = physicalParent
     authorization.parentDevice = parentStat.dev
     authorization.parentInode = parentStat.ino
@@ -285,7 +285,7 @@ function pinCleanupParent (authorization, filename) {
 
 function pinCleanupTarget (authorization, filename) {
   try {
-    const targetStat = fs.lstatSync(filename)
+    const targetStat = fs.lstatSync(filename, { bigint: true })
     authorization.targetDevice = targetStat.dev
     authorization.targetInode = targetStat.ino
   } catch {}
@@ -294,7 +294,7 @@ function pinCleanupTarget (authorization, filename) {
 function isCleanupAuthorizationValid (filename, authorization) {
   try {
     const currentPhysicalRoot = fs.realpathSync(authorization.lexicalRoot)
-    const rootStat = fs.statSync(currentPhysicalRoot)
+    const rootStat = fs.statSync(currentPhysicalRoot, { bigint: true })
     if (currentPhysicalRoot !== authorization.physicalRoot ||
       rootStat.dev !== authorization.rootDevice || rootStat.ino !== authorization.rootInode) {
       return false
@@ -302,14 +302,14 @@ function isCleanupAuthorizationValid (filename, authorization) {
 
     if (authorization.physicalParent === undefined) return false
     const physicalParent = fs.realpathSync(path.dirname(filename))
-    const parentStat = fs.statSync(physicalParent)
+    const parentStat = fs.statSync(physicalParent, { bigint: true })
     if (physicalParent !== authorization.physicalParent ||
       parentStat.dev !== authorization.parentDevice || parentStat.ino !== authorization.parentInode) {
       return false
     }
 
     if (authorization.targetDevice !== undefined) {
-      const targetStat = fs.lstatSync(filename)
+      const targetStat = fs.lstatSync(filename, { bigint: true })
       if (targetStat.dev !== authorization.targetDevice || targetStat.ino !== authorization.targetInode) {
         return false
       }
