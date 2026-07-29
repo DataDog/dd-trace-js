@@ -59,7 +59,10 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       const acquireCtx = { poolOptions: this.options }
       poolAcquireStartCh.publish(acquireCtx)
 
-      return connect.apply(this, arguments).then(client => {
+      const connectResult = connect.apply(this, arguments)
+      acquireCtx.params = latestPoolConnectionParameters(this)
+
+      return connectResult.then(client => {
         acquireCtx.params = client.connectionParameters
         finishAcquire(acquireCtx, start)
         return client
@@ -76,6 +79,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
     const ctx = {}
     const start = acquireStart(this)
+    let acquireCtx
 
     if (acquiringForPoolQuery) {
       arguments[0] = function (...args) {
@@ -94,7 +98,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
         }
       }
     } else {
-      const acquireCtx = { poolOptions: this.options }
+      acquireCtx = { poolOptions: this.options }
       poolAcquireStartCh.publish(acquireCtx)
 
       arguments[0] = function (...args) {
@@ -107,7 +111,11 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
     poolConnectStartCh.publish(ctx)
 
-    return connect.apply(this, arguments)
+    const connectResult = connect.apply(this, arguments)
+    if (acquireCtx !== undefined && acquireCtx.params === undefined) {
+      acquireCtx.params = latestPoolConnectionParameters(this)
+    }
+    return connectResult
   })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
   return pg
@@ -271,6 +279,16 @@ function acquireStart (pool) {
  */
 function acquireWait (start) {
   return start === undefined ? 0 : performance.now() - start
+}
+
+/**
+ * @param {import('pg').Pool} pool
+ */
+function latestPoolConnectionParameters (pool) {
+  // pg-pool removes a failed client before invoking the acquire callback, so snapshot it while
+  // connect is still pending.
+  const clients = pool._clients
+  return clients?.at(-1)?.connectionParameters
 }
 
 /**

@@ -868,19 +868,26 @@ describe('Plugin', () => {
           const { port } = probe.address()
 
           const failingPool = new pg.Pool({
-            host: '127.0.0.1',
-            port,
-            user: 'postgres',
-            database: 'postgres',
+            connectionString: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
             connectionTimeoutMillis: 500,
           })
           failingPool.on('error', () => {})
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name === 'pg.pool.acquire')
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
 
             assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
             assert.strictEqual(acquireSpan.error, 1)
+            assertObjectContains(acquireSpan, {
+              meta: {
+                'db.name': 'postgres',
+                'db.user': 'postgres',
+                'out.host': '127.0.0.1',
+              },
+              metrics: {
+                'network.destination.port': port,
+              },
+            })
           })
 
           try {
@@ -967,7 +974,11 @@ describe('Plugin', () => {
 
       describe('with a service name callback', () => {
         before(() => {
-          return agent.load('pg', { service: params => `${params.host}-${params.database}` })
+          return agent.load('pg', {
+            service: params => params.application_name === 'tracer-service'
+              ? 'test'
+              : `${params.host.toUpperCase()}-${params.database}`,
+          })
         })
 
         after(() => {
@@ -1002,6 +1013,75 @@ describe('Plugin', () => {
               if (err) throw err
             })
           })
+        })
+
+        it('resolves a pool acquire service from normalized connection parameters', async () => {
+          await client.end()
+
+          const connectionStringPool = new pg.Pool({
+            connectionString: 'postgres://postgres:postgres@127.0.0.1:5432/postgres',
+            max: 1,
+          })
+          const parent = tracer.startSpan('pool-service-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+            const querySpan = traces[0].find(span => span.resource === 'SELECT 16 AS service_probe')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.service, '127.0.0.1-postgres')
+            assert.strictEqual(acquireSpan.meta['_dd.svc_src'], 'opt.plugin')
+            assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+            assert.strictEqual(querySpan.service, acquireSpan.service)
+          })
+
+          try {
+            await Promise.all([
+              tracePromise,
+              tracer.scope().activate(parent, async () => {
+                let poolClient
+                try {
+                  poolClient = await connectionStringPool.connect()
+                  await poolClient.query('SELECT 16 AS service_probe')
+                } finally {
+                  poolClient?.release()
+                  parent.finish()
+                }
+              }),
+            ])
+          } finally {
+            await connectionStringPool.end()
+          }
+        })
+
+        it('clears the service source when a pool callback resolves to the tracer service', async () => {
+          await client.end()
+
+          const connectionStringPool = new pg.Pool({
+            connectionString: 'postgres://postgres:postgres@127.0.0.1:5432/postgres',
+            application_name: 'tracer-service',
+            max: 1,
+          })
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.service, 'test')
+            assert.ok(!Object.hasOwn(acquireSpan.meta, '_dd.svc_src'))
+          })
+
+          try {
+            await Promise.all([
+              tracePromise,
+              (async () => {
+                const poolClient = await connectionStringPool.connect()
+                poolClient.release()
+              })(),
+            ])
+          } finally {
+            await connectionStringPool.end()
+          }
         })
 
         withNamingSchema(
