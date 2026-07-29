@@ -47,9 +47,9 @@ do not. A project-global `--import=dd-trace/initialize.mjs` therefore fails an
 Edge function before application code can check `NEXT_RUNTIME`.
 
 There is no clean application-side conditional around that resolution step.
-Mixed Node and Edge projects need the official Vercel adapter to set
-`NODE_OPTIONS` only on generated Node functions. This is a platform integration
-requirement, not functionality that belongs in a customer loader.
+Mixed Node and Edge projects need a Datadog-owned Vercel Builder to set
+`NODE_OPTIONS` only on generated Node functions. This belongs at the public
+Build Runtime output boundary, not in customer route code or an encoded loader.
 
 ## Required Tracer Changes
 
@@ -77,12 +77,19 @@ name and security review.
 
 ## Verified Output
 
-Validated on Vercel with Next.js 16.2.10 using App Router Node routes and a Node
-Proxy:
+Validated on Vercel with Next.js 16.2.10 using App Router Node routes, a Node
+Proxy, and an Edge route.
 
-- `/api/ping`, `/api/flow`, and `/proxy-check` returned 200.
+- The customer-global preload validated `/api/ping`, `/api/flow`, and
+  `/proxy-check`, but failed Edge before application code.
+- Copying a loader into an Edge `.func` did not work because Vercel bundles
+  Edge source and does not expose the extra file to the Node host preload.
+- A Datadog Builder proof added the loader and function-local `NODE_OPTIONS`
+  only to generated Node functions and left Edge unchanged.
+- `/api/ping`, `/api/flow`, `/proxy-check`, and `/api/edge` then returned 200.
 - Node route traces exported directly to Datadog.
-- Trace `2378948595391565956` contained:
+- Edge started without initializing `dd-trace`.
+- Trace `1335212614691370750` contained:
 
 ```text
 web.request  GET /api/flow
@@ -100,19 +107,26 @@ normalized, and the trace had a real root span.
 
 ## Production Direction
 
-The preferred Vercel integration is:
+The preferred Vercel integration is a Datadog-owned Builder:
 
 1. The Datadog integration enables APM for a project.
-2. Vercel's official Next adapter detects that configuration.
-3. The adapter keeps `dd-trace` external and includes the instrumentation NFT
-   closure in each eligible Node function.
-4. The adapter merges `--import=dd-trace/initialize.mjs` into each Node
-   function's `NODE_OPTIONS`.
-5. The adapter omits the preload from Edge functions.
-6. Datadog injects secrets through supported Vercel integration settings.
+2. Vercel invokes the Datadog Builder instead of the default Next Builder.
+3. The Datadog Builder calls the published `@vercel/next.build()` implementation.
+4. It preserves all official output, routes, caching, and framework behavior.
+5. For each returned `NodejsLambda`, it adds the small conditional loader and
+   merges function-local `NODE_OPTIONS`.
+6. It leaves returned `EdgeFunction` objects unchanged.
+7. Next instrumentation NFT supplies the tracer dependency closure.
+8. Datadog injects secrets through the existing Vercel integration settings.
 
-That removes `vercel.json` and `NODE_OPTIONS` management from the customer
-without depending on private Vercel output formats or tracer internals.
+`@vercel/next` already exposes `build()`, and its public `NodejsLambda` output
+supports both `files` and `environment`. The wrapper therefore does not patch
+Vercel source, mutate `.vercel/output`, depend on private file maps, or require
+trace-drain cooperation.
+
+Vercel's `builds[].use` can register an npm Builder, although `builds` is a
+legacy configuration surface. The Datadog integration should own this
+configuration so customers do not maintain it manually.
 
 ## Remaining Work
 
@@ -122,8 +136,8 @@ without depending on private Vercel output formats or tracer internals.
    route-to-route propagation, concurrency, Proxy, and mixed Edge projects.
 3. Confirm supported Next.js version ranges rather than pinning one sample
    version.
-4. Implement the official Vercel adapter/integration handoff for per-function
-   preload configuration.
+4. Package and deploy the Datadog Builder wrapper around `@vercel/next`, then
+   validate Git-connected Preview and Production deployments.
 5. Define Edge telemetry separately through supported Vercel or OpenTelemetry
    ingestion; do not load the Node tracer into Edge.
 
@@ -135,7 +149,11 @@ without depending on private Vercel output formats or tracer internals.
 - Post-build mutation or custom function launchers: coupled to private output.
 - Encoded `data:` preload: can skip missing packages, but is opaque and not an
   acceptable customer configuration.
+- Copying a preload into an Edge `.func`: the Edge compiler does not preserve
+  it as a host filesystem file for `NODE_OPTIONS`.
 - Project-global package preload in mixed Edge projects: Edge does not contain
   the Node tracer and fails before application code can inspect the runtime.
+- A Vercel upstream patch: not required; the Datadog Builder can transform the
+  public Lambda objects returned by `@vercel/next.build()`.
 - Vercel trace drain as a requirement: adds a separate paid data path and is
   not needed for native Node spans.

@@ -63,9 +63,10 @@ values.
 Do not use this project-global preload in an application containing an Edge
 route. Vercel applies the option before the Edge handler starts, but Edge
 functions do not contain the Node tracer. Supporting mixed Node and Edge
-projects requires Vercel's adapter to apply the preload only to generated Node
-functions. An application-side runtime check cannot run before Node resolves
-the preload itself.
+projects requires a Datadog-owned Vercel Builder to apply the preload only to
+generated Node functions. The Builder wraps `@vercel/next.build()` and leaves
+Edge outputs unchanged. An application-side runtime check cannot run before
+Node resolves the preload itself.
 
 ## 5. Configure Datadog
 
