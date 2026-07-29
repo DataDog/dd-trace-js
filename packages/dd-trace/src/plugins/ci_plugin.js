@@ -168,6 +168,22 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   return suiteTags
 }
 
+/**
+ * Keeps non-TIA settings while disabling suite skipping and coverage collection.
+ *
+ * @param {object} libraryConfig
+ * @returns {object}
+ */
+function disableTestImpactAnalysis (libraryConfig) {
+  return Object.freeze({
+    ...libraryConfig,
+    isCodeCoverageEnabled: false,
+    isCoverageReportUploadEnabled: false,
+    isItrEnabled: false,
+    isSuitesSkippingEnabled: false,
+  })
+}
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -182,14 +198,28 @@ module.exports = class CiPlugin extends Plugin {
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { basicReportingOnly, onDone, frameworkVersion } = ctx
+      const {
+        basicReportingOnly,
+        disableTestImpactAnalysis: shouldDisableTestImpactAnalysis,
+        onDone,
+        frameworkVersion,
+      } = ctx
       ctx.currentStore = legacyStorage.getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
-        const effectiveLibraryConfig = err ? undefined : basicReportingOnly ? {} : libraryConfig
+        let effectiveLibraryConfig
+        if (!err) {
+          if (basicReportingOnly) {
+            effectiveLibraryConfig = {}
+          } else if (shouldDisableTestImpactAnalysis) {
+            effectiveLibraryConfig = disableTestImpactAnalysis(libraryConfig)
+          } else {
+            effectiveLibraryConfig = libraryConfig
+          }
+        }
         if (err) {
           this.libraryConfig = undefined
           this.itrCorrelationId = undefined
@@ -496,13 +526,17 @@ module.exports = class CiPlugin extends Plugin {
    * @param {string} frameworkVersion - The test framework version.
    * @param {object} [ctx] - Diagnostic channel context.
    * @param {boolean} [ctx.basicReportingOnly] - Whether advanced capabilities must be omitted.
+   * @param {string} [ctx.testFramework] - Effective framework when one framework is hosted by another.
    * @returns {Record<string, string|undefined>}
    */
   getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
     if (ctx.basicReportingOnly) {
       return {}
     }
-    return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+    return getDefaultLibraryCapabilitiesTags(
+      ctx.testFramework || this.testFramework || this.constructor.id,
+      frameworkVersion
+    )
   }
 
   /**

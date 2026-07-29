@@ -58,6 +58,7 @@ module.exports = {
   '@smithy/core': () => require('../aws-sdk'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
+  '@wdio/cli': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/local-runner': { esmFirst: true, fn: () => require('../webdriverio') },
   aerospike: () => require('../aerospike'),
   ai: () => require('../ai'),
