@@ -33,6 +33,8 @@ variables:
   needs: [ ]
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
+  variables:
+    KUBERNETES_POD_ANNOTATIONS_1: "beta.fabric.datadoghq.com/no-proxy-additions=registry.yarnpkg.com"
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
