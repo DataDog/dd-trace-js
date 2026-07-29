@@ -5,7 +5,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups } from './group-coverage.mjs'
+import {
+  mergeAllRunsCoverage, mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups,
+} from './group-coverage.mjs'
 
 /**
  * One cell's discovered report set: one `lcov` entry per Node.js version the cell ran.
@@ -229,6 +231,41 @@ describe('group-coverage', () => {
         { lcovDir: null, jsonDir: null }
       )
       assert.equal(existsSync(join(dir, 'coverage-upload', '42')), false)
+    })
+  })
+
+  describe('mergeAllRunsCoverage', () => {
+    let dir
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'group-coverage-all-runs-'))
+    })
+
+    afterEach(() => {
+      rmSync(dir, { force: true, recursive: true })
+    })
+
+    it('sums DA hit counts across every run\'s already-merged lcov file', () => {
+      const input = join(dir, 'coverage-upload')
+      const output = join(dir, 'coverage-upload-final')
+      mkdirSync(join(input, '1', 'lcov'), { recursive: true })
+      mkdirSync(join(input, '2', 'lcov'), { recursive: true })
+      writeFileSync(join(input, '1', 'lcov', 'lcov.info'), 'SF:shared.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n')
+      writeFileSync(join(input, '2', 'lcov', 'lcov.info'), 'SF:shared.js\nDA:1,2\nLF:1\nLH:1\nend_of_record\n')
+
+      const lcovDir = mergeAllRunsCoverage(input, output)
+
+      assert.equal(lcovDir, join(output, 'lcov'))
+      assert.equal(
+        readFileSync(join(lcovDir, 'lcov.info'), 'utf8'),
+        'SF:shared.js\nDA:1,3\nLF:1\nLH:1\nend_of_record\n'
+      )
+    })
+
+    it('returns null when no run produced an lcov file', () => {
+      const input = join(dir, 'coverage-upload')
+      mkdirSync(input, { recursive: true })
+      assert.equal(mergeAllRunsCoverage(input, join(dir, 'coverage-upload-final')), null)
     })
   })
 })

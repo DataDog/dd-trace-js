@@ -1,4 +1,4 @@
-import { mergeRunCoverage } from './group-coverage.mjs'
+import { mergeAllRunsCoverage, mergeRunCoverage } from './group-coverage.mjs'
 import { logUploads, runUpload, runUploadWithRetry } from './run-upload.mjs'
 
 // Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail.
@@ -82,31 +82,45 @@ export function hasCodecovCommit () {
 }
 
 /**
- * Merge and upload one workflow run's coverage to Datadog and Codecov, if it produced any. Datadog
- * gets the lcov report; Codecov gets the istanbul JSON report, since Codecov reads branch/function
- * coverage from it and its own cross-session merge for a shared file has been observed overwriting
- * rather than summing when more than one session reports it — see `group-coverage.mjs`. The Codecov
- * upload carries a flag derived from the workflow's name (see `flagOf`) so its per-flag breakdown
- * reflects each sibling workflow separately instead of every upload sharing one flag.
+ * Merge one workflow run's coverage and upload it to Codecov, if it produced any. Codecov reads
+ * branch/function coverage from the istanbul JSON report, since its own cross-session merge for a
+ * shared file has been observed overwriting rather than summing when more than one session reports
+ * it — see `group-coverage.mjs`. The upload carries a flag derived from the workflow's name (see
+ * `flagOf`) so Codecov's per-flag breakdown reflects each sibling workflow separately instead of
+ * every upload sharing one flag; that per-run flag is also why this stays one upload per workflow
+ * run instead of batching like the Datadog upload does (see `uploadAllCoverageToDatadog`) — merging
+ * lcov files that came from cells with the same content is safe, but merging Codecov uploads that
+ * each need a different flag isn't.
  *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
 export async function uploadCoverage (run, options) {
-  const { lcovDir, jsonDir } = mergeRunCoverage(run.id)
-  if (!lcovDir && !jsonDir) return []
+  const { jsonDir } = mergeRunCoverage(run.id)
+  if (!jsonDir) return []
 
-  const datadogUpload = lcovDir
-    ? runUpload('datadog-ci', ['coverage', 'upload', lcovDir, '--flags', 'coverage'])
-    : null
-  const commitReady = jsonDir ? await ensureCodecovCommit(options) : false
-  const codecovUpload = commitReady
-    ? runUploadWithRetry('codecovcli', codecovUploadArgs(jsonDir, flagOf(run.name), options))
-    : null
+  const commitReady = await ensureCodecovCommit(options)
+  if (!commitReady) return []
 
-  const results = await Promise.all([datadogUpload, codecovUpload])
-  return results.filter(Boolean)
+  const result = await runUploadWithRetry('codecovcli', codecovUploadArgs(jsonDir, flagOf(run.name), options))
+  return [result]
+}
+
+/**
+ * Merge every sibling workflow's already-per-run-merged lcov file into one and upload it to Datadog
+ * in a single call, instead of uploading each workflow run's coverage separately — Datadog's
+ * coverage flag doesn't vary per run, so nothing needs the per-run separation Codecov's flags
+ * require (see `uploadCoverage`).
+ *
+ * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
+ */
+export async function uploadAllCoverageToDatadog () {
+  const lcovDir = mergeAllRunsCoverage()
+  if (!lcovDir) return []
+
+  const result = await runUpload('datadog-ci', ['coverage', 'upload', lcovDir, '--flags', 'coverage'])
+  return [result]
 }
 
 /**
