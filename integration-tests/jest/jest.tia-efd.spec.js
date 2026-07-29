@@ -2019,6 +2019,64 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
+    it('keeps ATR retrying a new test when the EFD retry budget is zero', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/jest-flaky/flaky-passes.js'
+      const flakyTestName = 'test-flaky-test-retries can retry flaky tests'
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 0,
+            '10s': 0,
+            '30s': 0,
+            '5m': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_NAME] === flakyTestName)
+
+          assert.strictEqual(tests.length, 3)
+          for (const test of tests) {
+            assert.strictEqual(test.meta[TEST_SUITE], testSuite)
+            assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in test.meta))
+          }
+          assert.deepStrictEqual(
+            tests.filter(test => TEST_RETRY_REASON in test.meta).map(test => test.meta[TEST_RETRY_REASON]),
+            [TEST_RETRY_REASON_TYPES.atr, TEST_RETRY_REASON_TYPES.atr]
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-passes',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // fail-test.js will be considered new and will always fail
@@ -2432,16 +2490,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const { 'ci visibility can report tests': retriedTestExecutions, ...otherExecutions } = executionsByName
           // Jest shuffles the retries in among the tests they were registered next to. Discarding a
-          // surplus retry must not remove the test that took its place, and a surplus retry shuffled
-          // ahead of the original runs before its budget is known.
+          // surplus retry must not remove the test that took its place.
           assert.deepStrictEqual(otherExecutions, {
             'ci visibility skip will not be retried': 1,
             'ci visibility todo will not be retried': 1,
           })
-          assert.ok(
-            retriedTestExecutions >= SELECTED_RETRIES + 1 && retriedTestExecutions <= SCHEDULED_RETRIES + 1,
-            `expected 3 to 6 executions of the new test, got ${retriedTestExecutions}`
-          )
+          // Seed 4 shuffles one surplus retry ahead of the original, so it runs before the budget is
+          // known: the original, its two selected retries, and that one surplus execution. Re-derive
+          // this count from the reported order if Jest changes how it shuffles.
+          assert.strictEqual(retriedTestExecutions, SELECTED_RETRIES + 2)
         })
 
       childProcess = exec(
