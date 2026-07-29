@@ -37,7 +37,16 @@ async function findFunctionPaths (directory) {
 }
 
 async function instrumentBuildOutput (outputPath) {
-  const functionPaths = await findFunctionPaths(path.join(outputPath, 'functions'))
+  const functionsPath = path.join(outputPath, 'functions')
+
+  try {
+    await fs.access(functionsPath)
+  } catch (error) {
+    if (error.code === 'ENOENT') return
+    throw error
+  }
+
+  const functionPaths = await findFunctionPaths(functionsPath)
 
   for (const functionPath of functionPaths) {
     const configPath = path.join(functionPath, '.vc-config.json')
@@ -53,6 +62,7 @@ async function instrumentBuildOutput (outputPath) {
 
 async function build (options) {
   // Load Vercel's official Builder only when Vercel invokes this entry point.
+  // eslint-disable-next-line n/no-missing-require -- Declared by the published Builder package.
   const { build: buildNext } = require('@vercel/next')
   const result = await buildNext(options)
 
