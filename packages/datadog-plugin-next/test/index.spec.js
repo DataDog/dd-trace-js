@@ -23,6 +23,8 @@ const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 describe('Plugin', function () {
   let server
   let port
+  let downstreamServer
+  let downstreamPort
 
   // These next versions have a dependency which uses a deprecated node buffer
   describe('next', () => {
@@ -30,6 +32,18 @@ describe('Plugin', function () {
 
     withVersions('next', 'next', min, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+
+      before(done => {
+        downstreamServer = http.createServer((_req, res) => {
+          res.writeHead(204)
+          res.end()
+        }).listen(0, '127.0.0.1', () => {
+          downstreamPort = downstreamServer.address().port
+          done()
+        })
+      })
+
+      after(done => downstreamServer.close(done))
 
       const startServer = (
         { withConfig, standalone, serverFile = 'server' },
@@ -52,6 +66,8 @@ describe('Plugin', function () {
               ...process.env,
               VERSION: version,
               PORT: 0,
+              DOWNSTREAM_URL: `http://127.0.0.1:${downstreamPort}/downstream`,
+              DOWNSTREAM_PORT: String(downstreamPort),
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
@@ -349,6 +365,36 @@ describe('Plugin', function () {
               .get(`http://127.0.0.1:${port}/api/hello/world?createChildSpan=true`)
               .catch(done)
           })
+
+          if (satisfies(pkg.version, '>=15.4.1')) {
+            it('should create one Pages API request span with a downstream HTTP child span', () => {
+              const tracingPromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
+
+                assert.strictEqual(nextRequestSpans.length, 1)
+
+                const nextRequestSpan = nextRequestSpans[0]
+                assertObjectContains(nextRequestSpan, {
+                  resource: 'GET /api/hello/downstream',
+                  meta: {
+                    'next.page': '/api/hello/downstream',
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                  },
+                })
+
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.parent_id.toString() === nextRequestSpan.span_id.toString())
+                assert.ok(downstreamSpan, 'downstream HTTP client span should be a child of next.request')
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/api/hello/downstream`),
+                tracingPromise,
+              ])
+            })
+          }
         })
 
         describe('for pages', () => {
@@ -551,8 +597,10 @@ describe('Plugin', function () {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
 
-                assert.strictEqual(spans[1].resource, 'GET /api/appDir/[name]')
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assert.strictEqual(nextRequestSpans[0].resource, 'GET /api/appDir/[name]')
               })
               .then(done)
               .catch(done)
@@ -575,6 +623,78 @@ describe('Plugin', function () {
 
             axios.get(`http://127.0.0.1:${port}/appDir/hello`)
           })
+
+          if (satisfies(pkg.version, '>=15.4.1')) {
+            it('should trace an app route handler and its downstream request exactly once', () => {
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const requestSpans = spans.filter(span => span.name === 'next.request')
+                const routeSpan = requestSpans.find(span => span.resource === 'GET /api/appRouteTrace/[name]')
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/downstream`)
+
+                assert.strictEqual(requestSpans.length, 1)
+                assert.ok(routeSpan)
+                assert.ok(downstreamSpan)
+                assert.strictEqual(downstreamSpan.parent_id.toString(), routeSpan.span_id.toString())
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/hello`),
+                tracePromise,
+              ])
+            })
+
+            it('should trace a server-rendered app page and its downstream request exactly once', () => {
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces[0]
+                const requestSpans = spans.filter(span => span.name === 'web.request')
+                const nextRequestSpan = spans.find(span => span.name === 'next.request')
+                const downstreamSpan = spans.find(span => span.name === 'http.request' &&
+                  span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/app-page-downstream`)
+
+                assert.strictEqual(spans.filter(span => span.parent_id === 0n).length, 1)
+                assert.strictEqual(requestSpans.length, 1)
+                assert.strictEqual(requestSpans[0].resource, 'GET /appPageTraceShape/[name]')
+                assert.strictEqual(nextRequestSpan?.resource, 'GET /appPageTraceShape/[name]')
+                assert.ok(downstreamSpan)
+                assert.strictEqual(downstreamSpan.parent_id.toString(), nextRequestSpan.span_id.toString())
+              })
+
+              return Promise.all([
+                axios.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
+                tracePromise,
+              ])
+            })
+
+            it('should attach a thrown app page error to the request span', done => {
+              agent
+                .assertSomeTraces(traces => {
+                  const spans = traces[0]
+                  const nextRequestSpan = spans.find(span => span.name === 'next.request')
+
+                  assert.ok(nextRequestSpan, 'next.request span should exist')
+                  assertObjectContains(nextRequestSpan, {
+                    resource: 'GET /appDir/page-error',
+                    error: 1,
+                    meta: {
+                      'http.status_code': '500',
+                      'error.message': 'thrown app page error',
+                      'error.type': 'Error',
+                    },
+                  })
+                  assert.ok(nextRequestSpan.meta['error.stack'])
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://127.0.0.1:${port}/appDir/page-error`)
+                .catch(error => {
+                  if (error.response?.status !== 500) done(error)
+                })
+            })
+          }
         })
       }
 

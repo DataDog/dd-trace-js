@@ -244,14 +244,19 @@ addHook({
   return NextRequestAdapter
 })
 
-// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
-// above no longer maps the node request to the app-route NextRequest and a thrown handler error
-// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
-// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
-// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
-// bundled. The bundler/experimental part of the name is matched with a pattern rather than
-// enumerated, so a variant next adds later is picked up without a code change.
+// From Next 15.4.1, route modules execute through precompiled runtime bundles that bypass the
+// classic server hooks above. Match bundler and experimental filename variants without enumerating
+// them so App Routes, Pages APIs, and App Pages reuse the existing Next request lifecycle.
+const APP_ROUTE_RUNTIME_FILE_PATTERN =
+  String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`
+const PAGES_API_RUNTIME_FILE_PATTERN =
+  String.raw`dist/compiled/next-server/pages-api[\w-]*\.runtime\.(?:dev|prod)\.js$`
+const APP_PAGE_RUNTIME_FILE_PATTERN =
+  String.raw`dist/compiled/next-server/app-page[\w-]*\.runtime\.(?:dev|prod)\.js$`
+
 const patchedAppRouteModules = new WeakSet()
+const patchedPagesApiModules = new WeakSet()
+const patchedAppPageModules = new WeakSet()
 
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
@@ -262,12 +267,115 @@ function wrapOnRequestError (onRequestError) {
   }
 }
 
+function getRoutePage (routeModule, fallbackPage) {
+  const definition = routeModule?.definition
+  if (typeof definition?.pathname === 'string') {
+    return { page: definition.pathname, isFilesystemPath: false }
+  }
+
+  if (typeof definition?.page === 'string') {
+    return { page: definition.page, isFilesystemPath: true }
+  }
+
+  return { page: fallbackPage, isFilesystemPath: false }
+}
+
+function wrapAppRouteHandle (handle) {
+  return function (req, context) {
+    const res = { statusCode: 500 }
+    nodeNextRequestsToNextRequests.set(req, req)
+
+    return instrument(req, res, ctx => {
+      const pageData = getRoutePage(this)
+      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
+        pageLoadChannel.publish({ ...pageData, isAppPath: true })
+      }
+
+      return handle.apply(this, arguments).then(response => {
+        if (ctx) ctx.res.statusCode = response?.status || 200
+        return response
+      })
+    })
+  }
+}
+
 function instrumentAppRouteRuntime (runtime) {
   const AppRouteRouteModule = runtime.AppRouteRouteModule
   const proto = AppRouteRouteModule?.prototype
-  if (proto && typeof proto.onRequestError === 'function' && !patchedAppRouteModules.has(AppRouteRouteModule)) {
+  if (proto && !patchedAppRouteModules.has(AppRouteRouteModule)) {
     patchedAppRouteModules.add(AppRouteRouteModule)
-    shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+    if (typeof proto.handle === 'function') {
+      shimmer.wrap(proto, 'handle', wrapAppRouteHandle)
+    }
+    if (typeof proto.onRequestError === 'function') {
+      shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+    }
+  }
+  return runtime
+}
+
+function wrapPagesApiRender (render) {
+  return function (req, res, context = {}) {
+    return instrument(req, res, ctx => {
+      const pageData = getRoutePage(this, context.page)
+      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
+        pageLoadChannel.publish(pageData)
+      }
+
+      return render.apply(this, arguments)
+    })
+  }
+}
+
+function instrumentPagesApiRuntime (runtime) {
+  const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
+  const proto = PagesAPIRouteModule?.prototype
+  if (proto && !patchedPagesApiModules.has(PagesAPIRouteModule)) {
+    patchedPagesApiModules.add(PagesAPIRouteModule)
+    if (typeof proto.render === 'function') {
+      shimmer.wrap(proto, 'render', wrapPagesApiRender)
+    }
+  }
+  return runtime
+}
+
+function wrapAppPageRender (render) {
+  return function (req, res, context = {}) {
+    return instrument(req, res, ctx => {
+      const pageData = getRoutePage(this, context.page)
+      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
+        pageLoadChannel.publish({ ...pageData, isAppPath: true })
+      }
+
+      return render.apply(this, arguments).then(result => {
+        const statusCode = result?.metadata?.statusCode
+        if (ctx && typeof statusCode === 'number') {
+          ctx.res.statusCode = statusCode
+        }
+
+        return result
+      }, error => {
+        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
+          ctx.res.statusCode = 500
+        }
+
+        throw error
+      })
+    })
+  }
+}
+
+function instrumentAppPageRuntime (runtime) {
+  const AppPageRouteModule = runtime.AppPageRouteModule || runtime.default
+  const proto = AppPageRouteModule?.prototype
+  if (proto && !patchedAppPageModules.has(AppPageRouteModule)) {
+    patchedAppPageModules.add(AppPageRouteModule)
+    if (typeof proto.render === 'function') {
+      shimmer.wrap(proto, 'render', wrapAppPageRender)
+    }
+    if (typeof proto.onRequestError === 'function') {
+      shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+    }
   }
   return runtime
 }
@@ -275,8 +383,20 @@ function instrumentAppRouteRuntime (runtime) {
 addHook({
   name: 'next',
   versions: ['>=15.4.1'],
-  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+  filePattern: APP_ROUTE_RUNTIME_FILE_PATTERN,
 }, instrumentAppRouteRuntime)
+
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: PAGES_API_RUNTIME_FILE_PATTERN,
+}, instrumentPagesApiRuntime)
+
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: APP_PAGE_RUNTIME_FILE_PATTERN,
+}, instrumentAppPageRuntime)
 
 addHook({
   name: 'next',
