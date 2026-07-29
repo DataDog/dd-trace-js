@@ -11,10 +11,16 @@ const HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@confluentinc/
 const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
 const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
 
+/** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
+/** @typedef {{ messages: Array<{ headers: Record<string, string | Buffer> }> }} ProduceContext */
+
 function stageProducer () {
   class Producer {
-    produce (...args) {
-      this.args = args
+    /** @type {NativeHeaders} */
+    forwardedHeaders = []
+
+    produce (topic, partition, message, key, timestamp, opaque, headers) {
+      this.forwardedHeaders = headers
     }
   }
 
@@ -24,13 +30,13 @@ function stageProducer () {
 }
 
 /**
- * @param {{ produce: Function, args?: unknown[] }} producer
+ * @param {{ produce: Function, forwardedHeaders: NativeHeaders }} producer
  * @param {unknown} headers Seventh positional `produce()` argument.
- * @returns {unknown} The header argument the boundary forwarded to the library.
+ * @returns {NativeHeaders} What the boundary forwarded to the library.
  */
 function produce (producer, headers) {
   producer.produce('topic', null, Buffer.from('message'), 'key', Date.now(), undefined, headers)
-  return producer.args[6]
+  return producer.forwardedHeaders
 }
 
 describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js', () => {
@@ -45,7 +51,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
   describe('native produce headers', () => {
     /**
-     * @param {(ctx: { messages: Array<{ headers: Record<string, string | Buffer> }> }) => void} subscriber
+     * @param {(ctx: ProduceContext) => void} subscriber
      */
     function trackSubscriber (subscriber) {
       subscribers.push(subscriber)
@@ -53,7 +59,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
     }
 
     /**
-     * @param {{ messages: Array<{ headers: Record<string, string> }> }} ctx
+     * @param {ProduceContext} ctx
      */
     function injectPropagationHeaders (ctx) {
       ctx.messages[0].headers ??= {}
@@ -89,34 +95,39 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       assert.strictEqual(produced[2]['binary-header'], binary)
     })
 
-    it('forwards entries the binding parses differently instead of rejecting them', () => {
+    it('merges entries the binding reads differently from their literal shape', () => {
       trackSubscriber(injectPropagationHeaders)
 
       const multiKey = { first: 'one', second: 'two' }
       const arrayEntry = ['array-value']
-      const nonEnumerable = {}
-      Object.defineProperty(nonEnumerable, 'hidden', { value: 'value' })
 
-      const produced = produce(stageProducer(), [multiKey, arrayEntry, nonEnumerable])
+      const produced = produce(stageProducer(), [multiKey, arrayEntry])
 
       assert.strictEqual(produced[0], multiKey)
       assert.strictEqual(produced[1], arrayEntry)
-      assert.strictEqual(produced[2], nonEnumerable)
-      assert.deepStrictEqual(produced.slice(3), [
+      assert.deepStrictEqual(produced.slice(2), [
         { 'x-datadog-trace-id': '123' },
         { traceparent: TRACEPARENT },
       ])
     })
 
-    it('passes invalid values unchanged to the native binding', () => {
+    it('forwards the caller array whenever the binding has to reject it', () => {
       trackSubscriber(injectPropagationHeaders)
 
-      const applicationHeaders = [
-        { 'content-type': 'application/json' },
-        { 'content-length': 42 },
+      const nonEnumerable = {}
+      Object.defineProperty(nonEnumerable, 'hidden', { value: 'value' })
+
+      const rejectedShapes = [
+        [{ 'content-type': 'application/json' }, { 'content-length': 42 }],
+        [{ 'content-type': 'application/json' }, nonEnumerable],
+        [{}],
+        [42],
       ]
 
-      assert.strictEqual(produce(stageProducer(), applicationHeaders), applicationHeaders)
+      const producer = stageProducer()
+      for (const [index, headers] of rejectedShapes.entries()) {
+        assert.strictEqual(produce(producer, headers), headers, `rejected shape at index ${index}`)
+      }
     })
 
     it('drops every application entry sharing a key propagation claims', () => {
@@ -156,9 +167,6 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         [null],
         [undefined],
         [{ 'content-type': 'text/plain' }, null],
-        ['content-type'],
-        [42],
-        [{}],
       ]
 
       for (const [index, headers] of unusableShapes.entries()) {
