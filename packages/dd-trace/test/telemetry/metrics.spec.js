@@ -36,6 +36,38 @@ describe('metrics', () => {
       assert.ok(metrics.manager instanceof metrics.NamespaceManager)
     })
 
+    it('should defer loading sketch encoder until a distribution is used', () => {
+      const Sketch = sinon.stub()
+      const loadSketchConstructor = sinon.stub().returns(Sketch)
+      const sketchModule = {
+        '@noCallThru': true,
+      }
+      Object.defineProperty(sketchModule, 'LogCollapsingLowestDenseDDSketch', {
+        get: loadSketchConstructor,
+      })
+
+      const localMetrics = proxyquire.noPreserveCache()('../../src/telemetry/metrics', {
+        './send-data': {
+          sendData,
+        },
+        '../../../../vendor/dist/@datadog/sketches-js': sketchModule,
+      })
+      proxyquire.preserveCache()
+
+      sinon.assert.notCalled(loadSketchConstructor)
+
+      localMetrics.manager.namespace('test').count('metric').inc()
+      sinon.assert.notCalled(loadSketchConstructor)
+
+      localMetrics.manager.namespace('test').distribution('duration')
+      sinon.assert.calledOnce(loadSketchConstructor)
+      sinon.assert.calledOnce(Sketch)
+
+      localMetrics.manager.namespace('test').distribution('other.duration')
+      sinon.assert.calledOnce(loadSketchConstructor)
+      sinon.assert.calledTwice(Sketch)
+    })
+
     it('should make namespaces', () => {
       const manager = new metrics.NamespaceManager()
       const ns = manager.namespace('test')

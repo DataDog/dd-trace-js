@@ -1,8 +1,8 @@
 'use strict'
 
-const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
-
 const { sendData } = require('./send-data')
+
+let LogCollapsingLowestDenseDDSketch
 
 function getId (type, namespace, name, tags) {
   return `${type}:${namespace}.${name}:${tagArray(tags).sort().join(',')}`
@@ -36,6 +36,9 @@ function hasPoints (metric) {
 }
 
 function createSketch () {
+  if (LogCollapsingLowestDenseDDSketch === undefined) {
+    ({ LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js'))
+  }
   return new LogCollapsingLowestDenseDDSketch()
 }
 
@@ -105,6 +108,12 @@ class CountMetric extends Metric {
 }
 
 class DistributionMetric extends Metric {
+  /**
+   * @param {MetricsCollection} namespace
+   * @param {string} metric
+   * @param {boolean} common
+   * @param {string[]|Record<string, string|number|boolean>|undefined} tags
+   */
   constructor (namespace, metric, common, tags) {
     super(namespace, metric, common, tags)
 
