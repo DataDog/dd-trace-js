@@ -20,7 +20,7 @@ class PGPlugin extends DatabasePlugin {
     this.addSub('apm:pg:pool:acquire:start', ctx => {
       const params = ctx.poolOptions
 
-      ctx.acquireSpan = this.startSpan('pg.pool.acquire', {
+      this.startSpan('pg.pool.acquire', {
         service: this.serviceName({ pluginConfig: this.config, params }),
         resource: 'pg.pool.acquire',
         type: 'sql',
@@ -32,16 +32,16 @@ class PGPlugin extends DatabasePlugin {
           'out.host': params.host,
           [CLIENT_PORT_KEY]: params.port,
         },
-      }, false)
+      }, ctx)
     })
     this.addSub('apm:pg:pool:acquire:finish', ctx => {
-      const span = ctx.acquireSpan
+      const span = ctx.currentStore.span
 
       if (ctx.error) {
         this.addError(ctx.error, span)
       }
       span.setTag('db.pool.wait_time_ms', ctx.poolWaitTime)
-      span.finish()
+      this.finish(ctx)
     })
   }
 

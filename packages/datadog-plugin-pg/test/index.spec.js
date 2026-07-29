@@ -405,6 +405,18 @@ describe('Plugin', () => {
           return pool.end()
         })
 
+        withPeerService(
+          () => tracer,
+          'pg',
+          async () => {
+            const client = await pool.connect()
+            client.release()
+          },
+          'postgres',
+          'db.name',
+          { resource: 'pg.pool.acquire' }
+        )
+
         it('keeps a query that waits for a busy pool parented to its own caller', done => {
           const root = tracer.startSpan('root')
           const parent1 = tracer.startSpan('parent1', { childOf: root })
