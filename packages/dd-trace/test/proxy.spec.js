@@ -75,7 +75,6 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
-      refreshMetadata: sinon.stub(),
     }
 
     noop = {
@@ -87,7 +86,6 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
-      refreshMetadata: sinon.stub(),
     }
 
     noopAiguardSdk = {
@@ -1188,15 +1186,16 @@ describe('TracerProxy', () => {
       sinon.assert.notCalled(channelMock.subscribe)
     })
 
-    it('should fire refreshIdentity on POST /aws/lambda-microvms/runtime/v1/run via HTTP channel', () => {
+    it('should publish datadog:identity:update with the tracer config on POST .../run', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
+      sinon.assert.notCalled(channelMock.publish)
+
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
-      sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
+      sinon.assert.calledOnceWithExactly(channelMock.publish, config)
     })
 
     it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
@@ -1224,15 +1223,6 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
-    })
-
-    it('should publish datadog:identity:update before calling tracer.refreshMetadata', () => {
-      microProxy.init()
-
-      const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
-
-      assert.ok(channelMock.publish.calledBefore(tracer.refreshMetadata))
     })
   })
 })
