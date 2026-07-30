@@ -481,63 +481,70 @@ versions.forEach((version) => {
       assert.strictEqual(code, 0, testOutput)
     })
 
-    typecheckIt('does not advertise or enable TIA for typecheck-only runs', async () => {
-      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
-      receiver.setSettings({
-        itr_enabled: true,
-        code_coverage: true,
-        coverage_report_upload_enabled: false,
-        tests_skipping: true,
-      })
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: { suite: typecheckSuite },
-      }])
+    for (const { mixed, name, testSuiteCount } of [
+      { mixed: false, name: 'typecheck-only runs', testSuiteCount: 1 },
+      { mixed: true, name: 'mixed test and typecheck runs', testSuiteCount: 2 },
+    ]) {
+      typecheckIt(`does not advertise or enable TIA for ${name}`, async () => {
+        const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          coverage_report_upload_enabled: false,
+          tests_skipping: true,
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: typecheckSuite },
+        }])
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
-          `${typecheckSuite} --reporter=verbose`,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            DD_SERVICE: undefined,
-          },
-        }
-      )
-      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-
-      await receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) =>
-          url === '/api/v2/citestcycle' ||
-          url === '/api/v2/citestcov' ||
-          url === '/api/v2/ci/tests/skippable',
-        (payloads) => {
-          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
-          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
-
-          const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
-          const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
-          assert.ok(metadataEntries.length > 0, testOutput)
-          for (const metadata of metadataEntries) {
-            assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+        const testFilter = mixed ? '' : ` ${typecheckSuite}`
+        childProcess = exec(
+          `./node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs${testFilter} --reporter=verbose`,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_SERVICE: undefined,
+              ...(mixed && { TYPECHECK_MIXED: 'true' }),
+            },
           }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-          const events = cyclePayloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
-          const testSuite = events.find(event => event.type === 'test_suite_end').content
-          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
-          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
-        },
-        { hardTimeout: 60_000 }
-      )
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) =>
+            url === '/api/v2/citestcycle' ||
+            url === '/api/v2/citestcov' ||
+            url === '/api/v2/ci/tests/skippable',
+          (payloads) => {
+            assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+            assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
 
-      assert.strictEqual(childProcess.exitCode, 0, testOutput)
-    })
+            const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+            const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+            assert.ok(metadataEntries.length > 0, testOutput)
+            for (const metadata of metadataEntries) {
+              assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+            }
+
+            const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testSuites = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(testSuites.length, testSuiteCount, testOutput)
+            assert.ok(testSuites.every(({ content }) => content.meta[TEST_STATUS] === 'pass'))
+            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          },
+          { hardTimeout: 60_000 }
+        )
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+    }
 
     typecheckIt('honors Known Tests metadata for typecheck tests', async () => {
       receiver.setSettings({
@@ -1730,6 +1737,53 @@ versions.forEach((version) => {
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
+
+      const noIsolateConfigurations = [
+        { name: 'NO_ISOLATE', env: { NO_ISOLATE: 'true' } },
+        { name: 'POOL_NO_ISOLATE', env: { POOL_NO_ISOLATE: 'true' } },
+        {
+          name: 'PROJECT_NO_ISOLATE',
+          env: {
+            PROJECT_NO_ISOLATE: 'true',
+            PROJECT_POOL_CONFIG: 'forks',
+          },
+        },
+        {
+          name: 'PROJECT_POOL_NO_ISOLATE',
+          env: {
+            PROJECT_POOL_CONFIG: 'forks',
+            PROJECT_POOL_NO_ISOLATE: 'true',
+          },
+        },
+      ]
+      for (const { name, env } of noIsolateConfigurations) {
+        const noIsolateIt = name.startsWith('PROJECT_') ? newerVitestIt : it
+        noIsolateIt(`does not advertise or enable TIA with ${name}`, async () => {
+          await runTiaTests((payloads) => {
+            const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+            const metadataEntries = payloads
+              .filter(({ url }) => url === '/api/v2/citestcycle')
+              .flatMap(({ payload }) => payload.metadata || [])
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(payloads.some(({ url }) => url === skippableUrl), false)
+            assert.strictEqual(coverages.length, 0)
+            assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+            assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+            assert.ok(metadataEntries.length > 0, testOutput)
+            for (const metadata of metadataEntries) {
+              assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+            }
+            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          }, {
+            env,
+            requestFilter: tiaRequestFilter,
+          })
+
+          assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        })
+      }
 
       it('resets per-suite coverage when suites reuse one worker', async () => {
         await runTiaTests((payloads) => {

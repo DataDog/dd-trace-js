@@ -835,7 +835,9 @@ function ensureMainProcessSetup (
   const shouldInstallBrowserReporter = shouldUseBrowserReporter(frameworkVersion, testSpecifications)
   const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
   const disableTestImpactAnalysis =
-    forceDisableTestImpactAnalysis || isTypecheckOnlyRun(ctx, testSpecifications)
+    forceDisableTestImpactAnalysis ||
+    hasTypecheckRun(ctx, testSpecifications) ||
+    hasNonIsolatedRun(ctx, testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
   if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
@@ -1152,25 +1154,41 @@ function hasOnlyTypecheckTestSpecifications (testSpecifications) {
 }
 
 /**
- * Detect whether every selected Vitest project can only run typecheck specifications.
+ * Detect whether any selected Vitest project can run typecheck specifications.
  *
  * @param {object} ctx
  * @param {unknown} testSpecifications
  * @returns {boolean}
  */
-function isTypecheckOnlyRun (ctx, testSpecifications) {
+function hasTypecheckRun (ctx, testSpecifications) {
   if (hasOnlyTypecheckTestSpecifications(testSpecifications)) return true
 
   const projectConfigs = getVitestProjectConfigs(ctx, testSpecifications)
-  if (projectConfigs.length === 0) return false
-
   for (const { config } of projectConfigs) {
-    const typecheck = config.typecheck
-    if (!typecheck?.enabled || (!typecheck.only && config.include?.length !== 0)) {
-      return false
+    if (config.typecheck?.enabled) return true
+  }
+  return false
+}
+
+/**
+ * Detect whether any selected Vitest project reuses its module cache across suites.
+ *
+ * @param {object} ctx
+ * @param {unknown} testSpecifications
+ * @returns {boolean}
+ */
+function hasNonIsolatedRun (ctx, testSpecifications) {
+  const projectConfigs = getVitestProjectConfigs(ctx, testSpecifications)
+  for (const { config } of projectConfigs) {
+    if (
+      config.isolate === false ||
+      config.poolOptions?.forks?.isolate === false ||
+      config.poolOptions?.threads?.isolate === false
+    ) {
+      return true
     }
   }
-  return true
+  return false
 }
 
 function isBrowserTestSpecification (testSpecification) {

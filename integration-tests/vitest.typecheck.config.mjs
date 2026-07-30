@@ -31,7 +31,9 @@ const { typecheckFile, tsconfig } = typecheckFixtures[typecheckFixture]
 
 export default defineConfig({
   test: {
-    include: [],
+    include: process.env.TYPECHECK_MIXED
+      ? ['ci-visibility/vitest-tests/tia-first.mjs']
+      : [],
     typecheck: {
       checker: process.platform === 'win32' ? 'node_modules/.bin/tsc.cmd' : 'node_modules/.bin/tsc',
       enabled: true,
