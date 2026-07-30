@@ -274,7 +274,7 @@ class LLMObs extends NoopLLMObs {
 
       const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
 
-      if (inputData !== undefined || outputData !== undefined) {
+      if (inputData || outputData) {
         if (spanKind === 'llm') {
           this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
