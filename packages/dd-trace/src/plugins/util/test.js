@@ -2009,13 +2009,13 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  */
 function recordTestManagementExecution (execution, executions = testManagementExecutions) {
   if (!execution?.testName || execution.isAttemptToFix) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const action = execution.isDisabled
     ? 'disabled'
     : execution.isQuarantined ? 'quarantined' : undefined
   if (!action) return
   if (action === 'quarantined' && execution.status !== 'pass' && execution.status !== 'fail') return
+  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const name = formatTestOptimizationName(execution.testSuite, execution.testName)
   let result = executions.get(name)

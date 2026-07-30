@@ -671,6 +671,28 @@ describe('attempt to fix summary', () => {
 })
 
 describe('test management summary', () => {
+  it('does not read report configuration for unmanaged tests', () => {
+    const getValueFromEnvSources = sinon.stub()
+    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+      '../../../src/plugins/util/test',
+      {
+        '../../config/helper': {
+          getValueFromEnvSources,
+        },
+      }
+    )
+    const executions = new Map()
+
+    recordExecution({
+      testSuite: 'unmanaged.spec.js',
+      testName: 'passes',
+      status: 'pass',
+    }, executions)
+
+    assert.strictEqual(getValueFromEnvSources.callCount, 0)
+    assert.strictEqual(executions.size, 0)
+  })
+
   it('reports effective disabled and quarantined actions once per test', () => {
     const executions = new Map()
 
