@@ -92,9 +92,15 @@ class DatadogTracer {
     // instead. Probe for both markers exactly as the pre-native-spans exporter
     // selection did, otherwise these functions POST every span to a loopback port
     // nothing listens on (config forces flushInterval=0 there) and lose all traces.
+    //
+    // An explicit `exporter: 'agent'` still wins: master's `getExporter` matched
+    // the configured name in a switch and returned before it ever reached this
+    // probe, so a Lambda told to use the agent must use the agent.
+    //
     // Kept independent of `useLambdaJsPipeline` (which excludes OTLP) so the
     // missing-libdatadog degrade path below can reuse it.
     const lambdaWithoutLocalAgent = getIsAWSLambda() &&
+      configuredExporter !== exporters.AGENT &&
       !fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) &&
       !fs.existsSync(DATADOG_MINI_AGENT_PATH)
     const useLambdaLogExporter = useLambdaJsPipeline && lambdaWithoutLocalAgent
