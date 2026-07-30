@@ -878,6 +878,72 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('binds a Vitest project only through its explicit config', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --config configs/selected.ts --project fastly',
+    })
+    const selected = path.join(fixture.root, 'runtime-tests', 'selected', 'color.test.ts')
+    const outside = path.join(fixture.root, 'runtime-tests', 'outside', 'color.test.ts')
+    const selectedConfig = path.join(fixture.root, 'configs', 'selected.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.mkdirSync(path.dirname(outside), { recursive: true })
+    fs.mkdirSync(path.dirname(selectedConfig), { recursive: true })
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    fs.writeFileSync(outside, "test('outside', () => {})\n")
+    writeVitestProjectConfig(selectedConfig, 'runtime-tests/selected/**/*.test.ts')
+    writeVitestProjectConfig(
+      path.join(fixture.root, 'vitest.config.ts'),
+      'runtime-tests/outside/**/*.test.ts'
+    )
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.ok(framework.project.configFiles.includes(selectedConfig))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('ignores nested Vitest configs during default project resolution', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const selected = path.join(fixture.root, 'runtime-tests', 'selected', 'color.test.ts')
+    const outside = path.join(fixture.root, 'packages', 'other', 'outside.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.mkdirSync(path.dirname(outside), { recursive: true })
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    fs.writeFileSync(outside, "test('outside', () => {})\n")
+    writeVitestProjectConfig(
+      path.join(fixture.root, 'vitest.config.ts'),
+      'runtime-tests/selected/**/*.test.ts'
+    )
+    writeVitestProjectConfig(
+      path.join(fixture.root, 'packages', 'other', 'vitest.config.ts'),
+      '**/*.test.ts'
+    )
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('keeps Jest suffixes and disables retained leak detection for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',
@@ -1381,3 +1447,25 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 })
+
+/**
+ * Writes one root-scoped literal Vitest project.
+ *
+ * @param {string} filename config filename
+ * @param {string} include selected include pattern
+ * @returns {void}
+ */
+function writeVitestProjectConfig (filename, include) {
+  fs.mkdirSync(path.dirname(filename), { recursive: true })
+  fs.writeFileSync(filename, [
+    "import { defineConfig } from 'vitest/config'",
+    'export default defineConfig({',
+    '  test: {',
+    '    projects: [{',
+    `      test: { name: 'fastly', include: [${JSON.stringify(include)}] },`,
+    '    }],',
+    '  },',
+    '})',
+    '',
+  ].join('\n'))
+}

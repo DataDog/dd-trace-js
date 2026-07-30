@@ -60,6 +60,19 @@ describe('test optimization validation report', () => {
     assert.doesNotMatch(report, /### .*Early Flake Detection/)
   })
 
+  it('labels only the execution plan carrying the current approval digest', () => {
+    const approvedPlanSha256 = 'a'.repeat(64)
+    const planPath = path.join(out, 'execution-plan.md')
+    fs.writeFileSync(planPath, `node validator.js --sha256 ${'b'.repeat(64)}\n`)
+
+    write([], { approvedPlanSha256 })
+    assert.doesNotMatch(readReport(), /Approved execution plan/)
+
+    fs.writeFileSync(planPath, `node validator.js --sha256 ${approvedPlanSha256}\n`)
+    write([], { approvedPlanSha256 })
+    assert.match(readReport(), /Approved execution plan: `execution-plan\.md`/)
+  })
+
   it('surfaces a confirmed advanced failure ahead of Basic Reporting success', () => {
     write([
       result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.', {

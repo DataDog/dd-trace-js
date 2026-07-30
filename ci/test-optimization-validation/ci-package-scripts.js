@@ -138,6 +138,7 @@ function getPackageScriptInvocation (command) {
 
   const manager = match[1].replace(/\.cmd$/i, '').replace(/^yarnpkg$/, 'yarn')
   if (manager === 'npm' && !match[2] && !['restart', 'start', 'stop', 'test'].includes(match[3])) return
+  if (manager === 'bun' && match[2] !== 'run') return
   const args = match[4]?.trim()
   if (args && !splitLiteralAndChain(args)) return
   return {

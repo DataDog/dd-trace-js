@@ -119,6 +119,7 @@ function parseArgs (argv) {
  * @returns {Promise<void>} completion
  */
 async function main (argv) {
+  let activeApprovedPlanSha256
   let activeManifest
   let activeOut
   let cleanupOutcome = { status: 'not_started' }
@@ -159,6 +160,7 @@ async function main (argv) {
       keepTempFiles: options.keepTempFiles,
       verbose: options.verbose,
     })
+    activeApprovedPlanSha256 = options.approvedPlanSha256
     const packageCheck = needsInstalledPackageCheck(options.scenarios)
       ? checkInstalledPackage()
       : undefined
@@ -196,12 +198,16 @@ async function main (argv) {
     const annotatedResults = annotateResults(results)
     const executionStatus = getExecutionStatus(annotatedResults)
     const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
+    const completedLock = executionLock
+    executionLock = undefined
+    releaseExecutionLock(completedLock)
     await writeReport({
       manifest,
       out,
       results: annotatedResults,
       staticDiagnosis,
       runSummary: {
+        approvedPlanSha256: activeApprovedPlanSha256,
         checkedScenarios: [...options.scenarios],
         cleanup: cleanupOutcome,
         executionStatus,
@@ -217,18 +223,27 @@ async function main (argv) {
     console.log('Present the report and stop. Any correction or retry requires a fresh plan and approval.')
     process.exitCode = validatorExitCode
   } catch (error) {
-    const validatorExitCode = error?.validationExitCode || 3
+    let reportError = error
+    if (executionLock) {
+      try {
+        releaseExecutionLock(executionLock)
+      } catch (releaseError) {
+        reportError = releaseError
+      }
+    }
+    const validatorExitCode = reportError?.validationExitCode || 3
     process.exitCode = validatorExitCode
-    if (activeManifest && activeOut && !error?.suppressReport) {
+    if (activeManifest && activeOut && !reportError?.suppressReport) {
       try {
         await writeReport({
           manifest: activeManifest,
           out: activeOut,
-          results: [getOrchestrationFailure(error)],
+          results: [getOrchestrationFailure(reportError)],
           runSummary: {
+            approvedPlanSha256: activeApprovedPlanSha256,
             checkedScenarios: [],
             cleanup: cleanupOutcome,
-            executionStatus: error?.validationBlocker ? 'incomplete' : 'validator_error',
+            executionStatus: reportError?.validationBlocker ? 'incomplete' : 'validator_error',
             omittedScenarios: getSelectableScenarios(),
             runCompleted: true,
             selectedFrameworkIds: [],
@@ -238,20 +253,11 @@ async function main (argv) {
         })
       } catch {}
     }
-    const blockerRecommendation = error?.validationBlocker?.recommendation
-    const displayedError = error?.validationExitCode
-      ? `${error.message}${blockerRecommendation ? ` ${blockerRecommendation}` : ''}`
-      : (error?.stack || error)
+    const blockerRecommendation = reportError?.validationBlocker?.recommendation
+    const displayedError = reportError?.validationExitCode
+      ? `${reportError.message}${blockerRecommendation ? ` ${blockerRecommendation}` : ''}`
+      : (reportError?.stack || reportError)
     console.error(sanitizeConsoleText(displayedError))
-  } finally {
-    if (executionLock) {
-      try {
-        releaseExecutionLock(executionLock)
-      } catch (error) {
-        process.exitCode = 3
-        console.error(sanitizeConsoleText(error?.stack || error))
-      }
-    }
   }
 }
 

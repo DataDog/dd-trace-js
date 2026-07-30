@@ -15,12 +15,13 @@ const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
  * Customer configuration is read as text only. Dynamic names, roots, includes, and ambiguous matches fail closed.
  *
  * @param {object} input project inputs
+ * @param {string[]} input.configFiles approval-bound configuration files
  * @param {string[]} input.projectFiles bounded project files
  * @param {string} input.projectRoot detected project root
  * @param {string[]} input.runnerArgs retained Vitest arguments
  * @returns {{configFile?: string, error?: string, files?: string[], root?: string}|undefined} project binding
  */
-function bindLiteralProject ({ projectFiles, projectRoot, runnerArgs }) {
+function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArgs }) {
   const projects = getOptionValues(runnerArgs, '--project')
   if (projects.length === 0) return
   if (projects.length !== 1 || !LITERAL_PROJECT_PATTERN.test(projects[0])) {
@@ -28,9 +29,10 @@ function bindLiteralProject ({ projectFiles, projectRoot, runnerArgs }) {
   }
 
   const name = projects[0]
+  const selectedConfigs = getSelectedConfigFiles({ configFiles, projectRoot, runnerArgs })
+  if (selectedConfigs.error) return selectedConfigs
   const bindings = []
-  for (const configFile of projectFiles) {
-    if (!CONFIG_PATTERN.test(path.basename(configFile))) continue
+  for (const configFile of selectedConfigs.files) {
     const source = readText(configFile)
     if (source === undefined) continue
     for (const match of source.matchAll(PROJECT_NAME_PATTERN)) {
@@ -57,6 +59,36 @@ function bindLiteralProject ({ projectFiles, projectRoot, runnerArgs }) {
     }
   }
   return bindings[0]
+}
+
+/**
+ * Selects only an explicit approval-bound config or root-level default config candidates.
+ *
+ * @param {object} input config selection inputs
+ * @param {string[]} input.configFiles approval-bound configuration files
+ * @param {string} input.projectRoot detected project root
+ * @param {string[]} input.runnerArgs retained Vitest arguments
+ * @returns {{error?: string, files?: string[]}} selected configuration files
+ */
+function getSelectedConfigFiles ({ configFiles, projectRoot, runnerArgs }) {
+  const explicitConfigs = getOptionValues(runnerArgs, '--config')
+  if (explicitConfigs.length > 1) {
+    return { error: '--project cannot be bound with more than one explicit Vitest config' }
+  }
+  if (explicitConfigs.length === 1) {
+    const explicitConfig = getPhysicalPath(path.resolve(projectRoot, explicitConfigs[0]))
+    const selected = configFiles.find(filename => filename === explicitConfig)
+    return selected
+      ? { files: [selected] }
+      : { error: 'the explicit Vitest config is not an approval-bound regular file' }
+  }
+
+  const physicalRoot = getPhysicalDirectory(projectRoot)
+  return {
+    files: configFiles.filter(filename => {
+      return path.dirname(filename) === physicalRoot && CONFIG_PATTERN.test(path.basename(filename))
+    }),
+  }
 }
 
 function getBindingFromObject ({ configFile, projectFiles, projectObject, projectRoot, source }) {
@@ -183,6 +215,33 @@ function readText (filename) {
     const stat = fs.statSync(filename)
     if (!stat.isFile() || stat.size > 512 * 1024) return
     return fs.readFileSync(filename, 'utf8')
+  } catch {}
+}
+
+/**
+ * Resolves one regular non-symbolic-link path physically.
+ *
+ * @param {string} filename candidate filename
+ * @returns {string|undefined} physical filename
+ */
+function getPhysicalPath (filename) {
+  try {
+    const stat = fs.lstatSync(filename)
+    if (!stat.isFile() || stat.isSymbolicLink()) return
+    return fs.realpathSync(filename)
+  } catch {}
+}
+
+/**
+ * Resolves one physical directory.
+ *
+ * @param {string} directory candidate directory
+ * @returns {string|undefined} physical directory
+ */
+function getPhysicalDirectory (directory) {
+  try {
+    const physical = fs.realpathSync(directory)
+    if (fs.statSync(physical).isDirectory()) return physical
   } catch {}
 }
 

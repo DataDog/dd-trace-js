@@ -264,6 +264,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   }
   const vitestProject = framework === 'vitest'
     ? vitest.bindLiteralProject({
+      configFiles: [...new Set([...runnerContract.inputFiles, ...implicitConfigFiles])],
       projectFiles,
       projectRoot,
       runnerArgs: runnerContract.runnerArgs,

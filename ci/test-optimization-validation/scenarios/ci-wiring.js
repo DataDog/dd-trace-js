@@ -424,8 +424,15 @@ function hasUnavailableRemoteCiCommand (ci) {
   const evidence = [
     ci.step,
     ...(Array.isArray(ci.unresolved) ? ci.unresolved : []),
-  ].filter(Boolean).join('\n')
-  return /\b(?:remote|external|third-party)\s+(?:action|workflow)\b|\breusable workflow\b|^\s*uses:/im.test(evidence)
+  ].filter(Boolean)
+  if (evidence.some(item => {
+    return /\b(?:remote|external|third-party)\s+(?:action|workflow)\b/i.test(item)
+  })) return true
+
+  return evidence.some(item => {
+    const reference = /^\s*uses:\s*["']?([^"'\s]+)["']?\s*$/im.exec(item)?.[1]
+    return reference && !reference.startsWith('./')
+  })
 }
 
 function matrixAffectsCiFacts (jobSource, command) {

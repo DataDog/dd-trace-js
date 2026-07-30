@@ -41,7 +41,7 @@ function assertNoExecutionLock (out) {
  * @param {object} input lock inputs
  * @param {string} input.out validation result directory
  * @param {string} input.approvedPlanSha256 approved plan digest
- * @returns {{dev: number, ino: number, path: string}} lock identity
+ * @returns {{dev: bigint, ino: bigint, path: string}} lock identity
  */
 function acquireExecutionLock ({ out, approvedPlanSha256 }) {
   const lockPath = getExecutionLockPath(out)
@@ -57,7 +57,7 @@ function acquireExecutionLock ({ out, approvedPlanSha256 }) {
     throw error
   }
 
-  const stat = fs.lstatSync(lockPath)
+  const stat = fs.lstatSync(lockPath, { bigint: true })
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error(`Validation execution lock is not a regular file: ${lockPath}`)
   }
@@ -67,13 +67,13 @@ function acquireExecutionLock ({ out, approvedPlanSha256 }) {
 /**
  * Releases only the exact lock file created by this process.
  *
- * @param {{dev: number, ino: number, path: string}} lock lock identity
+ * @param {{dev: bigint, ino: bigint, path: string}} lock lock identity
  * @returns {void}
  */
 function releaseExecutionLock (lock) {
   let stat
   try {
-    stat = fs.lstatSync(lock.path)
+    stat = fs.lstatSync(lock.path, { bigint: true })
   } catch (error) {
     if (error.code === 'ENOENT') {
       throw new Error(`Validation execution lock disappeared before safe cleanup: ${lock.path}`)

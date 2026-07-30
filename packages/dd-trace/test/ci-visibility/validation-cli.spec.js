@@ -173,8 +173,10 @@ describe('test optimization validation CLI', () => {
 
     try {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest', '--framework', 'cypress']).status, 0)
-      const planned = runCli(fixture.root, ['--print-plan'])
       const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      fs.mkdirSync(out, { recursive: true })
+      fs.writeFileSync(path.join(out, 'execution-plan.md'), 'obsolete approved command\n')
+      const planned = runCli(fixture.root, ['--print-plan'])
       const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
       assert.strictEqual(planned.status, 2, planned.stderr)
@@ -183,6 +185,7 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
       assert.match(report, /UNSUPPORTED VERSION/)
       assert.match(report, /\*\*Report state: FINAL\*\*/)
+      assert.doesNotMatch(report, /Approved execution plan/)
     } finally {
       removeFixture(fixture.root)
     }
@@ -282,6 +285,50 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stderr, /confirming no validation process is active/)
       assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), 'existing lock\n')
       assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('reports a lock-release failure instead of finalizing the earlier result', function () {
+    this.timeout(20_000)
+    const out = 'dd-test-optimization-validation-results'
+    const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      runnerSource: [
+        "const fs = require('node:fs')",
+        "const path = require('node:path')",
+        `const lockPath = path.join(process.cwd(), ${JSON.stringify(lockPath)})`,
+        'try {',
+        '  if (fs.lstatSync(lockPath).isFile()) {',
+        '    fs.unlinkSync(lockPath)',
+        '    fs.mkdirSync(lockPath)',
+        '  }',
+        '} catch {}',
+        "console.log('1 passing')",
+        '',
+      ].join('\n'),
+    })
+    try {
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      assert.strictEqual(runCli(fixture.root, ['--print-plan', '--scenario', 'basic-reporting']).status, 0)
+      const outputDirectory = path.join(fixture.root, out)
+      const approvalPath = path.join(outputDirectory, 'approval.json')
+      const approval = fs.readFileSync(approvalPath)
+      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
+
+      const executed = runCli(fixture.root, [
+        '--run-approved-plan', approvalPath,
+        '--sha256', digest,
+      ])
+      const report = fs.readFileSync(path.join(outputDirectory, 'report.md'), 'utf8')
+
+      assert.strictEqual(executed.status, 3)
+      assert.match(executed.stderr, /changed validation execution lock/)
+      assert.match(report, /changed validation execution lock/)
+      assert.match(report, /Validator exit code: 3/)
+      assert.strictEqual(fs.statSync(path.join(fixture.root, lockPath)).isDirectory(), true)
     } finally {
       removeFixture(fixture.root)
     }

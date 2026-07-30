@@ -5,12 +5,15 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+
 const {
   acquireExecutionLock,
   assertNoExecutionLock,
   getExecutionLockPath,
   releaseExecutionLock,
 } = require('../../../../ci/test-optimization-validation/execution-lock')
+const { createWindowsFileReferenceFs } = require('./validation-test-helpers')
 
 describe('test optimization validation execution lock', () => {
   let out
@@ -60,5 +63,23 @@ describe('test optimization validation execution lock', () => {
 
     assert.throws(() => releaseExecutionLock(lock), /changed validation execution lock/)
     assert.strictEqual(fs.statSync(lock.path).isDirectory(), true)
+  })
+
+  it('compares lock identities without rounding large file reference numbers', () => {
+    const windowsLock = proxyquire('../../../../ci/test-optimization-validation/execution-lock', {
+      'node:fs': createWindowsFileReferenceFs(),
+    })
+    const lock = windowsLock.acquireExecutionLock({
+      out,
+      approvedPlanSha256: 'c'.repeat(64),
+    })
+    const replacement = path.join(out, 'replacement.lock')
+    fs.writeFileSync(replacement, 'replacement\n')
+    fs.unlinkSync(lock.path)
+    fs.renameSync(replacement, lock.path)
+
+    assert.strictEqual(typeof lock.ino, 'bigint')
+    assert.throws(() => windowsLock.releaseExecutionLock(lock), /changed validation execution lock/)
+    assert.strictEqual(fs.readFileSync(lock.path, 'utf8'), 'replacement\n')
   })
 })

@@ -142,6 +142,18 @@ describe('test optimization validation CI audit', () => {
     )
   })
 
+  it('does not interpret a Bun built-in as a package script', () => {
+    writeScripts({ test: command })
+    fs.writeFileSync(workflow, workflowSource({ command: 'bun test' }))
+    completeReview({ command: 'bun test', initialization: 'not_configured', transport: 'none' })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
+  })
+
   it('discards stale Bun wrapper uncertainty only after resolving the local package script', () => {
     framework.framework = 'cypress'
     framework.id = 'cypress:fixture'
@@ -406,6 +418,26 @@ describe('test optimization validation CI audit', () => {
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.reasonCode, 'remote-ci-command-unavailable')
     assert.match(result.diagnosis, /remote action or reusable workflow/)
+  })
+
+  it('does not label a repository-local action as an unavailable remote command', () => {
+    framework.ciWiring = {
+      command: null,
+      configFile: workflow,
+      initialization: { evidence: [], status: 'unknown' },
+      job: 'test:',
+      reviewComplete: false,
+      step: 'uses: ./.github/actions/test',
+      transport: { evidence: [], mode: 'unknown' },
+      unresolved: ['The repository-local action command has not been bound statically.'],
+      workingDirectory: fixture.root,
+    }
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.notStrictEqual(result.evidence.reasonCode, 'remote-ci-command-unavailable')
+    assert.doesNotMatch(result.diagnosis, /remote action or reusable workflow/)
   })
 
   it('does not bind a selected job to a command found only in another job', () => {

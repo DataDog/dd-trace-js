@@ -9,6 +9,8 @@ const { sanitizeConsoleText, sanitizeForReport, sanitizeString } = require('./re
 const { writeFileSafely } = require('./safe-files')
 
 const REPORT_FILENAME = 'report.md'
+const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
+const MAX_EXECUTION_PLAN_BYTES = 1024 * 1024
 const SHARING_WARNING =
   'This local diagnostic may contain repository paths, package names, CI metadata, commands, and sanitized output. ' +
   'Review it before sharing outside trusted support or engineering channels.'
@@ -172,7 +174,7 @@ function renderReport ({ manifest, out, reportPath, results, runSummary, staticD
     '',
     `- Report: ${code(relative(out, reportPath))}`,
     `- Manifest: ${code(relative(out, manifest.__path))}`,
-    ...(fs.existsSync(path.join(out, 'execution-plan.md'))
+    ...(hasCurrentExecutionPlan(out, runSummary.approvedPlanSha256)
       ? [`- Approved execution plan: ${code('execution-plan.md')}`]
       : []),
     ...(staticDiagnosisPath ? [`- Static diagnosis: ${code(relative(out, staticDiagnosisPath))}`] : []),
@@ -181,6 +183,25 @@ function renderReport ({ manifest, out, reportPath, results, runSummary, staticD
     ''
   )
   return lines.join('\n')
+}
+
+/**
+ * Confirms that the displayed execution plan belongs to this approved live run.
+ *
+ * @param {string} out validation output directory
+ * @param {string|undefined} approvedPlanSha256 approved plan digest
+ * @returns {boolean} whether the current plan is safe to label as approved
+ */
+function hasCurrentExecutionPlan (out, approvedPlanSha256) {
+  if (!APPROVAL_DIGEST_PATTERN.test(String(approvedPlanSha256 || ''))) return false
+  const planPath = path.join(out, 'execution-plan.md')
+  try {
+    const stat = fs.lstatSync(planPath)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_EXECUTION_PLAN_BYTES) return false
+    return fs.readFileSync(planPath, 'utf8').includes(`--sha256 ${approvedPlanSha256}`)
+  } catch {
+    return false
+  }
 }
 
 /**
