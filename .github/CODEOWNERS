@@ -189,7 +189,6 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
-/.llm-validation/ @DataDog/ml-observability
 /.agents/skills/llmobs-integration/ @DataDog/ml-observability
 /.agents/skills/llmobs-testing/ @DataDog/ml-observability
 /.claude/skills/llmobs-integration @DataDog/ml-observability
@@ -407,6 +406,8 @@
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup/ @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
+
+/.llm-validation/ @DataDog/lang-platform-js
 
 # Multiple teams
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
