@@ -288,8 +288,7 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
 
-      // eslint-disable-next-line eslint-rules/eslint-process-env
-      if (process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) {
+      if (getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN')) {
         this.#registerMicroVmRunHook(config)
       }
     } catch (e) {
