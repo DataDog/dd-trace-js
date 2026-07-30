@@ -17,9 +17,17 @@ describe('convertToTextMap', () => {
     })
   })
 
-  it('uses the last repeated KafkaJS header value', () => {
+  it('keeps duplicate traceparent values as an array instead of selecting a context', () => {
     assert.deepStrictEqual(convertToTextMap({
-      traceparent: [Buffer.from('stale'), Buffer.from('current')],
+      traceparent: [Buffer.from('first'), Buffer.from('second'), Buffer.from('third')],
+    }), {
+      traceparent: ['first', 'second', 'third'],
+    })
+  })
+
+  it('collapses one repeated KafkaJS header value to a scalar', () => {
+    assert.deepStrictEqual(convertToTextMap({
+      traceparent: [Buffer.from('current')],
     }), {
       traceparent: 'current',
     })
@@ -29,40 +37,60 @@ describe('convertToTextMap', () => {
     assert.deepStrictEqual(convertToTextMap({ traceparent: [] }), {})
   })
 
-  it('clears a repeated KafkaJS header ending in a nullish value', () => {
+  it('preserves a nullish final KafkaJS header value', () => {
     assert.deepStrictEqual(convertToTextMap({
       traceparent: [Buffer.from('current'), undefined],
-    }), {})
+    }), {
+      traceparent: ['current', undefined],
+    })
   })
 
-  it('skips nullish scalar values', () => {
+  it('preserves nullish scalar values', () => {
     assert.deepStrictEqual(convertToTextMap({
       first: null,
       second: undefined,
-    }), {})
+    }), {
+      first: null,
+      second: undefined,
+    })
   })
 
-  it('uses the last repeated native-list value', () => {
+  it('preserves repeated native-list values', () => {
     assert.deepStrictEqual(convertToTextMap([
       { traceparent: Buffer.from('stale') },
       { traceparent: Buffer.from('current') },
     ]), {
-      traceparent: 'current',
+      traceparent: ['stale', 'current'],
     })
   })
 
-  it('skips nullish native-list values', () => {
+  it('preserves nullish native-list values', () => {
     assert.deepStrictEqual(convertToTextMap([
       { first: null },
       { second: undefined },
-    ]), {})
+    ]), {
+      first: null,
+      second: undefined,
+    })
   })
 
-  it('clears a repeated native-list header ending in a nullish value', () => {
+  it('preserves a nullish final native-list value', () => {
     assert.deepStrictEqual(convertToTextMap([
       { traceparent: Buffer.from('current') },
       { traceparent: undefined },
-    ]), {})
+    ]), {
+      traceparent: ['current', undefined],
+    })
+  })
+
+  it('preserves repeated baggage and tracestate members', () => {
+    assert.deepStrictEqual(convertToTextMap({
+      baggage: [Buffer.from('first=one'), Buffer.from('second=two')],
+      tracestate: [Buffer.from('vendor=one'), Buffer.from('other=two')],
+    }), {
+      baggage: ['first=one', 'second=two'],
+      tracestate: ['vendor=one', 'other=two'],
+    })
   })
 })
 
