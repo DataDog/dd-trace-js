@@ -32,6 +32,7 @@ const {
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
@@ -898,7 +899,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
       })
     }
 
-    it('does not advertise Failed Test Replay capability in no-worker mode', async () => {
+    it('does not advertise unsupported capabilities in no-worker mode', async () => {
       receiver.setSettings({
         di_enabled: true,
       })
@@ -919,6 +920,10 @@ SUPPORTED_VERSIONS.forEach((version) => {
             })
             assert.ok(
               !Object.hasOwn(metadata.test, DD_CAPABILITIES_FAILED_TEST_REPLAY),
+              `Available keys: ${inspect(Object.keys(metadata.test))}`
+            )
+            assert.ok(
+              !Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS),
               `Available keys: ${inspect(Object.keys(metadata.test))}`
             )
           })

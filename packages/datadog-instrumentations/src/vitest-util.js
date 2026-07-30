@@ -28,6 +28,7 @@ const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
+const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
 const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
@@ -110,6 +111,10 @@ function getProvidedContext () {
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
       _ddCodeOwnersEntries: codeOwnersEntries,
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddItrCorrelationId: itrCorrelationId,
+      _ddUnskippableSuites: unskippableSuites,
+      _ddForcedToRunSuites: forcedToRunSuites,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -131,6 +136,10 @@ function getProvidedContext () {
       testCommand,
       repositoryRoot,
       codeOwnersEntries,
+      isCodeCoverageEnabled,
+      itrCorrelationId,
+      unskippableSuites,
+      forcedToRunSuites,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -153,6 +162,10 @@ function getProvidedContext () {
       testCommand: undefined,
       repositoryRoot: undefined,
       codeOwnersEntries: undefined,
+      isCodeCoverageEnabled: false,
+      itrCorrelationId: undefined,
+      unskippableSuites: {},
+      forcedToRunSuites: {},
     }
   }
 }
@@ -230,6 +243,7 @@ module.exports = {
   testManagementTestsCh,
   modifiedFilesCh,
   workerReportTraceCh,
+  workerReportCoverageCh,
   workerReportLogsCh,
   codeCoverageReportCh,
   findExportByName,

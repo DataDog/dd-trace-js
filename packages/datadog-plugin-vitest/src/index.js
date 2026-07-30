@@ -7,6 +7,7 @@ const {
   TEST_STATUS,
   TEST_TYPE,
   VITEST_POOL,
+  addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
@@ -15,7 +16,6 @@ const {
   getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
-  TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
   TEST_COMMAND,
   TEST_LEVELS_METADATA,
@@ -41,11 +41,21 @@ const {
   TEST_BROWSER_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_PARAMETERS,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const id = require('../../dd-trace/src/id')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_CODE_COVERAGE_STARTED,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
@@ -397,6 +407,11 @@ class VitestPlugin extends CiPlugin {
         browserDriver,
         browserName,
         browserProjectName,
+        isCodeCoverageEnabled,
+        coverageLibrary,
+        itrCorrelationId,
+        isUnskippable,
+        isForcedToRun,
       } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
@@ -444,6 +459,20 @@ class VitestPlugin extends CiPlugin {
       if (isTestFrameworkWorker) {
         testSuiteMetadata[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      }
+      if (isCodeCoverageEnabled) {
+        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: coverageLibrary })
+      }
       setBrowserTags(testSuiteMetadata, {
         browserDriver,
         browserName,
@@ -473,9 +502,33 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onDone }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({
+      testSuiteSpan,
+      status,
+      coverageFiles,
+      coverageLibrary,
+      testSuiteAbsolutePath,
+      deferFlush,
+      onDone,
+    }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
+        if (coverageFiles) {
+          if (!coverageFiles.length) {
+            this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
+          const files = new Set(coverageFiles)
+          files.add(testSuiteAbsolutePath)
+          const relativeFiles = [...files].map(filename => getTestSuitePath(filename, this.repositoryRoot))
+          const { _traceId, _spanId } = testSuiteSpan.context()
+          this.tracer._exporter.exportCoverage({
+            sessionId: _traceId,
+            suiteId: _spanId,
+            files: relativeFiles,
+          })
+          this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
+          this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
+        }
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -487,6 +540,17 @@ class VitestPlugin extends CiPlugin {
       this.tracer._exporter.flush(onDone)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
+      }
+    })
+
+    this.addSub('ci:vitest:worker-report:coverage', data => {
+      const formattedCoverages = JSON.parse(data).map(coverage => ({
+        sessionId: id(coverage.sessionId),
+        suiteId: id(coverage.suiteId),
+        files: coverage.files,
+      }))
+      for (const formattedCoverage of formattedCoverages) {
+        this.tracer._exporter.exportCoverage(formattedCoverage)
       }
     })
 
@@ -512,6 +576,12 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
@@ -527,10 +597,20 @@ class VitestPlugin extends CiPlugin {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
-      if (testCodeCoverageLinesTotal !== undefined) {
-        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
-        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
-      }
+      addIntelligentTestRunnerSpanTags(
+        this.testSessionSpan,
+        this.testModuleSpan,
+        {
+          isSuitesSkipped,
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
+          skippingType: 'suite',
+          skippingCount: numSkippedSuites,
+          hasUnskippableSuites,
+          hasForcedToRunSuites,
+        }
+      )
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
@@ -572,6 +652,7 @@ class VitestPlugin extends CiPlugin {
   getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
     return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion, {
       omitFailedTestReplay: ctx.isVitestNoWorkerInitActive,
+      omitTestImpactAnalysis: ctx.isVitestNoWorkerInitActive,
     })
   }
 
