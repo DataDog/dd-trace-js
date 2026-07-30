@@ -99,14 +99,16 @@ class PGPlugin extends DatabasePlugin {
 }
 
 /**
- * @param {{ database?: string, user?: string, host?: string, port?: number }} params
+ * `Pool.options` and `Client.connectionParameters` are pg internals, so either can be missing.
+ *
+ * @param {{ database?: string, user?: string, host?: string, port?: number } | undefined} params
  */
 function connectionMeta (params) {
   return {
-    'db.name': params.database,
-    'db.user': params.user,
-    'out.host': params.host,
-    [CLIENT_PORT_KEY]: params.port,
+    'db.name': params?.database,
+    'db.user': params?.user,
+    'out.host': params?.host,
+    [CLIENT_PORT_KEY]: params?.port,
   }
 }
 

@@ -472,6 +472,23 @@ describe('Plugin', () => {
           ])
         })
 
+        it('traces an acquire for a pool that exposes no connection options', async () => {
+          const ctx = {}
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.meta['db.type'], 'postgres')
+            assert.strictEqual(acquireSpan.meta['db.name'], undefined)
+          })
+
+          dc.channel('apm:pg:pool:acquire:start').publish(ctx)
+          dc.channel('apm:pg:pool:acquire:finish').publish(ctx)
+
+          await tracePromise
+        })
+
         it('keeps a query that waits for a busy pool parented to its own caller', done => {
           const root = tracer.startSpan('root')
           const parent1 = tracer.startSpan('parent1', { childOf: root })

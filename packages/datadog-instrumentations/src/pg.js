@@ -266,13 +266,13 @@ const finish = (ctx) => {
  * @typedef {{ database?: string, user?: string, host?: string, port?: number }} PoolConnectionParameters
  * @typedef {{ connectionParameters?: PoolConnectionParameters }} PoolClient
  * @typedef {{
- *   options: PoolConnectionParameters,
+ *   options?: PoolConnectionParameters,
  *   idleCount: number,
  *   waitingCount: number,
  *   _clients?: PoolClient[]
  * }} InstrumentedPool
  * @typedef {{
- *   poolOptions: PoolConnectionParameters,
+ *   poolOptions?: PoolConnectionParameters,
  *   params?: PoolConnectionParameters,
  *   error?: unknown,
  *   poolWaitTime?: number
