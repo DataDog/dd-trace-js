@@ -16,25 +16,31 @@ const MOCK_OBJECT = Symbol('object')
 const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
+ * @typedef {typeof MOCK_STRING | typeof MOCK_NUMBER | typeof MOCK_OBJECT | typeof MOCK_NOT_NULLISH} MockValue
+ */
+
+/**
+ * Optional fields assert their own absence when omitted, except `traceId`, which defaults to `MOCK_STRING`.
  * @typedef {{
- *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
+ *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'step' | 'tool' | 'retrieval',
  *   name: string,
- *   inputMessages: Record<string, unknown>,
- *   outputMessages: Record<string, unknown>,
- *   inputDocuments: Record<string, unknown>,
- *   outputDocuments: Record<string, unknown>,
- *   inputValue: Record<string, unknown>,
- *   outputValue: Record<string, unknown>,
- *   metrics: { [key: string]: number },
- *   metadata: Record<string, unknown>,
+ *   inputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputValue?: string | MockValue,
+ *   outputValue?: string | MockValue,
+ *   metrics?: Record<string, number | MockValue> | MockValue,
+ *   metadata?: Record<string, unknown> | MockValue,
+ *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
- *   error?: { message: string, type: string, stack: string },
- *   span: unknown,
+ *   error?: object,
+ *   span: object,
  *   sessionId?: string,
- *   tags: Record<string, unknown>,
- *   traceId?: string,
+ *   tags: Record<string, string>,
+ *   traceId?: string | MockValue,
  * }} ExpectedLLMObsSpanEvent
  */
 
@@ -58,7 +64,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  *
  * @param {object} actual
- * @param {ExpectedLLMObsSpanEvent} expected
+ * @param {object | MockValue | string | number | boolean | null | undefined} expected
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
