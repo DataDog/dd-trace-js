@@ -9,6 +9,7 @@ const {
 } = require('./utils')
 
 const MCP_REQUEST_SPAN_NAME = 'mcp.request'
+const CLIENT_INITIALIZE_RESOURCE = 'ClientSession.initialize'
 const CLIENT_TOOL_CALL_RESOURCE = 'client_tool_call'
 const CLIENT_LIST_TOOLS_RESOURCE = 'ClientSession.list_tools'
 const SERVER_TOOL_CALL_RESOURCE = 'server_tool_call'
@@ -61,6 +62,19 @@ class McpPropagationPlugin extends Plugin {
     const traceContext = {}
     this.tracer.inject(span, 'text_map', traceContext)
     ctx.traceContext = traceContext
+  }
+}
+
+class McpClientInitializePlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_initialize'
+  static prefix = 'tracing:apm:mcp:client:initialize'
+  static spanName = MCP_REQUEST_SPAN_NAME
+  static kind = 'client'
+
+  getResource () { return CLIENT_INITIALIZE_RESOURCE }
+
+  onEnd (span, ctx) {
+    if (ctx.error) span.setTag('error', ctx.error)
   }
 }
 
@@ -162,6 +176,7 @@ class McpServerToolCallPlugin extends McpPlugin {
 
 module.exports = [
   McpPropagationPlugin,
+  McpClientInitializePlugin,
   McpToolCallPlugin,
   McpListToolsPlugin,
   McpListResourcesPlugin,
