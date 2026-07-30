@@ -2048,6 +2048,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   if (!execution?.testName) return
+  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const name = formatTestOptimizationName(testSuite, testName)

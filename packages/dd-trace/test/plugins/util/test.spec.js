@@ -876,6 +876,7 @@ describe('test management summary', () => {
       testName: 'attempt to fix',
       status: 'pass',
     })
+    assert.strictEqual(attemptToFixExecutions.size, 0)
 
     try {
       logTestOptimizationSummary({
