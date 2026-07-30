@@ -5,6 +5,27 @@ const { getSizeOrZero } = require('../../dd-trace/src/datastreams')
 /** @typedef {string | Buffer | null | undefined} KafkaHeaderValue */
 /** @typedef {Record<string, KafkaHeaderValue | KafkaHeaderValue[]>} KafkaHeaderMap */
 /** @typedef {Array<Record<string, KafkaHeaderValue>>} NativeHeaderList */
+/** @typedef {Record<string, string | null | undefined | Array<string | null | undefined>>} TextMap */
+
+/**
+ * @param {TextMap} headers
+ * @param {string} key
+ * @param {KafkaHeaderValue} value
+ */
+function appendTextHeader (headers, key, value) {
+  const text = value === null || value === undefined ? value : value.toString()
+  if (!Object.hasOwn(headers, key)) {
+    headers[key] = text
+    return
+  }
+
+  const current = headers[key]
+  if (Array.isArray(current)) {
+    current.push(text)
+  } else {
+    headers[key] = [current, text]
+  }
+}
 
 /**
  * @param {KafkaHeaderMap | NativeHeaderList | null | undefined} bufferMap
@@ -14,26 +35,27 @@ function convertToTextMap (bufferMap) {
 
   // rdKafka returns an array of header maps
   if (Array.isArray(bufferMap)) {
+    /** @type {TextMap} */
     const headers = {}
     for (const headerMap of bufferMap) {
       for (const key of Object.keys(headerMap)) {
-        const value = headerMap[key]
-        if (value === null || value === undefined) {
-          delete headers[key]
-          continue
-        }
-        headers[key] = value.toString()
+        appendTextHeader(headers, key, headerMap[key])
       }
     }
     return headers
   }
 
+  /** @type {TextMap} */
   const textMap = {}
   for (const key of Object.keys(bufferMap)) {
     const values = bufferMap[key]
-    const value = Array.isArray(values) ? values.at(-1) : values
-    if (value === null || value === undefined) continue
-    textMap[key] = value.toString()
+    if (Array.isArray(values)) {
+      for (const value of values) {
+        appendTextHeader(textMap, key, value)
+      }
+    } else {
+      textMap[key] = values === null || values === undefined ? values : values.toString()
+    }
   }
   return textMap
 }
