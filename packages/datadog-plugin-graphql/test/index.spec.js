@@ -996,7 +996,7 @@ describe('Plugin', () => {
                   'user span must be contained within its live parent, not start after it finished',
                 )
               }
-            }, { spanResourceMatch: /items:\[Item]/ }),
+            }, { spanResourceMatch: /items:\[Item\]/ }),
             graphql.graphql({ schema: localSchema, source: '{ items { name } }' }),
           ])
 
@@ -1069,7 +1069,7 @@ describe('Plugin', () => {
               },
             })
             assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
-          }, { spanResourceMatch: /friends:\[Human]/ })
+          }, { spanResourceMatch: /friends:\[Human\]/ })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
@@ -2775,7 +2775,7 @@ describe('Plugin', () => {
               },
             })
             assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
-          }, { spanResourceMatch: /friends:\[Human]/ })
+          }, { spanResourceMatch: /friends:\[Human\]/ })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })

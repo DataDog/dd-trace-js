@@ -834,5 +834,21 @@ describe('plugins/util/web', () => {
         [204, 'No Content', { 'x-test': '1' }]
       )
     })
+
+    it('trims whitespace surrounding each requested header entry', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = '  x-datadog-parent-id  ,x-datadog-trace-id  '
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'x-datadog-parent-id,x-datadog-trace-id']
+      )
+    })
   })
 })
