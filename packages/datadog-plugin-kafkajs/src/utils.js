@@ -5,56 +5,45 @@ const { getSizeOrZero } = require('../../dd-trace/src/datastreams')
 /** @typedef {string | Buffer | null | undefined} KafkaHeaderValue */
 /** @typedef {Record<string, KafkaHeaderValue | KafkaHeaderValue[]>} KafkaHeaderMap */
 /** @typedef {Array<Record<string, KafkaHeaderValue>>} NativeHeaderList */
-/** @typedef {Record<string, string | null | undefined | Array<string | null | undefined>>} TextMap */
 
 /**
- * @param {TextMap} headers
- * @param {string} key
- * @param {KafkaHeaderValue} value
- */
-function appendTextHeader (headers, key, value) {
-  const text = value === null || value === undefined ? value : value.toString()
-  if (!Object.hasOwn(headers, key)) {
-    headers[key] = text
-    return
-  }
-
-  const current = headers[key]
-  if (Array.isArray(current)) {
-    current.push(text)
-  } else {
-    headers[key] = [current, text]
-  }
-}
-
-/**
+ * Repeated fields collapse to the last usable value: every propagation key the
+ * tracer reads expects a scalar, and handing it the duplicates instead invents
+ * context nobody sent — trace ids `123` and `456` extract as trace `1686`.
+ *
  * @param {KafkaHeaderMap | NativeHeaderList | null | undefined} bufferMap
  */
 function convertToTextMap (bufferMap) {
   if (!bufferMap) return null
 
-  // rdKafka returns an array of header maps
+  /** @type {Record<string, string>} */
+  const textMap = {}
+
+  // rdKafka reports one single-key record per wire field.
   if (Array.isArray(bufferMap)) {
-    /** @type {TextMap} */
-    const headers = {}
     for (const headerMap of bufferMap) {
       for (const key of Object.keys(headerMap)) {
-        appendTextHeader(headers, key, headerMap[key])
+        const value = headerMap[key]
+        if (value !== null && value !== undefined) {
+          textMap[key] = value.toString()
+        }
       }
     }
-    return headers
+    return textMap
   }
 
-  /** @type {TextMap} */
-  const textMap = {}
   for (const key of Object.keys(bufferMap)) {
-    const values = bufferMap[key]
-    if (Array.isArray(values)) {
-      for (const value of values) {
-        appendTextHeader(textMap, key, value)
+    const value = bufferMap[key]
+    if (Array.isArray(value)) {
+      for (let index = value.length - 1; index >= 0; index--) {
+        const repeated = value[index]
+        if (repeated !== null && repeated !== undefined) {
+          textMap[key] = repeated.toString()
+          break
+        }
       }
-    } else {
-      textMap[key] = values === null || values === undefined ? values : values.toString()
+    } else if (value !== null && value !== undefined) {
+      textMap[key] = value.toString()
     }
   }
   return textMap
