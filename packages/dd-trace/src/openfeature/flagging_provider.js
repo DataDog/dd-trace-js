@@ -73,7 +73,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
     return super.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, defaultValue, result))
+      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
@@ -87,7 +87,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
     return super.resolveStringEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, defaultValue, result))
+      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
@@ -101,7 +101,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
     return super.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, defaultValue, result))
+      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
@@ -116,7 +116,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
     return super.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, defaultValue, result))
+      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
@@ -124,31 +124,38 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    *
    * @template {import('@openfeature/server-sdk').FlagValue} T
    * @param {string} flagKey
-   * @param {T} defaultValue
    * @param {import('@openfeature/server-sdk').ResolutionDetails<T>} result
    * @returns {import('@openfeature/server-sdk').ResolutionDetails<T>}
    */
-  #normalizeResolution (flagKey, defaultValue, result) {
-    if (result?.errorCode === 'FLAG_NOT_FOUND') {
-      const { errorCode, ...withoutError } = result
-      return { ...withoutError, value: defaultValue, reason: 'DEFAULT' }
-    }
-
+  #normalizeResolution (flagKey, result) {
     if (result?.reason !== 'TARGETING_MATCH' && result?.reason !== 'DEFAULT') {
       return result
     }
 
-    const allocationKey = result.flagMetadata?.allocationKey
-    const allocation = this.#ffeConfig?.flags?.[flagKey]?.allocations?.find(item => item.key === allocationKey)
-    if (!allocation || allocation.rules?.length) {
+    const allocations = this.#ffeConfig?.flags?.[flagKey]?.allocations
+    if (!Array.isArray(allocations)) {
+      return result
+    }
+
+    const allocation = allocations.find(item => item.key === result.flagMetadata?.allocationKey)
+    if (!allocation || allocation.rules?.length || !Array.isArray(allocation.splits)) {
       return result
     }
 
     const flag = this.#ffeConfig.flags[flagKey]
-    const selectedSplit = allocation.splits?.find(split => {
+    const selectedSplit = allocation.splits.find(split => {
       const variant = flag.variations?.[split.variationKey]
       return variant?.key === result.variant || split.variationKey === result.variant
     })
+    if (!selectedSplit) {
+      return result
+    }
+
+    const hasTimeBounds = allocation.startAt !== undefined || allocation.endAt !== undefined
+    if (hasTimeBounds && allocation.splits.length === 1 && !selectedSplit.shards?.length) {
+      return { ...result, reason: 'DEFAULT' }
+    }
+
     const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
     return { ...result, reason }
   }
