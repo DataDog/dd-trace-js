@@ -272,6 +272,47 @@ function getTestSpecificationFilepath (testSpecification) {
 }
 
 /**
+ * Returns the normalized suite path and absolute path for a Vitest test specification.
+ *
+ * @param {unknown} testSpecification
+ * @returns {{ testSuite: string, testSuiteAbsolutePath: string }|undefined}
+ */
+function getTestSpecificationSuite (testSpecification) {
+  const testFilepath = getTestSpecificationFilepath(testSpecification)
+  if (!testFilepath) return
+
+  const testSuiteAbsolutePath = path.isAbsolute(testFilepath)
+    ? realpath(testFilepath)
+    : realpath(path.join(tiaRepositoryRoot, testFilepath))
+
+  return {
+    testSuite: getTestSuitePath(testSuiteAbsolutePath, tiaRepositoryRoot),
+    testSuiteAbsolutePath,
+  }
+}
+
+/**
+ * Returns suites that Vitest selected for typechecking.
+ *
+ * @param {unknown[]} testSpecifications
+ * @returns {Set<string>}
+ */
+function getTypecheckTestSuites (testSpecifications) {
+  const typecheckTestSuites = new Set()
+
+  for (const testSpecification of testSpecifications) {
+    if (getTestSpecificationPool(testSpecification) !== 'typescript') continue
+
+    const testSuite = getTestSpecificationSuite(testSpecification)?.testSuite
+    if (testSuite) {
+      typecheckTestSuites.add(testSuite)
+    }
+  }
+
+  return typecheckTestSuites
+}
+
+/**
  * Removes suites selected by TIA and propagates suite metadata to Vitest workers.
  *
  * @param {object} ctx
@@ -289,21 +330,19 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
 
   resetAppliedSuiteSkippingState()
   const skippableSuiteSet = new Set(skippableSuites.map(testSuite => testSuite.replaceAll('\\', '/')))
+  const typecheckTestSuites = getTypecheckTestSuites(testSpecifications)
   const currentSkippedSuites = []
   const testSpecificationsToRun = []
 
   for (const testSpecification of testSpecifications) {
-    const testFilepath = getTestSpecificationFilepath(testSpecification)
-    if (!testFilepath) {
+    const testSpecificationSuite = getTestSpecificationSuite(testSpecification)
+    if (!testSpecificationSuite) {
       testSpecificationsToRun.push(testSpecification)
       continue
     }
 
-    const testSuiteAbsolutePath = path.isAbsolute(testFilepath)
-      ? realpath(testFilepath)
-      : realpath(path.join(tiaRepositoryRoot, testFilepath))
-    const testSuite = getTestSuitePath(testSuiteAbsolutePath, tiaRepositoryRoot)
-    const shouldSkip = skippableSuiteSet.has(testSuite)
+    const { testSuite, testSuiteAbsolutePath } = testSpecificationSuite
+    const shouldSkip = !typecheckTestSuites.has(testSuite) && skippableSuiteSet.has(testSuite)
     const isUnskippable = isMarkedAsUnskippable({ path: testSuiteAbsolutePath })
 
     if (isUnskippable) {
@@ -836,8 +875,7 @@ function ensureMainProcessSetup (
   const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
   const disableTestImpactAnalysis =
     forceDisableTestImpactAnalysis ||
-    hasTypecheckRun(ctx, testSpecifications) ||
-    hasNonIsolatedRun(ctx, testSpecifications)
+    hasOnlyTypecheckTestSpecifications(testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
   if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
@@ -1151,44 +1189,6 @@ function hasOnlyTypecheckTestSpecifications (testSpecifications) {
     if (getTestSpecificationPool(testSpecification) !== 'typescript') return false
   }
   return true
-}
-
-/**
- * Detect whether any selected Vitest project can run typecheck specifications.
- *
- * @param {object} ctx
- * @param {unknown} testSpecifications
- * @returns {boolean}
- */
-function hasTypecheckRun (ctx, testSpecifications) {
-  if (hasOnlyTypecheckTestSpecifications(testSpecifications)) return true
-
-  const projectConfigs = getVitestProjectConfigs(ctx, testSpecifications)
-  for (const { config } of projectConfigs) {
-    if (config.typecheck?.enabled) return true
-  }
-  return false
-}
-
-/**
- * Detect whether any selected Vitest project reuses its module cache across suites.
- *
- * @param {object} ctx
- * @param {unknown} testSpecifications
- * @returns {boolean}
- */
-function hasNonIsolatedRun (ctx, testSpecifications) {
-  const projectConfigs = getVitestProjectConfigs(ctx, testSpecifications)
-  for (const { config } of projectConfigs) {
-    if (
-      config.isolate === false ||
-      config.poolOptions?.forks?.isolate === false ||
-      config.poolOptions?.threads?.isolate === false
-    ) {
-      return true
-    }
-  }
-  return false
 }
 
 function isBrowserTestSpecification (testSpecification) {
@@ -1548,13 +1548,17 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
   if (!testSuiteFinishCh.hasSubscribers) return
   if (!Array.isArray(result?.files)) return
 
-  if (ctx) {
+  const setupState = ctx && mainProcessSetupStates.get(ctx)
+  if (
+    ctx &&
+    (!setupState || setupState.shouldInstallMainReporter || setupState.disableTestImpactAnalysis)
+  ) {
     await ensureMainProcessSetup(
       ctx,
       frameworkVersion,
       result.files,
       false,
-      !mainProcessSetupStates.has(ctx)
+      !setupState || setupState.disableTestImpactAnalysis
     )
   }
   const providedContext = getMainProcessProvidedContext(ctx)

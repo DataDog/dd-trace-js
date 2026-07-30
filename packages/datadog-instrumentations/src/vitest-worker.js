@@ -64,6 +64,7 @@ let preciseCoverageSession
 let isPreciseCoverageUnavailable = false
 let vitestCoverageSnapshot
 const wrappedCoverageWorkerStates = new WeakSet()
+const nonIsolatedCoverageFiles = new Set()
 
 /**
  * Sends a command to a Node.js inspector session.
@@ -158,6 +159,34 @@ function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
 
 function getVitestCoverageOptions () {
   return globalThis.__vitest_worker__?.config?.coverage
+}
+
+/**
+ * Check whether the current Vitest worker reuses its module cache across test suites.
+ *
+ * @returns {boolean}
+ */
+function isNonIsolatedRun () {
+  const config = globalThis.__vitest_worker__?.config
+  if (config?.isolate === false) return true
+
+  return config?.poolOptions?.[config.pool]?.isolate === false
+}
+
+/**
+ * Conservatively include files covered by earlier suites when Vitest reuses its module cache.
+ *
+ * @param {string[] | undefined} coverageFiles
+ * @returns {string[] | undefined}
+ */
+function includePreviouslyCoveredFiles (coverageFiles) {
+  if (!coverageFiles || !isNonIsolatedRun()) return coverageFiles
+
+  // TODO: Track module cache hits per suite instead; cumulative coverage can under-skip with isolate:false.
+  for (const filename of coverageFiles) {
+    nonIsolatedCoverageFiles.add(filename)
+  }
+  return [...nonIsolatedCoverageFiles]
 }
 
 function usesVitestV8CoverageSnapshot (coverageOptions) {
@@ -973,9 +1002,10 @@ addHook({
 
     let coverageFiles
     if (providedContext.isCodeCoverageEnabled) {
-      coverageFiles = shouldUseVitestCoverage
+      const currentCoverageFiles = shouldUseVitestCoverage
         ? getVitestCoverageFiles(repositoryRoot)
         : await getPreciseCoverageFiles(repositoryRoot)
+      coverageFiles = includePreviouslyCoveredFiles(currentCoverageFiles)
     }
 
     await getChannelPromise(testSuiteFinishCh, {
