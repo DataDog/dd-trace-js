@@ -341,6 +341,41 @@ describe('Tracer', () => {
     )
   })
 
+  it('uses the JS agent pipeline when a custom DNS lookup is configured', () => {
+    // libdatadog's transport builds its own `http.request` options and takes no
+    // lookup hook, so on the native path the callback is silently dropped and
+    // traces go wherever the system resolver points. Users who set `lookup` are
+    // resolving the agent through service discovery, so honouring it matters more
+    // than using native spans.
+    config.lookup = (hostname, options, callback) => callback(null, '127.0.0.1', 4)
+    config.getOrigin = sinon.stub().withArgs('lookup').returns('code')
+    Tracer = loadTracer()
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    assert.strictEqual(tracer._isCiVisibility, false)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.notCalled(NativeSpansInterface)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+  })
+
+  it('stays on native spans when lookup is only the default', () => {
+    // `config.lookup` is always a function - it defaults to `dns.lookup` - so the
+    // guard has to key off where the value came from. It cannot compare against
+    // `dns.lookup` either: the dns plugin wraps that in place, so an identity
+    // check would report "custom" for every default install once instrumentation
+    // is active, silently dropping everyone off the native pipeline.
+    config.lookup = (hostname, options, callback) => callback(null, '127.0.0.1', 4)
+    config.getOrigin = sinon.stub().withArgs('lookup').returns('default')
+    Tracer = loadTracer()
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, false)
+    sinon.assert.calledOnce(NativeSpansInterface)
+  })
+
   it('writes traces to stdout when OTLP is requested in a Lambda with no local agent', () => {
     // useLambdaJsPipeline excludes OTLP, so this path is reached through the
     // missing-libdatadog degrade branch — it must still honour the no-local-agent

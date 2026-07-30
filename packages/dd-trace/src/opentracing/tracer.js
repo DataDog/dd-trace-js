@@ -104,6 +104,28 @@ class DatadogTracer {
       !fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) &&
       !fs.existsSync(DATADOG_MINI_AGENT_PATH)
     const useLambdaLogExporter = useLambdaJsPipeline && lambdaWithoutLocalAgent
+    // A custom DNS `lookup` cannot be honoured on the native path. libdatadog's
+    // shipped transport builds its own `http.request` options and exposes no hook
+    // for them (only `setStorage` and the response-header observer), so the
+    // callback would be silently dropped and every payload would go wherever the
+    // system resolver points. Anyone setting `lookup` is resolving the agent
+    // through custom service discovery, so ignoring it is worse than not using
+    // native spans: run them on the JS pipeline, which threads `lookup` into
+    // every agent request (exporters/agent/writer.js).
+    //
+    // Ask config where the value came from rather than comparing it to
+    // `dns.lookup`: the dns plugin wraps `dns.lookup` in-place, so an identity
+    // check reports "custom" for every default install once that instrumentation
+    // is active. A config without `getOrigin` (plain object in tests) is treated
+    // as the default, which keeps the native pipeline.
+    //
+    // CI Visibility and electron pick their own exporters below and neither goes
+    // through the native transport, so they are unaffected by this.
+    const lookupOrigin = typeof config.getOrigin === 'function' ? config.getOrigin('lookup') : 'default'
+    const useCustomLookup = typeof config.lookup === 'function' &&
+      lookupOrigin !== 'default' &&
+      !config.isCiVisibility &&
+      !useElectronExporter
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
       !useElectronExporter &&
@@ -119,14 +141,14 @@ class DatadogTracer {
       otlpStatsExporter = createOtlpSpanStatsExporter(config)
     }
 
-    if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline) {
+    if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline || useCustomLookup) {
       this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
         : useLambdaLogExporter
           ? require('../exporters/log')
-          : useLambdaJsPipeline
+          : useLambdaJsPipeline || useCustomLookup
             ? require('../exporters/agent')
             : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
@@ -139,7 +161,9 @@ class DatadogTracer {
           ? 'AWS Lambda environment detected without a local agent (JS span pipeline, stdout export)'
           : useLambdaJsPipeline
             ? 'AWS Lambda environment detected (JS span pipeline)'
-            : 'CI Visibility mode enabled (JS span pipeline)')
+            : config.isCiVisibility
+              ? 'CI Visibility mode enabled (JS span pipeline)'
+              : 'Custom DNS lookup configured (JS span pipeline)')
     } else {
       if (unsupportedApmExporter) {
         log.warn(
