@@ -141,7 +141,7 @@ class AgentlessConfigurationSource {
     headers['Accept-Encoding'] = 'gzip'
     if (this.#config.apiKey) {
       headers['DD-API-KEY'] = this.#config.apiKey
-      headers['DD-Api-Key-Fingerprint'] = generateApiKeyFingerprint(this.#config.apiKey)
+      headers['DD-API-KEY-FINGERPRINT'] = generateApiKeyFingerprint(this.#config.apiKey)
     }
     if (this.#etag) headers['If-None-Match'] = this.#etag
 

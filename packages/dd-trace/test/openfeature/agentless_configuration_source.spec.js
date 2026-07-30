@@ -150,7 +150,7 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].options.timeout, 2000)
     assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
     assert.strictEqual(
-      requests[0].options.headers['DD-Api-Key-Fingerprint'],
+      requests[0].options.headers['DD-API-KEY-FINGERPRINT'],
       'rijn_i8Jug5ocjALL7JZiV1a8HzXqkwDRKcE7hK9IouPQwio'
     )
     assert.strictEqual(requests[0].options.headers['Accept-Encoding'], 'gzip')
@@ -505,7 +505,7 @@ describe('AgentlessConfigurationSource', () => {
     await flush()
 
     assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-API-KEY'), false)
-    assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-Api-Key-Fingerprint'), false)
+    assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-API-KEY-FINGERPRINT'), false)
     sinon.assert.calledOnceWithExactly(
       log.warn,
       'Feature Flagging agentless endpoint returned HTTP %d; verify endpoint authentication',
