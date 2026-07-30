@@ -64,8 +64,10 @@ function rewrite (content, filename, format) {
   if (!transformer) return content
 
   try {
+    const source = getSourceText(content)
+
     // TODO: pass existing sourcemap as input for remapping
-    const { code, map } = transformer.transform(content, moduleType)
+    const { code, map } = transformer.transform(source, moduleType)
 
     if (!map) return code
 
@@ -77,6 +79,20 @@ function rewrite (content, filename, format) {
   }
 
   return content
+}
+
+/**
+ * Convert the source representations accepted by Node.js loader hooks to text.
+ *
+ * @param {string | ArrayBuffer | ArrayBufferView} source
+ * @returns {string}
+ */
+function getSourceText (source) {
+  if (typeof source === 'string') return source
+  if (ArrayBuffer.isView(source)) {
+    return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8')
+  }
+  return Buffer.from(source).toString('utf8')
 }
 
 function disable (instrumentation) {
