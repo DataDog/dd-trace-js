@@ -169,7 +169,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
 }
 
 /**
- * Keeps non-TIA settings while disabling suite skipping and coverage collection.
+ * Keeps non-TIA settings while disabling suite skipping and per-suite coverage collection.
  *
  * @param {object} libraryConfig
  * @returns {object}
@@ -178,7 +178,6 @@ function disableTestImpactAnalysis (libraryConfig) {
   return Object.freeze({
     ...libraryConfig,
     isCodeCoverageEnabled: false,
-    isCoverageReportUploadEnabled: false,
     isItrEnabled: false,
     isSuitesSkippingEnabled: false,
   })

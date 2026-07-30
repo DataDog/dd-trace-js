@@ -251,7 +251,6 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.libraryConfig, {
       ...libraryConfig,
       isCodeCoverageEnabled: false,
-      isCoverageReportUploadEnabled: false,
       isItrEnabled: false,
       isSuitesSkippingEnabled: false,
     })
