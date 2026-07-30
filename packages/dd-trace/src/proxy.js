@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const NoopProxy = require('./noop/proxy')
 const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
@@ -299,33 +300,16 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config
    */
   #registerMicroVmRunHook (config) {
-    const { channel } = require('dc-polyfill')
     const ch = channel('http.server.request.start')
-    let done = false
-
-    const resetIdentity = () => {
-      if (done) return
-      done = true
-      ch.unsubscribe(onHttpRequest)
-      this.#refreshIdentity(config)
-    }
 
     const onHttpRequest = ({ request }) => {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
-        resetIdentity()
+        ch.unsubscribe(onHttpRequest)
+        channel('datadog:identity:update').publish(config)
       }
     }
 
     ch.subscribe(onHttpRequest)
-  }
-
-  /**
-   * @param {import('./config/config-base')} config
-   */
-  #refreshIdentity (config) {
-    const { channel } = require('dc-polyfill')
-    channel('datadog:identity:update').publish(config)
-    this._tracer.refreshMetadata(config)
   }
 
   /**
