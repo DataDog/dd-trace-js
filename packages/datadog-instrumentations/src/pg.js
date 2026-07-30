@@ -99,8 +99,12 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       poolAcquireStartCh.publish(acquireCtx)
 
       arguments[0] = function (...args) {
+        const client = args[1]
         acquireCtx.error = args[0]
-        acquireCtx.params = args[1]?.connectionParameters
+        // A failed acquire has no client, so keep the parameters `connectForAcquire` snapshotted.
+        if (client !== undefined) {
+          acquireCtx.params = client.connectionParameters
+        }
         finishAcquire(acquireCtx, start)
         return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
       }

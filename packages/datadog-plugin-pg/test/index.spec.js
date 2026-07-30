@@ -904,6 +904,41 @@ describe('Plugin', () => {
           })
         })
 
+        it('records resolved connection tags when a callback connect fails', async () => {
+          await withUnreachablePort(async port => {
+            const failingPool = new pg.Pool({
+              connectionString: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
+              connectionTimeoutMillis: 500,
+            })
+            failingPool.on('error', () => {})
+
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const acquireSpan = findAcquireSpan(traces[0])
+
+              assert.strictEqual(acquireSpan.error, 1)
+              assertObjectContains(acquireSpan, {
+                meta: {
+                  'db.name': 'postgres',
+                  'db.user': 'postgres',
+                  'out.host': '127.0.0.1',
+                },
+                metrics: {
+                  'network.destination.port': port,
+                },
+              })
+            })
+
+            await withPool(failingPool, async () => {
+              const error = await new Promise(resolve => {
+                failingPool.connect(resolve)
+              })
+
+              assert.ok(error, 'expected the callback connect to fail')
+              await tracePromise
+            })
+          })
+        })
+
         it('finishes the acquire span when connecting throws synchronously', async () => {
           const throwingPool = new pg.Pool({ connectionString: 'postgres://[invalid' })
           const parent = tracer.startSpan('sync-throw-parent')
