@@ -1,30 +1,11 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getSizeOrZero } = require('../../dd-trace/src/datastreams')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { getKafkaMessageSize } = require('./utils')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
-
-/**
- * A Kafka header value array becomes one wire record per element, so the key
- * bytes repeat with it.
- *
- * @param {{ key?: unknown, value?: unknown,
- *   headers?: Record<string, string | Buffer | Array<string | Buffer>> }} message
- */
-function getKafkaMessageSize (message) {
-  const { key, value, headers } = message
-  let size = getSizeOrZero(key) + getSizeOrZero(value)
-  if (headers === undefined) return size
-
-  for (const headerKey of Object.keys(headers)) {
-    const headerValue = headers[headerKey]
-    const keySize = Buffer.byteLength(headerKey, 'utf8')
-    size += (Array.isArray(headerValue) ? keySize * headerValue.length : keySize) + getSizeOrZero(headerValue)
-  }
-  return size
-}
 
 class KafkajsProducerPlugin extends ProducerPlugin {
   static id = 'kafkajs'
