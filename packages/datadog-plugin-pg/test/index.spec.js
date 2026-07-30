@@ -25,6 +25,97 @@ if (process.env.PG_TEST_NATIVE === 'true') {
   clients['pg.native'] = pg => pg.native.Client
 }
 
+const POSTGRES_TARGET = {
+  host: '127.0.0.1',
+  user: 'postgres',
+  password: 'postgres',
+  database: 'postgres',
+  application_name: 'test',
+}
+
+/**
+ * @param {Record<string, string | number>} [overrides]
+ */
+function poolOptions (overrides) {
+  return { ...POSTGRES_TARGET, max: 1, ...overrides }
+}
+
+/**
+ * @param {number} start
+ * @param {(advanceTo: (value: number) => void) => Promise<unknown>} run
+ */
+async function withFakeNow (start, run) {
+  const nowStub = sinon.stub(performance, 'now').returns(start)
+
+  try {
+    await run(value => nowStub.returns(value))
+  } finally {
+    nowStub.restore()
+  }
+}
+
+/**
+ * Serve a port that accepts the TCP connection and destroys it, so pg fails after connecting.
+ *
+ * @param {(port: number) => Promise<unknown>} run
+ */
+async function withUnreachablePort (run) {
+  const probe = net.createServer(socket => socket.destroy())
+  probe.listen(0, '127.0.0.1')
+  await once(probe, 'listening')
+
+  try {
+    await run(probe.address().port)
+  } finally {
+    const closed = once(probe, 'close')
+    probe.close()
+    await closed
+  }
+}
+
+/**
+ * @param {{ end: () => Promise<unknown> }} pool
+ * @param {(pool: object) => Promise<unknown>} run
+ */
+async function withPool (pool, run) {
+  try {
+    await run(pool)
+  } finally {
+    await pool.end()
+  }
+}
+
+/**
+ * @param {Array<{ name: string }>} spans
+ */
+function findAcquireSpan (spans) {
+  const span = spans.find(candidate => candidate.name.endsWith('.pool.acquire'))
+  assert.ok(span, `missing acquire span: ${inspect(spans.map(candidate => candidate.name))}`)
+  return span
+}
+
+/**
+ * The body owns `release` on success so a test can time it; a throwing body releases with the error.
+ *
+ * @param {{ connect: Function }} pool
+ * @param {(client: object, release: (error?: unknown) => void) => unknown} run
+ */
+function acquireWithCallback (pool, run) {
+  return new Promise((resolve, reject) => {
+    pool.connect((error, client, release) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      Promise.resolve(run(client, release)).then(resolve, failure => {
+        release(failure)
+        reject(failure)
+      })
+    })
+  })
+}
+
 describe('Plugin', () => {
   let pg
   let client
@@ -391,14 +482,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          pool = new pg.Pool({
-            host: '127.0.0.1',
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test',
-            max: 1,
-          })
+          pool = new pg.Pool(poolOptions())
         })
 
         afterEach(() => {
@@ -436,9 +520,7 @@ describe('Plugin', () => {
           })
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
-
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            const acquireSpan = findAcquireSpan(traces[0])
             assertObjectContains(acquireSpan, {
               meta: {
                 'db.name': 'postgres',
@@ -451,14 +533,12 @@ describe('Plugin', () => {
             })
           })
 
-          try {
+          await withPool(connectionStringPool, async () => {
             const client = await connectionStringPool.connect()
             client.release()
 
             await tracePromise
-          } finally {
-            await connectionStringPool.end()
-          }
+          })
         })
 
         it('keeps tracing when an acquire finishes without a matching start', async () => {
@@ -476,9 +556,7 @@ describe('Plugin', () => {
           const ctx = {}
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
-
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            const acquireSpan = findAcquireSpan(traces[0])
             assert.strictEqual(acquireSpan.meta['db.type'], 'postgres')
             assert.strictEqual(acquireSpan.meta['db.name'], undefined)
           })
@@ -551,23 +629,19 @@ describe('Plugin', () => {
         })
 
         it('records the wait of an acquire that opens a new connection', async () => {
-          const nowStub = sinon.stub(performance, 'now').returns(100)
-
           const tracePromise = agent.assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].metrics['db.pool.wait_time_ms'], 50)
           }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
 
-          try {
+          await withFakeNow(100, async advanceTo => {
             const queryPromise = pool.query('SELECT 4 AS pool_wait_probe')
-            nowStub.returns(150)
+            advanceTo(150)
 
             await Promise.all([
               tracePromise,
               queryPromise,
             ])
-          } finally {
-            nowStub.restore()
-          }
+          })
         })
 
         it('reports a zero wait time when an idle pooled client is reused', async () => {
@@ -584,66 +658,55 @@ describe('Plugin', () => {
         it('reports a queued warm-pool wait without charging the first idle handoff', async () => {
           await pool.query('SELECT 1')
 
-          const nowStub = sinon.stub(performance, 'now').returns(100)
           const tracePromise = agent.assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].metrics['db.pool.wait_time_ms'], 50)
           }, { spanResourceMatch: /^SELECT 9 AS queued_probe$/ })
 
-          try {
+          await withFakeNow(100, async advanceTo => {
             const idleQuery = pool.query('SELECT 8 AS idle_taker')
             const queuedQuery = pool.query('SELECT 9 AS queued_probe')
-            nowStub.returns(150)
+            advanceTo(150)
 
             await Promise.all([
               tracePromise,
               idleQuery,
               queuedQuery,
             ])
-          } finally {
-            nowStub.restore()
-          }
+          })
         })
 
         it('keeps a concurrent acquire on another pool independent', async () => {
-          const otherPool = new pg.Pool({
-            host: '127.0.0.1',
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test',
-            max: 1,
-          })
+          const otherPool = new pg.Pool(poolOptions())
 
           let starvedWaitTime
           let idleWaitTime
           let heldClient
           let released = false
-          let nowStub
 
           try {
             await otherPool.query('SELECT 1')
             heldClient = await pool.connect()
-            nowStub = sinon.stub(performance, 'now').returns(100)
 
-            const starvedTrace = agent.assertSomeTraces(traces => {
-              starvedWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
-            }, { spanResourceMatch: /^SELECT 5 AS starved_probe$/ })
-            const idleTrace = agent.assertSomeTraces(traces => {
-              idleWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
-            }, { spanResourceMatch: /^SELECT 6 AS other_pool_probe$/ })
-            const starvedQuery = pool.query('SELECT 5 AS starved_probe')
-            const idleQuery = otherPool.query('SELECT 6 AS other_pool_probe')
+            await withFakeNow(100, async advanceTo => {
+              const starvedTrace = agent.assertSomeTraces(traces => {
+                starvedWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+              }, { spanResourceMatch: /^SELECT 5 AS starved_probe$/ })
+              const idleTrace = agent.assertSomeTraces(traces => {
+                idleWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+              }, { spanResourceMatch: /^SELECT 6 AS other_pool_probe$/ })
+              const starvedQuery = pool.query('SELECT 5 AS starved_probe')
+              const idleQuery = otherPool.query('SELECT 6 AS other_pool_probe')
 
-            nowStub.returns(150)
-            heldClient.release()
-            released = true
+              advanceTo(150)
+              heldClient.release()
+              released = true
 
-            await Promise.all([starvedTrace, idleTrace, starvedQuery, idleQuery])
+              await Promise.all([starvedTrace, idleTrace, starvedQuery, idleQuery])
+            })
           } finally {
             if (heldClient !== undefined && !released) {
               heldClient.release()
             }
-            nowStub?.restore()
             await otherPool.end()
           }
 
@@ -652,13 +715,7 @@ describe('Plugin', () => {
         })
 
         it('reports an explicit acquire on its own span and leaves every query span untagged', async () => {
-          const standalone = new pg.Client({
-            host: '127.0.0.1',
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test',
-          })
+          const standalone = new pg.Client(POSTGRES_TARGET)
 
           await standalone.connect()
 
@@ -682,29 +739,14 @@ describe('Plugin', () => {
           })
 
           try {
-            const operation = new Promise((resolve, reject) => {
-              tracer.scope().activate(parent, () => {
-                pool.connect(async (error, client, release) => {
-                  if (error) {
-                    parent.finish()
-                    reject(error)
-                    return
-                  }
-
-                  try {
-                    await Promise.all([
-                      standalone.query('SELECT 10 AS unrelated_probe'),
-                      client.query('SELECT 11 AS acquired_probe'),
-                    ])
-                    release()
-                    parent.finish()
-                    resolve()
-                  } catch (error) {
-                    release(error)
-                    parent.finish()
-                    reject(error)
-                  }
-                })
+            const operation = tracer.scope().activate(parent, () => {
+              return acquireWithCallback(pool, async (client, release) => {
+                await Promise.all([
+                  standalone.query('SELECT 10 AS unrelated_probe'),
+                  client.query('SELECT 11 AS acquired_probe'),
+                ])
+                release()
+                parent.finish()
               })
             })
 
@@ -716,7 +758,6 @@ describe('Plugin', () => {
 
         it('gives an acquire nested in a release its own wait', async () => {
           const parent = tracer.startSpan('nested-acquire-parent')
-          const nowStub = sinon.stub(performance, 'now').returns(100)
 
           const tracePromise = agent.assertSomeTraces(traces => {
             const waits = traces[0]
@@ -726,73 +767,41 @@ describe('Plugin', () => {
             assert.deepStrictEqual(waits, [10, 10])
           })
 
-          try {
-            const operation = new Promise((resolve, reject) => {
-              tracer.scope().activate(parent, () => {
-                pool.connect((error, client, release) => {
-                  if (error) {
-                    reject(error)
-                    return
-                  }
-
-                  pool.connect((nestedError, nestedClient, nestedRelease) => {
-                    if (nestedError) {
-                      reject(nestedError)
-                      return
-                    }
-
-                    nestedClient.query('SELECT 12 AS nested_probe', queryError => {
-                      nestedRelease()
-                      parent.finish()
-
-                      if (queryError) {
-                        reject(queryError)
-                      } else {
-                        resolve()
-                      }
-                    })
-                  })
-
-                  nowStub.returns(120)
-                  release()
+          await withFakeNow(100, async advanceTo => {
+            const operation = tracer.scope().activate(parent, () => {
+              return acquireWithCallback(pool, (client, release) => {
+                const nested = acquireWithCallback(pool, async (nestedClient, nestedRelease) => {
+                  await nestedClient.query('SELECT 12 AS nested_probe')
+                  nestedRelease()
+                  parent.finish()
                 })
+
+                advanceTo(120)
+                release()
+
+                return nested
               })
             })
 
-            nowStub.returns(110)
+            advanceTo(110)
 
             await Promise.all([tracePromise, operation])
-          } finally {
-            nowStub.restore()
-          }
+          })
         })
 
         it('does not throw when the pool fails to acquire a connection', async () => {
-          const probe = net.createServer(socket => socket.destroy())
-          probe.listen(0, '127.0.0.1')
-          await once(probe, 'listening')
+          await withUnreachablePort(async port => {
+            const failingPool = new pg.Pool(poolOptions({ port, connectionTimeoutMillis: 500 }))
+            failingPool.on('error', () => {})
 
-          const { port } = probe.address()
-          const failingPool = new pg.Pool({
-            host: '127.0.0.1',
-            port,
-            user: 'postgres',
-            database: 'postgres',
-            connectionTimeoutMillis: 500,
-          })
-          failingPool.on('error', () => {})
+            await withPool(failingPool, async () => {
+              const error = await new Promise(resolve => {
+                failingPool.query('SELECT 1', resolve)
+              })
 
-          try {
-            const error = await new Promise(resolve => {
-              failingPool.query('SELECT 1', resolve)
+              assert.ok(error, 'expected the pool connection to fail')
             })
-
-            assert.ok(error, 'expected the pool connection to fail')
-          } finally {
-            const closePromise = once(probe, 'close')
-            probe.close()
-            await Promise.all([failingPool.end(), closePromise])
-          }
+          })
         })
 
         it('creates a dedicated acquire span for an explicit promise pool.connect()', async () => {
@@ -825,7 +834,6 @@ describe('Plugin', () => {
         it('keeps the acquire wait when an async callback defers its query', async () => {
           const blocker = await pool.connect()
           const parent = tracer.startSpan('acquire-callback-parent')
-          const nowStub = sinon.stub(performance, 'now').returns(100)
           let blockerReleased = false
 
           const tracePromise = agent.assertSomeTraces(traces => {
@@ -841,82 +849,59 @@ describe('Plugin', () => {
           })
 
           try {
-            const operation = new Promise((resolve, reject) => {
-              tracer.scope().activate(parent, () => {
-                pool.connect(async (error, client, release) => {
-                  if (error) {
-                    parent.finish()
-                    reject(error)
-                    return
-                  }
-
-                  try {
-                    await new Promise(resolve => setImmediate(resolve))
-                    await client.query('SELECT 14 AS deferred_probe')
-                    release()
-                    parent.finish()
-                    resolve()
-                  } catch (error) {
-                    release(error)
-                    parent.finish()
-                    reject(error)
-                  }
+            await withFakeNow(100, async advanceTo => {
+              const operation = tracer.scope().activate(parent, () => {
+                return acquireWithCallback(pool, async (client, release) => {
+                  await new Promise(resolve => setImmediate(resolve))
+                  await client.query('SELECT 14 AS deferred_probe')
+                  release()
+                  parent.finish()
                 })
               })
+
+              advanceTo(150)
+              blocker.release()
+              blockerReleased = true
+
+              await Promise.all([tracePromise, operation])
             })
-
-            nowStub.returns(150)
-            blocker.release()
-            blockerReleased = true
-
-            await Promise.all([tracePromise, operation])
           } finally {
             if (!blockerReleased) {
               blocker.release()
             }
-            nowStub.restore()
           }
         })
 
         it('records an error on the acquire span when an explicit connect fails', async () => {
-          const probe = net.createServer(socket => socket.destroy())
-          probe.listen(0, '127.0.0.1')
-          await once(probe, 'listening')
-          const { port } = probe.address()
+          await withUnreachablePort(async port => {
+            const failingPool = new pg.Pool({
+              connectionString: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
+              connectionTimeoutMillis: 500,
+            })
+            failingPool.on('error', () => {})
 
-          const failingPool = new pg.Pool({
-            connectionString: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
-            connectionTimeoutMillis: 500,
-          })
-          failingPool.on('error', () => {})
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const acquireSpan = findAcquireSpan(traces[0])
+              assert.strictEqual(acquireSpan.error, 1)
+              assertObjectContains(acquireSpan, {
+                meta: {
+                  'db.name': 'postgres',
+                  'db.user': 'postgres',
+                  'out.host': '127.0.0.1',
+                },
+                metrics: {
+                  'network.destination.port': port,
+                },
+              })
+            })
 
-          const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
-
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
-            assert.strictEqual(acquireSpan.error, 1)
-            assertObjectContains(acquireSpan, {
-              meta: {
-                'db.name': 'postgres',
-                'db.user': 'postgres',
-                'out.host': '127.0.0.1',
-              },
-              metrics: {
-                'network.destination.port': port,
-              },
+            await withPool(failingPool, async () => {
+              await Promise.all([
+                assert.rejects(failingPool.connect()),
+                tracePromise,
+              ])
             })
           })
-
-          try {
-            await Promise.all([
-              assert.rejects(failingPool.connect()),
-              tracePromise,
-            ])
-          } finally {
-            const closePromise = once(probe, 'close')
-            probe.close()
-            await Promise.all([failingPool.end(), closePromise])
-          }
         })
 
         it('finishes the acquire span when connecting throws synchronously', async () => {
@@ -924,9 +909,7 @@ describe('Plugin', () => {
           const parent = tracer.startSpan('sync-throw-parent')
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
-
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            const acquireSpan = findAcquireSpan(traces[0])
             assert.strictEqual(acquireSpan.error, 1)
           })
 
@@ -1067,17 +1050,16 @@ describe('Plugin', () => {
           const parent = tracer.startSpan('pool-service-parent')
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+            const acquireSpan = findAcquireSpan(traces[0])
             const querySpan = traces[0].find(span => span.resource === 'SELECT 16 AS service_probe')
 
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
             assert.strictEqual(acquireSpan.service, '127.0.0.1-postgres')
             assert.strictEqual(acquireSpan.meta['_dd.svc_src'], 'opt.plugin')
             assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
             assert.strictEqual(querySpan.service, acquireSpan.service)
           })
 
-          try {
+          await withPool(connectionStringPool, async () => {
             await Promise.all([
               tracePromise,
               tracer.scope().activate(parent, async () => {
@@ -1091,9 +1073,7 @@ describe('Plugin', () => {
                 }
               }),
             ])
-          } finally {
-            await connectionStringPool.end()
-          }
+          })
         })
 
         it('keeps the schema fallback when a pool callback returns no name', async () => {
@@ -1107,10 +1087,9 @@ describe('Plugin', () => {
           const parent = tracer.startSpan('no-service-parent')
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
+            const acquireSpan = findAcquireSpan(traces[0])
             const querySpan = traces[0].find(span => span.resource === 'SELECT 17 AS fallback_probe')
 
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
             assert.strictEqual(acquireSpan.service, 'test-postgres')
             assert.strictEqual(acquireSpan.meta['_dd.svc_src'], 'postgres')
 
@@ -1119,7 +1098,7 @@ describe('Plugin', () => {
             assert.strictEqual(querySpan.meta['_dd.svc_src'], acquireSpan.meta['_dd.svc_src'])
           })
 
-          try {
+          await withPool(connectionStringPool, async () => {
             await Promise.all([
               tracePromise,
               tracer.scope().activate(parent, async () => {
@@ -1133,9 +1112,7 @@ describe('Plugin', () => {
                 }
               }),
             ])
-          } finally {
-            await connectionStringPool.end()
-          }
+          })
         })
 
         it('clears the service source when a pool callback resolves to the tracer service', async () => {
@@ -1148,14 +1125,12 @@ describe('Plugin', () => {
           })
 
           const tracePromise = agent.assertSomeTraces(traces => {
-            const acquireSpan = traces[0].find(span => span.name.endsWith('.pool.acquire'))
-
-            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            const acquireSpan = findAcquireSpan(traces[0])
             assert.strictEqual(acquireSpan.service, 'test')
             assert.ok(!Object.hasOwn(acquireSpan.meta, '_dd.svc_src'))
           })
 
-          try {
+          await withPool(connectionStringPool, async () => {
             await Promise.all([
               tracePromise,
               (async () => {
@@ -1163,9 +1138,7 @@ describe('Plugin', () => {
                 poolClient.release()
               })(),
             ])
-          } finally {
-            await connectionStringPool.end()
-          }
+          })
         })
 
         withNamingSchema(
