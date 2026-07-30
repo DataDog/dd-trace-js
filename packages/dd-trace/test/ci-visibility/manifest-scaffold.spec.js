@@ -66,6 +66,35 @@ describe('test optimization validation manifest scaffold', () => {
     })
   }
 
+  it('scopes a supported detected-only framework to its owning workspace package', () => {
+    const fixture = createRepositoryFixture({ framework: 'vitest' })
+    const packageJson = path.join(fixture.root, 'packages', 'app', 'package.json')
+    const configFile = path.join(fixture.root, 'packages', 'app', 'vitest.config.js')
+    const testFile = path.join(fixture.root, 'packages', 'app', 'test', 'nested.test.js')
+    const rootPackageJson = JSON.parse(fs.readFileSync(path.join(fixture.root, 'package.json')))
+    rootPackageJson.devDependencies = {}
+    rootPackageJson.scripts = {}
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(path.join(fixture.root, 'package.json'), `${JSON.stringify(rootPackageJson)}\n`)
+    fs.writeFileSync(packageJson, '{"name":"nested-vitest-app"}\n')
+    fs.writeFileSync(configFile, 'module.exports = {}\n')
+    fs.writeFileSync(testFile, "import { test } from 'vitest'\ntest('nested', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.project.root, path.dirname(packageJson))
+      assert.strictEqual(framework.project.packageJson, packageJson)
+      assert.strictEqual(framework.validation.testFile, testFile)
+      assert.notStrictEqual(framework.validation.testFile, fixture.testFile)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('finds a real Cucumber feature instead of a lint script mentioning cucumber.js', () => {
     const fixture = createRepositoryFixture({
       framework: 'cucumber',
@@ -224,6 +253,33 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.browserRequired, false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('marks an explicitly retained Cucumber browser hook as browser-required', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --require test/browser-hooks.js features/example.feature',
+    })
+    const supportFile = path.join(fixture.root, 'test', 'browser-hooks.js')
+    fs.mkdirSync(path.dirname(supportFile), { recursive: true })
+    fs.writeFileSync(supportFile, [
+      "const { chromium } = require('playwright')",
+      'module.exports = () => chromium.launch()',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.browserRequired, true)
+      assert.ok(framework.project.configFiles.includes(supportFile))
+      assert.strictEqual(framework.validation.timeoutMs, 300_000)
     } finally {
       removeFixture(fixture.root)
     }
@@ -533,6 +589,28 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('rejects non-English Cucumber generation expanded from a profile', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    })
+    fs.writeFileSync(path.join(fixture.root, 'cucumber.json'), `${JSON.stringify({
+      default: { language: 'fr' },
+    })}\n`)
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join('\n'), /--language fr is not supported/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('retains Jest configuration from a JavaScript runner entrypoint', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',
@@ -833,6 +911,39 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('ignores Vitest project names inside comments and strings', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      "      test: { name: 'other', include: ['test/**/*.test.js'] },",
+      "      description: \"name: 'fastly'\",",
+      "      // name: 'fastly',",
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
       assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
       assert.strictEqual(framework.validation, undefined)
     } finally {

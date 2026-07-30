@@ -128,17 +128,6 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
     }
   }
   const omittedOptions = getOmittedRunnerOptions(framework, invocation)
-  if (framework === 'cucumber') {
-    const language = getOptionValue(invocation, '--language')
-    if (language && language !== 'en') {
-      return {
-        environment: {},
-        error: `--language ${language} is not supported by the validator-generated English scenarios`,
-        inputFiles: [],
-        runnerArgs: [],
-      }
-    }
-  }
 
   const environment = getRunnerEnvironment(invocation, platform)
   const environmentError = getRunnerEnvironmentError(environment, platform)
@@ -344,11 +333,10 @@ function getOmittedRunnerOptions (framework, invocation) {
     .map(token => token.split('=', 1)[0]))]
 }
 
-function getOptionValue (invocation, expected) {
-  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].split('=', 1)[0] !== expected) continue
-    return tokens[index].includes('=') ? tokens[index].slice(tokens[index].indexOf('=') + 1) : tokens[index + 1]
+function getArgumentOptionValue (args, expected) {
+  for (let index = 0; index < args.length; index++) {
+    if (args[index].split('=', 1)[0] !== expected) continue
+    return args[index].includes('=') ? args[index].slice(args[index].indexOf('=') + 1) : args[index + 1]
   }
 }
 
@@ -409,6 +397,13 @@ function getRunnerArgsError (framework, args) {
     const value = args[++index]
     if (typeof value !== 'string' || !value || value.startsWith('-') || CONTROL_PATTERN.test(value)) {
       return `contain a missing or unsafe value for ${option}`
+    }
+  }
+
+  if (framework === 'cucumber') {
+    const language = getArgumentOptionValue(args, '--language')
+    if (language && language !== 'en') {
+      return `--language ${language} is not supported by the validator-generated English scenarios`
     }
   }
 }

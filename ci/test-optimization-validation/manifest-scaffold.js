@@ -158,7 +158,15 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
  */
 function buildFramework (repositoryRoot, detection, ciDiscovery) {
   const framework = detection.id
-  const packageJson = getDetectionPackageJson(repositoryRoot, detection.commandLocation)
+  const packageJson = getFrameworkPackageJson(repositoryRoot, detection)
+  if (!packageJson) {
+    return buildDetectedOnlyFramework(
+      repositoryRoot,
+      detection,
+      ciDiscovery,
+      `The package that owns ${detection.name} could not be identified from the bounded detection evidence.`
+    )
+  }
   const projectRoot = path.dirname(packageJson.path)
   const base = getFrameworkBase({
     ciDiscovery,
@@ -350,7 +358,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     : 'The validator uses the installed runner with repository-contained configuration files; the unresolved ' +
       'package wrapper is not executed.'
   const cucumberBrowserRequired = framework === 'cucumber' &&
-    hasCucumberBrowserSupport(candidateFiles, representativeRoot)
+    hasCucumberBrowserSupport(candidateFiles, runnerContract.inputFiles, representativeRoot)
   const browserRequired = framework === 'cypress' ||
     framework === 'playwright' ||
     cucumberBrowserRequired ||
@@ -445,10 +453,11 @@ function getImplicitConfigFiles (framework, projectRoot, repositoryRoot) {
  * @param {string} repositoryRoot repository root
  * @param {object} detection supported framework detection
  * @param {object} ciDiscovery bounded CI discovery result
+ * @param {string} [blockerNote] precise reason live validation is unavailable
  * @returns {object} framework manifest entry
  */
-function buildDetectedOnlyFramework (repositoryRoot, detection, ciDiscovery) {
-  const packageJson = getDetectionPackageJson(repositoryRoot, detection.locations?.[0])
+function buildDetectedOnlyFramework (repositoryRoot, detection, ciDiscovery, blockerNote) {
+  const packageJson = getDetectionPackageJson(repositoryRoot, getDetectionPackageLocation(detection))
   const projectRoot = path.dirname(packageJson.path)
   const version = detection.supportedVersion?.version ||
     detection.versionDetections?.[0]?.version ||
@@ -469,13 +478,13 @@ function buildDetectedOnlyFramework (repositoryRoot, detection, ciDiscovery) {
       : BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
     status: 'detected_not_runnable',
     notes: [
-      unsupportedVersion
+      blockerNote || (unsupportedVersion
         ? `${detection.name} ${unsupportedVersion} was detected, but live validation requires ` +
           `${detection.supportedRange}. Upgrade ${detection.name} through the project's normal dependency workflow ` +
           'before creating a fresh validation plan.'
         : detection.supportedVersion
           ? `A supported ${detection.name} installation was detected, but no project-local validation target was found.`
-          : `${detection.name} was detected, but no supported installed version was confirmed.`,
+          : `${detection.name} was detected, but no supported installed version was confirmed.`),
     ],
   }
 }
@@ -682,13 +691,15 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName) 
  * Reports whether bounded Cucumber support code visibly imports a browser driver.
  *
  * @param {string[]} files bounded project files
+ * @param {string[]} retainedInputs approval-bound runner input files
  * @param {string} projectRoot selected project root
  * @returns {boolean} whether Cucumber may launch a project browser
  */
-function hasCucumberBrowserSupport (files, projectRoot) {
-  for (const filename of files) {
+function hasCucumberBrowserSupport (files, retainedInputs, projectRoot) {
+  const retained = new Set(retainedInputs)
+  for (const filename of new Set([...files, ...retained])) {
     const relative = path.relative(projectRoot, filename).replaceAll('\\', '/')
-    if (!CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN.test(relative)) continue
+    if (!retained.has(filename) && !CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN.test(relative)) continue
     const source = readText(filename)
     if (source !== undefined && CUCUMBER_BROWSER_DRIVER_PATTERN.test(source)) return true
   }
@@ -1080,6 +1091,60 @@ function getDetectionPackageJson (repositoryRoot, location) {
     json: readJson(path.join(repositoryRoot, 'package.json')) || {},
     path: path.join(repositoryRoot, 'package.json'),
   }
+}
+
+/**
+ * Finds the exact package manifest that owns a live-validation target.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} detection framework detection
+ * @returns {{json: object, path: string}|undefined} package metadata
+ */
+function getFrameworkPackageJson (repositoryRoot, detection) {
+  const preciseLocation = detection.commandLocation ||
+    detection.supportedVersion?.relativePath ||
+    detection.eligibleCommand?.relativePath ||
+    detection.versionLocation
+  if (preciseLocation) return findOwningPackageJson(repositoryRoot, preciseLocation)
+
+  const owners = new Map()
+  for (const location of detection.locations || []) {
+    const owner = findOwningPackageJson(repositoryRoot, location)
+    if (owner) owners.set(owner.path, owner)
+  }
+  if (owners.size === 1) return [...owners.values()][0]
+}
+
+function findOwningPackageJson (repositoryRoot, location) {
+  let candidate = path.resolve(repositoryRoot, location)
+  if (!isPathInside(repositoryRoot, candidate)) return
+  try {
+    if (!fs.statSync(candidate).isDirectory()) candidate = path.dirname(candidate)
+  } catch {
+    candidate = path.dirname(candidate)
+  }
+
+  while (isPathInside(repositoryRoot, candidate)) {
+    const packageJson = path.join(candidate, 'package.json')
+    const json = readJson(packageJson)
+    if (json) return { json, path: packageJson }
+    if (candidate === repositoryRoot) return
+    candidate = path.dirname(candidate)
+  }
+}
+
+/**
+ * Gets the most precise serialized package location available for a detection.
+ *
+ * @param {object} detection framework detection
+ * @returns {string|undefined} detected package manifest path
+ */
+function getDetectionPackageLocation (detection) {
+  return detection.commandLocation ||
+    detection.supportedVersion?.relativePath ||
+    detection.eligibleCommand?.relativePath ||
+    detection.versionLocation ||
+    detection.locations?.[0]
 }
 
 /**

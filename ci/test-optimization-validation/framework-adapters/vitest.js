@@ -6,7 +6,6 @@ const path = require('node:path')
 const { matchesLiteralGlob } = require('../literal-glob')
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
-const PROJECT_NAME_PATTERN = /\bname\s*:\s*(["'])([^"'\\]+)\1/g
 const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
 
 /**
@@ -35,9 +34,9 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
   for (const configFile of selectedConfigs.files) {
     const source = readText(configFile)
     if (source === undefined) continue
-    for (const match of source.matchAll(PROJECT_NAME_PATTERN)) {
-      if (match[2] !== name) continue
-      const projectObject = getProjectObject(source, match.index)
+    for (const property of getLiteralStringProperties(source, 'name')) {
+      if (property.value !== name) continue
+      const projectObject = getProjectObject(source, property.index)
       if (!projectObject) continue
       const binding = getBindingFromObject({
         configFile,
@@ -169,6 +168,67 @@ function getObjectRanges (source) {
     }
   }
   return ranges
+}
+
+function getLiteralStringProperties (source, property) {
+  const properties = []
+  let quote
+  let lineComment = false
+  let blockComment = false
+  let previousCodeCharacter
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index]
+    const next = source[index + 1]
+    if (lineComment) {
+      if (character === '\n') lineComment = false
+      continue
+    }
+    if (blockComment) {
+      if (character === '*' && next === '/') {
+        blockComment = false
+        index++
+      }
+      continue
+    }
+    if (quote) {
+      if (character === '\\') index++
+      else if (character === quote) quote = undefined
+      continue
+    }
+    if (character === '/' && next === '/') {
+      lineComment = true
+      index++
+      continue
+    }
+    if (character === '/' && next === '*') {
+      blockComment = true
+      index++
+      continue
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      quote = character
+      continue
+    }
+    if (!source.startsWith(property, index) ||
+      !['{', ','].includes(previousCodeCharacter) ||
+      /[A-Za-z0-9_$]/.test(source[index - 1] || '') ||
+      /[A-Za-z0-9_$]/.test(source[index + property.length] || '')) {
+      if (!/\s/.test(character)) previousCodeCharacter = character
+      continue
+    }
+
+    const match = new RegExp(
+      String.raw`^${property}\s*:\s*(["'])([^"'\\]+)\1`
+    ).exec(source.slice(index))
+    if (!match) {
+      previousCodeCharacter = character
+      continue
+    }
+    properties.push({ index, value: match[2] })
+    previousCodeCharacter = match[0].at(-1)
+    index += match[0].length - 1
+  }
+  return properties
 }
 
 function getLiteralProperty (source, property) {
