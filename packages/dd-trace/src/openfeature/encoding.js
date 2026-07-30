@@ -2,6 +2,9 @@
 
 const crypto = require('node:crypto')
 
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const CLIFFORD_SHA256_BASE62_LENGTH = 43
+
 /**
  * Encode a single value as a ULEB128 varint (variable-length integer).
  * Uses 7 bits per byte, with MSB as continuation flag.
@@ -63,8 +66,28 @@ function hashTargetingKey (targetingKey) {
   return crypto.createHash('sha256').update(targetingKey).digest('hex')
 }
 
+/**
+ * Generate a Clifford v1 fingerprint from an API key.
+ *
+ * @param {string} apiKey - The API key to fingerprint
+ * @returns {string} The rijn-prefixed, base62-encoded SHA256 fingerprint
+ */
+function generateApiKeyFingerprint (apiKey) {
+  const digest = crypto.createHash('sha256').update(apiKey, 'utf8').digest('hex')
+  let value = BigInt(`0x${digest}`)
+  let encoded = ''
+
+  while (value > 0n) {
+    encoded = BASE62_ALPHABET[Number(value % 62n)] + encoded
+    value /= 62n
+  }
+
+  return `rijn_${encoded.padStart(CLIFFORD_SHA256_BASE62_LENGTH, '0')}`
+}
+
 module.exports = {
   encodeVarint,
   encodeDeltaVarint,
+  generateApiKeyFingerprint,
   hashTargetingKey,
 }

@@ -5,7 +5,12 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 
-const { encodeVarint, encodeDeltaVarint, hashTargetingKey } = require('../../src/openfeature/encoding')
+const {
+  encodeVarint,
+  encodeDeltaVarint,
+  generateApiKeyFingerprint,
+  hashTargetingKey,
+} = require('../../src/openfeature/encoding')
 
 describe('encoding', () => {
   describe('encodeVarint()', () => {
@@ -127,5 +132,23 @@ describe('encoding', () => {
       assert.strictEqual(hash.length, 64)
       assert.match(hash, /^[0-9a-f]{64}$/)
     })
+  })
+
+  describe('generateApiKeyFingerprint()', () => {
+    const vectors = [
+      ['', 'rijn_RZwTDmWjELXeEmMEb0eIIegKayGGUPNsuJweEPhlXi5'],
+      ['7b58e278012eec8316224b052d87e6e8b2ba9e49', 'rijn_SddeOoHbx2gFQTblESRn88xKs2B9zEA9ii1CclRfD6s'],
+      ['!@#$%^𐍈한€हИ£', 'rijn_eFLHeyLxwaiNs2hY16pjkjNjVSHWRgf2rlveKc8YA1K'],
+      ['padding-171', 'rijn_053ybBRXypQt9AC6UIlqH1YCFYSV1rQl8HCDIcBZs3D'],
+    ]
+
+    for (const [apiKey, expected] of vectors) {
+      it(`matches the Clifford v1 vector for ${JSON.stringify(apiKey)}`, () => {
+        const fingerprint = generateApiKeyFingerprint(apiKey)
+
+        assert.strictEqual(fingerprint, expected)
+        assert.strictEqual(fingerprint.length, 48)
+      })
+    }
   })
 })

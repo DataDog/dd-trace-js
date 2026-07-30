@@ -7,6 +7,7 @@ const { setTimeout: sleep } = require('node:timers/promises')
 const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
+const { generateApiKeyFingerprint } = require('./encoding')
 
 const MAX_ATTEMPTS = 3
 const FIRST_RETRY_MIN_MS = 2000
@@ -138,7 +139,10 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
-    if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
+    if (this.#config.apiKey) {
+      headers['DD-API-KEY'] = this.#config.apiKey
+      headers['DD-Api-Key-Fingerprint'] = generateApiKeyFingerprint(this.#config.apiKey)
+    }
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
     /**
