@@ -9,5 +9,4 @@ Assume tracer, instrumentation, propagation, span, and request paths are hot unl
 - Check whether a new abstraction adds work at every call site.
 - Require a reproducible microbenchmark when the change claims a performance trade-off.
 
-State the call path and cost mechanism. If runtime behavior decides the cost, ask for a benchmark or profile instead
-of declaring a regression.
+State the call path and cost mechanism. If runtime behavior decides the cost, ask for a benchmark or profile instead of declaring a regression.

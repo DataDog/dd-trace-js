@@ -8,9 +8,6 @@ Check whether the next maintainer can understand and safely change the code:
 - Names, control flow, state ownership, and error behavior should make the contract apparent.
 - Shared invariants should live in one place rather than depend on synchronized edits.
 - Tests should exercise the real production path and pin failures, siblings, boundaries, and observable behavior.
-- Avoid test-only exports, fake prototype instances, or production surfaces added only for tests.
-- Comments should explain constraints the code cannot carry, not narrate the diff.
-- Check cancellation and lifecycle transitions.
+- Treat comments as part of maintainability. Keep them very brief, avoid adding more than the surrounding code has, and never narrate the diff. Zero comments is perfectly okay.
 
-File findings for wrong behavior, concrete ambiguity, hidden coupling, drift risk, or tests that would pass while
-production is broken. Do not turn personal style preferences into findings.
+File findings for wrong behavior, concrete ambiguity, hidden coupling, drift risk, or tests that would pass while production is broken. Do not turn personal style preferences into findings.

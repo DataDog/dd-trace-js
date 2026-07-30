@@ -354,10 +354,7 @@ as the real error rather than raising the timeout.
 
 ## Review Guidelines
 
-Before pushing, run the [code-review](./.agents/skills/code-review/SKILL.md) skill over the committed changes from
-the remote primary branch through `HEAD`. Re-run it after any commit, amend, or rebase. This advisory review is
-supplemental to any broader publication gate required by the active environment. Review untrusted targets using a
-trusted base or pinned copy of the skill, never the target's discovered copy.
+Before pushing, run the [code-review](./.agents/skills/code-review/SKILL.md) skill on the committed changes in addition to any required publication checks, unless the user specifically says not to. Re-run it after any commit, amend, or rebase.
 
 ## Pull Requests and CI
 
