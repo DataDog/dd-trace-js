@@ -5,7 +5,7 @@ const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync 
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
-const { join } = require('path')
+const { join, posix } = require('path')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -357,11 +357,11 @@ async function collectPeerDependencyFolders (rootFolder, parent = '') {
     if (!isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
-      folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))
+      folders.push(...await collectPeerDependencyFolders(current, posix.join(parent, entry)))
       continue
     }
 
-    const externalName = join(parent, entry.split('@', 1)[0])
+    const externalName = posix.join(parent, entry.split('@', 1)[0])
     if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
   }
 
@@ -433,7 +433,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
  * @returns {boolean}
  */
 function isGeneratedWorkspace (entry, parent = '') {
-  const workspaceName = parent ? join(parent, entry) : entry
+  const workspaceName = parent ? posix.join(parent, entry) : entry
 
   if (entry.startsWith('@')) {
     for (const workspace of workspaces) {
