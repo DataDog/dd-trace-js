@@ -7,6 +7,7 @@ const { channel } = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const { getTraceContextCarrier } = require('../src/utils')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
@@ -21,6 +22,26 @@ describe('plugin lifecycle', () => {
     require('../src/tracing')
 
     assert.strictEqual(registeredCh.hasSubscribers, false)
+  })
+
+  it('bounds MCP trace metadata before extraction', () => {
+    const carrier = getTraceContextCarrier({
+      'x-datadog-trace-id': '1',
+      'x-datadog-parent-id': '2',
+      ignored: 'metadata',
+    })
+
+    assert.deepStrictEqual(carrier, {
+      'x-datadog-trace-id': '1',
+      'x-datadog-parent-id': '2',
+    })
+    assert.strictEqual(getTraceContextCarrier({
+      'x-datadog-trace-id': '1'.repeat(33),
+      'x-datadog-parent-id': '2',
+    }), undefined)
+    assert.strictEqual(getTraceContextCarrier({
+      baggage: 'key=value,'.repeat(205),
+    }), undefined)
   })
 })
 
@@ -434,6 +455,65 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
           'trace context should include a supported propagation header'
         )
 
+        return traceAssertion
+      } finally {
+        await distributedClient.close()
+        await distributedServer.close()
+      }
+    })
+
+    it('server tool call request span should ignore an oversized _meta trace context', async () => {
+      const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
+      const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
+      const { Client } = meta.mod
+
+      const distributedServer = new McpServer({ name: 'bounded-server', version: '1.0.0' })
+      distributedServer.registerTool(
+        'bounded-tool',
+        { description: 'A tool with bounded trace metadata', inputSchema: {} },
+        async () => ({ content: [{ type: 'text', text: 'bounded result' }] })
+      )
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await distributedServer.connect(serverTransport)
+
+      const serverOnMessage = serverTransport.onmessage
+      serverTransport.onmessage = (request, extra) => {
+        const params = request.params || {}
+        const traceContext = params._meta?._dd_trace_context || {}
+        const oversizedRequest = {
+          ...request,
+          params: {
+            ...params,
+            _meta: {
+              ...params._meta,
+              _dd_trace_context: {
+                ...traceContext,
+                'x-datadog-trace-id': '1'.repeat(33),
+                'x-datadog-parent-id': '1',
+              },
+            },
+          },
+        }
+        return legacyStorage.run({}, () => serverOnMessage.call(serverTransport, oversizedRequest, extra))
+      }
+
+      const distributedClient = new Client({ name: 'bounded-client', version: '1.0.0' })
+      await distributedClient.connect(clientTransport)
+
+      const spans = []
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        spans.push(...traces.flatMap(trace => trace))
+        const clientSpan = spans.find(span => span.name === 'mcp.request' && span.resource === 'client_tool_call')
+        const serverSpan = spans.find(span => span.name === 'mcp.request' && span.resource === 'server_tool_call')
+
+        assert.ok(clientSpan, 'client tool call span should exist')
+        assert.ok(serverSpan, 'server request span should exist')
+        assert.notStrictEqual(serverSpan.trace_id.toString(), clientSpan.trace_id.toString())
+      })
+
+      try {
+        await distributedClient.callTool({ name: 'bounded-tool', arguments: {} })
         return traceAssertion
       } finally {
         await distributedClient.close()

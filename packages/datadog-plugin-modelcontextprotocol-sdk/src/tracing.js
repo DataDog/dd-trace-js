@@ -5,6 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const {
   DISTRIBUTED_TRACE_META_KEY,
+  getTraceContextCarrier,
   tagErrorResult,
 } = require('./utils')
 
@@ -121,9 +122,10 @@ class McpServerRequestPlugin extends McpPlugin {
   getResource (ctx) { return getServerRequestResource(ctx.request) }
   getChildOf (ctx) {
     const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
-    if (!traceContext || typeof traceContext !== 'object') return
+    const carrier = getTraceContextCarrier(traceContext)
+    if (!carrier) return
 
-    const childOf = this.tracer.extract('text_map', traceContext)
+    const childOf = this.tracer.extract('text_map', carrier)
     const activeSpan = this.activeSpan
     if (!childOf || activeSpan?.context().toTraceId() === childOf.toTraceId()) return
 
