@@ -11,6 +11,7 @@ const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   getMaxEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
@@ -41,6 +42,7 @@ const {
   workerReportTraceCh,
   workerReportCoverageCh,
   workerReportLogsCh,
+  workerReportTelemetryCh,
   codeCoverageReportCh,
   findExportByName,
   getTypeTasks,
@@ -85,6 +87,8 @@ let forcedToRunSuites = {}
 let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let areAllSuitesSkipped = false
+let hasRunnableSuites = false
+let hasSelectedSuites = false
 let itrCorrelationId
 let tiaRepositoryRoot = process.cwd()
 const tinyPoolClassWrappers = new WeakMap()
@@ -241,12 +245,17 @@ function resetSuiteSkippingRunState () {
 }
 
 function resetAppliedSuiteSkippingState () {
-  skippedSuites = []
   unskippableSuites = {}
   forcedToRunSuites = {}
+}
+
+function resetSessionSuiteSkippingState () {
+  skippedSuites = []
   hasUnskippableSuites = false
   hasForcedToRunSuites = false
   areAllSuitesSkipped = false
+  hasRunnableSuites = false
+  hasSelectedSuites = false
 }
 
 /**
@@ -278,6 +287,7 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
 
   resetAppliedSuiteSkippingState()
   const skippableSuiteSet = new Set(skippableSuites.map(testSuite => testSuite.replaceAll('\\', '/')))
+  const currentSkippedSuites = []
   const testSpecificationsToRun = []
 
   for (const testSpecification of testSpecifications) {
@@ -305,6 +315,7 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
 
     if (shouldSkip && !isUnskippable) {
       skippedSuites.push(testSuite)
+      currentSkippedSuites.push(testSuite)
     } else {
       testSpecificationsToRun.push(testSpecification)
     }
@@ -317,11 +328,17 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
     _ddForcedToRunSuites: forcedToRunSuites,
   }, 'Could not send TIA configuration to workers.')
 
-  if (skippedSuites.length) {
-    itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+  if (currentSkippedSuites.length) {
+    itrSkippedSuitesCh.publish({ skippedSuites: currentSkippedSuites, frameworkVersion })
   }
+  if (testSpecifications.length > 0) {
+    hasSelectedSuites = true
+  }
+  if (testSpecificationsToRun.length > 0) {
+    hasRunnableSuites = true
+  }
+  areAllSuitesSkipped = hasSelectedSuites && !hasRunnableSuites
   if (testSpecifications.length > 0 && testSpecificationsToRun.length === 0) {
-    areAllSuitesSkipped = true
     const config = safeConfig(ctx)
     if (config) {
       config.passWithNoTests = true
@@ -1054,6 +1071,7 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
         return oldCliOrStartVitest.apply(this, args)
       }
       isSessionStarted = true
+      resetSessionSuiteSkippingState()
       testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
       return oldCliOrStartVitest.apply(this, args)
     }
@@ -1657,6 +1675,11 @@ function handleWorkerReport (interprocessCode, data) {
 
   if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
     workerReportLogsCh.publish(data)
+    return true
+  }
+
+  if (interprocessCode === VITEST_WORKER_TELEMETRY_PAYLOAD_CODE) {
+    workerReportTelemetryCh.publish(data)
     return true
   }
 

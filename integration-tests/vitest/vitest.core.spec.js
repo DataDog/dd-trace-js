@@ -58,6 +58,8 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
   TEST_CODE_COVERAGE_ENABLED,
   ITR_CORRELATION_ID,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
@@ -65,6 +67,13 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const {
+  TELEMETRY_CODE_COVERAGE_STARTED,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_ITR_UNSKIPPABLE,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+} = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
 
@@ -121,6 +130,7 @@ const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
+    const legacyVitestIt = version === '1.6.0' ? it : it.skip
     const newerVitestIt = version === '1.6.0' ? it.skip : it
     const typecheckIt = version === '1.6.0' ? it.skip : it
 
@@ -1131,16 +1141,42 @@ versions.forEach((version) => {
     context('test impact analysis', () => {
       const firstSuite = 'ci-visibility/vitest-tests/tia-first.mjs'
       const secondSuite = 'ci-visibility/vitest-tests/tia-second.mjs'
+      const settingsUrl = '/api/v2/libraries/tests/services/setting'
+      const skippableUrl = '/api/v2/ci/tests/skippable'
+      const tiaRequestFilter = ({ url }) =>
+        url === '/api/v2/citestcycle' ||
+        url === '/api/v2/citestcov' ||
+        url === settingsUrl ||
+        url === skippableUrl ||
+        url.endsWith('/api/v2/apmtelemetry')
 
-      function runTiaTests (assertPayloads, coverageProvider) {
+      function getTiaSettings (overrides = {}) {
+        return {
+          itr_enabled: true,
+          code_coverage: true,
+          coverage_report_upload_enabled: false,
+          tests_skipping: true,
+          ...overrides,
+        }
+      }
+
+      function runTiaTests (assertPayloads, options = {}) {
+        const {
+          command = './node_modules/.bin/vitest run',
+          coverageProvider,
+          currentWorkingDirectory = cwd,
+          env = {},
+          requestFilter = ({ url }) => url === '/api/v2/citestcycle' || url === '/api/v2/citestcov',
+        } = options
         const coverageArgument = coverageProvider ? ' --coverage' : ''
-        childProcess = exec(`./node_modules/.bin/vitest run${coverageArgument}`, {
-          cwd,
+        childProcess = exec(`${command}${coverageArgument}`, {
+          cwd: currentWorkingDirectory,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/tia-*.mjs',
+            TEST_DIR: 'ci-visibility/vitest-tests/tia-{first,second}.mjs',
             COVERAGE_PROVIDER: coverageProvider,
+            ...env,
           },
         })
 
@@ -1153,7 +1189,7 @@ versions.forEach((version) => {
 
         return receiver.gatherPayloadsUntilChildExit(
           childProcess,
-          ({ url }) => url === '/api/v2/citestcycle' || url === '/api/v2/citestcov',
+          requestFilter,
           assertPayloads,
           { hardTimeout: 60_000 }
         )
@@ -1176,8 +1212,12 @@ versions.forEach((version) => {
           suiteById.get(coverage.test_suite_id),
           coverage.files.map(({ filename }) => filename).sort(),
         ]))
+        const coverageDetails = coverages.map(coverage => ({
+          coverage,
+          suite: suiteById.get(coverage.test_suite_id),
+        }))
 
-        return { events, testSuiteEvents, coverages, coverageBySuite }
+        return { events, testSuiteEvents, coverages, coverageBySuite, coverageDetails }
       }
 
       it('reports covered files per test suite without a user coverage dependency', async () => {
@@ -1187,6 +1227,12 @@ versions.forEach((version) => {
           const testModule = events.find(event => event.type === 'test_module_end').content
 
           assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(coverages.length, 2, testOutput)
+          assert.strictEqual(
+            new Set(coverages.map(coverage => coverage.test_suite_id)).size,
+            2,
+            testOutput
+          )
           assert.deepStrictEqual(
             coverageBySuite.get(firstSuite),
             [firstSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
@@ -1222,7 +1268,7 @@ versions.forEach((version) => {
               coverageBySuite.get(secondSuite),
               ['ci-visibility/vitest-tests/bad-sum.mjs', secondSuite].sort()
             )
-          }, coverageProvider)
+          }, { coverageProvider })
 
           assert.strictEqual(childProcess.exitCode, 0, testOutput)
         })
@@ -1292,6 +1338,593 @@ versions.forEach((version) => {
           assert.strictEqual(testModule.meta[TEST_STATUS], 'skip')
           assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 2)
         })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('does not request skippable suites or report coverage when TIA is disabled', async () => {
+        receiver.setSettings(getTiaSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+        }))
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(payloads.filter(({ url }) => url === settingsUrl).length, 1)
+          assert.strictEqual(payloads.some(({ url }) => url === skippableUrl), false)
+          assert.strictEqual(coverages.length, 0)
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+        }, { requestFilter: tiaRequestFilter })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('skips suites without reporting coverage when coverage is disabled', async () => {
+        receiver.setSettings(getTiaSettings({ code_coverage: false }))
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(payloads.filter(({ url }) => url === skippableUrl).length, 1)
+          assert.strictEqual(coverages.length, 0)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, { requestFilter: tiaRequestFilter })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports coverage without requesting or skipping suites when skipping is disabled', async () => {
+        receiver.setSettings(getTiaSettings({ tests_skipping: false }))
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(payloads.some(({ url }) => url === skippableUrl), false)
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+          assert.strictEqual(coverages.length, 2)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+        }, { requestFilter: tiaRequestFilter })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('forces an unskippable suite to run and reports its TIA tags', async () => {
+        const suitePrefix = 'ci-visibility/vitest-tests/tia-unskippable-'
+        const suiteToRun = `${suitePrefix}to-run.mjs`
+        const suiteToSkip = `${suitePrefix}to-skip.mjs`
+        const unskippableSuite = `${suitePrefix}marked.mjs`
+        receiver.setSuitesToSkip([suiteToSkip, unskippableSuite].map(suite => ({
+          type: 'suite',
+          attributes: { suite },
+        })))
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          const suites = new Map(testSuiteEvents.map(({ content }) => [content.meta[TEST_SUITE], content]))
+
+          assert.strictEqual(testSuiteEvents.length, 3, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+          assert.strictEqual(suites.get(suiteToRun).meta[TEST_STATUS], 'pass')
+          assert.strictEqual(suites.get(suiteToSkip).meta[TEST_STATUS], 'skip')
+          assert.strictEqual(suites.get(suiteToSkip).meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(suites.get(unskippableSuite).meta[TEST_STATUS], 'pass')
+          assert.strictEqual(suites.get(unskippableSuite).meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(suites.get(unskippableSuite).meta[TEST_ITR_FORCED_RUN], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_FORCED_RUN], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_FORCED_RUN], 'true')
+          assert.strictEqual(coverageBySuite.has(suiteToSkip), false)
+          assert.strictEqual(coverageBySuite.has(unskippableSuite), true)
+        }, {
+          env: {
+            TEST_DIR: 'ci-visibility/vitest-tests/tia-unskippable-*.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('marks an unskippable suite without marking it forced when it is not a skip candidate', async () => {
+        const suitePrefix = 'ci-visibility/vitest-tests/tia-unskippable-'
+        const suiteToSkip = `${suitePrefix}to-skip.mjs`
+        const unskippableSuite = `${suitePrefix}marked.mjs`
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: suiteToSkip },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          const suite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === unskippableSuite).content
+
+          assert.strictEqual(suite.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(Object.hasOwn(suite.meta, TEST_ITR_FORCED_RUN), false)
+          assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(Object.hasOwn(testSession.meta, TEST_ITR_FORCED_RUN), false)
+          assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+          assert.strictEqual(Object.hasOwn(testModule.meta, TEST_ITR_FORCED_RUN), false)
+        }, {
+          env: {
+            TEST_DIR: 'ci-visibility/vitest-tests/tia-unskippable-*.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports transformed TypeScript source files without a coverage dependency', async () => {
+        const typeScriptSuite = 'ci-visibility/vitest-tests/tia-typescript.test.ts'
+
+        await runTiaTests((payloads) => {
+          const { testSuiteEvents, coverages, coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.strictEqual(testSuiteEvents.length, 1, testOutput)
+          assert.strictEqual(coverages.length, 1)
+          assert.deepStrictEqual(
+            coverageBySuite.get(typeScriptSuite),
+            [
+              typeScriptSuite,
+              'ci-visibility/vitest-tests/tia-typescript-source.ts',
+            ].sort()
+          )
+        }, {
+          env: {
+            TEST_DIR: typeScriptSuite,
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports repository-relative paths when Vitest runs below the repository root', async () => {
+        const subprojectDirectory = path.join(cwd, 'ci-visibility/vitest-tests/subproject')
+        const subprojectSuite = 'ci-visibility/vitest-tests/subproject/tia-subproject.test.ts'
+
+        await runTiaTests((payloads) => {
+          const { testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.strictEqual(testSuiteEvents.length, 1, testOutput)
+          assert.deepStrictEqual(
+            coverageBySuite.get(subprojectSuite),
+            [
+              subprojectSuite,
+              'ci-visibility/vitest-tests/subproject/tia-subproject-source.ts',
+            ].sort()
+          )
+        }, {
+          command: '../../../node_modules/.bin/vitest run --config ../../../vitest.config.mjs',
+          currentWorkingDirectory: subprojectDirectory,
+          env: {
+            TEST_DIR: './tia-subproject.test.ts',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('normalizes Windows separators in backend skip candidates', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: secondSuite.replaceAll('/', '\\'),
+          },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { testSuiteEvents } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('does not mark the session skipped for a candidate that does not exist', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/tia-does-not-exist.mjs',
+          },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+          assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports per-suite coverage with the threads pool', async () => {
+        await runTiaTests((payloads) => {
+          const { coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.deepStrictEqual(
+            coverageBySuite.get(firstSuite),
+            [firstSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
+          )
+          assert.deepStrictEqual(
+            coverageBySuite.get(secondSuite),
+            ['ci-visibility/vitest-tests/bad-sum.mjs', secondSuite].sort()
+          )
+        }, {
+          env: {
+            POOL_CONFIG: 'threads',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('resets per-suite coverage when suites reuse one worker', async () => {
+        await runTiaTests((payloads) => {
+          const { coverages, coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.strictEqual(coverages.length, 2, testOutput)
+          assert.deepStrictEqual(
+            coverageBySuite.get(firstSuite),
+            [firstSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
+          )
+          assert.deepStrictEqual(
+            coverageBySuite.get(secondSuite),
+            ['ci-visibility/vitest-tests/bad-sum.mjs', secondSuite].sort()
+          )
+        }, {
+          command: './node_modules/.bin/vitest run --maxWorkers=1 --no-file-parallelism',
+          env: {
+            POOL_CONFIG: 'threads',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      newerVitestIt('skips duplicate suite paths independently across projects', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageDetails } = getTiaPayloads(payloads)
+          const firstSuites = testSuiteEvents.filter(({ content }) => content.meta[TEST_SUITE] === firstSuite)
+          const secondSuites = testSuiteEvents.filter(({ content }) => content.meta[TEST_SUITE] === secondSuite)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(testSuiteEvents.length, 4, testOutput)
+          assert.strictEqual(firstSuites.length, 2)
+          assert.strictEqual(secondSuites.length, 2)
+          assert.ok(secondSuites.every(({ content }) => content.meta[TEST_STATUS] === 'skip'))
+          assert.ok(secondSuites.every(({ content }) => content.meta[TEST_SKIPPED_BY_ITR] === 'true'))
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+          assert.strictEqual(coverageDetails.filter(({ suite }) => suite === firstSuite).length, 2)
+          assert.strictEqual(coverageDetails.some(({ suite }) => suite === secondSuite), false)
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+        }, {
+          env: {
+            PROJECT_POOL_CONFIG: 'forks',
+            SECOND_PROJECT_POOL_CONFIG: 'threads',
+            SECOND_PROJECT_TEST_DIR: 'ci-visibility/vitest-tests/tia-{first,second}.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports coverage for a failing suite and fails the session', async () => {
+        const failingSuite = 'ci-visibility/vitest-tests/tia-failing.mjs'
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+          const failedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === failingSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+          assert.deepStrictEqual(
+            coverageBySuite.get(failingSuite),
+            [failingSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
+          )
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'fail')
+        }, {
+          env: {
+            TEST_DIR: 'ci-visibility/vitest-tests/tia-{failing,second}.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 1, testOutput)
+      })
+
+      it('reports mixed skipped and failed suites with the correct counts and status', async () => {
+        const failingSuite = 'ci-visibility/vitest-tests/tia-failing.mjs'
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+          const failedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === failingSuite).content
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+          assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(coverageBySuite.has(failingSuite), true)
+          assert.strictEqual(coverageBySuite.has(secondSuite), false)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, {
+          env: {
+            TEST_DIR: 'ci-visibility/vitest-tests/tia-{failing,second}.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 1, testOutput)
+      })
+
+      for (const coverageProvider of ['v8', 'istanbul']) {
+        it(`preserves aggregate ${coverageProvider} coverage and configured reporters when TIA runs no skips`,
+          async () => {
+            async function runAndGetCoverage (settings) {
+              receiver.setSettings(settings)
+              testOutput = ''
+
+              await runTiaTests(() => {}, { coverageProvider })
+
+              assert.strictEqual(childProcess.exitCode, 0, testOutput)
+              const linePctMatch = testOutput.match(linePctMatchRegex)
+              assert.ok(linePctMatch, testOutput)
+              assert.ok(testOutput.includes('Coverage report from'), testOutput)
+              assert.strictEqual(fs.existsSync(path.join(cwd, 'coverage/lcov.info')), true)
+
+              return Number(linePctMatch[1])
+            }
+
+            const baselineCoverage = await runAndGetCoverage(getTiaSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+            }))
+            const tiaCoverage = await runAndGetCoverage(getTiaSettings({
+              tests_skipping: false,
+            }))
+
+            assert.strictEqual(tiaCoverage, baselineCoverage)
+          })
+      }
+
+      it('applies TIA when a custom sequencer is enabled', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.match(testOutput, new RegExp(CUSTOM_SEQUENCER_MARKER))
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, {
+          env: {
+            CUSTOM_SEQUENCER: '1',
+            CUSTOM_SEQUENCER_MARKER,
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      newerVitestIt('applies TIA after a custom sequencer and sharding are enabled', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.match(testOutput, new RegExp(CUSTOM_SEQUENCER_MARKER))
+          assert.strictEqual(testSuiteEvents.length, 4, testOutput)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, {
+          command: './node_modules/.bin/vitest run --shard=1/2',
+          env: {
+            CUSTOM_SEQUENCER: '1',
+            CUSTOM_SEQUENCER_MARKER,
+            TEST_DIR:
+              'ci-visibility/vitest-tests/tia-{first,second,unskippable-to-run,unskippable-to-skip}.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      legacyVitestIt('applies TIA to the suites selected by a shard', async () => {
+        const suites = [
+          firstSuite,
+          secondSuite,
+          'ci-visibility/vitest-tests/tia-unskippable-to-run.mjs',
+          'ci-visibility/vitest-tests/tia-unskippable-to-skip.mjs',
+        ]
+        receiver.setSuitesToSkip(suites.map(suite => ({
+          type: 'suite',
+          attributes: { suite },
+        })))
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.ok(testSuiteEvents.length > 0, testOutput)
+          assert.ok(testSuiteEvents.every(({ content }) => content.meta[TEST_STATUS] === 'skip'))
+          assert.ok(testSuiteEvents.every(({ content }) => content.meta[TEST_SKIPPED_BY_ITR] === 'true'))
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], testSuiteEvents.length)
+        }, {
+          command: './node_modules/.bin/vitest run --shard=1/2',
+          env: {
+            TEST_DIR:
+              'ci-visibility/vitest-tests/tia-{first,second,unskippable-to-run,unskippable-to-skip}.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      newerVitestIt('keeps TIA skipping and coverage correct across programmatic reruns', async () => {
+        const programmaticFirstSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-first.mjs'
+        const programmaticSecondSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-second.mjs'
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: programmaticFirstSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+          const firstSuiteEvent = testSuiteEvents
+            .find(({ content }) => content.meta[TEST_SUITE] === programmaticFirstSuite).content
+          const secondSuiteEvent = testSuiteEvents
+            .find(({ content }) => content.meta[TEST_SUITE] === programmaticSecondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(firstSuiteEvent.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(firstSuiteEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(secondSuiteEvent.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+          assert.strictEqual(coverageBySuite.has(programmaticFirstSuite), false)
+          assert.deepStrictEqual(
+            coverageBySuite.get(programmaticSecondSuite),
+            [
+              'ci-visibility/vitest-tests/bad-sum.mjs',
+              programmaticSecondSuite,
+            ].sort()
+          )
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, {
+          command: 'node run-programmatic-api-tia-rerun.mjs',
+          currentWorkingDirectory: path.join(cwd, 'ci-visibility/vitest-tests-programmatic-api'),
+          env: {
+            TEST_DIR: './tia-programmatic-*.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('forwards TIA coverage and unskippable telemetry from Vitest workers', async () => {
+        const unskippableSuite = 'ci-visibility/vitest-tests/tia-unskippable-marked.mjs'
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: unskippableSuite },
+        }])
+
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: unskippableSuite,
+          },
+        })
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/apmtelemetry'),
+          (payloads) => {
+            const metricNames = new Set(
+              payloads.flatMap(({ payload }) => payload.payload.series).map(({ metric }) => metric)
+            )
+
+            assert.ok(metricNames.has(TELEMETRY_CODE_COVERAGE_STARTED))
+            assert.ok(metricNames.has(TELEMETRY_CODE_COVERAGE_FINISHED))
+            assert.ok(metricNames.has(TELEMETRY_CODE_COVERAGE_NUM_FILES))
+            assert.ok(metricNames.has(TELEMETRY_ITR_UNSKIPPABLE))
+            assert.ok(metricNames.has(TELEMETRY_ITR_FORCED_TO_RUN))
+          },
+          { hardTimeout: 60_000 }
+        )
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })

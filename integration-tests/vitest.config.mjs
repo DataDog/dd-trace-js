@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
+import { BaseSequencer } from 'vitest/node'
 
 let defineVitestConfig = defineConfig
 
-class CustomSequencer {
+class CustomSequencer extends BaseSequencer {
   async shard (files) {
     return files
   }
@@ -12,7 +13,7 @@ class CustomSequencer {
       // eslint-disable-next-line no-console
       console.log(process.env.CUSTOM_SEQUENCER_MARKER)
     }
-    return files
+    return super.sort(files)
   }
 }
 

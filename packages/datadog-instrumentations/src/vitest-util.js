@@ -30,6 +30,7 @@ const modifiedFilesCh = channel('ci:vitest:modified-files')
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+const workerReportTelemetryCh = channel('ci:vitest:worker-report:telemetry')
 const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 function findExportByName (pkg, name) {
@@ -245,6 +246,7 @@ module.exports = {
   workerReportTraceCh,
   workerReportCoverageCh,
   workerReportLogsCh,
+  workerReportTelemetryCh,
   codeCoverageReportCh,
   findExportByName,
   getTestRunnerExport,

@@ -21,6 +21,7 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
 describe('CI Visibility Test Worker Exporter', () => {
@@ -284,6 +285,18 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(send,
         [VITEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
+      )
+    })
+
+    it('can export telemetry', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      const telemetry = { type: 'ciVisEvent', name: 'code_coverage_started' }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      vitestWorkerExporter.exportTelemetry(telemetry)
+      vitestWorkerExporter.flush()
+      sinon.assert.calledWith(
+        send,
+        [VITEST_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
       )
     })
 
