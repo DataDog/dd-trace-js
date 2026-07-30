@@ -23,7 +23,7 @@ class AgentlessExporter {
    * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
-   * @param {object} [config.tags] - Tags including runtime-id
+   * @param {object} config.tags - Tags including runtime-id
    */
   constructor (config) {
     this.#config = config
@@ -46,7 +46,7 @@ class AgentlessExporter {
       // Read live off `config` (instead of copying the value) so a later change
       // (e.g. a MicroVM clone resume) is picked up by the next `JSON.stringify` in the encoder.
       get env () { return config.env },
-      get runtimeID () { return config.tags?.['runtime-id'] },
+      get runtimeID () { return config.tags['runtime-id'] },
       ...(entityId ? { containerID: entityId } : {}),
     }
 

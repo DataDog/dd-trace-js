@@ -406,10 +406,10 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       events: [],
     }
 
-    if (this.tags?.env) {
+    if (this.tags.env) {
       payload.metadata['*'].env = this.tags.env
     }
-    const runtimeId = this.tags?.['runtime-id']
+    const runtimeId = this.tags['runtime-id']
     if (runtimeId) {
       payload.metadata['*']['runtime-id'] = runtimeId
     }
