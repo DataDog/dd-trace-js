@@ -76,7 +76,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
 }
 
 function resolveTilde (filePath) {
@@ -216,7 +216,7 @@ const githubWellKnownDiagnosticDirPatternsUnix = [
 ]
 const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
 
-const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+const githubJobIDRegex = /"job":\s*\{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
   const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
@@ -650,7 +650,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/g, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }

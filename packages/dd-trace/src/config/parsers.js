@@ -172,7 +172,14 @@ const transformers = {
         return transformers.stripColonWhitespace(item)
       })
     }
-    return value.replaceAll(/\s*:\s*/g, ':')
+    // Only whitespace adjacent to a colon is removed; the outer whitespace of the first and
+    // last segment stays.
+    const parts = value.split(':')
+    for (let i = 0; i < parts.length; i++) {
+      if (i !== 0) parts[i] = parts[i].trimStart()
+      if (i !== parts.length - 1) parts[i] = parts[i].trimEnd()
+    }
+    return parts.join(':')
   },
   /**
    * @param {string} value
