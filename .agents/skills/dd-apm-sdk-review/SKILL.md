@@ -7,9 +7,14 @@ description: |
   conventions, and cross-SDK consistency - then consolidates their findings into
   one report with an explicit push / do-not-push verdict.
 
-  Triggers: "review my changes", "review this diff", "is this ready",
-  "ready to push", "about to push", "before I open a PR", "pre-push review",
-  "dd-apm-sdk-review".
+  Use this only when a push or a non-draft PR is the immediate next action.
+  Triggers: "ready to push", "about to push", "before I open a PR",
+  "pre-push review", "is this ready to push", "dd-apm-sdk-review".
+
+  Do not use for open-ended or single-topic review requests - "review my
+  changes", "review this diff", "take a look at this", "check the perf of
+  this". Those are reviews, not a push gate; answer them directly or use the
+  narrower skill that fits.
 ---
 
 # dd-apm-sdk-review
@@ -17,7 +22,16 @@ description: |
 Multi-perspective review of the changes you are about to push to `dd-trace-js`.
 
 You are the **orchestrator**. You do not review the code yourself. You
-determine what changed, delegate to six reviewers, then consolidate.
+determine what changed, delegate to the reviewers in the roster below, then
+consolidate.
+
+This is a **push gate**, not a general-purpose review. It is deliberately
+expensive - a panel of reviewers over the whole change set - so it earns that
+cost once, when a push or non-draft PR is the immediate next action. If someone
+asks for a review without that intent, or asks about one dimension only, do not
+run this skill: answer directly, or use the narrower skill for that dimension.
+Running it on every review request is the failure mode, and it does not replace
+or pre-empt any other review pass.
 
 ## Step 1 — Determine the change set
 
