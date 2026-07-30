@@ -89,7 +89,7 @@ const BUILD_ARTIFACT_PATTERN =
 const CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN =
   /(?:^|\/)(?:features?|helpers?|step_definitions|steps?|support)(?:\/|$)/i
 const CUCUMBER_BROWSER_DRIVER_PATTERN =
-  /(?:from\s+|require\s*\(\s*)['"](?:@playwright\/test|nightwatch|playwright(?:-core)?|puppeteer(?:-core)?|selenium-webdriver|webdriverio)['"]/
+  /(?:from\s+|(?:import|require)\s*\(\s*)['"](?:@playwright\/test|nightwatch|playwright(?:-core)?|puppeteer(?:-core)?|selenium-webdriver|webdriverio)['"]/
 const CYPRESS_LOCAL_ORIGIN_PATTERN =
   /\bcy\.(?:visit|request)\s*\([\s\S]{0,512}\b(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?=[:/'"`\s}])/i
 
@@ -300,7 +300,8 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     candidateFiles,
     framework,
     representativeRoot,
-    representativePackage.name
+    representativePackage.name,
+    commandRoots.length > 0 || vitestProject !== undefined
   )
   const candidate = candidates[0]
   if (!candidate) {
@@ -327,11 +328,18 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     }
   }
 
-  const generatedTestStrategy = buildGeneratedTestStrategy({
+  const plannedGeneratedTestStrategy = buildGeneratedTestStrategy({
     framework,
-    projectRoot,
+    projectRoot: vitestProject?.root || projectRoot,
     representative: candidate.path,
   })
+  const generatedTestStrategy = vitestProject &&
+    !vitest.supportsGeneratedFiles(vitestProject, plannedGeneratedTestStrategy)
+    ? {
+        reason: 'The selected Vitest project include patterns do not collect validator-generated test files.',
+        status: 'not_possible',
+      }
+    : plannedGeneratedTestStrategy
   const configFiles = [...new Set([
     ...runnerContract.inputFiles,
     ...(vitestProject?.configFile ? [vitestProject.configFile] : []),
@@ -363,13 +371,22 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     framework === 'playwright' ||
     cucumberBrowserRequired ||
     (framework === 'vitest' && runnerContract.runnerArgs.includes('--browser'))
-  const fallbackTests = candidates.slice(1).map(candidate => ({
-    buildArtifactRequired: candidate.requiresBuildArtifact,
-    localSocketRequired: candidate.requiresLocalSocket,
-    testFile: candidate.path,
-  }))
+  const fallbackCandidates = candidates
+    .slice(1)
+    .filter(candidate => hasGeneratedTestContract(
+      candidate.path,
+      framework,
+      vitestProject?.root || projectRoot,
+      plannedGeneratedTestStrategy
+    ))
+  const fallbackTests = fallbackCandidates
+    .map(candidate => ({
+      buildArtifactRequired: candidate.requiresBuildArtifact,
+      localSocketRequired: candidate.requiresLocalSocket,
+      testFile: candidate.path,
+    }))
   const allCandidatesRequireLocalSocket =
-    candidates.length > 0 && candidates.every(candidate => candidate.requiresLocalSocket)
+    [candidate, ...fallbackCandidates].every(candidate => candidate.requiresLocalSocket)
 
   return {
     ...base,
@@ -644,6 +661,13 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
   }
 }
 
+function hasGeneratedTestContract (representative, framework, projectRoot, strategy) {
+  const convention = getGeneratedTestConvention(framework, representative, projectRoot)
+  return convention.fileExtension === strategy.fileExtension &&
+    convention.testDirectory === strategy.testDirectory &&
+    getModuleSystem(representative, projectRoot) === strategy.moduleSystem
+}
+
 /**
  * Selects up to three representative framework-owned test files.
  *
@@ -651,6 +675,7 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
  * @param {string} framework framework name
  * @param {string} projectRoot project root
  * @param {string} packageName project package name
+ * @param {boolean} allowDirectoryConvention whether a literal runner selector owns this root
  * @returns {Array<{
  *   path: string,
  *   requiresBuildArtifact: boolean,
@@ -658,12 +683,12 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
  *   requiresLocalSocket: boolean
  * }>} selected tests
  */
-function selectRepresentativeTests (files, framework, projectRoot, packageName) {
+function selectRepresentativeTests (files, framework, projectRoot, packageName, allowDirectoryConvention) {
   const candidates = []
   for (const filename of files) {
     const source = readText(filename)
     if (source === undefined ||
-      !isTestFile(filename, source, framework, projectRoot) ||
+      !isTestFile(filename, source, framework, projectRoot, allowDirectoryConvention) ||
       hasConflictingFramework(source, framework)) continue
     if (framework === 'cucumber'
       ? cucumber.getScenarioCount(source) === 0
@@ -713,9 +738,10 @@ function hasCucumberBrowserSupport (files, retainedInputs, projectRoot) {
  * @param {string} source candidate source
  * @param {string} framework framework name
  * @param {string} projectRoot project root
+ * @param {boolean} allowDirectoryConvention whether a literal runner selector owns this root
  * @returns {boolean} whether the file is a candidate
  */
-function isTestFile (filename, source, framework, projectRoot) {
+function isTestFile (filename, source, framework, projectRoot, allowDirectoryConvention) {
   const basename = path.basename(filename)
   const normalized = filename.replaceAll('\\', '/')
   if (normalized.includes('/dd-test-optimization-validation-')) return false
@@ -732,9 +758,9 @@ function isTestFile (filename, source, framework, projectRoot) {
     return ['__tests__', 'spec', 'test', 'tests'].includes(directory)
   })
   if (BARE_TEST_FILE_PATTERN.test(basename)) {
-    return inTestDirectory || hasExplicitFrameworkImport(source, framework)
+    return (allowDirectoryConvention && inTestDirectory) || hasExplicitFrameworkImport(source, framework)
   }
-  return inTestDirectory && /\.[cm]?[jt]sx?$/.test(basename)
+  return allowDirectoryConvention && inTestDirectory && /\.[cm]?[jt]sx?$/.test(basename)
 }
 
 /**

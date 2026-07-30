@@ -266,8 +266,7 @@ describe('test optimization validation manifest scaffold', () => {
     const supportFile = path.join(fixture.root, 'test', 'browser-hooks.js')
     fs.mkdirSync(path.dirname(supportFile), { recursive: true })
     fs.writeFileSync(supportFile, [
-      "const { chromium } = require('playwright')",
-      'module.exports = () => chromium.launch()',
+      "module.exports = async () => (await import('playwright')).chromium.launch()",
       '',
     ].join('\n'))
     try {
@@ -286,7 +285,7 @@ describe('test optimization validation manifest scaffold', () => {
   })
 
   it('selects a non-suffixed Jest test inside a conventional test directory', () => {
-    const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest' })
+    const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest src/__tests__' })
     const representative = path.join(fixture.root, 'src', '__tests__', 'events.js')
     fs.rmSync(fixture.testFile)
     fs.mkdirSync(path.dirname(representative), { recursive: true })
@@ -306,7 +305,7 @@ describe('test optimization validation manifest scaffold', () => {
 
   it('uses an installed Jest runner when the package script is an unresolved wrapper', () => {
     const fixture = createRepositoryFixture({ framework: 'jest', script: 'kcd-scripts test' })
-    const representative = path.join(fixture.root, 'src', '__tests__', 'events.js')
+    const representative = path.join(fixture.root, 'src', '__tests__', 'events.test.js')
     const packageJsonPath = path.join(fixture.root, 'package.json')
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
     delete packageJson.devDependencies.jest
@@ -411,6 +410,24 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('does not retain a fallback with a different generated-test contract', () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha' })
+    const typescriptTest = path.join(fixture.root, 'test', 'a-first.spec.ts')
+    fs.writeFileSync(typescriptTest, "describe('first', () => { it('works', () => {}) })\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.validation.testFile, typescriptTest)
+      assert.strictEqual(framework.generatedTestStrategy.fileExtension, '.spec.ts')
+      assert.strictEqual(framework.validation.fallbackTests, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('retains Jest color because it can affect snapshot output', () => {
     const fixture = createRepositoryFixture({ framework: 'jest', script: 'jest --color=true' })
     try {
@@ -432,11 +449,9 @@ describe('test optimization validation manifest scaffold', () => {
       framework: 'mocha',
       script: 'nyc --reporter=lcov --reporter=text mocha --require test/support/env',
     })
-    const representative = path.join(fixture.root, 'test', 'test.js')
+    const representative = fixture.testFile
     const preload = path.join(fixture.root, 'test', 'support', 'env.js')
-    fs.rmSync(fixture.testFile)
     fs.mkdirSync(path.dirname(preload), { recursive: true })
-    fs.writeFileSync(representative, "describe('works', () => { it('passes', () => {}) })\n")
     fs.writeFileSync(preload, 'void 0\n')
     try {
       const framework = createManifestScaffold({
@@ -464,6 +479,43 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.validation.testFile, fixture.testFile)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('does not assign a non-suffixed Mocha test to a detected Jest runner', () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    const mochaTest = path.join(fixture.root, 'test', 'mocha-only.js')
+    const jestDefinition = FRAMEWORKS.jest
+    const jestRoot = path.join(fixture.root, 'node_modules', jestDefinition.packageName)
+    const jestRunner = path.join(jestRoot, 'bin', `${jestDefinition.bin}.js`)
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.devDependencies.jest = jestDefinition.version
+    packageJson.scripts.test = 'mocha test/mocha-only.js'
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    fs.rmSync(fixture.testFile)
+    fs.writeFileSync(mochaTest, "describe('mocha', () => { it('works', () => {}) })\n")
+    fs.mkdirSync(path.dirname(jestRunner), { recursive: true })
+    fs.writeFileSync(jestRunner, 'void 0\n')
+    fs.writeFileSync(path.join(jestRoot, 'package.json'), `${JSON.stringify({
+      name: jestDefinition.packageName,
+      version: jestDefinition.version,
+      bin: { jest: 'bin/jest.js' },
+    })}\n`)
+    try {
+      const frameworks = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest', 'mocha']),
+      }).frameworks
+      const jest = frameworks.find(framework => framework.framework === 'jest')
+      const mocha = frameworks.find(framework => framework.framework === 'mocha')
+
+      assert.strictEqual(mocha.status, 'runnable')
+      assert.strictEqual(mocha.validation.testFile, mochaTest)
+      assert.strictEqual(jest.status, 'requires_manual_setup')
+      assert.match(jest.notes.join(' '), /No single Jest test file/)
     } finally {
       removeFixture(fixture.root)
     }
@@ -984,6 +1036,83 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.validation.testFile, selected)
       assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'fastly'])
       assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'vitest.config.ts')))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('generates Vitest checks inside a bound project root and include scope', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const projectRoot = path.join(fixture.root, 'runtime-tests', 'shared')
+    const selected = path.join(projectRoot, 'test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(projectRoot, { recursive: true })
+    fs.writeFileSync(selected, "import { test } from 'vitest'\ntest('selected', () => {})\n")
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      "      test: { name: 'fastly', root: 'runtime-tests/shared', include: ['test.ts', '**/test.ts'] },",
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.generatedTestStrategy.status, 'planned')
+      assert.strictEqual(framework.generatedTestStrategy.testDirectory, projectRoot)
+      for (const scenario of framework.generatedTestStrategy.scenarios) {
+        const generatedFile = scenario.testIdentities[0].file
+        assert.strictEqual(path.dirname(path.dirname(generatedFile)), projectRoot)
+        assert.strictEqual(path.basename(generatedFile), 'test.ts')
+      }
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('keeps Vitest advanced checks unavailable when a bound include cannot collect generated files', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const projectRoot = path.join(fixture.root, 'runtime-tests', 'shared')
+    const selected = path.join(projectRoot, 'test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(projectRoot, { recursive: true })
+    fs.writeFileSync(selected, "import { test } from 'vitest'\ntest('selected', () => {})\n")
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      "      test: { name: 'fastly', root: 'runtime-tests/shared', include: ['test.ts'] },",
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.generatedTestStrategy, {
+        reason: 'The selected Vitest project include patterns do not collect validator-generated test files.',
+        status: 'not_possible',
+      })
     } finally {
       removeFixture(fixture.root)
     }

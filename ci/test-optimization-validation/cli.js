@@ -198,9 +198,6 @@ async function main (argv) {
     const annotatedResults = annotateResults(results)
     const executionStatus = getExecutionStatus(annotatedResults)
     const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
-    const completedLock = executionLock
-    executionLock = undefined
-    releaseExecutionLock(completedLock)
     await writeReport({
       manifest,
       out,
@@ -219,46 +216,65 @@ async function main (argv) {
         validatorExitCode,
       },
     })
+    releaseExecutionLock(executionLock)
+    executionLock = undefined
     console.log(`Validation report: ${path.join(out, 'report.md')}`)
     console.log('Present the report and stop. Any correction or retry requires a fresh plan and approval.')
     process.exitCode = validatorExitCode
   } catch (error) {
     let reportError = error
+    await publishFailureReport({
+      approvedPlanSha256: activeApprovedPlanSha256,
+      cleanup: cleanupOutcome,
+      error: reportError,
+      manifest: activeManifest,
+      out: activeOut,
+    })
     if (executionLock) {
       try {
         releaseExecutionLock(executionLock)
+        executionLock = undefined
       } catch (releaseError) {
         reportError = releaseError
+        await publishFailureReport({
+          approvedPlanSha256: activeApprovedPlanSha256,
+          cleanup: cleanupOutcome,
+          error: reportError,
+          manifest: activeManifest,
+          out: activeOut,
+        })
       }
     }
     const validatorExitCode = reportError?.validationExitCode || 3
     process.exitCode = validatorExitCode
-    if (activeManifest && activeOut && !reportError?.suppressReport) {
-      try {
-        await writeReport({
-          manifest: activeManifest,
-          out: activeOut,
-          results: [getOrchestrationFailure(reportError)],
-          runSummary: {
-            approvedPlanSha256: activeApprovedPlanSha256,
-            checkedScenarios: [],
-            cleanup: cleanupOutcome,
-            executionStatus: reportError?.validationBlocker ? 'incomplete' : 'validator_error',
-            omittedScenarios: getSelectableScenarios(),
-            runCompleted: true,
-            selectedFrameworkIds: [],
-            validationCoverage: 'partial',
-            validatorExitCode,
-          },
-        })
-      } catch {}
-    }
     const blockerRecommendation = reportError?.validationBlocker?.recommendation
     const displayedError = reportError?.validationExitCode
       ? `${reportError.message}${blockerRecommendation ? ` ${blockerRecommendation}` : ''}`
       : (reportError?.stack || reportError)
     console.error(sanitizeConsoleText(displayedError))
   }
+}
+
+async function publishFailureReport ({ approvedPlanSha256, cleanup, error, manifest, out }) {
+  if (!manifest || !out || error?.suppressReport) return
+  try {
+    await writeReport({
+      manifest,
+      out,
+      results: [getOrchestrationFailure(error)],
+      runSummary: {
+        approvedPlanSha256,
+        checkedScenarios: [],
+        cleanup,
+        executionStatus: error?.validationBlocker ? 'incomplete' : 'validator_error',
+        omittedScenarios: getSelectableScenarios(),
+        runCompleted: true,
+        selectedFrameworkIds: [],
+        validationCoverage: 'partial',
+        validatorExitCode: error?.validationExitCode || 3,
+      },
+    })
+  } catch {}
 }
 
 /**

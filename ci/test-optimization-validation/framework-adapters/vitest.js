@@ -18,7 +18,13 @@ const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
  * @param {string[]} input.projectFiles bounded project files
  * @param {string} input.projectRoot detected project root
  * @param {string[]} input.runnerArgs retained Vitest arguments
- * @returns {{configFile?: string, error?: string, files?: string[], root?: string}|undefined} project binding
+ * @returns {{
+ *   configFile?: string,
+ *   error?: string,
+ *   files?: string[],
+ *   includePatterns?: string[],
+ *   root?: string
+ * }|undefined} project binding
  */
 function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArgs }) {
   const projects = getOptionValues(runnerArgs, '--project')
@@ -114,7 +120,16 @@ function getBindingFromObject ({ configFile, projectFiles, projectObject, projec
     const normalized = relativeToRoot.replaceAll('\\', '/')
     return include.values.some(pattern => matchesLiteralGlob(normalized, pattern))
   })
-  return { configFile, files, root }
+  return { configFile, files, includePatterns: include.values, root }
+}
+
+function supportsGeneratedFiles (project, strategy) {
+  if (project.includePatterns.length === 0) return true
+  return strategy.scenarios.every(scenario => {
+    const relative = path.relative(project.root, scenario.testIdentities[0].file).replaceAll('\\', '/')
+    return relative && !relative.startsWith('../') &&
+      project.includePatterns.some(pattern => matchesLiteralGlob(relative, pattern))
+  })
 }
 
 function getProjectObject (source, nameIndex) {
@@ -305,4 +320,4 @@ function getPhysicalDirectory (directory) {
   } catch {}
 }
 
-module.exports = { bindLiteralProject }
+module.exports = { bindLiteralProject, supportsGeneratedFiles }
