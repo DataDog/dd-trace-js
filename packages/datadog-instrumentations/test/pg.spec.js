@@ -26,6 +26,8 @@ describe('pg instrumentation', () => {
       abortController.abort(error)
     }
 
+    function observeQuery () {}
+
     before(() => {
       return agent.load(['pg'])
     })
@@ -197,11 +199,20 @@ describe('pg instrumentation', () => {
         afterEach(() => {
           if (queryPoolStartChannel.hasSubscribers) {
             queryPoolStartChannel.unsubscribe(abortQuery)
+            queryPoolStartChannel.unsubscribe(observeQuery)
           }
         })
 
         describe('using callback', () => {
           it('Should not fail if it is not aborted', (done) => {
+            pool.query('SELECT 1', (err) => {
+              done(err)
+            })
+          })
+
+          it('Should run the query when a subscriber does not abort it', (done) => {
+            queryPoolStartChannel.subscribe(observeQuery)
+
             pool.query('SELECT 1', (err) => {
               done(err)
             })
