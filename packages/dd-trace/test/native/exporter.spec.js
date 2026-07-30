@@ -192,14 +192,14 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(logWarn)
     })
 
-    it('counts an export attempt and success per chunk, tagged with that chunk span count', async () => {
-      // `flushSpansGrouped` issues one HTTP request per trace chunk, so these
-      // mirror the deleted JS OTLP exporter exactly: its `export()` was invoked
-      // per chunk and emitted one increment tagged with that chunk's span count.
+    it('counts one export attempt and success per flush, tagged with the payload span total', async () => {
+      // `flushSpansGrouped` issues ONE request for the whole flush, so these
+      // mirror the deleted JS OTLP exporter's per-request counters: one increment
+      // each, tagged with every span in the payload - not one per trace chunk.
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
 
-      // Two traces of 2 and 3 spans, so a `spans:` tag built from the whole-flush
-      // total is distinguishable from the per-chunk counts.
+      // Two traces of 2 and 3 spans: 5 spans in 2 groups, so a `spans:` tag built
+      // from the group count is distinguishable from the real span total.
       const traceA = [createMockSpan(1n), createMockSpan(2n)]
       const traceB = [createMockSpan(3n), createMockSpan(4n), createMockSpan(5n)]
       for (const span of traceA) span.context()._trace = traceA[0].context()._trace
@@ -211,10 +211,8 @@ describe('NativeExporter', () => {
 
       assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 2)
       assert.deepStrictEqual(telemetryCounts, [
-        { metric: 'otel.traces_export_attempts', tags: ['protocol:http', 'encoding:json', 'spans:2'] },
-        { metric: 'otel.traces_export_attempts', tags: ['protocol:http', 'encoding:json', 'spans:3'] },
-        { metric: 'otel.traces_export_successes', tags: ['protocol:http', 'encoding:json', 'spans:2'] },
-        { metric: 'otel.traces_export_successes', tags: ['protocol:http', 'encoding:json', 'spans:3'] },
+        { metric: 'otel.traces_export_attempts', tags: ['protocol:http', 'encoding:json', 'spans:5'] },
+        { metric: 'otel.traces_export_successes', tags: ['protocol:http', 'encoding:json', 'spans:5'] },
       ])
     })
 
@@ -394,6 +392,41 @@ describe('NativeExporter', () => {
       // Fired on span count alone, with the interval timer nowhere near elapsed.
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
       assert.strictEqual(exporter._pendingSpans.length, 0)
+    })
+
+    it('splits an oversized payload across sends instead of one unbounded request', async () => {
+      // Sends are serialized, so while one is in flight flush() only records
+      // #flushRequested and the pending queue keeps growing for the whole round
+      // trip - the export()-time trigger cannot bound the payload here.
+      let release
+      nativeSpans.flushSpansGrouped = sinon.stub().returns(new Promise(resolve => { release = resolve }))
+
+      // First flush takes the whole (small) batch and is now in flight.
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+
+      // 12_000 spans arrive as 12 chunks of 1000 while that send is in flight.
+      for (let c = 0; c < 12; c++) {
+        const chunk = []
+        for (let i = 0; i < 1000; i++) chunk.push(createMockSpan(BigInt(c * 1000 + i + 2)))
+        exporter.export(chunk)
+      }
+      assert.strictEqual(exporter._pendingSpans.length, 12_000)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+
+      // The 12_000 backlog must not go out as one request: the next send carries
+      // 10 whole chunks (10_000 spans) and the 2_000-span remainder follows in its
+      // own request, without waiting out another flushInterval.
+      nativeSpans.flushSpansGrouped = sinon.stub().resolves('OK')
+      release('OK')
+      await clock.tickAsync(0)
+
+      const sizes = nativeSpans.flushSpansGrouped.getCalls()
+        .map(call => call.args[0].reduce((total, group) => total + group.spanIds.length, 0))
+      assert.deepStrictEqual(sizes, [10_000, 2000])
+      assert.strictEqual(exporter._pendingSpans.length, 0)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
     })
 
     it('resets native state immediately when explicitly requested while idle', () => {
@@ -925,10 +958,10 @@ describe('NativeExporter', () => {
   describe('health metrics', () => {
     const P = 'datadog.tracer.node.exporter.agent'
 
-    it('increments request + response counters once per trace chunk', async () => {
-      // `flushSpansGrouped` issues one HTTP request per chunk, so these counters
-      // must scale with chunks to stay on the same per-attempt footing as
-      // `.errors`. A single per-flush increment reports 1/N of the real volume.
+    it('increments request + response counters once per flush, not once per trace', async () => {
+      // Two traces coalesce into two chunks but ONE request, so these counters
+      // must fire once - the same per-request scale as `.errors`. Counting per
+      // chunk multiplies every native user's request rate by traces-per-flush.
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
       exporter.export([createMockSpan(1n)])
       exporter.export([createMockSpan(2n)])
@@ -937,9 +970,10 @@ describe('NativeExporter', () => {
 
       const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
       assert.strictEqual(groups.length, 2)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
       const counted = metric => metricsIncrement.args.filter(([name]) => name === metric).length
-      assert.strictEqual(counted(`${P}.requests`), 2)
-      assert.strictEqual(counted(`${P}.responses`), 2)
+      assert.strictEqual(counted(`${P}.requests`), 1)
+      assert.strictEqual(counted(`${P}.responses`), 1)
     })
 
     it('increments error counters (name + code) on a failed flush', async () => {

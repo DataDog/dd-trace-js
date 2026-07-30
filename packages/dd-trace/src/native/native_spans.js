@@ -1209,47 +1209,65 @@ class NativeSpansInterface {
    * local root. Passing many traces as one chunk would lump distinct trace_ids
    * together and stamp only the first — corrupting sampling/grouping under load.
    *
-   * One request per group, sequentially. The native `prepared_spans` Vec does
-   * accumulate (libdatadog-nodejs #159) and `sendPreparedChunk` would drain all of
-   * it into a single multi-trace payload, so batching the whole flush into one
-   * request is possible - but it changes what a consumer sees per payload, and
-   * `traces[0]` consumers (the test agent among them) rely on one trace per
-   * payload, which is also what the legacy AgentWriter produced at the flush
-   * intervals these paths run with. Sending per group also keeps a failed send
-   * from taking unrelated traces down with it.
+   * `prepareChunk` appends to a native chunk Vec and `sendPreparedChunk` drains
+   * all of it into a single multi-trace request (libdatadog-nodejs #159), which
+   * is the same shape the legacy writer sends. So stage the whole flush, then
+   * send once: one HTTP request per flush carrying one chunk per trace.
+   *
+   * Staging synchronously also matters for correctness. `prepareChunk` is what
+   * drains the change buffer and removes spans from the WASM map, so with no
+   * await between groups nothing can finish into a half-staged flush, and the
+   * string table can be evicted exactly once at a provably drained point.
    *
    * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
    * @returns {Promise<string>} The agent response body, or a no-op marker
    */
   flushSpansGrouped (groups) {
     // Drain all pending ops (creates, tags, per-trace sampling/trace tags) once
-    // up front so every chunk prepared below sees a fully-applied span map.
+    // up front so every chunk staged below sees a fully-applied span map.
     this.flushChangeQueue()
 
-    const pending = []
-    for (const group of groups) {
-      if (group.spanIds?.length) pending.push(group)
+    let staged = 0
+    try {
+      for (const group of groups) {
+        if (!group.spanIds?.length) continue
+        if (this.#prepareGroup(group)) staged++
+      }
+    } catch (e) {
+      // prepareChunk may throw partway through (`flush_chunk` errors on an
+      // absent span id), after consuming some of the change queue or growing
+      // WASM memory. Reset JS-side queue state and refresh views so the next
+      // caller starts from a known-good baseline. Groups staged before the
+      // throw stay staged and ship with the next flush - they are real spans we
+      // wanted to send, so delaying beats dropping them.
+      this.resetChangeQueue()
+      this.#checkDetach()
+      log.error('Error preparing spans to flush:', e)
+      return Promise.reject(e)
     }
 
-    if (pending.length === 0) {
-      this.#evictStringTable(true)
-      return Promise.resolve('no spans to flush')
-    }
+    // Safe here and only here: `prepareChunk` drained the change buffer and
+    // resolved every interned id into the staged spans, and nothing can have
+    // queued an op since (staging above is synchronous). `#evictStringTable(true)`
+    // also resets `_stringIdCounter`, so running it while ops are queued - e.g.
+    // from a `.finally()` after the async send - would re-issue live ids to
+    // different strings and silently mis-tag exported spans.
+    this.#evictStringTable(true)
 
-    // Sequential: `sendPreparedChunk` also guards against async re-entrancy, and
-    // staging the next chunk while one is in flight would put it in the same
-    // payload as the current one.
-    let chain = Promise.resolve('no spans to flush')
-    for (let i = 0; i < pending.length; i++) {
-      const group = pending[i]
-      const isLast = i === pending.length - 1
-      chain = chain.then(() => this.#prepareAndSend(group, isLast))
-    }
+    if (staged === 0) return Promise.resolve('no spans to flush')
 
-    return chain
+    const send = this._state.sendPreparedChunk()
+    this.#sendInFlight = send
+    const clearSend = () => {
+      if (this.#sendInFlight === send) this.#sendInFlight = null
+    }
+    send.then(clearSend, clearSend)
+
+    return send
       .catch(e => {
         // A send failure is a *network* fault for the already-serialized chunks;
-        // those are lost, which is expected on a transient agent outage.
+        // `sendPreparedChunk` took them out of the native Vec before sending, so
+        // they are lost, which is expected on a transient agent outage.
         //
         // Crucially, do NOT resetChangeQueue() here. sendPreparedChunk is async,
         // so by the time this rejection lands, ops for *other* spans (including
@@ -1268,55 +1286,6 @@ class NativeSpansInterface {
         log.errorWithoutTelemetry('Error flushing spans to agent:', e)
         throw e
       })
-  }
-
-  /**
-   * Stage one trace's chunk and send it. Rejects if staging throws, after
-   * restoring JS-side queue state.
-   *
-   * @param {{spanIds: Uint8Array[], firstIsLocalRoot: boolean}} group
-   * @param {boolean} isLast Whether this is the final group of the flush
-   * @returns {Promise<string>}
-   */
-  #prepareAndSend (group, isLast) {
-    // Every group after the first runs in a `.then()` after an HTTP response, so
-    // spans that finished during that send have queued ops. `prepareChunk` calls
-    // `flush_change_buffer` internally, which zeroes the WASM header without
-    // touching our `_cqbIndex`/`_cqbCount` — drain through our own path first so
-    // the two stay in sync (same hazard `setMetaStruct` documents). A no-op when
-    // the queue is already empty.
-    this.flushChangeQueue()
-
-    let staged
-    try {
-      staged = this.#prepareGroup(group)
-    } catch (e) {
-      // prepareChunk may throw partway through, after consuming some of the
-      // change queue or growing WASM memory. Reset JS-side queue state and
-      // refresh views so the next caller starts from a known-good baseline.
-      this.resetChangeQueue()
-      this.#checkDetach()
-      log.error('Error preparing spans to flush:', e)
-      return Promise.reject(e)
-    }
-
-    // Evict only here, and only on the last group: `prepareChunk` has just
-    // drained the change buffer, so no queued op can still reference an id we
-    // are about to evict — and `#evictStringTable(true)` also resets
-    // `_stringIdCounter`, so running it while ops are queued (e.g. from a
-    // `.finally()` after the async send) would re-issue live ids to different
-    // strings and silently mis-tag exported spans.
-    if (isLast) this.#evictStringTable(true)
-
-    if (!staged) return Promise.resolve('no spans to flush')
-
-    const send = this._state.sendPreparedChunk()
-    this.#sendInFlight = send
-    const clearSend = () => {
-      if (this.#sendInFlight === send) this.#sendInFlight = null
-    }
-    send.then(clearSend, clearSend)
-    return send
   }
 
   // Note: sample() is not available in the WASM pipeline module.

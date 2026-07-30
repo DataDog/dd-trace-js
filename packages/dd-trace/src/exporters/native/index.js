@@ -61,9 +61,6 @@ function formatSpansForDebug (spans) {
 class NativeExporter {
   #timer
   #flushInFlight = false
-  // An explicit flush() arrived while a send was in flight, so the send's
-  // completion must drain rather than wait for the next batching timer.
-  #flushRequested = false
   #firstFlushSent = false
   #flushCallbacks = []
   #activeSpans = 0
@@ -194,21 +191,20 @@ class NativeExporter {
    * Mirror the deleted OtlpHttpTraceExporter's per-request telemetry counters.
    * No-op on the agent path.
    *
-   * The deleted JS exporter's `export()` was invoked per trace chunk and issued
-   * one HTTP request each, tagged with that chunk's span count.
-   * `flushSpansGrouped` also sends one request per chunk, so emit once per group
-   * with that group's span count: a single per-flush increment would under-count
-   * attempts by the number of chunks and would turn `spans:` into an unbounded
-   * whole-flush total (the telemetry namespace map never evicts keys).
+   * `attempts`/`successes` measure export *pushes*, so they are incremented once
+   * per HTTP request. The deleted JS exporter's `export()` was invoked per trace
+   * chunk and issued one request each, so its `spans:` tag was that chunk's span
+   * count; `flushSpansGrouped` coalesces the whole flush into one multi-chunk
+   * request, so the equivalent tag is the payload's total span count.
    *
    * @param {string} metric `otel.traces_export_attempts` or `..._successes`
    * @param {Array<{spanIds: Uint8Array[]}>} groups Groups in this flush
    */
   #recordOtlpTelemetry (metric, groups) {
     if (this.#otlpTelemetryTags === null) return
-    for (const group of groups) {
-      tracerMetrics.count(metric, [...this.#otlpTelemetryTags, `spans:${group.spanIds.length}`]).inc(1)
-    }
+    let spans = 0
+    for (const group of groups) spans += group.spanIds.length
+    tracerMetrics.count(metric, [...this.#otlpTelemetryTags, `spans:${spans}`]).inc(1)
   }
 
   /**
@@ -465,33 +461,17 @@ class NativeExporter {
   }
 
   #finishSend () {
-    // Only drain eagerly when something is actually waiting on this send.
-    // Draining unconditionally defeated flushInterval entirely: any span that
-    // finished inside a send window triggered another send the moment the
-    // previous one resolved, turning a 2s batch into one request per round trip.
-    const waiting = this.#flushRequested ||
-      this.#flushCallbacks.length > 0 ||
-      this.#urlUpdateCallbacks.length > 0
-    this.#flushRequested = false
-
-    if (this._pendingSpanChunks.length > 0 && waiting) {
+    // Drain unconditionally. Gating this on "is something waiting" lets chunks
+    // accumulate across a send window, which changes how many traces a payload
+    // carries - and `traces[0]` consumers (the plugin test agent among them)
+    // depend on a payload holding the trace they just produced.
+    if (this._pendingSpanChunks.length > 0) {
       this.flush()
       return
     }
 
     this.#finishFlushCallbacks()
     this.#finishUrlUpdateCallbacks()
-
-    // An explicit flush() during the send cleared the batching timer; re-arm it
-    // so spans buffered in the meantime still go out on the normal interval.
-    const { flushInterval } = this._config
-    if (this._pendingSpanChunks.length > 0 && flushInterval > 0 && this.#timer === undefined) {
-      this.#timer = setTimeout(() => {
-        this.flush()
-        this.#timer = undefined
-      }, flushInterval)
-      this.#timer.unref?.()
-    }
   }
 
   #handleSendError (err) {
@@ -552,7 +532,6 @@ class NativeExporter {
     // on this to observe spans that finished while a previous payload was still
     // being sent.
     if (this.#flushInFlight) {
-      this.#flushRequested = true
       return
     }
 
@@ -561,12 +540,35 @@ class NativeExporter {
       return
     }
 
-    // Each chunk becomes its own HTTP request (see flushSpansGrouped), so payload
-    // size is bounded by one trace and there is nothing to split here. The
-    // soft-limit trigger in `export()` still bounds how much is buffered.
-    const spanChunks = this._pendingSpanChunks
-    this._pendingSpans = []
-    this._pendingSpanChunks = []
+    // One flush is one HTTP request, so cap what a single payload carries. The
+    // soft-limit trigger in `export()` bounds how much is buffered while idle, but
+    // it cannot bound this: sends are serialized, so while one is in flight
+    // `flush()` returns early and `_pendingSpanChunks` keeps growing for the whole
+    // round trip. Take whole chunks up to the limit and leave the rest, which
+    // `#finishSend` drains as soon as this send resolves.
+    let spanChunks
+    if (this._pendingSpans.length > SOFT_LIMIT_SPANS) {
+      let taken = 0
+      let i = 0
+      // Never split a chunk - chunk boundaries are the processor's trace
+      // boundaries. Always take at least one, even if it alone exceeds the limit.
+      while (i < this._pendingSpanChunks.length &&
+        (taken === 0 || taken + this._pendingSpanChunks[i].length <= SOFT_LIMIT_SPANS)) {
+        taken += this._pendingSpanChunks[i].length
+        i++
+      }
+      spanChunks = this._pendingSpanChunks.slice(0, i)
+      this._pendingSpanChunks = this._pendingSpanChunks.slice(i)
+      // `_pendingSpans` is the in-order concatenation of the chunks, so the
+      // remainder is exactly the tail past what this payload took.
+      this._pendingSpans = this._pendingSpans.slice(taken)
+      // The remainder ships from `#finishSend`, which drains whatever is still
+      // pending as soon as this send resolves.
+    } else {
+      spanChunks = this._pendingSpanChunks
+      this._pendingSpans = []
+      this._pendingSpanChunks = []
+    }
 
     // Convert each SpanProcessor export call into one or more native chunks,
     // splitting only traces that happen to share one export call. Never group
@@ -575,12 +577,11 @@ class NativeExporter {
     // when flushInterval coalesces HTTP sends.
     const groups = this.#groupsFromSpanChunks(spanChunks, true)
 
-    // `flushSpansGrouped` sends one request per trace chunk, so count per chunk:
-    // a single per-flush increment reported 1/N of the real request volume and
-    // left `.requests` on a different scale from `.errors`, which is per-attempt.
-    for (let i = 0; i < groups.length; i++) {
-      runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
-    }
+    // `flushSpansGrouped` stages every chunk synchronously and issues exactly one
+    // HTTP request for the whole flush, so `.requests`/`.responses` are counted
+    // once here - the same per-request scale as `.errors` and as the legacy
+    // AgentWriter's `_sendPayload`.
+    runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
     this.#recordOtlpTelemetry('otel.traces_export_attempts', groups)
     // Self-guarded (`integrationsAlreadyRan`), so the repeat cost is one boolean.
     // Without this the on-by-default `INTEGRATIONS LOADED` startup line never
@@ -597,8 +598,9 @@ class NativeExporter {
       this.#firstFlushSent = true
       firstFlushChannel.publish()
     }
-    // One request per trace chunk, sequentially, preserving the legacy writer's
-    // one-trace-per-payload shape that `traces[0]` consumers rely on.
+    // One request carrying one chunk per trace: `prepareChunk` appends to a
+    // native chunk Vec and `sendPreparedChunk` drains all of it into a single
+    // multi-trace payload, which is the shape the legacy AgentWriter sent.
     let sendGrouped
     try {
       sendGrouped = this._nativeSpans.flushSpansGrouped(groups)
@@ -610,9 +612,7 @@ class NativeExporter {
     sendGrouped
       .then((response) => {
         this.#flushInFlight = false
-        for (let i = 0; i < groups.length; i++) {
-          runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        }
+        runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         this.#recordOtlpTelemetry('otel.traces_export_successes', groups)
         // The agent's response carries per-service sampling rates. Feed them
         // back into the priority sampler so adaptive (agent-driven) sampling

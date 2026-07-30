@@ -539,11 +539,10 @@ describe('NativeSpansInterface', () => {
       assert.strictEqual(nativeSpans._cqbCount, 0)
     })
 
-    it('flushSpansGrouped sends each group before staging the next', async () => {
-      // The native chunk Vec accumulates, so staging both groups and then sending
-      // would put two traces in one payload. One request per trace keeps the
-      // legacy writer's one-trace-per-payload shape that `traces[0]` consumers
-      // rely on, and keeps a failed send from taking unrelated traces with it.
+    it('flushSpansGrouped stages every group then sends once', async () => {
+      // `prepareChunk` appends to a native chunk Vec and `sendPreparedChunk` drains
+      // all of it as one multi-trace request, so a flush is N stages + 1 send.
+      // Sending per group would issue N sequential HTTP round-trips per flush.
       const idA = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
       const idB = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
 
@@ -565,13 +564,15 @@ describe('NativeSpansInterface', () => {
         { spanIds: [idB], firstIsLocalRoot: false },
       ])
 
-      // One prepareChunk per group, carrying that group's firstIsLocalRoot, and
-      // each chunk sent before the next is staged.
-      assert.deepStrictEqual(order, ['prepare:true', 'send', 'prepare:false', 'send'])
+      // Change queue drained exactly once, up front.
+      sinon.assert.calledOnce(mockState.flushChangeQueue)
+      // One prepareChunk per group, carrying that group's firstIsLocalRoot, and a
+      // single send after all staging.
+      assert.deepStrictEqual(order, ['prepare:true', 'prepare:false', 'send'])
       assert.strictEqual(result, 'OK')
     })
 
-    it('flushSpansGrouped stops the chain when a later group fails to stage', async () => {
+    it('flushSpansGrouped keeps chunks staged before a mid-flush prepare failure', async () => {
       const idA = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
       const idB = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
       mockState.prepareChunk = sinon.stub()
@@ -583,9 +584,9 @@ describe('NativeSpansInterface', () => {
         { spanIds: [idB], firstIsLocalRoot: false },
       ]), /span not found/)
 
-      // Group A was staged and sent before B was staged, so only B is lost, and
-      // the change queue is left in a known-good state for the next flush.
-      sinon.assert.calledOnce(mockState.sendPreparedChunk)
+      // Group A is already staged; it must NOT be sent by this failed flush, and it
+      // must stay staged so the next flush ships it (these are real spans).
+      sinon.assert.notCalled(mockState.sendPreparedChunk)
       assert.strictEqual(nativeSpans._cqbCount, 0)
     })
 
@@ -810,9 +811,6 @@ describe('NativeSpansInterface', () => {
       mockState.sendPreparedChunk = sinon.stub().returns(new Promise(resolve => { release = resolve }))
       const oldState = mockState
       const send = nativeSpans.flushSpansGrouped([{ spanIds: [spanId], firstIsLocalRoot: true }])
-      // `#prepareAndSend` runs in a `.then()`, so let the chain reach the send.
-      await Promise.resolve()
-      await Promise.resolve()
 
       nativeSpans.setAgentUrl('http://localhost:9999')
 
