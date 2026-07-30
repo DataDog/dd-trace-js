@@ -166,9 +166,6 @@ function walkContentBlocks (blocks) {
         appendContent(out, combineMetadataWithBody(metadata, convertAnthropicBlocksToContent(block.content)))
         break
       }
-      case 'mid_conv_system':
-        appendContent(out, convertAnthropicBlocksToContent(block.content))
-        break
       case 'web_fetch_tool_result': {
         // Emit as a tool result (like other *_tool_result blocks) so the call -> result -> final-text
         // timeline is preserved and the fetched document isn't merged into the assistant answer.
@@ -298,29 +295,23 @@ function convertServerToolResultContent (content) {
 }
 
 /**
- * Converts a single Anthropic message to zero or more normalized messages.
+ * Converts one turn's worth of content blocks (with no mid_conv_system among them) to normalized
+ * messages under a single role.
  *
  * Assistant `tool_use` blocks become an assistant `tool_calls` message. Tool result blocks become
- * one `tool` message per block. When the message calls a built-in server tool (call, result and
+ * one `tool` message per block. When the segment calls a built-in server tool (call, result and
  * final text arrive together), the content-block timeline is preserved: the tool-call message and
  * any text before the last result come first, then the results, then text that follows them as a
  * separate assistant message — so the final answer stays last (`messages.at(-1)`) rather than being
  * moved ahead of the tool result. User turns carry only results, so those precede any accompanying
- * text. Text/image blocks are otherwise merged into a single message per role.
+ * text. Text/image blocks are otherwise merged into a single message.
  *
- * @param {{role: string, content: string|Array<AnthropicContentBlock>}} message
+ * @param {string} role
+ * @param {Array<AnthropicContentBlock>} blocks
  * @returns {Array<object>}
  */
-function convertAnthropicMessage (message) {
-  if (!message || typeof message !== 'object') return []
-  const { role, content } = message
-
-  if (typeof content === 'string') {
-    return content.length ? [{ role, content }] : []
-  }
-  if (!Array.isArray(content)) return []
-
-  const { parts, toolCalls, toolResults, hasImages, partsBeforeLastResult } = walkContentBlocks(content)
+function convertContentSegment (role, blocks) {
+  const { parts, toolCalls, toolResults, hasImages, partsBeforeLastResult } = walkContentBlocks(blocks)
 
   // Built-in server tool turn: keep the call -> result -> final-answer timeline.
   if (toolCalls.length && toolResults.length) {
@@ -353,6 +344,42 @@ function convertAnthropicMessage (message) {
 
   const messages = [...toolResults]
   if (assistantMessage) messages.push(assistantMessage)
+  return messages
+}
+
+/**
+ * Converts a single Anthropic message to zero or more normalized messages.
+ *
+ * `mid_conv_system` blocks carry system-level instructions inserted at a point in the turn; each
+ * becomes its own `{ role: 'system' }` message in place, so the content around it keeps its role
+ * and chronology instead of the instruction being folded into (and mis-scored as) user/assistant
+ * text. See {@link convertContentSegment} for how each surrounding segment is converted.
+ *
+ * @param {{role: string, content: string|Array<AnthropicContentBlock>}} message
+ * @returns {Array<object>}
+ */
+function convertAnthropicMessage (message) {
+  if (!message || typeof message !== 'object') return []
+  const { role, content } = message
+
+  if (typeof content === 'string') {
+    return content.length ? [{ role, content }] : []
+  }
+  if (!Array.isArray(content)) return []
+
+  const messages = []
+  let segment = []
+  for (const block of content) {
+    if (block?.type === 'mid_conv_system') {
+      for (const converted of convertContentSegment(role, segment)) messages.push(converted)
+      segment = []
+      const systemContent = convertAnthropicBlocksToContent(block.content)
+      if (systemContent != null) messages.push({ role: 'system', content: systemContent })
+    } else {
+      segment.push(block)
+    }
+  }
+  for (const converted of convertContentSegment(role, segment)) messages.push(converted)
   return messages
 }
 

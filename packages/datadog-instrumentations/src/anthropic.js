@@ -45,40 +45,53 @@ function waitForVerdict (promise, verdict) {
 }
 
 /**
+ * Runs the output verdict for a parsed response and finishes the span with it. Finishing after the
+ * verdict lets a block propagate to anthropic.request and keeps the span wrapping its child.
+ *
+ * @param {object} ctx
+ * @param {object} result
+ * @param {(body: object) => Promise<void>|undefined} getVerdict
+ * @param {object|string} [returnedResult]
+ * @returns {object|string|Promise<object|string>}
+ */
+function finishResult (ctx, result, getVerdict, returnedResult = result) {
+  const verdict = getVerdict(result)
+  if (!verdict) {
+    finish(ctx, result, null)
+    return returnedResult
+  }
+
+  return verdict.then(() => {
+    finish(ctx, result, null)
+    return returnedResult
+  })
+}
+
+/**
  * @param {object} response
  * @param {'json'|'text'} method
  * @param {object} ctx
- * @param {(body: object|string) => Promise<void>|undefined} getVerdict
+ * @param {(body: object) => Promise<void>|undefined} getVerdict
  */
 function wrapResponseReader (response, method, ctx, getVerdict) {
   if (typeof response[method] !== 'function') return
 
   shimmer.wrap(response, method, original => function (...args) {
     return original.apply(this, args)
-      .then(body => finishResult(ctx, body, getVerdict))
+      .then(body => {
+        if (method === 'json') return finishResult(ctx, body, getVerdict)
+
+        try {
+          return finishResult(ctx, JSON.parse(body), getVerdict, body)
+        } catch {
+          finish(ctx)
+          return body
+        }
+      })
       .catch(error => {
         if (!ctx.finished) finish(ctx, null, error)
         throw error
       })
-  })
-}
-
-/**
- * @param {object} ctx
- * @param {object|string} result
- * @param {(body: object|string) => Promise<void>|undefined} getVerdict
- * @returns {object|string|Promise<object|string>}
- */
-function finishResult (ctx, result, getVerdict) {
-  const verdict = getVerdict(result)
-  if (!verdict) {
-    finish(ctx, result, null)
-    return result
-  }
-
-  return verdict.then(() => {
-    finish(ctx, result, null)
-    return result
   })
 }
 
@@ -175,24 +188,30 @@ function wrapCreate (create) {
         return parseResult
       })
 
-      // Gate raw access; output evaluation supports only the common json() and text() readers.
-      shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
-        return waitForVerdict(origAsResponse.apply(this, asResponseArgs), getBeforeVerdict())
-          .then(response => {
-            if (!stream && wrappedResponse !== response) {
-              wrappedResponse = response
-              wrapResponseReader(response, 'json', ctx, getAfterVerdict)
-              wrapResponseReader(response, 'text', ctx, getAfterVerdict)
-            }
+      if (typeof apiPromise.asResponse === 'function') {
+        shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
+          return waitForVerdict(origAsResponse.apply(this, asResponseArgs), getBeforeVerdict())
+            .then(response => {
+              // Raw output evaluation supports the common json() and text() readers only.
+              if (!stream &&
+                (anthropicTracingChannel.start.hasSubscribers ||
+                  afterVerdict ||
+                  messagesAfterChannel.hasSubscribers) &&
+                wrappedResponse !== response) {
+                wrappedResponse = response
+                wrapResponseReader(response, 'json', ctx, getAfterVerdict)
+                wrapResponseReader(response, 'text', ctx, getAfterVerdict)
+              }
 
-            if (afterVerdict) return afterVerdict.then(() => response)
-            return response
-          })
-          .catch(error => {
-            if (!ctx.finished) finish(ctx, null, error)
-            throw error
-          })
-      })
+              if (afterVerdict) return afterVerdict.then(() => response)
+              return response
+            })
+            .catch(error => {
+              if (!ctx.finished) finish(ctx, null, error)
+              throw error
+            })
+        })
+      }
 
       anthropicTracingChannel.end.publish(ctx)
 

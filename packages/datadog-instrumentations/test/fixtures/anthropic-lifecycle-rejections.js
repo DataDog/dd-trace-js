@@ -9,7 +9,6 @@ const {
   FakeAPIPromise,
   FakeMessages,
   applyShim,
-  createDeferred,
   loadAnthropicInstrumentation,
 } = require('../helpers/anthropic-lifecycle')
 
@@ -64,30 +63,8 @@ async function run () {
     return
   }
 
-  if (mode === 'ignored-first-raw') {
-    const error = new Error('blocked')
-    /**
-     * @param {{ abortController: AbortController, pending: Promise<void>[] }} context
-     */
-    const subscriber = context => {
-      context.abortController.abort(error)
-      context.pending.push(Promise.resolve())
-    }
-    messagesAfterChannel.subscribe(subscriber)
-    const instrumentedPromise = messages.create({ messages: [] })
-    const response = await instrumentedPromise.asResponse()
-    response.json()
-
-    try {
-      await setImmediate()
-    } finally {
-      messagesAfterChannel.unsubscribe(subscriber)
-    }
-    return
-  }
-
-  if (mode === 'raw-with-pending-parse') {
-    const parseDeferred = createDeferred()
+  if (mode === 'handled-repeated-raw-error') {
+    const error = new Error('request failed')
     /**
      * @param {{ pending: Promise<void>[] }} context
      */
@@ -95,25 +72,15 @@ async function run () {
       context.pending.push(Promise.resolve())
     }
     messagesAfterChannel.subscribe(subscriber)
-    apiPromise.parse = () => parseDeferred.promise
+    apiPromise.asResponse = () => Promise.reject(error)
     const instrumentedPromise = messages.create({ messages: [] })
-    const parsePromise = instrumentedPromise.parse()
-    let rawResponse
 
     try {
-      instrumentedPromise.asResponse().then(
-        /**
-         * @param {object} response
-         */
-        response => {
-          rawResponse = response
-        }
-      )
+      await Promise.all([
+        assert.rejects(instrumentedPromise.asResponse(), error),
+        assert.rejects(instrumentedPromise.asResponse(), error),
+      ])
       await setImmediate()
-      assert.strictEqual(rawResponse, apiPromise._rawResponse)
-
-      parseDeferred.resolve(apiPromise._body)
-      await parsePromise
     } finally {
       messagesAfterChannel.unsubscribe(subscriber)
     }
