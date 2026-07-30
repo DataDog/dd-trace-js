@@ -1958,6 +1958,66 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 0)
       })
 
+      onlyLatestIt('reports failed ATR attempts when a quarantined test eventually passes', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-passes.js': {
+                tests: {
+                  'test-flaky-test-retries can retry flaky tests': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'test-flaky-test-retries can retry flaky tests')
+
+            assert.strictEqual(tests.length, 3)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+              RUN_IN_PARALLEL: 'true',
+              TESTS_TO_RUN: 'jest-flaky/flaky-passes.js',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+      })
+
       it('session passes when EFD flaky retries and quarantine failures are combined', async () => {
         const NUM_RETRIES_EFD = 3
 

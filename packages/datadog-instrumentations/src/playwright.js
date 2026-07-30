@@ -747,6 +747,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
         testSuite: getTestSuitePath(testSuiteAbsolutePath, rootDir),
         testName: getTestFullname(test),
         status: 'skip',
+        isAttemptToFix: test._ddIsAttemptToFix,
         isDisabled: true,
         isQuarantined: test._ddIsQuarantined,
       })
@@ -2226,6 +2227,7 @@ function generateSummaryWrapper (generateSummary) {
             line: testSourceLine,
           },
           _ddIsNew: isNew,
+          _ddIsAttemptToFix: isAttemptToFix,
           _ddIsDisabled: isDisabled,
           _ddIsModified: isModified,
           _ddIsQuarantined: isQuarantined,
@@ -2237,6 +2239,7 @@ function generateSummaryWrapper (generateSummary) {
             testSuite: getTestSuitePath(testSuiteAbsolutePath, rootDir),
             testName: getTestFullname(test),
             status: 'skip',
+            isAttemptToFix,
             isDisabled,
             isQuarantined,
           })

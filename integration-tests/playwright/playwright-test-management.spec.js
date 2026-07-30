@@ -679,6 +679,7 @@ versions.forEach((version) => {
           ])
 
           assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+          assert.doesNotMatch(testOutput, /Disabled:/)
           assert.strictEqual(exitCode, 0, testOutput)
         })
 

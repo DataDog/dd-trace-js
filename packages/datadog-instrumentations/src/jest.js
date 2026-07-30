@@ -328,12 +328,10 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *   efdFailureCount: number
  * } | undefined} ignoredFailures
  * @param {NonNullable<TestOptimizationSummary['attemptToFixExecutions']>} attemptToFixExecutions
- * @param {NonNullable<TestOptimizationSummary['testManagementExecutions']>} testManagementExecutions
  */
-function logSessionSummary (ignoredFailures, attemptToFixExecutions, testManagementExecutions) {
+function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
   logTestOptimizationSummary({
     attemptToFixExecutions,
-    testManagementExecutions,
     extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
     newTestsWithDynamicNames,
   })
@@ -379,8 +377,21 @@ function getAttemptToFixExecutionsFromJestResults (result) {
   return executions
 }
 
-function getTestManagementExecutionsFromJestResults (result, quarantineFailureNames) {
-  const executions = new Map()
+/**
+ * Records test-management results reported by Jest after all retries have finished.
+ *
+ * @param {{
+ *   globalConfig?: { rootDir?: string },
+ *   results: {
+ *     testResults: Array<{
+ *       testResults: Array<{ fullName: string, status: string }>,
+ *       testFilePath: string
+ *     }>
+ *   }
+ * }} result
+ * @param {string[]} quarantineFailureNames
+ */
+function recordTestManagementExecutionsFromJestResults (result, quarantineFailureNames) {
   const rootDir = result.globalConfig?.rootDir || process.cwd()
   const failedQuarantinedTests = new Set(quarantineFailureNames)
 
@@ -406,11 +417,9 @@ function getTestManagementExecutionsFromJestResults (result, quarantineFailureNa
         isAttemptToFix: testManagementTest.attempt_to_fix,
         isDisabled: testManagementTest.disabled,
         isQuarantined: testManagementTest.quarantined,
-      }, executions)
+      })
     }
   }
-
-  return executions
 }
 
 function wrapConsoleErrorForJestReferenceErrors () {
@@ -1555,6 +1564,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
           return
         }
+        recordTestManagementExecution({
+          testSuite: ctx.suite,
+          testName: ctx.name,
+          status,
+          isAttemptToFix: ctx.isAttemptToFix,
+          isDisabled: ctx.isDisabled,
+          isQuarantined: ctx.isQuarantined,
+        })
         if (ctx.concurrentTestState && !ctx.currentStore && !ctx.isDisabled) {
           testStartCh.runStores(ctx, () => {})
         }
@@ -2573,11 +2590,8 @@ function getCliWrapper (isNewJestVersion) {
         await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
-      logSessionSummary(
-        ignoredFailuresSummary,
-        getAttemptToFixExecutionsFromJestResults(result),
-        getTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
-      )
+      recordTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
+      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       resetSuiteSkippingRunState()
 

@@ -64,6 +64,7 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -697,7 +698,7 @@ function publishRetriedAttempt (runner, state) {
 
   // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
   if (isFlakyTestRetriesEnabled) {
-    const nameForKey = runner.pickle.name.replace(/ ?\(attempt \d+(?:, retried)?\) ?$/, '')
+    const nameForKey = runner.pickle.name.replace(CUCUMBER_RETRY_NAME_SUFFIX, '')
     const atrKey = `${runner.pickle.uri}:${nameForKey}`
     if (atrStatusesByScenarioKey.has(atrKey)) {
       atrStatusesByScenarioKey.get(atrKey).push('fail')
@@ -803,6 +804,7 @@ function wrapRun (pl, isLatestVersion, version) {
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
+        const testName = this.pickle.name.replace(CUCUMBER_RETRY_NAME_SUFFIX, '')
 
         if (lastStatusByPickleId.has(this.pickle.id)) {
           lastStatusByPickleId.get(this.pickle.id).push(status)
@@ -822,7 +824,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          const testProperties = getTestProperties(testSuitePath, testName)
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
           isAttemptToFix = testProperties.attemptToFix
           isAttemptToFixRetry = isAttemptToFix && numRetries > 0
@@ -890,8 +892,7 @@ function wrapRun (pl, isLatestVersion, version) {
         // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
         // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
         if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
-          const nameForKey = this.pickle.name.replace(/ ?\(attempt \d+(?:, retried)?\) ?$/, '')
-          const atrKey = `${this.pickle.uri}:${nameForKey}`
+          const atrKey = `${this.pickle.uri}:${testName}`
           if (atrStatusesByScenarioKey.has(atrKey)) {
             atrStatusesByScenarioKey.get(atrKey).push(status)
           } else {
@@ -912,7 +913,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         recordTestManagementExecution({
           testSuite: testSuitePath,
-          testName: this.pickle.name,
+          testName,
           status,
           isAttemptToFix,
           isDisabled,
@@ -922,7 +923,7 @@ function wrapRun (pl, isLatestVersion, version) {
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {
             testSuite: testSuitePath,
-            testName: this.pickle.name,
+            testName,
             status,
             isDisabled,
             isQuarantined,

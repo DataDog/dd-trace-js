@@ -3655,6 +3655,45 @@ describe(`cucumber@${version} commonJS`, () => {
         runTest(done, true)
       })
 
+      onlyLatestIt('reports a quarantined test once after ATR retries', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 1,
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (data) => {
+          stdout += data.toString()
+        })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+      })
+
       it('fails if quarantine is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 
