@@ -21,6 +21,7 @@ const {
   getMaxEfdRetryCount,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   logAttemptToFixTestExecution,
@@ -908,6 +909,15 @@ function wrapRun (pl, isLatestVersion, version) {
         const attemptCtx = numAttemptToCtx.get(state.numAttempt)
 
         const error = getErrorFromCucumberResult(result)
+
+        recordTestManagementExecution({
+          testSuite: testSuitePath,
+          testName: this.pickle.name,
+          status,
+          isAttemptToFix,
+          isDisabled,
+          isQuarantined,
+        })
 
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {

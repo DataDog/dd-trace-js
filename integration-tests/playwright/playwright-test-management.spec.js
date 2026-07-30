@@ -792,7 +792,8 @@ versions.forEach((version) => {
             // the testOutput checks whether the test is actually skipped
             if (isDisabling) {
               assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
-              assert.strictEqual(exitCode, 0)
+              assert.match(testOutput, /Disabled: \d+ tests? skipped\./)
+              assert.strictEqual(exitCode, 0, testOutput)
             } else {
               assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
               assert.strictEqual(exitCode, 1)
@@ -940,6 +941,7 @@ versions.forEach((version) => {
           hasFlakyTests = false,
         }) => {
           const testAssertionsPromise = getTestAssertions(receiver, { isQuarantining, hasFlakyTests })
+          let testOutput = ''
           let proc
           try {
             proc = exec(
@@ -954,6 +956,8 @@ versions.forEach((version) => {
                 },
               }
             )
+            proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
             const [[exitCode]] = await Promise.all([
               once(proc, 'exit'),
@@ -961,6 +965,10 @@ versions.forEach((version) => {
             ])
 
             if (isQuarantining) {
+              assert.match(
+                testOutput,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)

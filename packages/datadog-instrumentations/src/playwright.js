@@ -16,6 +16,7 @@ const {
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
   getMaxEfdRetryCount,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -741,6 +742,15 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
 
   for (const test of skippedTests) {
     const browserName = getBrowserNameFromProjects(projects, test)
+    if (test._ddIsDisabled) {
+      recordTestManagementExecution({
+        testSuite: getTestSuitePath(testSuiteAbsolutePath, rootDir),
+        testName: getTestFullname(test),
+        status: 'skip',
+        isDisabled: true,
+        isQuarantined: test._ddIsQuarantined,
+      })
+    }
     testSkipCh.publish({
       testName: getTestFullname(test),
       testSuiteAbsolutePath,
@@ -833,6 +843,15 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+
+  recordTestManagementExecution({
+    testSuite: getTestSuitePath(test._requireFile, rootDir),
+    testName: getTestFullname(test),
+    status: testStatus,
+    isAttemptToFix: testProperties.attemptToFix,
+    isDisabled: testProperties.disabled,
+    isQuarantined: testProperties.quarantined,
+  })
 
   if (testProperties.attemptToFix) {
     test._ddHasFailedAttemptToFixRetries = false
@@ -2213,6 +2232,15 @@ function generateSummaryWrapper (generateSummary) {
         } = test
         const browserName = getBrowserNameFromProjects(sessionProjects, test)
 
+        if (isDisabled) {
+          recordTestManagementExecution({
+            testSuite: getTestSuitePath(testSuiteAbsolutePath, rootDir),
+            testName: getTestFullname(test),
+            status: 'skip',
+            isDisabled,
+            isQuarantined,
+          })
+        }
         testSkipCh.publish({
           testName: getTestFullname(test),
           testSuiteAbsolutePath,

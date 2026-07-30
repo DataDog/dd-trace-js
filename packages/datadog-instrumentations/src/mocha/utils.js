@@ -7,6 +7,7 @@ const {
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
   getMaxEfdRetryCount,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -640,6 +641,15 @@ function getTestFinishInfo (test, status, config, error) {
     isQuarantined: _ddIsQuarantined,
     isDisabled: _ddIsDisabled,
     isFinalAttempt,
+  })
+
+  recordTestManagementExecution({
+    testSuite: getTestSuitePath(test.file, process.cwd()),
+    testName: test.fullTitle(),
+    status,
+    isAttemptToFix: _ddIsAttemptToFix,
+    isDisabled: _ddIsDisabled,
+    isQuarantined: _ddIsQuarantined,
   })
 
   if (_ddIsAttemptToFix) {

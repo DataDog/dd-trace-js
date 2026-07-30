@@ -5,7 +5,7 @@ const fs = require('fs')
 const { URL } = require('url')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
@@ -300,7 +300,10 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
+const MAX_TEST_MANAGEMENT_REPORT_ITEMS = 5
+const MAX_TEST_OPTIMIZATION_NAME_LENGTH = 160
 const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
+const testManagementExecutions = new Map()
 
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
@@ -584,8 +587,10 @@ module.exports = {
   collectDynamicNamesFromTraces,
   collectTestOptimizationSummariesFromTraces,
   logDynamicNamesWarning,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
+  formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   formatDynamicNamesSummary,
@@ -1878,6 +1883,67 @@ function formatTestOptimizationName (testSuite, testName) {
 }
 
 /**
+ * Replaces characters that could make one test occupy multiple CI log lines.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function sanitizeTestOptimizationName (value) {
+  return value.replaceAll(/\s+/g, ' ').trim()
+}
+
+/**
+ * Truncates the beginning of a value while preserving its distinguishing suffix.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ * @returns {string}
+ */
+function truncateTestOptimizationNameStart (value, maxLength) {
+  return value.length <= maxLength ? value : `…${value.slice(-(maxLength - 1))}`
+}
+
+/**
+ * Truncates the middle of a value while preserving both its context and suffix.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ * @returns {string}
+ */
+function truncateTestOptimizationNameMiddle (value, maxLength) {
+  if (value.length <= maxLength) return value
+
+  const prefixLength = Math.ceil((maxLength - 1) / 2)
+  const suffixLength = maxLength - prefixLength - 1
+  return `${value.slice(0, prefixLength)}…${value.slice(-suffixLength)}`
+}
+
+/**
+ * Formats a bounded, single-line test name for CI output.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @returns {string}
+ */
+function formatTestOptimizationDisplayName (testSuite, testName) {
+  const sanitizedSuite = testSuite ? sanitizeTestOptimizationName(testSuite) : ''
+  const sanitizedName = sanitizeTestOptimizationName(testName)
+  if (!sanitizedSuite) {
+    return truncateTestOptimizationNameMiddle(sanitizedName, MAX_TEST_OPTIMIZATION_NAME_LENGTH)
+  }
+
+  const separator = ' › '
+  if (sanitizedSuite.length + separator.length + sanitizedName.length <= MAX_TEST_OPTIMIZATION_NAME_LENGTH) {
+    return `${sanitizedSuite}${separator}${sanitizedName}`
+  }
+
+  const suiteLength = Math.min(60, sanitizedSuite.length)
+  const testNameLength = MAX_TEST_OPTIMIZATION_NAME_LENGTH - separator.length - suiteLength
+  return truncateTestOptimizationNameStart(sanitizedSuite, suiteLength) +
+    `${separator}${truncateTestOptimizationNameMiddle(sanitizedName, testNameLength)}`
+}
+
+/**
  * Renders a bounded bullet list for Test Optimization summaries.
  *
  * @param {Array<{ text: string, suffix?: string }>} items
@@ -1888,7 +1954,12 @@ function formatTestOptimizationList (items) {
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
 
-  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+  return shown
+    .map(({ text, suffix }) => `  • ${truncateTestOptimizationNameMiddle(
+      sanitizeTestOptimizationName(text),
+      MAX_TEST_OPTIMIZATION_NAME_LENGTH
+    )}${suffix ? ` (${suffix})` : ''}`)
+    .join('\n') + moreSuffix
 }
 
 /**
@@ -1909,7 +1980,56 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
   }
 
   // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
-  console.warn(`Datadog Test Optimization: attempting to fix ${name}`)
+  console.warn(`Datadog Test Optimization: attempting to fix ${formatTestOptimizationDisplayName(testSuite, testName)}`)
+}
+
+/**
+ * @typedef {object} TestManagementExecutionResult
+ * @property {string} name
+ * @property {'disabled'|'quarantined'} action
+ * @property {boolean} failed
+ */
+
+/**
+ * @typedef {Map<string, TestManagementExecutionResult>} TestManagementExecutions
+ */
+
+/**
+ * Records the effective non-Attempt-to-Fix Test Management action for one execution.
+ *
+ * @param {{
+ *   testSuite?: string,
+ *   testName: string,
+ *   status?: string,
+ *   isAttemptToFix?: boolean,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }} execution
+ * @param {TestManagementExecutions} [executions]
+ */
+function recordTestManagementExecution (execution, executions = testManagementExecutions) {
+  if (!execution?.testName || execution.isAttemptToFix) return
+
+  const action = execution.isDisabled
+    ? 'disabled'
+    : execution.isQuarantined ? 'quarantined' : undefined
+  if (!action) return
+
+  const name = formatTestOptimizationName(execution.testSuite, execution.testName)
+  let result = executions.get(name)
+
+  if (!result) {
+    result = {
+      name,
+      action,
+      failed: false,
+    }
+    executions.set(name, result)
+  } else if (action === 'disabled') {
+    result.action = action
+  }
+
+  result.failed ||= execution.status === 'fail'
 }
 
 /**
@@ -1975,6 +2095,20 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
   })
 }
 
+function collectTestManagementExecutionFromTraceSpan (span, executions) {
+  const meta = span.meta
+  if (!meta) return
+
+  recordTestManagementExecution({
+    testSuite: meta[TEST_SUITE],
+    testName: meta[TEST_NAME],
+    status: meta[TEST_STATUS],
+    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+  }, executions)
+}
+
 /**
  * Scans serialized worker trace payloads and populates Test Optimization summary data.
  * Silently ignores parse errors.
@@ -1982,11 +2116,16 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
  * @param {string} data - JSON-serialized traces from a worker
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
- *   attemptToFixExecutions?: AttemptToFixExecutions
+ *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
  */
 function collectTestOptimizationSummariesFromTraces (data, summaries) {
-  const { newTestsWithDynamicNames, attemptToFixExecutions } = summaries
+  const {
+    newTestsWithDynamicNames,
+    attemptToFixExecutions,
+    testManagementExecutions: executions = testManagementExecutions,
+  } = summaries
 
   try {
     const traces = JSON.parse(data)
@@ -1998,6 +2137,7 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
         if (attemptToFixExecutions) {
           collectAttemptToFixExecutionFromTraceSpan(span, attemptToFixExecutions)
         }
+        collectTestManagementExecutionFromTraceSpan(span, executions)
       }
     }
   } catch {
@@ -2044,7 +2184,10 @@ function hasAttemptToFixManagementNotes (result) {
 }
 
 function addAttemptToFixResultLine (lines, result) {
-  lines.push(`  • ${result.name}`)
+  lines.push(`  • ${truncateTestOptimizationNameMiddle(
+    sanitizeTestOptimizationName(result.name),
+    MAX_TEST_OPTIMIZATION_NAME_LENGTH
+  )}`)
 
   for (const note of getAttemptToFixManagementNotes(result)) {
     lines.push(`    ${note}`)
@@ -2055,9 +2198,10 @@ function addAttemptToFixResultLine (lines, result) {
  * Formats the attempt-to-fix end-of-session summary.
  *
  * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @param {boolean} [includeTestNames]
  * @returns {string}
  */
-function formatAttemptToFixSummary (attemptToFixExecutions) {
+function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = true) {
   if (attemptToFixExecutions.size === 0) return ''
 
   const results = [...attemptToFixExecutions.values()]
@@ -2069,9 +2213,11 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
       `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`,
     ]
 
-    for (const result of results) {
-      if (hasAttemptToFixManagementNotes(result)) {
-        addAttemptToFixResultLine(lines, result)
+    if (includeTestNames) {
+      for (const result of results) {
+        if (hasAttemptToFixManagementNotes(result)) {
+          addAttemptToFixResultLine(lines, result)
+        }
       }
     }
 
@@ -2087,12 +2233,66 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
       `across ${failedResults.length} of ${results.length} test(s).`,
   ]
 
-  for (const result of failedResults) {
-    addAttemptToFixResultLine(lines, result)
-  }
-  for (const result of results) {
-    if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+  if (includeTestNames) {
+    for (const result of failedResults) {
       addAttemptToFixResultLine(lines, result)
+    }
+    for (const result of results) {
+      if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+        addAttemptToFixResultLine(lines, result)
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Formats the disabled and quarantined Test Management summary.
+ *
+ * @param {TestManagementExecutions} executions
+ * @param {boolean} [includeTestNames]
+ * @returns {string}
+ */
+function formatTestManagementSummary (executions, includeTestNames = true) {
+  if (executions.size === 0) return ''
+
+  const results = [...executions.values()]
+  const disabledResults = results.filter(result => result.action === 'disabled')
+  const quarantinedResults = results.filter(result => result.action === 'quarantined')
+  const failedQuarantinedResults = quarantinedResults.filter(result => result.failed)
+  const lines = ['Test Management']
+
+  if (disabledResults.length > 0) {
+    const testLabel = disabledResults.length === 1 ? 'test' : 'tests'
+    lines.push(`  Disabled: ${disabledResults.length} ${testLabel} skipped.`)
+  }
+  if (quarantinedResults.length > 0) {
+    const testLabel = quarantinedResults.length === 1 ? 'test' : 'tests'
+    if (failedQuarantinedResults.length > 0) {
+      const failureLabel = failedQuarantinedResults.length === 1 ? 'failure' : 'failures'
+      lines.push(
+        `  Quarantined: ${quarantinedResults.length} ${testLabel} run; ` +
+        `${failedQuarantinedResults.length} ${failureLabel} did not affect the test session.`
+      )
+    } else {
+      lines.push(`  Quarantined: ${quarantinedResults.length} ${testLabel} run; all passed.`)
+    }
+  }
+
+  if (includeTestNames) {
+    lines.push('', '  Affected tests:')
+    results.sort((a, b) => a.name.localeCompare(b.name))
+    for (const result of results) {
+      const status = result.action === 'disabled'
+        ? 'disabled'
+        : result.failed ? 'quarantined, failed' : 'quarantined, passed'
+      lines.push(
+        `  • [${status}] ${truncateTestOptimizationNameMiddle(
+          sanitizeTestOptimizationName(result.name),
+          MAX_TEST_OPTIMIZATION_NAME_LENGTH
+        )}`
+      )
     }
   }
 
@@ -2124,25 +2324,57 @@ function formatDynamicNamesSummary (newTestsWithDynamicNames) {
  *
  * @param {{
  *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   testManagementExecutions?: TestManagementExecutions,
  *   newTestsWithDynamicNames?: Set<string>,
  *   extraSections?: string[]
  * }} summary
  */
 function logTestOptimizationSummary (summary) {
-  const { attemptToFixExecutions, newTestsWithDynamicNames, extraSections = [] } = summary
+  const {
+    attemptToFixExecutions,
+    testManagementExecutions: executions = testManagementExecutions,
+    newTestsWithDynamicNames,
+    extraSections = [],
+  } = summary
   const sections = []
-  const attemptToFixSummary = attemptToFixExecutions
-    ? formatAttemptToFixSummary(attemptToFixExecutions)
+  const isTestManagementReportEnabled =
+    getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') !== false
+  const testManagementTestCount = (attemptToFixExecutions?.size || 0) + executions.size
+  const includeTestNames = testManagementTestCount <= MAX_TEST_MANAGEMENT_REPORT_ITEMS
+  const attemptToFixSummary = isTestManagementReportEnabled && attemptToFixExecutions
+    ? formatAttemptToFixSummary(attemptToFixExecutions, includeTestNames)
+    : ''
+  const testManagementSummary = isTestManagementReportEnabled
+    ? formatTestManagementSummary(executions, includeTestNames)
     : ''
   const dynamicNamesSummary = newTestsWithDynamicNames
     ? formatDynamicNamesSummary(newTestsWithDynamicNames)
     : ''
 
   if (attemptToFixSummary) sections.push(attemptToFixSummary)
+  if (testManagementSummary) sections.push(testManagementSummary)
+  if (attemptToFixSummary || testManagementSummary) {
+    if (!includeTestNames) {
+      sections.push(`Individual test names omitted because ${testManagementTestCount} tests were affected.`)
+    }
+    sections.push('Hide this report: DD_TEST_MANAGEMENT_REPORT_ENABLED=false')
+  }
   sections.push(...extraSections.filter(Boolean))
   if (dynamicNamesSummary) sections.push(dynamicNamesSummary)
 
-  if (sections.length === 0) return
+  if (sections.length === 0) {
+    executions.clear()
+    if (executions !== testManagementExecutions) {
+      testManagementExecutions.clear()
+    }
+    if (attemptToFixExecutions) {
+      attemptToFixExecutions.clear()
+    }
+    if (newTestsWithDynamicNames) {
+      newTestsWithDynamicNames.clear()
+    }
+    return
+  }
 
   const line = '-'.repeat(50)
   // eslint-disable-next-line no-console -- Intentional user-facing session summary
@@ -2150,6 +2382,10 @@ function logTestOptimizationSummary (summary) {
 
   if (attemptToFixExecutions) {
     attemptToFixExecutions.clear()
+  }
+  executions.clear()
+  if (executions !== testManagementExecutions) {
+    testManagementExecutions.clear()
   }
   if (newTestsWithDynamicNames) {
     newTestsWithDynamicNames.clear()

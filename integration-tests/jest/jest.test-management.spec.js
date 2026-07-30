@@ -1382,7 +1382,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
-      const runDisableTest = (done, isDisabling, extraEnvVars = {}, isParallel = false) => {
+      const runDisableTest = (
+        done,
+        isDisabling,
+        extraEnvVars = {},
+        isParallel = false,
+        isReportEnabled = true
+      ) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
 
@@ -1408,6 +1414,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              if (isReportEnabled) {
+                assert.match(stdout, /Disabled: \d+ tests? skipped\./)
+              } else {
+                assert.doesNotMatch(stdout, /Datadog Test Optimization/)
+              }
               // even though a test fails, the exit code is 0 because the test is disabled
               assert.strictEqual(exitCode, 0)
             } else {
@@ -1423,6 +1434,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runDisableTest(done, true)
+      })
+
+      it('can disable the Test Management report without disabling Test Management', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, true, { DD_TEST_MANAGEMENT_REPORT_ENABLED: 'false' }, false, false)
       })
 
       onlyLatestIt('skips disabled concurrent test bodies before they run', async () => {
@@ -1747,8 +1764,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(exitCode, 0)
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
-          assert.match(stdout, /\d+ test failure\(s\) were ignored/)
-          assert.match(stdout, /Quarantine/)
+          assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
           assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)

@@ -5870,11 +5870,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
 
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              assert.match(stdout, /Disabled: \d+ tests? skipped\./)
               assert.strictEqual(exitCode, 0)
             } else {
               assert.match(stdout, /I am running/)
@@ -5997,12 +6001,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
 
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             // it runs regardless of the quarantine status
             assert.match(stdout, /I am running when quarantined/)
             if (isQuarantining) {
+              assert.match(
+                stdout,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)

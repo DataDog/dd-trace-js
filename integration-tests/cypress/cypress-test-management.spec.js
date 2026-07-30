@@ -735,6 +735,7 @@ moduleTypes.forEach(({
 
         const runDisableAndQuarantineTest = async (isManagingTests, extraEnvVars = {}) => {
           const envVars = getCiVisEvpProxyConfig(receiver.port)
+          let testOutput = ''
 
           const specToRun = 'cypress/e2e/{disable,quarantine}.js'
           const cypress67SpecToRun = 'cypress/e2e/disable.js,cypress/e2e/quarantine.js'
@@ -754,10 +755,17 @@ moduleTypes.forEach(({
               },
             }
           )
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
           await awaitTestAssertions(isManagingTests, childProcess)
 
           if (isManagingTests) {
+            assert.match(testOutput, /Disabled: 1 test skipped\./)
+            assert.match(
+              testOutput,
+              /Quarantined: 1 test run; 1 failure did not affect the test session\./
+            )
             assert.strictEqual(childProcess.exitCode, 0)
           } else {
             assert.strictEqual(childProcess.exitCode, 2)

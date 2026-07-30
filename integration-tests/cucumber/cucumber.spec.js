@@ -3526,11 +3526,15 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              assert.match(stdout, /Disabled: \d+ tests? skipped\./)
               assert.strictEqual(exitCode, 0)
             } else {
               assert.match(stdout, /I am running/)
@@ -3622,12 +3626,19 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.stdout?.on('data', (data) => {
           stdout += data.toString()
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             // Regardless of whether the test is quarantined or not, it will be run
             assert.match(stdout, /I am running as quarantine/)
             if (isQuarantining) {
+              assert.match(
+                stdout,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               // even though a test fails, the exit code is 1 because the test is quarantined
               assert.strictEqual(exitCode, 0)
             } else {

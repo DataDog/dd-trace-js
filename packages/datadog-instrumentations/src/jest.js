@@ -27,6 +27,7 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -288,22 +289,20 @@ function getTestStats (testStatuses) {
 /**
  * Formats the ignored-failure section for the Test Optimization summary.
  *
- * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @param {{
+ *   efdNames: string[],
+ *   quarantineNames: string[],
+ *   totalCount: number,
+ *   efdFailureCount: number
+ * } | undefined} ignoredFailures
  * @returns {string}
  */
 function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures) return ''
 
-  const items = []
+  const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
 
-  for (const n of ignoredFailures.efdNames) {
-    items.push({ text: n, suffix: 'Early Flake Detection' })
-  }
-  for (const n of ignoredFailures.quarantineNames) {
-    items.push({ text: n, suffix: 'Quarantine' })
-  }
-
-  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
+  if (items.length === 0) return ''
 
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
@@ -312,17 +311,23 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
     .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
     .join('\n') + moreSuffix
 
-  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
+  return `${ignoredFailures.efdFailureCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
  * Logs a single "Datadog Test Optimization" summary at session end.
  *
- * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @param {{
+ *   efdNames: string[],
+ *   quarantineNames: string[],
+ *   totalCount: number,
+ *   efdFailureCount: number
+ * } | undefined} ignoredFailures
  */
-function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+function logSessionSummary (ignoredFailures, attemptToFixExecutions, testManagementExecutions) {
   logTestOptimizationSummary({
     attemptToFixExecutions,
+    testManagementExecutions,
     extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
     newTestsWithDynamicNames,
   })
@@ -362,6 +367,40 @@ function getAttemptToFixExecutionsFromJestResults (result) {
         isDisabled: testManagementTest.disabled,
         isQuarantined: testManagementTest.quarantined,
       })
+    }
+  }
+
+  return executions
+}
+
+function getTestManagementExecutionsFromJestResults (result, quarantineFailureNames) {
+  const executions = new Map()
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+  const failedQuarantinedTests = new Set(quarantineFailureNames)
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = removeSeedSuffixFromTestName(fullName)
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest) continue
+
+      const name = `${testSuite} › ${testName}`
+      recordTestManagementExecution({
+        testSuite,
+        testName,
+        status: failedQuarantinedTests.has(name) ? 'fail' : getTestStatusFromJestResult(status),
+        isAttemptToFix: testManagementTest.attempt_to_fix,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      }, executions)
     }
   }
 
@@ -2377,7 +2416,14 @@ function getCliWrapper (isNewJestVersion) {
         }
       }
 
-      /** @type {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} */
+      /**
+       * @type {{
+       *   efdNames: string[],
+       *   quarantineNames: string[],
+       *   totalCount: number,
+       *   efdFailureCount: number
+       * } | undefined}
+       */
       let ignoredFailuresSummary
       if (isEarlyFlakeDetectionEnabled) {
         for (const [testName, testStatuses] of newTestsTestStatuses) {
@@ -2399,6 +2445,7 @@ function getCliWrapper (isNewJestVersion) {
             efdNames: efdIgnoredNames,
             quarantineNames: [],
             totalCount: numEfdFailedTestsToIgnore,
+            efdFailureCount: numEfdFailedTestsToIgnore,
           }
         }
       }
@@ -2471,6 +2518,7 @@ function getCliWrapper (isNewJestVersion) {
               efdNames: [],
               quarantineNames: quarantineIgnoredNames,
               totalCount: totalQuarantineFailures,
+              efdFailureCount: 0,
             }
           }
         }
@@ -2496,6 +2544,7 @@ function getCliWrapper (isNewJestVersion) {
             efdNames: efdIgnoredNames,
             quarantineNames: quarantineIgnoredNames,
             totalCount: visibleIgnoredFailures + numSuppressedQuarantinedTests,
+            efdFailureCount: numEfdFailedTestsToIgnore,
           }
         }
       }
@@ -2518,7 +2567,11 @@ function getCliWrapper (isNewJestVersion) {
         await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
-      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
+      logSessionSummary(
+        ignoredFailuresSummary,
+        getAttemptToFixExecutionsFromJestResults(result),
+        getTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
+      )
 
       resetSuiteSkippingRunState()
 
