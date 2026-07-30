@@ -1314,6 +1314,32 @@ versions.forEach((version) => {
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
 
+      it('reports setup files and their dependencies without a user coverage dependency', async () => {
+        const setupFile = 'ci-visibility/vitest-tests/tia-setup.mjs'
+        const setupSource = 'ci-visibility/vitest-tests/tia-setup-source.mjs'
+
+        await runTiaTests((payloads) => {
+          const { coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.deepStrictEqual(
+            coverageBySuite.get(firstSuite),
+            [
+              firstSuite,
+              'ci-visibility/vitest-tests/sum.mjs',
+              setupFile,
+              setupSource,
+            ].sort()
+          )
+        }, {
+          env: {
+            TEST_DIR: firstSuite,
+            VITEST_SETUP_FILE: setupFile,
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
       for (const coverageProvider of ['v8', 'istanbul']) {
         it(`reports per-suite covered files when the user enables ${coverageProvider} coverage`, async () => {
           await runTiaTests((payloads) => {
