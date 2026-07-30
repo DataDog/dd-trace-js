@@ -414,6 +414,7 @@ function omitOptions (args, options) {
 function expandSupportPaths (args, projectFiles, projectRoot) {
   const expanded = []
   const pathOptions = new Set(['-i', '-r', '--import', '--require'])
+  const aliases = { '-i': '--import', '-r': '--require' }
   for (let index = 0; index < args.length; index++) {
     const option = args[index].split('=', 1)[0]
     if (!pathOptions.has(option)) {
@@ -429,7 +430,7 @@ function expandSupportPaths (args, projectFiles, projectRoot) {
         runnerArgs: [],
       }
     }
-    for (const filename of matches) expanded.push(option, filename)
+    for (const filename of matches) expanded.push(aliases[option] || option, filename)
   }
   return { runnerArgs: expanded }
 }

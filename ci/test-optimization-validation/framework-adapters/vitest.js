@@ -44,6 +44,8 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
       if (property.value !== name) continue
       const projectObject = getProjectObject(source, property.index)
       if (!projectObject) continue
+      const projectName = getLiteralProperty(projectObject, 'name')
+      if (projectName.dynamic || projectName.value !== name) continue
       const binding = getBindingFromObject({
         configFile,
         projectFiles,
@@ -186,11 +188,18 @@ function getObjectRanges (source) {
 }
 
 function getLiteralStringProperties (source, property) {
+  return getPropertyPositions(source, property).flatMap(({ index, valueStart }) => {
+    const literal = /^(["'])([^"'\\]+)\1/.exec(source.slice(valueStart))
+    return literal ? [{ index, value: literal[2] }] : []
+  })
+}
+
+function getPropertyPositions (source, property) {
   const properties = []
   let quote
   let lineComment = false
   let blockComment = false
-  let previousCodeCharacter
+  let previousCodeCharacter = '{'
   for (let index = 0; index < source.length; index++) {
     const character = source[index]
     const next = source[index + 1]
@@ -232,32 +241,32 @@ function getLiteralStringProperties (source, property) {
       continue
     }
 
-    const match = new RegExp(
-      String.raw`^${property}\s*:\s*(["'])([^"'\\]+)\1`
-    ).exec(source.slice(index))
+    const match = new RegExp(String.raw`^${property}\s*:\s*`).exec(source.slice(index))
     if (!match) {
       previousCodeCharacter = character
       continue
     }
-    properties.push({ index, value: match[2] })
-    previousCodeCharacter = match[0].at(-1)
+    properties.push({ index, valueStart: index + match[0].length })
+    previousCodeCharacter = ':'
     index += match[0].length - 1
   }
   return properties
 }
 
 function getLiteralProperty (source, property) {
-  const literal = new RegExp(String.raw`\b${property}\s*:\s*(["'])([^"'\\]+)\1`).exec(source)
+  const properties = getPropertyPositions(source, property)
+  if (properties.length === 0) return {}
+  if (properties.length !== 1) return { dynamic: true }
+  const literal = /^(["'])([^"'\\]+)\1/.exec(source.slice(properties[0].valueStart))
   if (literal) return { value: literal[2] }
-  return { dynamic: new RegExp(String.raw`\b${property}\s*:`).test(source) }
+  return { dynamic: true }
 }
 
 function getLiteralStringArray (source, property) {
-  const propertyPattern = new RegExp(String.raw`\b${property}\s*:`)
-  const propertyMatch = propertyPattern.exec(source)
-  if (!propertyMatch) return { values: [] }
-  const tail = source.slice(propertyMatch.index + propertyMatch[0].length)
-  const arrayMatch = /^\s*\[([\s\S]{0,8192}?)\]/.exec(tail)
+  const properties = getPropertyPositions(source, property)
+  if (properties.length === 0) return { values: [] }
+  if (properties.length !== 1) return { dynamic: true, values: [] }
+  const arrayMatch = /^\[([\s\S]{0,8192}?)\]/.exec(source.slice(properties[0].valueStart))
   if (!arrayMatch) return { dynamic: true, values: [] }
   const values = [...arrayMatch[1].matchAll(/(["'])([^"'\\]+)\1/g)].map(match => match[2])
   const residue = arrayMatch[1].replaceAll(/(["'])([^"'\\]+)\1/g, '').replaceAll(',', '').trim()

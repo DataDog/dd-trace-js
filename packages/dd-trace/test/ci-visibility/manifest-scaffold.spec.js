@@ -126,12 +126,14 @@ describe('test optimization validation manifest scaffold', () => {
     })
     fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
       'module.exports = {',
-      "  ci: 'features/**/*.feature --require features/**/*.js',",
+      "  ci: 'features/**/*.feature -r features/**/*.js -i features/**/*.mjs',",
       '}',
       '',
     ].join('\n'))
     const supportFile = path.join(fixture.root, 'features', 'steps.js')
+    const importFile = path.join(fixture.root, 'features', 'steps.mjs')
     fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+    fs.writeFileSync(importFile, 'export default function () {}\n')
     try {
       const framework = createManifestScaffold({
         root: fixture.root,
@@ -141,11 +143,15 @@ describe('test optimization validation manifest scaffold', () => {
       const generated = getGeneratedCommand(framework, framework.generatedTestStrategy.scenarios[0])
       const selectedFeatures = generated.argv.filter(argument => argument.endsWith('.feature'))
 
-      assert.deepStrictEqual(framework.validation.runnerArgs, ['--require', supportFile])
+      assert.deepStrictEqual(framework.validation.runnerArgs, [
+        '--require', supportFile,
+        '--import', importFile,
+      ])
       assert.strictEqual(basic.argv.includes('--profile'), false)
       assert.ok(basic.argv.some(argument => argument.endsWith('cucumber-validation.json')))
       assert.strictEqual(generated.argv.includes('--profile'), false)
       assert.ok(generated.argv.includes(supportFile))
+      assert.ok(generated.argv.includes(importFile))
       assert.ok(generated.argv.includes('json'))
       assert.deepStrictEqual(selectedFeatures, [
         framework.generatedTestStrategy.scenarios[0].testIdentities[0].file,
@@ -1036,6 +1042,49 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.validation.testFile, selected)
       assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'fastly'])
       assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'vitest.config.ts')))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('ignores commented Vitest root and include properties', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const stale = path.join(fixture.root, 'runtime-tests', 'stale', 'stale.test.ts')
+    const selected = path.join(fixture.root, 'runtime-tests', 'real', 'real.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(stale), { recursive: true })
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.writeFileSync(stale, "test('stale', () => {})\n")
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      '      test: {',
+      "        name: 'fastly',",
+      "        // root: 'runtime-tests/stale',",
+      "        root: 'runtime-tests/real',",
+      "        // include: ['**/stale.test.ts'],",
+      "        include: ['**/real.test.ts'],",
+      '      },',
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.strictEqual(framework.project.root, fixture.root)
     } finally {
       removeFixture(fixture.root)
     }
