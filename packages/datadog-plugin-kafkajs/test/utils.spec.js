@@ -4,9 +4,16 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
+const getConfig = require('../../dd-trace/src/config')
+const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/text_map')
 const { convertToTextMap, getKafkaMessageSize } = require('../src/utils')
 
 describe('convertToTextMap', () => {
+  it('reports absent headers as null so the caller skips extraction', () => {
+    assert.strictEqual(convertToTextMap(undefined), null)
+    assert.strictEqual(convertToTextMap(null), null)
+  })
+
   it('converts scalar string and Buffer values', () => {
     assert.deepStrictEqual(convertToTextMap({
       text: 'value',
@@ -17,11 +24,11 @@ describe('convertToTextMap', () => {
     })
   })
 
-  it('keeps duplicate traceparent values as an array instead of selecting a context', () => {
+  it('collapses repeated KafkaJS values to the last one', () => {
     assert.deepStrictEqual(convertToTextMap({
       traceparent: [Buffer.from('first'), Buffer.from('second'), Buffer.from('third')],
     }), {
-      traceparent: ['first', 'second', 'third'],
+      traceparent: 'third',
     })
   })
 
@@ -37,60 +44,56 @@ describe('convertToTextMap', () => {
     assert.deepStrictEqual(convertToTextMap({ traceparent: [] }), {})
   })
 
-  it('preserves a nullish final KafkaJS header value', () => {
+  it('falls back to the last usable value when the repeated tail is nullish', () => {
     assert.deepStrictEqual(convertToTextMap({
-      traceparent: [Buffer.from('current'), undefined],
+      traceparent: [Buffer.from('current'), undefined, null],
     }), {
-      traceparent: ['current', undefined],
+      traceparent: 'current',
     })
   })
 
-  it('preserves nullish scalar values', () => {
+  it('skips nullish scalar values', () => {
     assert.deepStrictEqual(convertToTextMap({
       first: null,
       second: undefined,
-    }), {
-      first: null,
-      second: undefined,
-    })
+    }), {})
   })
 
-  it('preserves repeated native-list values', () => {
+  it('collapses repeated native-list values to the last one', () => {
     assert.deepStrictEqual(convertToTextMap([
       { traceparent: Buffer.from('stale') },
       { traceparent: Buffer.from('current') },
     ]), {
-      traceparent: ['stale', 'current'],
+      traceparent: 'current',
     })
   })
 
-  it('preserves nullish native-list values', () => {
+  it('skips nullish native-list values instead of throwing on them', () => {
     assert.deepStrictEqual(convertToTextMap([
       { first: null },
       { second: undefined },
-    ]), {
-      first: null,
-      second: undefined,
-    })
+    ]), {})
   })
 
-  it('preserves a nullish final native-list value', () => {
+  it('keeps an earlier native-list value that a nullish repeat would erase', () => {
     assert.deepStrictEqual(convertToTextMap([
       { traceparent: Buffer.from('current') },
       { traceparent: undefined },
     ]), {
-      traceparent: ['current', undefined],
+      traceparent: 'current',
     })
   })
 
-  it('preserves repeated baggage and tracestate members', () => {
-    assert.deepStrictEqual(convertToTextMap({
-      baggage: [Buffer.from('first=one'), Buffer.from('second=two')],
-      tracestate: [Buffer.from('vendor=one'), Buffer.from('other=two')],
-    }), {
-      baggage: ['first=one', 'second=two'],
-      tracestate: ['vendor=one', 'other=two'],
-    })
+  it('extracts a trace id the producer actually sent when the field repeats', () => {
+    const carrier = convertToTextMap([
+      { 'x-datadog-trace-id': Buffer.from('123') },
+      { 'x-datadog-trace-id': Buffer.from('456') },
+      { 'x-datadog-parent-id': Buffer.from('789') },
+    ])
+    const extracted = new TextMapPropagator(getConfig()).extract(carrier)
+
+    assert.strictEqual(extracted.toTraceId(), '456')
+    assert.strictEqual(extracted.toSpanId(), '789')
   })
 })
 
