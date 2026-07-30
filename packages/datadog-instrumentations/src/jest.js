@@ -302,7 +302,7 @@ function getTestStats (testStatuses) {
  * @returns {string}
  */
 function formatIgnoredFailuresSummary (ignoredFailures) {
-  if (!ignoredFailures) return ''
+  if (!ignoredFailures?.efdFailureCount) return ''
 
   const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
 
@@ -2453,8 +2453,10 @@ function getCliWrapper (isNewJestVersion) {
           const { pass, fail } = getTestStats(testStatuses)
           if (pass > 0) { // as long as one passes, we'll consider the test passed
             numEfdFailedTestsToIgnore += fail
-            const suite = fullNameToSuite.get(testName)
-            efdIgnoredNames.push(suite ? `${suite} › ${testName}` : testName)
+            if (fail > 0) {
+              const suite = fullNameToSuite.get(testName)
+              efdIgnoredNames.push(suite ? `${suite} › ${testName}` : testName)
+            }
           }
         }
         // If every test that failed was an EFD retry, we'll consider the suite passed

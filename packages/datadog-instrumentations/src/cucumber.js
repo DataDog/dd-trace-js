@@ -66,6 +66,17 @@ const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
 const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
 
+/**
+ * Removes Cucumber's generated retry suffix without changing literal scenario names.
+ *
+ * @param {string} testName
+ * @param {boolean} isRetry
+ * @returns {string}
+ */
+function getCucumberTestName (testName, isRetry) {
+  return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
+}
+
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
@@ -698,7 +709,7 @@ function publishRetriedAttempt (runner, state) {
 
   // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
   if (isFlakyTestRetriesEnabled) {
-    const nameForKey = runner.pickle.name.replace(CUCUMBER_RETRY_NAME_SUFFIX, '')
+    const nameForKey = getCucumberTestName(runner.pickle.name, currentAttempt > 0)
     const atrKey = `${runner.pickle.uri}:${nameForKey}`
     if (atrStatusesByScenarioKey.has(atrKey)) {
       atrStatusesByScenarioKey.get(atrKey).push('fail')
@@ -804,7 +815,7 @@ function wrapRun (pl, isLatestVersion, version) {
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
-        const testName = this.pickle.name.replace(CUCUMBER_RETRY_NAME_SUFFIX, '')
+        const testName = getCucumberTestName(this.pickle.name, state.numAttempt > 0)
 
         if (lastStatusByPickleId.has(this.pickle.id)) {
           lastStatusByPickleId.get(this.pickle.id).push(status)

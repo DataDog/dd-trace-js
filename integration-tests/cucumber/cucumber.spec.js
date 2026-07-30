@@ -3694,6 +3694,60 @@ describe(`cucumber@${version} commonJS`, () => {
         assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
       })
 
+      it('preserves literal retry-like scenario names', async () => {
+        const testName = 'Say quarantine (attempt 2)'
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          cucumber: {
+            suites: {
+              'ci-visibility/features-test-management/retry-like-name.feature': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .find(test => test.meta[TEST_NAME] === testName)
+
+            assert.ok(test)
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/retry-like-name.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        childProcess.stdout?.on('data', (data) => {
+          stdout += data.toString()
+        })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /retry-like-name\.feature › Say quarantine \(attempt 2\)/)
+      })
+
       it('fails if quarantine is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 

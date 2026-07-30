@@ -2101,6 +2101,67 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 0)
       })
 
+      onlyLatestIt('does not report passing EFD retries as ignored failures', async () => {
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          test_management: { enabled: true },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-quarantine-1.js': {
+                tests: {
+                  'quarantine tests can quarantine a test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+        assert.doesNotMatch(stdout, /0 test failure\(s\) were ignored/)
+        assert.doesNotMatch(stdout, /Early Flake Detection/)
+      })
+
       it('does not flip exit code to 0 when a test suite fails to parse', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
