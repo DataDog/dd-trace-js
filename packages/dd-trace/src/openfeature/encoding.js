@@ -73,6 +73,9 @@ function hashTargetingKey (targetingKey) {
  * @returns {string} The rijn-prefixed, base62-encoded SHA256 fingerprint
  */
 function generateApiKeyFingerprint (apiKey) {
+  // Clifford v1 fingerprints high-entropy API keys; it does not verify passwords.
+  // The interoperability contract requires one SHA-256 digest.
+  // codeql[js/insufficient-password-hash]
   const digest = crypto.createHash('sha256').update(apiKey, 'utf8').digest('hex')
   let value = BigInt(`0x${digest}`)
   let encoded = ''
