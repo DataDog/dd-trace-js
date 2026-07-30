@@ -15,8 +15,9 @@ const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 let clientId = uuid()
+let tagsString
 
-channel('datadog:identity:update').subscribe(refreshClientId)
+channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
@@ -46,6 +47,7 @@ class RemoteConfig {
     const appliedConfigs = this.appliedConfigs = new Map()
 
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
+    tagsString = getTagsString(config, repositoryUrl, commitSHA)
 
     this.state = {
       client: {
@@ -82,14 +84,7 @@ class RemoteConfig {
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
           get tags () {
-            const tags = repositoryUrl
-              ? {
-                  ...config.tags,
-                  [GIT_REPOSITORY_URL]: repositoryUrl,
-                  [GIT_COMMIT_SHA]: commitSHA,
-                }
-              : config.tags
-            return Object.entries(tags).map((pair) => pair.join(':'))
+            return tagsString
           },
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
@@ -582,16 +577,36 @@ function supportsAckCallback (handler) {
 }
 
 /**
- * Regenerates the RC client ID and updates config tags.
- * `state.client.id` is a live getter, so subsequent RC polls pick up the new value.
+ * @param {import('../config/config-base')} config
+ * @param {string} repositoryUrl
+ * @param {string} commitSHA
+ * @returns {string[]}
+ */
+function getTagsString (config, repositoryUrl, commitSHA) {
+  const tags = repositoryUrl
+    ? {
+        ...config.tags,
+        [GIT_REPOSITORY_URL]: repositoryUrl,
+        [GIT_COMMIT_SHA]: commitSHA,
+      }
+    : config.tags
+  return Object.entries(tags).map((pair) => pair.join(':'))
+}
+
+/**
+ * Regenerates the RC client ID and refreshes the cached RC tags string.
+ * `state.client.id` and `client_tracer.tags` are live getters, so subsequent RC polls pick up
+ * the new values.
  *
  * @param {import('../config/config-base')} config
  */
-function refreshClientId (config) {
+function refreshIdentity (config) {
   clientId = uuid()
   if (config.tags['_dd.rc.client_id']) {
     config.tags['_dd.rc.client_id'] = clientId
   }
+  const { commitSHA, repositoryUrl } = getGitMetadata(config)
+  tagsString = getTagsString(config, repositoryUrl, commitSHA)
 }
 
 module.exports = RemoteConfig
