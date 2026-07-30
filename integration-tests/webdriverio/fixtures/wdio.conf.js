@@ -1,6 +1,7 @@
 'use strict'
 
 const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
+const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
 
 const baseConfig = {
   runner: 'local',
@@ -18,8 +19,12 @@ const baseConfig = {
   path: '/',
   connectionRetryCount: 0,
   services: [],
-  framework: 'mocha',
+  framework,
   reporters: [],
+  jasmineOpts: {
+    defaultTimeoutInterval: 10_000,
+    random: false,
+  },
   mochaOpts: {
     ui: 'bdd',
     timeout: 10_000,
@@ -110,6 +115,10 @@ const scenarioConfig = {
   impacted: {
     maxInstances: 1,
     specs: ['./impacted.e2e.js'],
+  },
+  jasmineStatuses: {
+    maxInstances: 1,
+    specs: ['./jasmine-statuses.e2e.js'],
   },
   loadFailure: {
     maxInstances: 1,

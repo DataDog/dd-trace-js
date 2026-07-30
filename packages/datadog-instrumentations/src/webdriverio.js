@@ -18,6 +18,7 @@ const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  sendWebdriverioWorkerMessage,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
@@ -34,15 +35,21 @@ const knownTestsCh = channel('ci:mocha:known-tests')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
+const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 
 const NODE_OPTIONS_SEPARATOR_RE = /\s/
+const JASMINE_FRAMEWORK_ADAPTER = 'jasmine'
+const MOCHA_FRAMEWORK_ADAPTER = 'mocha'
+const SUPPORTED_FRAMEWORK_ADAPTERS = new Set([JASMINE_FRAMEWORK_ADAPTER, MOCHA_FRAMEWORK_ADAPTER])
 const TEST_FRAMEWORK = 'webdriverio'
+const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -118,7 +125,7 @@ addHook({
  */
 
 /**
- * Creates the configuration consumed by Mocha workers.
+ * Creates the configuration consumed by WebdriverIO workers.
  *
  * @returns {object}
  */
@@ -146,6 +153,37 @@ function createWorkerConfiguration () {
     testManagementAttemptToFixRetries: 0,
     testManagementTests: {},
   }
+}
+
+/**
+ * Configures a Jasmine worker for reporting-only execution and notifies its coordinator.
+ *
+ * @param {{_specs?: string[]}} adapter
+ * @returns {void}
+ */
+function initializeJasmineWorker (adapter) {
+  if (!isWebdriverioWorker) {
+    return
+  }
+
+  workerConfigurationCh.publish({
+    libraryConfig: createWorkerConfiguration(),
+    repositoryRoot: undefined,
+    specs: adapter?._specs || [],
+    testFramework: TEST_FRAMEWORK,
+    testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+  })
+  sendWebdriverioWorkerMessage({
+    origin: 'datadog',
+    name: WORKER_READY,
+    content: {
+      testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+    },
+  }, error => {
+    if (error) {
+      log.error('WebdriverIO Test Optimization IPC error', error)
+    }
+  })
 }
 
 /**
@@ -247,7 +285,7 @@ function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
 }
 
 /**
- * Starts the single Mocha session owned by the WebdriverIO launcher.
+ * Starts the single test session owned by the WebdriverIO launcher.
  *
  * @param {CoordinatorState} state
  * @returns {void}
@@ -445,6 +483,7 @@ function initializeCoordinator (state, onDone) {
 
   try {
     libraryConfigurationCh.runStores({
+      basicReportingOnly: state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER,
       disableTestImpactAnalysis: true,
       frameworkVersion: state.frameworkVersion,
       isParallel: state.maxActiveWorkers > 1,
@@ -552,7 +591,7 @@ function sendWorkerMessage (workerRecord, message) {
 }
 
 /**
- * Handles a worker request for its Mocha execution configuration.
+ * Handles a worker request for its execution configuration.
  *
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
@@ -608,7 +647,7 @@ function updateEarlyFlakeDetectionFaultyState (state, files) {
 }
 
 /**
- * Handles suite results reported by a Mocha worker.
+ * Handles suite results reported by a WebdriverIO worker.
  *
  * @param {WorkerRecord} workerRecord
  * @param {object} message
@@ -659,7 +698,11 @@ function handleWorkerMessage (state, workerRecord, message) {
   }
 
   if (message.name === WORKER_READY) {
-    initializeCoordinator(state)
+    initializeCoordinator(state, () => {
+      if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
+        startWorkerSuites(workerRecord, workerRecord.specs)
+      }
+    })
     return
   }
   if (message.name === CONFIGURATION_REQUEST) {
@@ -768,7 +811,7 @@ function getSessionStatus (state) {
 }
 
 /**
- * Finishes the single WebdriverIO-owned Mocha session.
+ * Finishes the single WebdriverIO-owned test session.
  *
  * @param {CoordinatorState} state
  * @param {unknown} error
@@ -824,11 +867,19 @@ function finishCoordinator (state, error, onDone) {
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
+jasmineAdapterInitCh.subscribe({
+  asyncEnd (context) {
+    initializeJasmineWorker(context.result || context.self)
+  },
+})
+
+// dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
+// @ts-expect-error
 launcherStartInstanceCh.subscribe({
   start (context) {
     const localRunner = context.self?.runner
     const runnerConfiguration = localRunner && getRunnerConfiguration(localRunner)
-    if (!testFinishCh.hasSubscribers || runnerConfiguration?.framework !== 'mocha') {
+    if (!testFinishCh.hasSubscribers || !SUPPORTED_FRAMEWORK_ADAPTERS.has(runnerConfiguration?.framework)) {
       return
     }
 
@@ -847,7 +898,7 @@ launcherStartInstanceCh.subscribe({
 localRunnerRunCh.subscribe({
   start (context) {
     const runnerConfiguration = getRunnerConfiguration(context.self)
-    if (!testFinishCh.hasSubscribers || runnerConfiguration?.framework !== 'mocha') {
+    if (!testFinishCh.hasSubscribers || !SUPPORTED_FRAMEWORK_ADAPTERS.has(runnerConfiguration?.framework)) {
       return
     }
 

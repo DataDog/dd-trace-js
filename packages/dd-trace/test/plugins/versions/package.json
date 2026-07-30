@@ -93,6 +93,7 @@
     "@vitest/runner": "4.1.10",
     "@vscode/sqlite3": "5.1.12-vscode",
     "@wdio/cli": "9.30.0",
+    "@wdio/jasmine-framework": "9.30.0",
     "@wdio/local-runner": "9.30.0",
     "@wdio/mocha-framework": "9.30.0",
     "aerospike": "6.7.1",

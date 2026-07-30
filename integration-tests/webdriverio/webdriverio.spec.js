@@ -59,6 +59,24 @@ const disabledSettings = {
   coverage_report_upload_enabled: false,
 }
 
+const enabledSettings = {
+  code_coverage: true,
+  tests_skipping: true,
+  itr_enabled: true,
+  require_git: false,
+  early_flake_detection: {
+    enabled: true,
+  },
+  flaky_test_retries_enabled: true,
+  di_enabled: true,
+  known_tests_enabled: true,
+  test_management: {
+    enabled: true,
+  },
+  impacted_tests_enabled: true,
+  coverage_report_upload_enabled: true,
+}
+
 const advancedRequestPaths = [
   '/api/v2/ci/libraries/tests',
   '/api/v2/ci/tests/skippable',
@@ -175,9 +193,10 @@ function assertOneTestPerSuiteExecution (suites, tests) {
  *
  * @param {object[]} payloads
  * @param {string} requestedVersion
+ * @param {string} frameworkAdapter
  * @returns {{session: object, module: object, suites: object[], tests: object[]}}
  */
-function getReportingEvents (payloads, requestedVersion) {
+function getReportingEvents (payloads, requestedVersion, frameworkAdapter) {
   const settingsRequests = payloads.filter(({ url }) =>
     url.endsWith('/api/v2/libraries/tests/services/setting'))
   const advancedRequests = payloads.filter(({ url }) =>
@@ -209,13 +228,23 @@ function getReportingEvents (payloads, requestedVersion) {
   assert.ok(metadata.length > 0)
   for (const metadataEntry of metadata) {
     assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+    if (frameworkAdapter === 'jasmine') {
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], undefined)
+    } else {
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+    }
   }
 
   for (const event of [sessions[0], modules[0], ...suites, ...tests]) {
@@ -228,7 +257,7 @@ function getReportingEvents (payloads, requestedVersion) {
     }
   }
   for (const event of [...suites, ...tests]) {
-    assert.strictEqual(event.meta[TEST_FRAMEWORK_ADAPTER], 'mocha')
+    assert.strictEqual(event.meta[TEST_FRAMEWORK_ADAPTER], frameworkAdapter)
   }
   assertEventHierarchy(sessions[0], modules[0], suites, tests)
 
@@ -252,6 +281,7 @@ for (const version of versions) {
 
     useSandbox([
       `@wdio/cli@${version}`,
+      `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
@@ -283,9 +313,12 @@ for (const version of versions) {
      * @param {number} expectedWebDriverSessions
      * @param {(events: ReturnType<typeof getReportingEvents>) => void} assertEvents
      * @param {number} [expectedExitCode]
+     * @param {object} [options]
+     * @param {string} [options.framework]
      * @returns {Promise<void>}
      */
-    async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0) {
+    async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
+      const { framework = 'mocha' } = options
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
@@ -293,6 +326,7 @@ for (const version of versions) {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
+          WEBDRIVERIO_FRAMEWORK: framework,
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
         },
@@ -307,7 +341,7 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        payloads => assertEvents(getReportingEvents(payloads, version)),
+        payloads => assertEvents(getReportingEvents(payloads, version, framework)),
         { hardTimeout: 45_000 }
       )
 
@@ -347,6 +381,44 @@ for (const version of versions) {
         )
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
       })
+    })
+
+    it('reports parallel Jasmine workers as one basic-reporting session', async () => {
+      receiver.setSettings(enabledSettings)
+
+      await runScenario('parallel', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], 'true')
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.deepStrictEqual(
+          suites.map(suite => suite.meta[TEST_SUITE]).sort(),
+          ['first.e2e.js', 'second.e2e.js']
+        )
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['first', 'second']
+        )
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports Jasmine pass, fail, and skip statuses', async () => {
+      receiver.setSettings(enabledSettings)
+
+      await runScenario('jasmineStatuses', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'jasmine-statuses.e2e.js')
+        assert.strictEqual(tests.length, 3)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass', 'skip'])
+        assert.strictEqual(
+          tests.find(test => test.meta[TEST_STATUS] === 'pass').meta['test.webdriverio.worker'],
+          'jasmine'
+        )
+        assert.match(tests.find(test => test.meta[TEST_STATUS] === 'fail').meta['error.message'], /expected WebdriverIO/)
+      }, 1, { framework: 'jasmine' })
     })
 
     it('reports failures before Mocha loads', async () => {

@@ -50,6 +50,16 @@ const fixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const jasmineFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-jasmine-framework.mjs')
+const jasmineFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'jasmine-framework',
+  'build',
+  'index.js'
+)
 const launcherFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-launcher.mjs')
 const launcherFixtureModulePath = path.join(
   __dirname,
@@ -57,6 +67,16 @@ const launcherFixtureModulePath = path.join(
   'node_modules',
   '@wdio',
   'cli',
+  'build',
+  'index.js'
+)
+const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const utilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils',
   'build',
   'index.js'
 )
@@ -80,6 +100,27 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM Jasmine adapter and reporter', () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_init/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_run/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specStarted/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM WebdriverIO test-function wrapper', () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
   })
 
   it('waits for coordinator shutdown before preserving a LocalRunner.shutdown rejection', async () => {
@@ -119,6 +160,46 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator', 'rejected'])
     } finally {
       shutdownCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for Jasmine worker reporting before preserving a JasmineAdapter.run rejection', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const runCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_run')
+    const runError = new Error('Jasmine run failed')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('worker')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    runCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const resultPromise = new JasmineAdapter([]).run(runError)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      await assert.rejects(resultPromise, error => {
+        steps.push('rejected')
+        return error === runError
+      })
+      assert.deepStrictEqual(steps, ['asyncEnd', 'worker', 'rejected'])
+    } finally {
+      runCh.unsubscribe(subscriber)
     }
   })
 
@@ -200,11 +281,113 @@ describe('webdriverio instrumentation', () => {
         libraryConfig: {},
         repositoryRoot: process.cwd(),
         testFramework: 'webdriverio',
+        testFrameworkAdapter: 'mocha',
       })
 
       assert.strictEqual(plugin.testFramework, 'webdriverio')
+      assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
     } finally {
       plugin.configure(false)
+    }
+  })
+
+  it('coordinates Jasmine workers in basic-reporting mode', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const modifiedFilesCh = channel('ci:mocha:modified-files')
+    const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const sessionStarts = []
+    const sessionFinishes = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    let advancedFeatureRequests = 0
+    let configurationRequests = 0
+
+    function onTestFinish () {}
+    function onAdvancedFeatureRequest () {
+      advancedFeatureRequests++
+    }
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      assert.strictEqual(request.basicReportingOnly, true)
+      assert.strictEqual(request.disableTestImpactAnalysis, true)
+      assert.strictEqual(request.testFramework, 'webdriverio')
+      request.onDone({
+        libraryConfig: {},
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onAdvancedFeatureRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    modifiedFilesCh.subscribe(onAdvancedFeatureRequest)
+    testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'jasmine',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'jasmine.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      worker.emit('message', {
+        name: WORKER_READY,
+        content: { testFrameworkAdapter: 'jasmine' },
+      })
+      await new Promise(setImmediate)
+
+      reportSuiteFinish(worker, file)
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(advancedFeatureRequests, 0)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
+      assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'jasmine')
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'pass')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [file])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['pass'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      modifiedFilesCh.unsubscribe(onAdvancedFeatureRequest)
+      testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
   })
 
