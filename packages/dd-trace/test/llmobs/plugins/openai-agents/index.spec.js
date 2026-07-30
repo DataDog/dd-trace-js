@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const path = require('node:path')
+const { createRequire } = require('node:module')
 
 const { withVersions } = require('../../../setup/mocha')
 
@@ -80,13 +80,12 @@ describe('integrations', () => {
       before(() => {
         agentsCore = require(`../../../../../../versions/@openai/agents@${version}`).get()
 
-        const { OpenAIChatCompletionsModel, OpenAIResponsesModel } =
-          require(`../../../../../../versions/@openai/agents-openai@${version}`).get()
+        const agentsOpenai = require(`../../../../../../versions/@openai/agents-openai@${version}`)
+        const { OpenAIChatCompletionsModel, OpenAIResponsesModel } = agentsOpenai.get()
 
-        const agentsOpenaiDir = path.join(
-          __dirname, '..', '..', '..', '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai'
-        )
-        const openaiPath = require.resolve('openai', { paths: [agentsOpenaiDir] })
+        // Resolve from the loaded package so the client class comes from the `openai` copy this
+        // `@openai/agents-openai` build uses, rather than whichever copy the layout happens to hoist.
+        const openaiPath = createRequire(agentsOpenai.getPath()).resolve('openai')
         const { OpenAI } = require(openaiPath)
 
         const mockClient = new OpenAI({
