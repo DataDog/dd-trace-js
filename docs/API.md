@@ -523,6 +523,10 @@ Early Flake Detection retries in every supported test-duration bucket. A value o
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
 
+Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
+The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
+are disabled, quarantined, or run in Attempt to Fix mode.
+
 <h3 id="custom-logging">Custom Logging</h3>
 
 By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.

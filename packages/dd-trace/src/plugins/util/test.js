@@ -2014,6 +2014,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
     ? 'disabled'
     : execution.isQuarantined ? 'quarantined' : undefined
   if (!action) return
+  if (action === 'quarantined' && execution.status !== 'pass' && execution.status !== 'fail') return
 
   const name = formatTestOptimizationName(execution.testSuite, execution.testName)
   let result = executions.get(name)

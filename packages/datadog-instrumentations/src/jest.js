@@ -279,6 +279,10 @@ function getTestEnvironmentOptions (config) {
 
 const MAX_IGNORED_TEST_NAMES = 10
 
+/**
+ * @typedef {Parameters<typeof logTestOptimizationSummary>[0]} TestOptimizationSummary
+ */
+
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -323,6 +327,8 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *   totalCount: number,
  *   efdFailureCount: number
  * } | undefined} ignoredFailures
+ * @param {NonNullable<TestOptimizationSummary['attemptToFixExecutions']>} attemptToFixExecutions
+ * @param {NonNullable<TestOptimizationSummary['testManagementExecutions']>} testManagementExecutions
  */
 function logSessionSummary (ignoredFailures, attemptToFixExecutions, testManagementExecutions) {
   logTestOptimizationSummary({

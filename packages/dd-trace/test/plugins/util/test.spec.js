@@ -767,6 +767,25 @@ describe('test management summary', () => {
     )
   })
 
+  it('does not report quarantined tests that did not run', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is pending',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(formatTestManagementSummary(executions), '')
+  })
+
   it('omits names when more than five tests are affected', () => {
     const executions = new Map()
     const consoleWarn = sinon.stub(console, 'warn')
