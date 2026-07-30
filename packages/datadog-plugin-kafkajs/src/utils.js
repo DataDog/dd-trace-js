@@ -50,8 +50,9 @@ function convertToTextMap (bufferMap) {
 }
 
 /**
- * A KafkaJS header value array becomes one wire record per element. A native
- * header array already contains one record per entry.
+ * A KafkaJS header value array becomes one wire record per element, so its key
+ * counts once per value. A native header array already holds one record per
+ * entry, where the array indices are not wire bytes.
  *
  * @param {{ key?: unknown, value?: unknown,
  *   headers?: KafkaHeaderMap | NativeHeaderList | null }} message
@@ -60,14 +61,7 @@ function getKafkaMessageSize (message) {
   const { key, value, headers } = message
   let size = getSizeOrZero(key) + getSizeOrZero(value)
   if (headers === undefined || headers === null) return size
-
-  if (Array.isArray(headers)) {
-    for (const header of headers) {
-      const headerKey = Object.keys(header)[0]
-      size += Buffer.byteLength(headerKey, 'utf8') + getSizeOrZero(header[headerKey])
-    }
-    return size
-  }
+  if (Array.isArray(headers)) return size + getSizeOrZero(headers)
 
   for (const headerKey of Object.keys(headers)) {
     const headerValue = headers[headerKey]

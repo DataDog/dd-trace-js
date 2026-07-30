@@ -163,36 +163,24 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       ])
     })
 
-    it('publishes a carrier seeded with the application headers', () => {
+    it('publishes one carrier holding every application value the caller sent', () => {
+      /** @type {NativeHeaderCarrier[]} */
       const carriers = []
       trackSubscriber((ctx) => carriers.push(ctx.messages[0].headers))
 
       const binary = Buffer.from('binary-value')
-      produce(stageProducer(), [{ 'content-type': 'application/json' }, { 'binary-header': binary }])
-
-      assert.strictEqual(carriers.length, 1)
-      assert.deepStrictEqual(Object.keys(carriers[0]), ['content-type', 'binary-header'])
-      assert.strictEqual(carriers[0]['content-type'], 'application/json')
-      assert.strictEqual(carriers[0]['binary-header'], binary)
-    })
-
-    it('publishes every repeated application value on the carrier', () => {
-      /** @type {ProduceContext | undefined} */
-      let context
-      trackSubscriber((ctx) => { context = ctx })
-
       produce(stageProducer(), [
         { 'content-type': 'text' },
         { 'content-type': 'application/json' },
         { 'content-type': 'application/octet-stream' },
+        { 'binary-header': binary },
       ])
 
-      assert.ok(context)
-      assert.deepStrictEqual(context.messages[0].headers['content-type'], [
-        'text',
-        'application/json',
-        'application/octet-stream',
-      ])
+      assert.strictEqual(carriers.length, 1)
+      const [carrier] = carriers
+      assert.deepStrictEqual(Object.keys(carrier), ['content-type', 'binary-header'])
+      assert.deepStrictEqual(carrier['content-type'], ['text', 'application/json', 'application/octet-stream'])
+      assert.strictEqual(carrier['binary-header'], binary)
     })
 
     it('sends generated headers only for shapes the binding cannot consume', () => {
