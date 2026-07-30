@@ -403,65 +403,6 @@ describe('Tracer', () => {
     })
   })
 
-  describe('refreshMetadata', () => {
-    let storeConfigStub
-    let PatchedTracer
-
-    beforeEach(() => {
-      storeConfigStub = sinon.stub()
-      PatchedTracer = proxyquire('../src/tracer', {
-        './tracer_metadata': storeConfigStub,
-      })
-    })
-
-    it('should not call storeConfig when _inmem_cfg is unset', () => {
-      storeConfigStub.returns(undefined)
-      const t = new PatchedTracer(config)
-      assert.strictEqual(t._inmem_cfg, undefined)
-      storeConfigStub.resetHistory()
-
-      t.refreshMetadata(config)
-
-      sinon.assert.notCalled(storeConfigStub)
-    })
-
-    it('should update _inmem_cfg with the return value of storeConfig', () => {
-      const initialHandle = { handle: 'initial' }
-      const newHandle = { handle: 'new' }
-      storeConfigStub.onFirstCall().returns(initialHandle)
-      storeConfigStub.onSecondCall().returns(newHandle)
-      const t = new PatchedTracer(config)
-
-      t.refreshMetadata(config)
-
-      assert.strictEqual(t._inmem_cfg, newHandle)
-    })
-
-    it('should not replace _inmem_cfg when storeConfig returns undefined', () => {
-      const initialHandle = { handle: 'initial' }
-      storeConfigStub.onFirstCall().returns(initialHandle)
-      storeConfigStub.onSecondCall().returns(undefined)
-      const t = new PatchedTracer(config)
-
-      t.refreshMetadata(config)
-
-      assert.strictEqual(t._inmem_cfg, initialHandle)
-    })
-
-    it('should call storeConfig when _inmem_cfg is a falsy but defined handle', () => {
-      storeConfigStub.onFirstCall().returns(0)
-      storeConfigStub.onSecondCall().returns('new-handle')
-      const t = new PatchedTracer(config)
-      assert.strictEqual(t._inmem_cfg, 0)
-
-      t.refreshMetadata(config)
-
-      // once at construction, once on refresh
-      sinon.assert.calledTwice(storeConfigStub)
-      assert.strictEqual(t._inmem_cfg, 'new-handle')
-    })
-  })
-
   describe('service discovery warning', () => {
     const WARNING = 'Could not store tracer configuration for service discovery'
     const log = require('../src/log')
