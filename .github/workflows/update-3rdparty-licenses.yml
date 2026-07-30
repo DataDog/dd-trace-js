@@ -13,8 +13,15 @@ on:
   pull_request:
     paths:
       - ".github/vendored-dependencies.csv"
+      - ".github/workflows/update-3rdparty-licenses.yml"
+      - "LICENSE-3rdparty.csv"
       - "bun.lock"
+      - "package.json"
+      - "scripts/generate-3rdparty-licenses.js"
+      - "scripts/helpers/concurrency.js"
+      - "scripts/third-party-dependencies.js"
       - "vendor/bun.lock"
+      - "vendor/package.json"
 
 jobs:
   check-licenses:
@@ -24,6 +31,7 @@ jobs:
     outputs:
       needs_update: ${{ steps.check.outputs.needs_update }}
       is_bot_same_repo: ${{ steps.check.outputs.is_bot_same_repo }}
+      is_release_proposal: ${{ steps.check.outputs.is_release_proposal }}
       head_oid: ${{ steps.check.outputs.head_oid }}
     steps:
       - name: Check out PR branch
@@ -40,6 +48,7 @@ jobs:
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -e
           echo "head_oid=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
@@ -58,8 +67,18 @@ jobs:
             echo "is_bot_same_repo=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # Release tooling requires the version bump to stay at HEAD.
+          if [[ "$HEAD_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-proposal$ ]]; then
+            echo "is_release_proposal=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release_proposal=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload updated LICENSE-3rdparty.csv
-        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo == 'true'
+        if: >-
+          steps.check.outputs.needs_update == 'true' &&
+          steps.check.outputs.is_bot_same_repo == 'true' &&
+          steps.check.outputs.is_release_proposal != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: license-csv
@@ -67,7 +86,9 @@ jobs:
           if-no-files-found: error
 
       - name: Fail for PRs with outdated licenses
-        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo != 'true'
+        if: >-
+          steps.check.outputs.needs_update == 'true' &&
+          (steps.check.outputs.is_bot_same_repo != 'true' || steps.check.outputs.is_release_proposal == 'true')
         run: |
           echo "❌ The LICENSE-3rdparty.csv file needs to be updated!"
           echo ""
@@ -76,7 +97,10 @@ jobs:
 
   auto-commit-licenses:
     needs: check-licenses
-    if: needs.check-licenses.outputs.needs_update == 'true' && needs.check-licenses.outputs.is_bot_same_repo == 'true'
+    if: >-
+      needs.check-licenses.outputs.needs_update == 'true' &&
+      needs.check-licenses.outputs.is_bot_same_repo == 'true' &&
+      needs.check-licenses.outputs.is_release_proposal != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
