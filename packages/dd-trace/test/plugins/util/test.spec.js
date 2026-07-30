@@ -847,6 +847,8 @@ describe('test management summary', () => {
       status: 'skip',
       isDisabled: true,
     }, executions)
+    assert.strictEqual(executions.size, 0)
+
     recordAttemptToFixExecution(attemptToFixExecutions, {
       testSuite: 'suite.js',
       testName: 'attempt to fix',

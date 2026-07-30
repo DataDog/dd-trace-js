@@ -1177,6 +1177,14 @@ function reportFinalTestAttempt (testReport) {
   } = testReport
 
   if (status === 'skip') {
+    recordTestManagementExecution({
+      testSuite: testProperties.testSuite,
+      testName,
+      status,
+      isAttemptToFix: testProperties.isAttemptToFix,
+      isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
+    })
     const {
       isRumActive,
       testExecutionId,

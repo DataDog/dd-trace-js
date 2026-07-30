@@ -1309,6 +1309,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
       ]).then(([exitCode]) => exitCode)
 
       assert.strictEqual(exitCode, 1, testOutput)
+      assert.match(testOutput, /Disabled: 1 test skipped\./)
     })
 
     it('does not skip disabled attempt-to-fix tests in no-worker mode', async () => {

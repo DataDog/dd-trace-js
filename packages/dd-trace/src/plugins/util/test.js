@@ -2009,6 +2009,7 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  */
 function recordTestManagementExecution (execution, executions = testManagementExecutions) {
   if (!execution?.testName || execution.isAttemptToFix) return
+  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const action = execution.isDisabled
     ? 'disabled'
@@ -2096,6 +2097,13 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
   })
 }
 
+/**
+ * Records a Test Management execution from a serialized worker trace span.
+ *
+ * @param {{ meta?: Record<string, string> }} span
+ * @param {TestManagementExecutions} executions
+ * @returns {void}
+ */
 function collectTestManagementExecutionFromTraceSpan (span, executions) {
   const meta = span.meta
   if (!meta) return
