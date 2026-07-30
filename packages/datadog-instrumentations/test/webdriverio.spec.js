@@ -111,6 +111,8 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_run/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specDone/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specStarted/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteStarted/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
   })
@@ -291,7 +293,7 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('coordinates Jasmine workers in basic-reporting mode', async () => {
+  it('keeps Jasmine suite results reported before basic-reporting configuration completes', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
     const knownTestsCh = channel('ci:mocha:known-tests')
     const libraryConfigurationCh = channel('ci:mocha:library-configuration')
@@ -299,14 +301,17 @@ describe('webdriverio instrumentation', () => {
     const testManagementTestsCh = channel('ci:mocha:test-management-tests')
     const testSessionStartCh = channel('ci:mocha:session:start')
     const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
     const testSuiteStartCh = channel('ci:mocha:test-suite:start')
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
     const sessionStarts = []
     const sessionFinishes = []
+    const suiteErrors = []
     const suiteStarts = []
     const suiteFinishes = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
+    let finishConfiguration
 
     function onTestFinish () {}
     function onAdvancedFeatureRequest () {
@@ -317,7 +322,7 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(request.basicReportingOnly, true)
       assert.strictEqual(request.disableTestImpactAnalysis, true)
       assert.strictEqual(request.testFramework, 'webdriverio')
-      request.onDone({
+      finishConfiguration = () => request.onDone({
         libraryConfig: {},
         repositoryRoot: process.cwd(),
       })
@@ -328,6 +333,9 @@ describe('webdriverio instrumentation', () => {
     function onSessionFinish (event) {
       sessionFinishes.push(event)
       event.onDone()
+    }
+    function onSuiteError (event) {
+      suiteErrors.push(event.error)
     }
     function onSuiteStart (event) {
       suiteStarts.push(event)
@@ -343,6 +351,7 @@ describe('webdriverio instrumentation', () => {
     testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
     testSessionStartCh.subscribe(onSessionStart)
     testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteErrorCh.subscribe(onSuiteError)
     testSuiteStartCh.subscribe(onSuiteStart)
     testSuiteFinishCh.subscribe(onSuiteFinish)
 
@@ -355,18 +364,26 @@ describe('webdriverio instrumentation', () => {
           rootDir: process.cwd(),
         },
       }
-      const file = path.join(process.cwd(), 'jasmine.spec.js')
+      const failedFile = path.join(process.cwd(), 'jasmine-failed.spec.js')
+      const passedFile = path.join(process.cwd(), 'jasmine-passed.spec.js')
       const worker = createWorker()
 
-      registerWorker(localRunner, worker, file)
+      registerWorker(localRunner, worker, [failedFile, passedFile])
       worker.emit('message', {
         name: WORKER_READY,
         content: { testFrameworkAdapter: 'jasmine' },
       })
+
+      reportSuiteFinish(worker, failedFile, 'fail', {
+        message: 'expected Jasmine suite failure',
+        stack: 'Error: expected Jasmine suite failure',
+      })
+      reportSuiteFinish(worker, passedFile)
+      assert.ok(finishConfiguration)
+      finishConfiguration()
       await new Promise(setImmediate)
 
-      reportSuiteFinish(worker, file)
-      worker.emit('exit', { exitCode: 0, retries: 0 })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
       await finishLocalRunner(localRunner)
 
       assert.strictEqual(configurationRequests, 1)
@@ -375,9 +392,12 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
       assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'jasmine')
       assert.strictEqual(sessionFinishes.length, 1)
-      assert.strictEqual(sessionFinishes[0].status, 'pass')
-      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [file])
-      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['pass'])
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(suiteErrors.length, 1)
+      assert.strictEqual(suiteErrors[0].message, 'expected Jasmine suite failure')
+      assert.strictEqual(suiteErrors[0].stack, 'Error: expected Jasmine suite failure')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [failedFile, passedFile])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['fail', 'pass'])
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
       knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
@@ -386,6 +406,7 @@ describe('webdriverio instrumentation', () => {
       testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteErrorCh.unsubscribe(onSuiteError)
       testSuiteStartCh.unsubscribe(onSuiteStart)
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
@@ -1252,16 +1273,17 @@ function requestConfiguration (worker, file, requestId) {
  * @param {EventEmitter} worker
  * @param {string} file
  * @param {string} [status]
+ * @param {{message?: string, stack?: string}} [error]
  * @returns {void}
  */
-function reportSuiteFinish (worker, file, status = 'pass') {
+function reportSuiteFinish (worker, file, status = 'pass', error) {
   worker.emit('message', {
     origin: 'datadog',
     name: 'workerEvent',
     args: {
       name: SUITE_FINISH,
       content: {
-        results: [{ file, status }],
+        results: [{ error, file, status }],
       },
     },
   })

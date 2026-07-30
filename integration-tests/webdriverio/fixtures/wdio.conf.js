@@ -120,6 +120,14 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
   },
+  jasmineAfterAllFailure: {
+    maxInstances: 1,
+    specs: ['./jasmine-after-all-fail.e2e.js'],
+  },
+  jasmineHooks: {
+    maxInstances: 1,
+    specs: ['./jasmine-hooks.e2e.js'],
+  },
   loadFailure: {
     maxInstances: 1,
     specs: ['./load-fail.e2e.js'],

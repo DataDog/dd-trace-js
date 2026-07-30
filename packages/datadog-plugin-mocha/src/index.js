@@ -63,6 +63,8 @@ const {
 const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
 const jasmineReporterSpecDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end'
 const jasmineReporterSpecStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end'
+const jasmineReporterSuiteDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteDone:end'
+const jasmineReporterSuiteStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteStarted:end'
 const jasmineTestFunctionStartCh = 'tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start'
 const testFinishCh = channel('ci:mocha:test:finish')
 const WEBDRIVERIO_JASMINE_ADAPTER = 'jasmine'
@@ -76,6 +78,7 @@ const workerFinishCh = channel('ci:mocha:worker:finish')
  * @property {string|undefined} file
  * @property {string|undefined} filename
  * @property {string|undefined} fullName
+ * @property {string|undefined} parentSuiteId
  * @property {string|undefined} status
  */
 
@@ -142,6 +145,8 @@ class MochaPlugin extends CiPlugin {
         this._webdriverioJasmineState = {
           currentResult: undefined,
           specs: specs || [],
+          suiteErrors: new Map(),
+          suiteFiles: new Map(),
           suiteStatuses: new Map(),
           tests: new Map(),
         }
@@ -149,16 +154,49 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind(jasmineTestFunctionStartCh, (ctx) => {
-      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER || ctx.arguments?.[1] !== 'Test') {
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
         return storage('legacy').getStore()
       }
-      return this.#startWebdriverioJasmineTest(this._webdriverioJasmineState?.currentResult)
+
+      const result = this._webdriverioJasmineState?.currentResult
+      const type = ctx.arguments?.[1]
+      if (type === 'Test' || (type === 'Hook' && result)) {
+        return this.#startWebdriverioJasmineTest(result)
+      }
+      return storage('legacy').getStore()
+    })
+
+    this.addSub(jasmineReporterSuiteStartedEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const suite = ctx.arguments?.[0]
+        const file = normalizeJasmineFile(suite?.filename)
+        if (suite?.id && file) {
+          this._webdriverioJasmineState.suiteFiles.set(suite.id, file)
+        }
+      }
+    })
+
+    this.addSub(jasmineReporterSuiteDoneEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const state = this._webdriverioJasmineState
+        const suite = ctx.arguments?.[0]
+        const error = suite && getJasmineError(suite)
+        const file = normalizeJasmineFile(
+          suite?.filename ||
+          state.suiteFiles.get(suite?.id) ||
+          (state.specs.length === 1 ? state.specs[0] : undefined)
+        )
+        if (error && file) {
+          state.suiteErrors.set(file, error)
+          state.suiteStatuses.set(file, 'fail')
+        }
+      }
     })
 
     this.addSub(jasmineReporterSpecStartedEndCh, (ctx) => {
       if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
         this._webdriverioJasmineState.currentResult = ctx.arguments?.[0]
-        this.#startWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+        this.#startWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs, ctx.self?.startedSuite)
       }
     })
 
@@ -597,9 +635,10 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {WebdriverioJasmineResult|undefined} result
    * @param {string[]} [specs]
+   * @param {{filename?: string}|undefined} currentSuite
    * @returns {object|undefined}
    */
-  #startWebdriverioJasmineTest (result, specs) {
+  #startWebdriverioJasmineTest (result, specs, currentSuite) {
     const state = this._webdriverioJasmineState
     const currentStore = storage('legacy').getStore()
     if (!state || !result?.id) {
@@ -613,7 +652,12 @@ class MochaPlugin extends CiPlugin {
 
     const candidateSpecs = specs || state.specs
     const testSuiteAbsolutePath = normalizeJasmineFile(
-      candidateSpecs[0] || result.file || result.filename
+      state.suiteFiles.get(result.parentSuiteId) ||
+      currentSuite?.filename ||
+      (candidateSpecs.length === 1 ? candidateSpecs[0] : undefined) ||
+      result.file ||
+      result.filename ||
+      candidateSpecs[0]
     )
     if (!testSuiteAbsolutePath) {
       return currentStore
@@ -684,7 +728,15 @@ class MochaPlugin extends CiPlugin {
     const state = this._webdriverioJasmineState
     const results = []
     for (const [file, status] of state?.suiteStatuses || []) {
-      results.push({ file, status })
+      const error = state.suiteErrors.get(file)
+      const result = { file, status }
+      if (error) {
+        result.error = {
+          message: error.message,
+          stack: error.stack,
+        }
+      }
+      results.push(result)
     }
 
     const waitForWorker = onDone => {

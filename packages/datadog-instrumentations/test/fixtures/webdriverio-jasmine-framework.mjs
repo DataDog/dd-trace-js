@@ -7,6 +7,14 @@ const JasmineReporter = class {
     return result
   }
 
+  suiteStarted (result) {
+    return result
+  }
+
+  suiteDone (result) {
+    return result
+  }
+
   specDone (result) {
     return result
   }

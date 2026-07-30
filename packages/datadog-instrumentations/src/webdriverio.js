@@ -29,6 +29,7 @@ const {
 const testFinishCh = channel('ci:mocha:test:finish')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
+const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const knownTestsCh = channel('ci:mocha:known-tests')
@@ -86,6 +87,7 @@ addHook({
  * @typedef {object} WorkerRecord
  * @property {object} worker
  * @property {string[]} specs
+ * @property {Map<string, WebdriverioSuiteResult>} reportedSuiteResults
  * @property {Map<string, WebdriverioSuiteContext>} suiteContexts
  * @property {string} testSuiteExecutionId
  * @property {boolean|undefined} hasTests
@@ -96,9 +98,16 @@ addHook({
 /**
  * @typedef {object} WebdriverioSuiteContext
  * @property {object|undefined} currentStore
+ * @property {Error|undefined} error
  * @property {string|undefined} status
  * @property {string} testSuiteAbsolutePath
  * @property {string} testSuiteExecutionId
+ */
+
+/**
+ * @typedef {object} WebdriverioSuiteResult
+ * @property {{message?: string, stack?: string}|undefined} error
+ * @property {string|undefined} status
  */
 
 /**
@@ -515,7 +524,10 @@ function startWorkerSuites (workerRecord, files) {
       continue
     }
 
+    const reportedResult = workerRecord.reportedSuiteResults.get(file)
     const suiteContext = {
+      error: getWebdriverioSuiteError(reportedResult?.error),
+      status: reportedResult?.status,
       testSuiteAbsolutePath: file,
       testSuiteExecutionId: workerRecord.testSuiteExecutionId,
     }
@@ -541,6 +553,9 @@ function finishWorkerSuite (state, workerRecord, rawFile, status) {
   }
 
   state.suiteStatuses.set(suiteContext, status)
+  if (suiteContext.error) {
+    testSuiteErrorCh.runStores(suiteContext, () => {})
+  }
   testSuiteFinishCh.publish({ status, ...suiteContext.currentStore })
 }
 
@@ -647,6 +662,24 @@ function updateEarlyFlakeDetectionFaultyState (state, files) {
 }
 
 /**
+ * Reconstructs an Error received from a WebdriverIO worker.
+ *
+ * @param {{message?: string, stack?: string}|undefined} error
+ * @returns {Error|undefined}
+ */
+function getWebdriverioSuiteError (error) {
+  if (!error?.message) {
+    return
+  }
+
+  const suiteError = new Error(error.message)
+  if (error.stack) {
+    suiteError.stack = error.stack
+  }
+  return suiteError
+}
+
+/**
  * Handles suite results reported by a WebdriverIO worker.
  *
  * @param {WorkerRecord} workerRecord
@@ -655,9 +688,12 @@ function updateEarlyFlakeDetectionFaultyState (state, files) {
  */
 function handleSuiteResults (workerRecord, message) {
   const { results = [] } = message.content || {}
-  for (const { file, status } of results) {
-    const suiteContext = workerRecord.suiteContexts.get(normalizeFile(file))
+  for (const { error, file, status } of results) {
+    const normalizedFile = normalizeFile(file)
+    workerRecord.reportedSuiteResults.set(normalizedFile, { error, status })
+    const suiteContext = workerRecord.suiteContexts.get(normalizedFile)
     if (suiteContext) {
+      suiteContext.error = getWebdriverioSuiteError(error)
       suiteContext.status = status
     }
   }
@@ -764,6 +800,7 @@ function registerWorker (state, worker, specs) {
   const workerRecord = {
     worker,
     specs: normalizedSpecs,
+    reportedSuiteResults: new Map(),
     suiteContexts: new Map(),
     testSuiteExecutionId: String(++state.nextWorkerId),
     hasTests: undefined,

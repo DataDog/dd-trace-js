@@ -122,6 +122,32 @@ module.exports = [
   },
   {
     module: {
+      name: '@wdio/jasmine-framework',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      className: 'JasmineReporter',
+      methodName: 'suiteStarted',
+      kind: 'Sync',
+    },
+    channelName: 'JasmineReporter_suiteStarted',
+  },
+  {
+    module: {
+      name: '@wdio/jasmine-framework',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      className: 'JasmineReporter',
+      methodName: 'suiteDone',
+      kind: 'Sync',
+    },
+    channelName: 'JasmineReporter_suiteDone',
+  },
+  {
+    module: {
       name: '@wdio/utils',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
