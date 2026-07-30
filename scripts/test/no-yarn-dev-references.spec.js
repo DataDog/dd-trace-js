@@ -438,4 +438,43 @@ describe('no yarn dev references', function () {
       ]
     )
   })
+
+  it('regenerates licenses when any generator input changes', () => {
+    const workflow = yaml.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/workflows/update-3rdparty-licenses.yml'),
+      'utf8'
+    ))
+
+    assert.deepStrictEqual(workflow.on.pull_request.paths.sort(), [
+      '.github/vendored-dependencies.csv',
+      '.github/workflows/update-3rdparty-licenses.yml',
+      'LICENSE-3rdparty.csv',
+      'bun.lock',
+      'package.json',
+      'scripts/generate-3rdparty-licenses.js',
+      'scripts/helpers/concurrency.js',
+      'scripts/third-party-dependencies.js',
+      'vendor/bun.lock',
+      'vendor/package.json',
+    ])
+  })
+
+  it('keeps automated license updates off release proposal branches', () => {
+    const workflow = yaml.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/workflows/update-3rdparty-licenses.yml'),
+      'utf8'
+    ))
+    const checkJob = workflow.jobs['check-licenses']
+    const checkScript = checkJob.steps.find(step => step.id === 'check').run
+    const uploadStep = checkJob.steps.find(step => step.name === 'Upload updated LICENSE-3rdparty.csv')
+    const failStep = checkJob.steps.find(step => step.name === 'Fail for PRs with outdated licenses')
+
+    assert.strictEqual(checkJob.outputs.is_release_proposal, '$' + '{{ steps.check.outputs.is_release_proposal }}')
+    assert.match(checkScript, /\^v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+-proposal\$/)
+    assert.match(checkScript, /is_release_proposal=true/)
+    assert.match(checkScript, /is_release_proposal=false/)
+    assert.match(uploadStep.if, /is_release_proposal != 'true'/)
+    assert.match(failStep.if, /is_release_proposal == 'true'/)
+    assert.match(workflow.jobs['auto-commit-licenses'].if, /is_release_proposal != 'true'/)
+  })
 })
