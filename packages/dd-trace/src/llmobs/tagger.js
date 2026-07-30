@@ -520,18 +520,17 @@ class LLMObsTagger {
   }
 
   #tagText (span, data, key) {
-    if (data === undefined || data === null) return
-
-    if (typeof data === 'string') {
-      this._setTag(span, key, data)
-      return
-    }
-
-    try {
-      this._setTag(span, key, JSON.stringify(data))
-    } catch {
-      const type = key === INPUT_VALUE ? 'input' : 'output'
-      this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
+    if (data) {
+      if (typeof data === 'string') {
+        this._setTag(span, key, data)
+      } else {
+        try {
+          this._setTag(span, key, JSON.stringify(data))
+        } catch {
+          const type = key === INPUT_VALUE ? 'input' : 'output'
+          this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
+        }
+      }
     }
   }
 

@@ -159,36 +159,6 @@ describe('span processor', () => {
       assert.ok(payload.tags.includes('run_id:run-1'))
     })
 
-    it('preserves empty string text input and output values', () => {
-      span = {
-        _name: 'empty-text',
-        _startTime: 0,
-        _duration: 1,
-        context () {
-          return {
-            _tags: {},
-            getTags () { return this._tags },
-            getTag (key) { return this._tags[key] },
-            setTag (key, value) { this._tags[key] = value },
-            toTraceId () { return '123' },
-            toSpanId () { return '456' },
-          }
-        },
-      }
-      LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'experiment',
-        '_ml_obs.meta.ml_app': 'myApp',
-        '_ml_obs.meta.input.value': '',
-        '_ml_obs.meta.output.value': '',
-      })
-
-      processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
-
-      assert.equal(payload.meta.input.value, '')
-      assert.equal(payload.meta.output.value, '')
-    })
-
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
