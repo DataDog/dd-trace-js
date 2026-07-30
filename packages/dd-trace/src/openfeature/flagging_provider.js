@@ -134,7 +134,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       return { ...withoutError, value: defaultValue, reason: 'DEFAULT' }
     }
 
-    if (result?.reason !== 'TARGETING_MATCH') {
+    if (result?.reason !== 'TARGETING_MATCH' && result?.reason !== 'DEFAULT') {
       return result
     }
 
