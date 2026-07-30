@@ -48,7 +48,7 @@
     "@hapi/boom": "10.0.1",
     "@hapi/hapi": "21.4.10",
     "@happy-dom/jest-environment": "20.11.1",
-    "@hono/node-server": "2.0.11",
+    "@hono/node-server": "2.0.12",
     "@jest/core": "30.4.2",
     "@jest/globals": "30.4.1",
     "@jest/reporters": "30.4.1",
