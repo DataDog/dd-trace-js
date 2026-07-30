@@ -30,7 +30,7 @@ const PLAYWRIGHT_BROWSER_PATTERN = new RegExp(
   'i'
 )
 const PLAYWRIGHT_BROWSER_LAUNCH_PATTERN =
-  /(?:browserType\.launch: Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous)/i
+  /(?:Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous)/i
 const PLAYWRIGHT_BROWSER_ABORT_PATTERN =
   /(?:browserType\.launch: Target page, context or browser has been closed|Browser logs:)[\s\S]*?(?:signal=SIGABRT|Received signal 6|Abort trap: 6)/i
 const PUPPETEER_BROWSER_PATTERN =
@@ -146,7 +146,7 @@ function getCommandBlocker (result, options = {}) {
         'broader permissions automatically or change the command, approval file, or approval SHA.',
       signals: getMatchingLines(
         output,
-        /browserType\.launch|bootstrap_check_in|MachPortRendezvous|EACCES|EPERM|Operation not permitted|Permission denied/i
+        /Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous|EACCES|EPERM|Operation not permitted|Permission denied/i
       ),
       blockedByExecutionEnvironment: true,
     }

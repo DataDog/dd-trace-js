@@ -259,17 +259,112 @@ function readProfileDefinitions (filename) {
   if (extension === '.yaml' || extension === '.yml') {
     return getYamlStringProfileDefinitions(source)
   }
-  if (!/(?:\bmodule\.exports\s*=|\bexport\s+default\b)/.test(source)) return new Map()
+  return getJavascriptStringProfileDefinitions(source)
+}
 
+function getJavascriptStringProfileDefinitions (source) {
+  const syntax = maskJavascriptCommentsAndStrings(source)
+  const exports = [...syntax.matchAll(/^\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gm)]
+  if (exports.length === 0) return new Map()
+  if (exports.length !== 1) throw new Error('configuration must export one literal profile object')
+
+  const objectStart = exports[0].index + exports[0][0].lastIndexOf('{')
+  const objectEnd = findClosingBrace(syntax, objectStart)
+  if (objectEnd === -1) throw new Error('configuration contains an unterminated profile object')
   const definitions = new Map()
-  const propertyPattern = /(?:^|[,{])\s*(?:(["'])([^"'\\]+)\1|([A-Za-z_$][\w$]*))\s*:\s*/gm
-  for (const match of source.matchAll(propertyPattern)) {
-    const name = match[2] || match[3]
-    const valueStart = match.index + match[0].length
-    const definition = readQuotedString(source, valueStart)
-    if (definition !== undefined) definitions.set(name, definition)
+  let index = objectStart + 1
+  while (index < objectEnd) {
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] === ',') {
+      index++
+      continue
+    }
+    if (index >= objectEnd) break
+
+    let name
+    const quotedName = readQuotedString(source, index)
+    if (quotedName) {
+      name = quotedName.value
+      index = quotedName.end
+    } else {
+      const identifier = /^[A-Za-z_$][\w$]*/.exec(syntax.slice(index))
+      if (!identifier) throw new Error('profile names must be static literal properties')
+      name = identifier[0]
+      index += identifier[0].length
+    }
+
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] !== ':') throw new Error(`profile ${JSON.stringify(name)} must have a literal value`)
+    index = skipWhitespace(syntax, index + 1)
+    const definition = readQuotedString(source, index)
+    if (!definition) throw new Error(`profile ${JSON.stringify(name)} must be a literal string`)
+    definitions.set(name, definition.value)
+    index = skipWhitespace(syntax, definition.end)
+    if (index < objectEnd && syntax[index] !== ',') {
+      throw new Error(`profile ${JSON.stringify(name)} must be followed by a comma`)
+    }
   }
   return definitions
+}
+
+function maskJavascriptCommentsAndStrings (source) {
+  const syntax = [...source]
+  let quote
+  let lineComment = false
+  let blockComment = false
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index]
+    const next = source[index + 1]
+    if (lineComment) {
+      if (character === '\n') lineComment = false
+      else syntax[index] = ' '
+      continue
+    }
+    if (blockComment) {
+      syntax[index] = ' '
+      if (character === '*' && next === '/') {
+        syntax[++index] = ' '
+        blockComment = false
+      }
+      continue
+    }
+    if (quote) {
+      if (character === '\\') {
+        syntax[index] = ' '
+        if (index + 1 < source.length) syntax[++index] = ' '
+      } else if (character === quote) {
+        quote = undefined
+      } else {
+        syntax[index] = ' '
+      }
+      continue
+    }
+    if (character === '/' && next === '/') {
+      syntax[index] = syntax[++index] = ' '
+      lineComment = true
+    } else if (character === '/' && next === '*') {
+      syntax[index] = syntax[++index] = ' '
+      blockComment = true
+    } else if (character === '"' || character === "'" || character === '`') {
+      quote = character
+    }
+  }
+  return syntax.join('')
+}
+
+function findClosingBrace (source, start) {
+  let depth = 0
+  for (let index = start; index < source.length; index++) {
+    if (source[index] === '{') depth++
+    else if (source[index] === '}' && --depth === 0) return index
+  }
+  return -1
+}
+
+function skipWhitespace (source, start) {
+  let index = start
+  while (/\s/.test(source[index] || '')) index++
+  return index
 }
 
 function getDataProfileDefinitions (value) {
@@ -298,7 +393,7 @@ function readQuotedString (source, start) {
   let value = ''
   for (let index = start + 1; index < source.length; index++) {
     const character = source[index]
-    if (character === quote) return value
+    if (character === quote) return { end: index + 1, value }
     if (character !== '\\') {
       value += character
       continue

@@ -126,14 +126,19 @@ describe('test optimization validation manifest scaffold', () => {
     })
     fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
       'module.exports = {',
-      "  ci: 'features/**/*.feature -r features/**/*.js -i features/**/*.mjs',",
+      "  ci: 'features/**/*.feature -r features/steps.js -i features/steps.mjs',",
+      "  description: \"old config: { ci: '-r legacy/stale.js' }\",",
+      "  // old config: { ci: '-r legacy/stale.js' },",
       '}',
       '',
     ].join('\n'))
     const supportFile = path.join(fixture.root, 'features', 'steps.js')
     const importFile = path.join(fixture.root, 'features', 'steps.mjs')
+    const staleFile = path.join(fixture.root, 'legacy', 'stale.js')
+    fs.mkdirSync(path.dirname(staleFile), { recursive: true })
     fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
     fs.writeFileSync(importFile, 'export default function () {}\n')
+    fs.writeFileSync(staleFile, 'throw new Error("stale profile must not be loaded")\n')
     try {
       const framework = createManifestScaffold({
         root: fixture.root,
@@ -152,6 +157,7 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(generated.argv.includes('--profile'), false)
       assert.ok(generated.argv.includes(supportFile))
       assert.ok(generated.argv.includes(importFile))
+      assert.strictEqual(generated.argv.includes(staleFile), false)
       assert.ok(generated.argv.includes('json'))
       assert.deepStrictEqual(selectedFeatures, [
         framework.generatedTestStrategy.scenarios[0].testIdentities[0].file,

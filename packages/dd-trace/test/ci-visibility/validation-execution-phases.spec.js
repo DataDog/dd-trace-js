@@ -116,6 +116,26 @@ describe('test optimization validation execution boundary', () => {
     assert.match(blocker.summary, /not a project test or Test Optimization failure/)
   })
 
+  it('classifies a permission-denied Puppeteer launch as an execution environment blocker', () => {
+    const blocker = getCommandBlocker({
+      exitCode: 1,
+      stderr: [
+        'Error: Failed to launch the browser process!',
+        'spawn /project/chrome EACCES',
+        'Permission denied',
+      ].join('\n'),
+      stdout: '',
+    }, {
+      browserRequired: true,
+      framework: 'cucumber',
+      testsRan: false,
+    })
+
+    assert.strictEqual(blocker.kind, 'cucumber-browser-launch-blocked')
+    assert.strictEqual(blocker.blockerCategory, 'EXECUTION_ENVIRONMENT_BLOCKED')
+    assert.match(blocker.recommendation, /same approved plan/)
+  })
+
   for (const command of [
     { cwd: '/', usesShell: false, argv: ['npm', 'test'] },
     { cwd: '/', usesShell: true, argv: [process.execPath, '/tmp/runner.js', '/tmp/test.js'] },
