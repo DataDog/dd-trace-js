@@ -854,6 +854,22 @@ describe('RemoteConfig', () => {
 
       config.tags['runtime-id'] = 'runtimeId'
     })
+
+    it('should cache client_tracer.tags and only refresh it on datadog:identity:update', () => {
+      const originalTags = rc.state.client.client_tracer.tags
+
+      config.tags['new-tag'] = 'new-value'
+
+      // unlike runtime_id, tags is a cached string, so a direct config mutation isn't picked up
+      assert.strictEqual(rc.state.client.client_tracer.tags, originalTags)
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.notStrictEqual(rc.state.client.client_tracer.tags, originalTags)
+      assert.ok(rc.state.client.client_tracer.tags.includes('new-tag:new-value'))
+
+      delete config.tags['new-tag']
+    })
   })
 
   describe('refreshClientId', () => {
