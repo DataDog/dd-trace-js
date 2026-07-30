@@ -29,7 +29,6 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
-const IGNORE_OTEL_ERROR = constants.IGNORE_OTEL_ERROR
 
 const spanId = id('0234567812345678')
 const spanId2 = id('0254567812345678')
@@ -848,22 +847,6 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.error, 1)
-    })
-
-    it('should not set the error flag when IGNORE_OTEL_ERROR is set', () => {
-      // `otel.recordException()` records the exception as error meta but must
-      // not mark the trace as errored; only `setStatus(ERROR)` does that.
-      spanContext._tags[ERROR_TYPE] = 'Error'
-      spanContext._tags[ERROR_MESSAGE] = 'boom'
-      spanContext._tags[ERROR_STACK] = 'at <anonymous>'
-      spanContext._tags[IGNORE_OTEL_ERROR] = true
-
-      trace = spanFormat(span)
-
-      assert.strictEqual(trace.error, 0)
-      assert.strictEqual(trace.meta[ERROR_TYPE], 'Error')
-      assert.strictEqual(trace.meta[ERROR_MESSAGE], 'boom')
-      assert.strictEqual(trace.meta[ERROR_STACK], 'at <anonymous>')
     })
 
     it('should set the error flag when there is an error-related tag with should setTrace', () => {

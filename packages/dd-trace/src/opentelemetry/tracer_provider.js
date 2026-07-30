@@ -84,8 +84,7 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    // The Lambda stdout exporter writes synchronously and defines no `flush`.
-    exporter.flush?.()
+    exporter.flush()
     return this.#activeProcessor.forceFlush()
   }
 

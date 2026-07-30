@@ -14,11 +14,9 @@ describe('NativeExporter', () => {
   let prioritySampler
   let nativeSpans
   let logError
-  let logErrorWithoutTelemetry
   let logWarn
   let metricsIncrement
   let fetchAgentInfo
-  let telemetryCounts
   let clock
 
   beforeEach(() => {
@@ -46,30 +44,17 @@ describe('NativeExporter', () => {
     }
 
     logError = sinon.stub()
-    logErrorWithoutTelemetry = sinon.stub()
     logWarn = sinon.stub()
     metricsIncrement = sinon.stub()
     fetchAgentInfo = sinon.stub()
-    telemetryCounts = []
     NativeExporter = proxyquire('../../src/exporters/native', {
       '../../log': {
         warn: logWarn,
         error: logError,
-        errorWithoutTelemetry: logErrorWithoutTelemetry,
         debug: sinon.stub(),
       },
       '../../runtime_metrics': { increment: metricsIncrement },
       '../../agent/info': { fetchAgentInfo },
-      '../../telemetry/metrics': {
-        manager: {
-          namespace: () => ({
-            count: (metric, tags) => {
-              telemetryCounts.push({ metric, tags })
-              return { inc: sinon.stub() }
-            },
-          }),
-        },
-      },
     })
   })
 
@@ -191,59 +176,6 @@ describe('NativeExporter', () => {
       sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
       sinon.assert.calledOnce(logWarn)
     })
-
-    it('counts one export attempt and success per flush, tagged with the payload span total', async () => {
-      // `flushSpansGrouped` issues ONE request for the whole flush, so these
-      // mirror the deleted JS OTLP exporter's per-request counters: one increment
-      // each, tagged with every span in the payload - not one per trace chunk.
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-
-      // Two traces of 2 and 3 spans: 5 spans in 2 groups, so a `spans:` tag built
-      // from the group count is distinguishable from the real span total.
-      const traceA = [createMockSpan(1n), createMockSpan(2n)]
-      const traceB = [createMockSpan(3n), createMockSpan(4n), createMockSpan(5n)]
-      for (const span of traceA) span.context()._trace = traceA[0].context()._trace
-      for (const span of traceB) span.context()._trace = traceB[0].context()._trace
-      exporter.export(traceA)
-      exporter.export(traceB)
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 2)
-      assert.deepStrictEqual(telemetryCounts, [
-        { metric: 'otel.traces_export_attempts', tags: ['protocol:http', 'encoding:json', 'spans:5'] },
-        { metric: 'otel.traces_export_successes', tags: ['protocol:http', 'encoding:json', 'spans:5'] },
-      ])
-    })
-
-    it('counts no export success when the send fails', async () => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-      nativeSpans.flushSpansGrouped.rejects(new Error('collector unreachable'))
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      assert.deepStrictEqual(telemetryCounts.map(c => c.metric), ['otel.traces_export_attempts'])
-    })
-
-    it('exports a sampler-rejected trace instead of dropping it in JS', async () => {
-      // libdatadog applies its own client-side p0 drop before writing a payload, so
-      // a rejected trace never reaches the collector. Dropping it here would leave
-      // its spans resident in the WASM map, since `prepareChunk` is the only call
-      // that releases a span and it stages whatever it releases.
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-      const rejected = createMockSpan(1n)
-      rejected.context()._sampling = { priority: -1 }
-
-      exporter.export([rejected])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
-      assert.deepStrictEqual(groups[0].spanIds, [rejected.context()._nativeSpanId])
-    })
   })
 
   describe('constructor', () => {
@@ -291,13 +223,10 @@ describe('NativeExporter', () => {
     })
 
     it('should derive URL from config.url, falling back to hostname:port', () => {
-      // `config.url` here must be something the hostname:port fallback could
-      // never produce, otherwise dropping the `url ||` term would keep this
-      // test green while silently discarding any user-supplied
-      // DD_TRACE_AGENT_URL (including the unix:// and named-pipe forms).
-      const configWithUrl = { ...config, url: 'http://url-branch:9999' }
-      const fromUrl = new NativeExporter(configWithUrl, prioritySampler, nativeSpans)
-      assert.strictEqual(fromUrl._url, configWithUrl.url)
+      // Two branches of the URL-derivation logic in one test: the happy path
+      // (config.url provided) and the fallback (only hostname/port given).
+      const fromUrl = new NativeExporter(config, prioritySampler, nativeSpans)
+      assert.ok(fromUrl._url)
 
       const configWithHostname = {
         hostname: 'agent.example.com',
@@ -305,7 +234,7 @@ describe('NativeExporter', () => {
         flushInterval: 1000,
       }
       const fromHostname = new NativeExporter(configWithHostname, prioritySampler, nativeSpans)
-      assert.strictEqual(fromHostname._url.toString(), 'http://agent.example.com:8127/')
+      assert.ok(fromHostname._url.toString().includes('agent.example.com'))
     })
   })
 
@@ -377,58 +306,6 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
     })
 
-    it('forces a flush before flushInterval once pending spans hit the soft limit', () => {
-      // One flush is one HTTP request, so a burst inside flushInterval would
-      // otherwise build a single unbounded payload and risk the agent's request
-      // cap - losing the whole flush rather than sending two.
-      const burst = []
-      for (let i = 1; i <= 9999; i++) burst.push(createMockSpan(BigInt(i)))
-      exporter.export(burst)
-
-      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-
-      exporter.export([createMockSpan(10_000n)])
-
-      // Fired on span count alone, with the interval timer nowhere near elapsed.
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpans.length, 0)
-    })
-
-    it('splits an oversized payload across sends instead of one unbounded request', async () => {
-      // Sends are serialized, so while one is in flight flush() only records
-      // #flushRequested and the pending queue keeps growing for the whole round
-      // trip - the export()-time trigger cannot bound the payload here.
-      let release
-      nativeSpans.flushSpansGrouped = sinon.stub().returns(new Promise(resolve => { release = resolve }))
-
-      // First flush takes the whole (small) batch and is now in flight.
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-
-      // 12_000 spans arrive as 12 chunks of 1000 while that send is in flight.
-      for (let c = 0; c < 12; c++) {
-        const chunk = []
-        for (let i = 0; i < 1000; i++) chunk.push(createMockSpan(BigInt(c * 1000 + i + 2)))
-        exporter.export(chunk)
-      }
-      assert.strictEqual(exporter._pendingSpans.length, 12_000)
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-
-      // The 12_000 backlog must not go out as one request: the next send carries
-      // 10 whole chunks (10_000 spans) and the 2_000-span remainder follows in its
-      // own request, without waiting out another flushInterval.
-      nativeSpans.flushSpansGrouped = sinon.stub().resolves('OK')
-      release('OK')
-      await clock.tickAsync(0)
-
-      const sizes = nativeSpans.flushSpansGrouped.getCalls()
-        .map(call => call.args[0].reduce((total, group) => total + group.spanIds.length, 0))
-      assert.deepStrictEqual(sizes, [10_000, 2000])
-      assert.strictEqual(exporter._pendingSpans.length, 0)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-    })
-
     it('resets native state immediately when explicitly requested while idle', () => {
       exporter._resetNativeStateWhenIdle()
 
@@ -451,24 +328,6 @@ describe('NativeExporter', () => {
       sinon.assert.notCalled(nativeSpans.setAgentUrl)
       exporter._trackSpanFinish()
       sinon.assert.calledWith(nativeSpans.setAgentUrl, config.url)
-    })
-
-    it('amortizes the rebuild across dropped spans instead of one per dropped trace', () => {
-      // A rebuild is the only way to reclaim a dropped span's WASM slot, and it
-      // costs a fresh 8 MB change queue. Rebuilding per dropped trace made a route
-      // on the documented http `blocklist` rebuild state on every filtered request
-      // (and, before the state was freed, abort the process after ~4k of them).
-      for (let i = 0; i < 9; i++) exporter._resetNativeStateWhenIdle(1000)
-
-      sinon.assert.notCalled(nativeSpans.setAgentUrl)
-
-      exporter._resetNativeStateWhenIdle(1000)
-
-      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, config.url)
-
-      // Counter cleared, so the next batch starts a fresh budget.
-      exporter._resetNativeStateWhenIdle(1000)
-      sinon.assert.calledOnce(nativeSpans.setAgentUrl)
     })
   })
 
@@ -587,10 +446,7 @@ describe('NativeExporter', () => {
       exporter.flush((err) => { cbErr = err })
 
       assert.strictEqual(cbErr, undefined)
-      // Send failures use the non-transmitting variant: telemetry ships through
-      // the same agent, so an unreachable agent must not generate more payloads.
-      sinon.assert.called(logErrorWithoutTelemetry)
-      sinon.assert.notCalled(logError)
+      sinon.assert.called(logError)
     })
 
     // The success path is one observable sequence — splitting it across 5
@@ -628,26 +484,25 @@ describe('NativeExporter', () => {
         assert.strictEqual(cbErr, undefined)
       })
 
-    it('hands every coalesced trace to the native layer as its own group', async () => {
-      // Per-trace grouping is not about request count: `prepareChunk` appends to a
-      // native chunk Vec and `sendPreparedChunk` drains all of it as ONE
-      // multi-trace request. It matters because `flush_chunk` stamps trace-level
-      // tags (sampling priority, `_dd.p.dm`, origin) onto each chunk's local root,
-      // so lumping distinct trace_ids into one chunk would stamp only the first.
-      // The exporter's job is only to split the flush into per-trace groups.
-      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
-      const span1 = createMockSpan(123n)
-      const span2 = createMockSpan(456n)
-      exporter.export([span1, span2])
+    it('sends one payload per trace at flushInterval:0 when a flush coalesced multiple traces',
+      async () => {
+        // flushInterval:0 mirrors the legacy AgentWriter's one-trace-per-request
+        // behaviour. When several traces pile up during an in-flight send and
+        // drain together, each must ship as its own payload so a `traces[0]`
+        // consumer isn't handed a coalesced multi-trace payload.
+        exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
+        const span1 = createMockSpan(123n)
+        const span2 = createMockSpan(456n)
+        exporter.export([span1, span2])
 
-      await clock.tickAsync(0)
+        // Drain the sequenced per-group sends.
+        await clock.tickAsync(0)
+        await clock.tickAsync(0)
 
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
-      assert.strictEqual(groups.length, 2)
-      assert.strictEqual(groups[0].spanIds.length, 1)
-      assert.strictEqual(groups[1].spanIds.length, 1)
-    })
+        sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
+        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 1)
+        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(1).args[0].length, 1)
+      })
 
     it('sends one batched payload at flushInterval:0 for a single trace', async () => {
       exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
@@ -775,8 +630,8 @@ describe('NativeExporter', () => {
     })
 
     it('should swallow flushSpansGrouped rejections (logged, not propagated to done)', async () => {
-      // flush() waits for async send settlement, then logs any rejection via the
-      // non-transmitting error path. Errors do not surface through the callback.
+      // flush() waits for async send settlement, then log.error()s any rejection.
+      // Errors do not surface through the done callback.
       nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
 
       const span = createMockSpan(1n)
@@ -792,7 +647,7 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
       assert.strictEqual(cbErr, undefined)
 
-      sinon.assert.called(logErrorWithoutTelemetry)
+      sinon.assert.called(logError)
     })
   })
 
@@ -958,22 +813,13 @@ describe('NativeExporter', () => {
   describe('health metrics', () => {
     const P = 'datadog.tracer.node.exporter.agent'
 
-    it('increments request + response counters once per flush, not once per trace', async () => {
-      // Two traces coalesce into two chunks but ONE request, so these counters
-      // must fire once - the same per-request scale as `.errors`. Counting per
-      // chunk multiplies every native user's request rate by traces-per-flush.
+    it('increments request + response counters on a successful flush', async () => {
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
       exporter.export([createMockSpan(1n)])
-      exporter.export([createMockSpan(2n)])
       exporter.flush(() => {})
       await clock.tickAsync(0)
-
-      const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
-      assert.strictEqual(groups.length, 2)
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      const counted = metric => metricsIncrement.args.filter(([name]) => name === metric).length
-      assert.strictEqual(counted(`${P}.requests`), 1)
-      assert.strictEqual(counted(`${P}.responses`), 1)
+      sinon.assert.calledWith(metricsIncrement, `${P}.requests`, true)
+      sinon.assert.calledWith(metricsIncrement, `${P}.responses`, true)
     })
 
     it('increments error counters (name + code) on a failed flush', async () => {

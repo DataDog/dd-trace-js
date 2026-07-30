@@ -260,9 +260,10 @@ function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnable
  * @param {import('../opentracing/span')} ddSpan
  * @param {number} currentCode 0 = UNSET, 1 = OK, 2 = ERROR.
  * @param {{ code?: number, message?: string }} [status]
+ * @param {boolean} [otelTraceSemanticsEnabled]
  * @returns {number} The new status code to track on the caller.
  */
-function applyOtelStatus (ddSpan, currentCode, status) {
+function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return currentCode
 
   const code = status?.code
@@ -275,14 +276,7 @@ function applyOtelStatus (ddSpan, currentCode, status) {
   if (code === 1) {
     if (currentCode === 2) {
       const context = ddSpan.context()
-      // Clear ALL three error keys, not just the message: `span_format` re-asserts
-      // `error = 1` for any of ERROR_TYPE/ERROR_MESSAGE/ERROR_STACK unless
-      // IGNORE_OTEL_ERROR is truthy — and this branch deletes that guard. Leaving
-      // type/stack behind therefore made OK-after-recordException *set* the error
-      // it was supposed to clear, on both the JS and native pipelines.
-      context.deleteTag(ERROR_TYPE)
       context.deleteTag(ERROR_MESSAGE)
-      context.deleteTag(ERROR_STACK)
       context.deleteTag(IGNORE_OTEL_ERROR)
       ddSpan.setTag('error', 0)
     }

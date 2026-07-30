@@ -99,7 +99,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').SpanStatus} status
    */
   setStatus (status) {
-    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status)
+    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status, this._otelTraceSemanticsEnabled)
     return this
   }
 }

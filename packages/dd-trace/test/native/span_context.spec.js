@@ -97,27 +97,24 @@ describe('NativeSpanContext', () => {
       })
     })
 
-    it('does not queue native ops for a span native storage has already dropped', () => {
-      // `applyOtelHttpSemantics` returns early unless http.method/http.url is
-      // present, so these tags are what make it a real exercise of the
-      // exported guard rather than the non-HTTP early return.
-      spanContext.setTag('span.kind', 'server')
-      spanContext.setTag('http.method', 'GET')
-      spanContext.setTag('http.url', 'http://h/p')
+    it('keeps late tags in the JS cache without queueing native ops', () => {
       spanContext.markExported()
       nativeSpans.queueOp.resetHistory()
+      nativeSpans.queueBatchMeta.resetHistory()
+      nativeSpans.queueBatchMetrics.resetHistory()
       nativeSpans.queueBatchMetaFlat.resetHistory()
       nativeSpans.queueBatchMetricsFlat.resetHistory()
 
-      spanContext.applyOtelHttpSemantics()
       spanContext.setTag('peer.service', 'db')
+      spanContext.syncOneTagToNative('k', 'v')
+      spanContext.syncToNativeOnly({ a: 'b', n: 1 })
       spanContext.syncFinalTagsToNative({ name: 'n', resource: 'r', error: 0, meta: {}, metrics: {} })
 
-      sinon.assert.notCalled(nativeSpans.queueOp)
-      sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
-      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
-      // The JS tag cache stays readable for in-process consumers.
-      assert.strictEqual(spanContext.getTag('http.url'), 'http://h/p')
+      assert.strictEqual(nativeSpans.queueOp.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMeta.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetrics.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetaFlat.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetricsFlat.callCount, 0)
       assert.strictEqual(spanContext.getTag('peer.service'), 'db')
     })
   })
@@ -130,13 +127,15 @@ describe('NativeSpanContext', () => {
       })
     })
 
-    it('keeps setTag JS-cache-only before the final sync', () => {
+    it('keeps mutation paths JS-cache-only before final sync', () => {
       spanContext.setTag('dynamic.tag', 'first')
-      spanContext.setTag('flag', true)
+      spanContext.syncOneTagToNative('dynamic.tag', 42)
+      spanContext.syncToNativeOnly({ 'removed.tag': undefined, flag: true })
 
       assert.strictEqual(spanContext.getTag('dynamic.tag'), 'first')
-      assert.strictEqual(spanContext.getTag('flag'), true)
       sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(nativeSpans.queueBatchMeta)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
       sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
       sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
     })
@@ -185,56 +184,53 @@ describe('NativeSpanContext', () => {
     })
   })
 
-  // setTag/getTag/hasTag/deleteTag/getTags all inherit from DatadogSpanContext
-  // and are covered by `packages/dd-trace/test/opentracing/span_context.spec.js`.
-  // The native subclass doesn't override them: tag writes stay JS-cache-only
-  // until the finish-time snapshot (tested above).
-  //
-  // The span name likewise never gets its own WASM op during a span's life
-  // (`_setNameLocal` writes only the Symbol-keyed slot). It reaches WASM through
-  // `queueCreateSpan` at start and through `syncFinalTagsToNative`'s SetName op
-  // at finish, asserted by 'queues one final formatted snapshot to native
-  // storage' above.
+  // getTag/hasTag/deleteTag/getTags inherit from DatadogSpanContext and are
+  // covered by `packages/dd-trace/test/opentracing/span_context.spec.js`. The
+  // native subclass adds native-storage sync on setTag (tested above) but
+  // doesn't override the read-side accessors, so we don't re-test them here.
+
+  describe('_syncNameToNative', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id,
+      })
+    })
+
+    it('should queue SetName operation', () => {
+      spanContext._syncNameToNative('my-operation')
+
+      sinon.assert.calledWith(
+        nativeSpans.queueOp,
+        OpCode.SetName,
+        leSpanId,
+        'my-operation'
+      )
+    })
+  })
 
   describe('OTEL semantics (DD_TRACE_OTEL_SEMANTICS_ENABLED)', () => {
     beforeEach(() => {
       nativeSpans.otelSemanticsEnabled = true
       spanContext = new NativeSpanContext(nativeSpans, { traceId: id, spanId: id })
       nativeSpans.queueOp.resetHistory()
-      nativeSpans.queueBatchMetaFlat.resetHistory()
-      nativeSpans.queueBatchMetricsFlat.resetHistory()
+      nativeSpans.queueBatchMeta.resetHistory()
+      nativeSpans.queueBatchMetrics.resetHistory()
     })
 
-    it('holds DD HTTP keys out of the final WASM snapshot', () => {
+    it('holds DD HTTP keys out of WASM across setTag, batch, and single-sync paths', () => {
       spanContext.setTag('http.url', 'http://h/p')
-      spanContext.setTag('http.method', 'GET')
+      spanContext.syncToNativeOnly({ 'http.method': 'GET', 'out.host': 'h' })
+      spanContext.syncOneTagToNative('http.useragent', 'curl/8')
 
-      spanContext.syncFinalTagsToNative({
-        name: 'n',
-        resource: 'r',
-        error: 0,
-        meta: {
-          'http.url': 'http://h/p',
-          'http.method': 'GET',
-          'out.host': 'h',
-          'http.useragent': 'curl/8',
-          'peer.service': 'db',
-        },
-        metrics: { 'network.destination.port': 8080, 'metric.key': 3 },
-      })
-
-      const evenItems = calls => calls.flatMap(c => c.args[1].filter((_, i) => i % 2 === 0))
-      const metaKeys = evenItems(nativeSpans.queueBatchMetaFlat.getCalls())
-      const metricKeys = evenItems(nativeSpans.queueBatchMetricsFlat.getCalls())
       const opKeys = nativeSpans.queueOp.getCalls().map(c => c.args[2])
-      for (const k of ['http.url', 'http.method', 'out.host', 'http.useragent', 'network.destination.port']) {
-        assert.ok(!metaKeys.includes(k) && !metricKeys.includes(k) && !opKeys.includes(k), `${k} leaked to WASM`)
+      const batchKeys = nativeSpans.queueBatchMeta.getCalls().flatMap(c => c.args[1].map(([k]) => k))
+      for (const k of ['http.url', 'http.method', 'out.host', 'http.useragent']) {
+        assert.ok(!opKeys.includes(k) && !batchKeys.includes(k), `${k} leaked to WASM`)
       }
-      // Non-HTTP tags are unaffected by the deferral.
-      assert.ok(metaKeys.includes('peer.service'))
-      assert.ok(metricKeys.includes('metric.key'))
-      // setTag still populates the JS cache, so the finish-time remap can read
-      // the DD tags that were held out of WASM.
+      // setTag still populates the JS cache (only the WASM sync is skipped) so
+      // the finish-time remap can read the DD tag. (syncToNativeOnly/
+      // syncOneTagToNative sync WASM only; their callers write the cache.)
       assert.strictEqual(spanContext.getTag('http.url'), 'http://h/p')
     })
 

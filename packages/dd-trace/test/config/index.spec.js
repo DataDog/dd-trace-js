@@ -1296,7 +1296,7 @@ describe('Config', () => {
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
@@ -1398,7 +1398,7 @@ describe('Config', () => {
           timeout: 2000,
         },
         enableGetRumData: true,
-        exporter: 'agent',
+        exporter: 'log',
       },
       hostname: 'agent',
       DD_HEAP_SNAPSHOT_COUNT: 1,
@@ -1539,7 +1539,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'env_var' },
-      { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'agent', origin: 'env_var' },
+      { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'env_var' },
       { name: 'DD_AGENT_HOST', value: 'agent', origin: 'env_var' },
       { name: 'DD_IAST_DB_ROWS_TO_TAINT', value: 2, origin: 'env_var' },
       { name: 'DD_IAST_DEDUPLICATION_ENABLED', value: false, origin: 'env_var' },
@@ -1901,7 +1901,7 @@ describe('Config', () => {
           maxMessagesLength: 32,
           timeout: 2000,
         },
-        exporter: 'agent',
+        exporter: 'log',
         enableGetRumData: true,
       },
       iast: {
@@ -2008,7 +2008,7 @@ describe('Config', () => {
           timeout: 2000,
         },
         enableGetRumData: true,
-        exporter: 'agent',
+        exporter: 'log',
       },
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -2152,7 +2152,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'code' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2_000, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'code' },
-      { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'agent', origin: 'code' },
+      { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'code' },
       { name: 'DD_TRACE_FLUSH_INTERVAL', value: 5000, origin: 'code' },
       { name: 'DD_TRACE_PARTIAL_FLUSH_MIN_SPANS', value: 500, origin: 'code' },
       { name: 'DD_AGENT_HOST', value: 'agent', origin: 'code' },
@@ -2430,7 +2430,7 @@ describe('Config', () => {
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'datadog'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'

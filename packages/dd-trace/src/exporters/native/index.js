@@ -8,11 +8,8 @@ const defaults = require('../../config/defaults')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
-const { logIntegrations, logAgentError } = require('../../startup-log')
-const telemetryMetrics = require('../../telemetry/metrics')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
-const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 // Mirrors the legacy AgentWriter so operators see the same tracer-health
 // metrics on the native export path. The native `sendPreparedChunk` does not
@@ -20,12 +17,6 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 // omitted (libdatadog handles the transport); requests/responses/errors are
 // emitted around each send attempt.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
-
-// Pending spans tolerated before a flush is forced ahead of `flushInterval`.
-// The legacy encoder tripped at 8 MB of encoded trace bytes; at a few hundred
-// bytes per span this is the same order of magnitude, and it is far enough above
-// normal traffic that the single-request path is what almost every flush takes.
-const SOFT_LIMIT_SPANS = 10_000
 
 // JS-side debug view of the spans being exported. The native pipeline
 // serializes in WASM, so mirror the legacy AgentWriter's `Encoding payload`
@@ -69,13 +60,6 @@ class NativeExporter {
   // building is one-shot and won't recover, so we stop exporting rather than
   // loop on the same error every flush.
   #disabled = false
-  // Non-null only on the OTLP route: the protocol tag for the export counters.
-  #otlpTelemetryTags = null
-  // One queued idle-reset is enough; without this every non-recording trace
-  // appends another identical closure that rebuilds the whole 8 MB WASM state.
-  #resetQueued = false
-  // Dropped spans still resident in the WASM map, awaiting a state rebuild.
-  #retainedDroppedSpans = 0
   /**
    * @param {object} config - Tracer configuration
    * @param {object} prioritySampler - Priority sampler instance
@@ -149,18 +133,6 @@ class NativeExporter {
     // below): it fails loud at build/first-send rather than silently degrading,
     // since there is no sensible default endpoint to fall back to.
     this._nativeSpans.setOtlpEndpoint(endpoint)
-    // `otel.traces_export_attempts`/`_successes` are the only signal for whether a
-    // customer's OTLP trace export is working. The deleted JS OTLP exporter emitted
-    // them per HTTP request; OTLP logs and metrics still do, so without this the
-    // traces signal alone flatlines to zero for every native-path user. Keep the
-    // exact tag set it used (`protocol` + `encoding`) so the three signals remain
-    // comparable and existing monitors filtering on `encoding` still match.
-    const isProtobuf = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL === 'http/protobuf'
-    this.#otlpTelemetryTags = [
-      // Lowercase first: the old derivation went through `new URL().protocol`.
-      `protocol:${String(endpoint).toLowerCase().startsWith('https:') ? 'https' : 'http'}`,
-      `encoding:${isProtobuf ? 'protobuf' : 'json'}`,
-    ]
 
     const protocol = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
     if (protocol) {
@@ -188,26 +160,6 @@ class NativeExporter {
   }
 
   /**
-   * Mirror the deleted OtlpHttpTraceExporter's per-request telemetry counters.
-   * No-op on the agent path.
-   *
-   * `attempts`/`successes` measure export *pushes*, so they are incremented once
-   * per HTTP request. The deleted JS exporter's `export()` was invoked per trace
-   * chunk and issued one request each, so its `spans:` tag was that chunk's span
-   * count; `flushSpansGrouped` coalesces the whole flush into one multi-chunk
-   * request, so the equivalent tag is the payload's total span count.
-   *
-   * @param {string} metric `otel.traces_export_attempts` or `..._successes`
-   * @param {Array<{spanIds: Uint8Array[]}>} groups Groups in this flush
-   */
-  #recordOtlpTelemetry (metric, groups) {
-    if (this.#otlpTelemetryTags === null) return
-    let spans = 0
-    for (const group of groups) spans += group.spanIds.length
-    tracerMetrics.count(metric, [...this.#otlpTelemetryTags, `spans:${spans}`]).inc(1)
-  }
-
-  /**
    * Confirm the agent supports v0.5 before switching the native exporter to it.
    * Asynchronous: until /info resolves the exporter stays on v0.4 (the safe
    * default), so an early first flush may go out as v0.4 — acceptable, since
@@ -232,13 +184,7 @@ class NativeExporter {
       // response (non-array, or a string that substring-matches) can't throw
       // in this async callback or false-positive into v0.5.
       if (Array.isArray(info?.endpoints) && info.endpoints.includes('/v0.5/traces')) {
-        try {
-          this._nativeSpans.setUseV05(true)
-        } catch (e) {
-          // This runs inside an HTTP response callback, so a throw would surface
-          // as an uncaughtException. v0.5 is an optional upgrade: stay on v0.4.
-          log.warn('Native exporter: failed to enable v0.5 output, staying on v0.4: %s', e.message)
-        }
+        this._nativeSpans.setUseV05(true)
       }
     })
   }
@@ -257,28 +203,19 @@ class NativeExporter {
       !this._config.OTEL_TRACES_SPAN_METRICS_ENABLED
   }
 
-  /**
-   * Reclaim WASM span slots held by spans that were dropped instead of exported.
-   *
-   * `prepareChunk` is the only call that releases a span, and it stages whatever
-   * it releases, so a dropped trace cannot be released individually - rebuilding
-   * the whole state is the only reclamation available. That costs a fresh 8 MB
-   * change queue, so it is amortized: retain up to `SOFT_LIMIT_SPANS` dropped
-   * spans (a few MB at typical span sizes) and rebuild once, rather than paying a
-   * rebuild per dropped trace. Before this, a route on the documented http
-   * `blocklist` rebuilt state on every filtered request.
-   *
-   * @param {number} [dropped] Spans just dropped, for the retention accounting
-   */
-  _resetNativeStateWhenIdle (dropped = 0) {
+  _discardNativeSpans (spans) {
+    if (this.#disabled || this.#nativeStatsEnabled() || !spans?.length) return false
+    const discard = this._nativeSpans.discardSpansGrouped
+    if (typeof discard !== 'function') return false
+
+    const groups = this.#groupsFromSpanChunks([spans], false)
+    if (groups.length === 0) return false
+    return discard.call(this._nativeSpans, groups) > 0
+  }
+
+  _resetNativeStateWhenIdle () {
     if (this.#disabled || this.#nativeStatsEnabled()) return
-    this.#retainedDroppedSpans += dropped
-    if (this.#retainedDroppedSpans < SOFT_LIMIT_SPANS && dropped > 0) return
-    if (this.#resetQueued) return
-    this.#resetQueued = true
     this.#urlUpdateCallbacks.push(() => {
-      this.#resetQueued = false
-      this.#retainedDroppedSpans = 0
       try {
         this._nativeSpans.setAgentUrl(this._url.toString())
       } catch (e) {
@@ -356,13 +293,6 @@ class NativeExporter {
   export (spans) {
     if (this.#disabled) return
 
-    // Note: sampler-rejected traces are NOT dropped here, on either pipeline.
-    // The agent needs them to compute stats, and libdatadog applies its own
-    // client-side p0 drop before writing an OTLP payload, so a rejected trace
-    // never reaches a collector either. Dropping them in JS would also mean
-    // leaving their spans resident in the WASM map, since `prepareChunk` is the
-    // only call that releases a span and it stages whatever it releases.
-
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
 
@@ -379,13 +309,7 @@ class NativeExporter {
 
     const { flushInterval } = this._config
 
-    // `flushInterval === 0` is flush-per-export. The soft limit forces the same
-    // decision for a different reason: it bounds how much is buffered before the
-    // first send, mirroring the legacy v0.4 encoder's 8 MB soft-limit flush
-    // ("Buffer went over soft limit, flushing"). Span count is the only size proxy
-    // available before WASM serializes the payload. `flush()` caps the payload it
-    // takes as well, which is what bounds a backlog built during an in-flight send.
-    if (flushInterval === 0 || this._pendingSpans.length >= SOFT_LIMIT_SPANS) {
+    if (flushInterval === 0) {
       this.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
@@ -461,17 +385,12 @@ class NativeExporter {
   }
 
   #finishSend () {
-    // Drain unconditionally. Gating this on "is something waiting" lets chunks
-    // accumulate across a send window, which changes how many traces a payload
-    // carries - and `traces[0]` consumers (the plugin test agent among them)
-    // depend on a payload holding the trace they just produced.
     if (this._pendingSpanChunks.length > 0) {
       this.flush()
-      return
+    } else {
+      this.#finishFlushCallbacks()
+      this.#finishUrlUpdateCallbacks()
     }
-
-    this.#finishFlushCallbacks()
-    this.#finishUrlUpdateCallbacks()
   }
 
   #handleSendError (err) {
@@ -481,11 +400,7 @@ class NativeExporter {
     if (err.code) {
       runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
     }
-    // Non-transmitting: telemetry ships through the same agent, so an
-    // unreachable agent would turn every failed flush into another payload for
-    // the unreachable agent. Tracer health is already on `${METRIC_PREFIX}.errors`.
-    logAgentError({ status: err.status, message: err.message ?? String(err) })
-    log.errorWithoutTelemetry('Error sending spans to agent via native exporter:', err)
+    log.error('Error sending spans to agent via native exporter:', err)
     // A fatal exporter-build error (bad config) is one-shot and won't recover;
     // libdatadog tags it as NativeExporterBuildError. Stop exporting instead of
     // looping on the same error every flush, and drop buffered spans so they
@@ -496,10 +411,6 @@ class NativeExporter {
       this._pendingSpanChunks = []
       clearTimeout(this.#timer)
       this.#timer = undefined
-      // Nothing will be sent again, so stop the 10s native stats interval too:
-      // otherwise it keeps calling into WASM and logging against a dead agent for
-      // the life of the process, pinning the 8 MB change queue with it.
-      this._nativeSpans.stopStatsFlush?.()
       log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
       this.#finishFlushCallbacks()
       return
@@ -540,35 +451,9 @@ class NativeExporter {
       return
     }
 
-    // One flush is one HTTP request, so cap what a single payload carries. The
-    // soft-limit trigger in `export()` bounds how much is buffered while idle, but
-    // it cannot bound this: sends are serialized, so while one is in flight
-    // `flush()` returns early and `_pendingSpanChunks` keeps growing for the whole
-    // round trip. Take whole chunks up to the limit and leave the rest, which
-    // `#finishSend` drains as soon as this send resolves.
-    let spanChunks
-    if (this._pendingSpans.length > SOFT_LIMIT_SPANS) {
-      let taken = 0
-      let i = 0
-      // Never split a chunk - chunk boundaries are the processor's trace
-      // boundaries. Always take at least one, even if it alone exceeds the limit.
-      while (i < this._pendingSpanChunks.length &&
-        (taken === 0 || taken + this._pendingSpanChunks[i].length <= SOFT_LIMIT_SPANS)) {
-        taken += this._pendingSpanChunks[i].length
-        i++
-      }
-      spanChunks = this._pendingSpanChunks.slice(0, i)
-      this._pendingSpanChunks = this._pendingSpanChunks.slice(i)
-      // `_pendingSpans` is the in-order concatenation of the chunks, so the
-      // remainder is exactly the tail past what this payload took.
-      this._pendingSpans = this._pendingSpans.slice(taken)
-      // The remainder ships from `#finishSend`, which drains whatever is still
-      // pending as soon as this send resolves.
-    } else {
-      spanChunks = this._pendingSpanChunks
-      this._pendingSpans = []
-      this._pendingSpanChunks = []
-    }
+    const spanChunks = this._pendingSpanChunks
+    this._pendingSpans = []
+    this._pendingSpanChunks = []
 
     // Convert each SpanProcessor export call into one or more native chunks,
     // splitting only traces that happen to share one export call. Never group
@@ -577,16 +462,12 @@ class NativeExporter {
     // when flushInterval coalesces HTTP sends.
     const groups = this.#groupsFromSpanChunks(spanChunks, true)
 
-    // `flushSpansGrouped` stages every chunk synchronously and issues exactly one
-    // HTTP request for the whole flush, so `.requests`/`.responses` are counted
-    // once here - the same per-request scale as `.errors` and as the legacy
-    // AgentWriter's `_sendPayload`.
+    // prepareChunk is synchronous — extract spans from native storage now.
+    // sendPreparedChunk is async (HTTP send). We serialize sends so that
+    // prepared chunks don't accumulate faster than they can be sent, which
+    // would cause unbounded memory growth proportional to total requests.
+    // Note: flushChangeQueue is called inside flushSpansGrouped.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
-    this.#recordOtlpTelemetry('otel.traces_export_attempts', groups)
-    // Self-guarded (`integrationsAlreadyRan`), so the repeat cost is one boolean.
-    // Without this the on-by-default `INTEGRATIONS LOADED` startup line never
-    // printed on the native path, which is a first-line support artifact.
-    logIntegrations()
     // Announce the first flush when the send is *attempted*, not when it
     // succeeds — matching the legacy AgentWriter, which publishes before sending.
     // `logAbortedIntegrations` (register.js) subscribes to this channel to emit
@@ -598,12 +479,28 @@ class NativeExporter {
       this.#firstFlushSent = true
       firstFlushChannel.publish()
     }
-    // One request carrying one chunk per trace: `prepareChunk` appends to a
-    // native chunk Vec and `sendPreparedChunk` drains all of it into a single
-    // multi-trace payload, which is the shape the legacy AgentWriter sent.
+    // At `flushInterval: 0` the legacy AgentWriter sent one trace per request
+    // (each finished trace flushed immediately). The batched single-payload form
+    // — used at flushInterval>0 to cut request overhead — would instead deliver
+    // several coalesced traces in one payload, which any `traces[0]` consumer
+    // (and the test agent, which asserts one trace per payload) sees as trace
+    // reordering. When a deferred flush coalesced multiple traces at
+    // flushInterval:0, send each group as its own payload to preserve that
+    // one-trace-per-request contract. Each call is the same single-group
+    // `flushSpansGrouped` shape `flushSpans` wraps; the first call drains the
+    // whole change queue so every group's spans (and their trace tags) are
+    // materialized before any `prepareChunk`. A send failure rejects the chain
+    // into the handler below and leaves later groups unsent — acceptable since
+    // flushInterval:0 only runs against a local test agent or a short-lived
+    // lambda.
     let sendGrouped
     try {
-      sendGrouped = this._nativeSpans.flushSpansGrouped(groups)
+      sendGrouped = this._config.flushInterval === 0 && groups.length > 1
+        ? groups.reduce(
+          (previous, group) => previous.then(() => this._nativeSpans.flushSpansGrouped([group])),
+          Promise.resolve('no spans to flush')
+        )
+        : this._nativeSpans.flushSpansGrouped(groups)
     } catch (err) {
       this.#handleSendError(err)
       return
@@ -613,7 +510,6 @@ class NativeExporter {
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        this.#recordOtlpTelemetry('otel.traces_export_successes', groups)
         // The agent's response carries per-service sampling rates. Feed them
         // back into the priority sampler so adaptive (agent-driven) sampling
         // works in native mode, matching the legacy AgentWriter behaviour.

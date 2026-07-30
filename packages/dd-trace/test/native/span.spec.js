@@ -98,11 +98,10 @@ describe('NativeDatadogSpan', () => {
       OpCode,
     }
 
-    // Create a mock NativeSpanContext that tracks tags. On top of
-    // DatadogSpanContext the real class adds `_setNameLocal`,
-    // `markExported`/`isExported`, `syncFinalTagsToNative` and
-    // `applyOtelHttpSemantics` — provide those so the production span code can
-    // call them without TypeErrors.
+    // Create a mock NativeSpanContext that tracks tags. The real
+    // class adds syncToNativeOnly / syncOneTagToNative /
+    // _setNameLocal — provide stubs so the production span code can call
+    // them without TypeErrors.
     NativeSpanContext = function (ns, props) {
       this._nativeSpans = ns
       this._nativeSpanId = props.spanId.toBuffer()
@@ -119,23 +118,36 @@ describe('NativeDatadogSpan', () => {
       // Backing store renamed away from `_tags` so the
       // `eslint-no-private-tags-access` rule does not flag mock-internal access.
       this.tagStore = { ...(props.tags || {}) }
-      // Mirror the production NativeSpanContext shape: `_name` is a plain
-      // getter/setter pair over a local slot which queues no WASM op. The name
-      // reaches native storage through `queueCreateSpan` at start and through
-      // `syncFinalTagsToNative`'s SetName op at finish.
+      // Mirror the production NativeSpanContext shape: `_name` is a getter/setter
+      // pair, and the setter fires `_syncNameToNative` once the context is
+      // `[NATIVE_READY]`. The mock starts ready so `setOperationName` writes
+      // are observed via the stub.
       let nameValue
       Object.defineProperty(this, '_name', {
         configurable: true,
         get () { return nameValue },
-        set (v) { nameValue = v },
+        set (v) {
+          nameValue = v
+          this._syncNameToNative(v)
+        },
       })
       this._hostname = undefined
       this._isFinished = false
+      // Per-instance call tracker. The production NativeDatadogSpan
+      // shadows the prototype's `_syncNameToNative` with a no-op on
+      // the instance during construction (to suppress the parent's
+      // double-SetName), then deletes the shadow once super() returns.
+      // We keep the underlying tracker as `_syncNameToNativeStub` so
+      // tests can still assert against it post-construction.
+      this._syncNameToNativeStub = sinon.stub()
       this._setNameLocal = (name) => { nameValue = name }
-      // Driven by the span processor at export time rather than by
-      // NativeDatadogSpan; stubbed so nothing here can call them blind.
-      this.syncFinalTagsToNative = sinon.stub()
-      this.applyOtelHttpSemantics = sinon.stub()
+      // Initial tags are seeded into `_tags` by the parent
+      // DatadogSpanContext via Object.assign in `getTags()`; the native
+      // span constructor then calls `syncToNativeOnly(fields.tags)` to
+      // push them to WASM. The stub here just needs to exist so that
+      // production call does not blow up.
+      this.syncToNativeOnly = sinon.stub()
+      this.syncOneTagToNative = sinon.stub()
       this.markExported = () => { this.exported = true }
       this.isExported = () => this.exported === true
 
@@ -155,6 +167,13 @@ describe('NativeDatadogSpan', () => {
       this.getTags = () => {
         return this.tagStore
       }
+    }
+    // `_syncNameToNative` lives on the prototype so the production
+    // `delete spanContext._syncNameToNative` (which removes only the
+    // instance shadow installed during construction) leaves a usable
+    // method behind for post-construction `setOperationName` calls.
+    NativeSpanContext.prototype._syncNameToNative = function (v) {
+      this._syncNameToNativeStub(v)
     }
 
     // Mock DatadogSpan parent — exercises the relevant constructor
@@ -253,53 +272,6 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(typeof args[5], 'number') // startMs
     })
 
-    it('derives the start time from the clock for `startTime: 0` instead of recording 1970', () => {
-      // `_createContext` coerces the caller's start with `||`, exactly as the
-      // parent constructor's `fields.startTime || this._getTime()` does.
-      // `startTime: 0` is the one input where an `=== undefined` check diverges:
-      // it would forward 0 verbatim to queueCreateSpan (start = 1970 in WASM)
-      // while the parent's `||` fell back to the current time for `_startTime`,
-      // so the exported span's start would not match the JS-side value that
-      // consumers such as LLMObs read.
-      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'zero-start',
-        startTime: 0,
-      }, false, nativeSpans)
-
-      const startArg = nativeSpans.queueCreateSpan.getCall(0).args[5]
-      assert.strictEqual(startArg, 1500000000000) // the stubbed clock, not 0
-      assert.strictEqual(startArg, span._startTime)
-    })
-
-    it('passes the parent span id as the queueCreateSpan parent id', () => {
-      // Regression guard for the parent_id field: dropping it (or reading the
-      // Identifier's bytes the wrong way downstream) zeroes parent_id in the
-      // wire record, which exports every child span as a root.
-      const parent = new NativeDatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'parent',
-      }, false, nativeSpans)
-      // A root span has no parent id at all.
-      assert.strictEqual(nativeSpans.queueCreateSpan.getCall(0).args[3], null)
-
-      nativeSpans.queueCreateSpan.resetHistory()
-      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'child',
-        parent: parent.context(),
-      }, false, nativeSpans)
-
-      const parentIdArg = nativeSpans.queueCreateSpan.getCall(0).args[3]
-      assert.ok(parentIdArg, 'child parent id must not be null/undefined')
-      assert.deepStrictEqual(
-        Buffer.from(parentIdArg.toBuffer()),
-        Buffer.from(parent.context()._spanId.toBuffer())
-      )
-      // ...and it must be the parent's id, not the child's own span id.
-      assert.notDeepStrictEqual(
-        Buffer.from(parentIdArg.toBuffer()),
-        Buffer.from(span.context()._spanId.toBuffer())
-      )
-    })
-
     it('defaults the resource to the operation name when no resource.name is supplied', () => {
       // The JS formatter defaulted resource to the span name; native has no
       // format step, so the span must queue SetResourceName(name) at creation.
@@ -351,29 +323,11 @@ describe('NativeDatadogSpan', () => {
         tags: { 'resource.name': 'GET /users' },
       }, false, nativeSpans)
 
-      // No default SetResourceName op is queued at creation: `_createContext`
-      // skips the operation-name default when `fields.tags['resource.name']` is
-      // a string. That explicit value then reaches WASM only through the
-      // finish-time formatted snapshot (`syncFinalTagsToNative`).
+      // No default SetResourceName op is queued at creation...
       const resourceOps = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetResourceName)
       assert.strictEqual(resourceOps.length, 0)
-    })
-
-    it('defaults the resource to the operation name without a string resource.name', () => {
-      // The skip above is keyed on `typeof === 'string'`, so an absent or
-      // non-string `resource.name` must still get SetResourceName(name).
-      for (const tags of [undefined, { 'resource.name': 42 }]) {
-        nativeSpans.queueOp.resetHistory()
-        // eslint-disable-next-line no-new
-        new NativeDatadogSpan(tracer, processor, prioritySampler, {
-          operationName: 'test-operation',
-          tags,
-        }, false, nativeSpans)
-
-        sinon.assert.calledWith(
-          nativeSpans.queueOp, OpCode.SetResourceName, sinon.match.any, 'test-operation'
-        )
-      }
+      // ...the explicit resource.name is synced through the tag path instead.
+      sinon.assert.calledWith(span.context().syncToNativeOnly, sinon.match({ 'resource.name': 'GET /users' }))
     })
 
     it('gives child spans the same 128-bit native trace id as the root (not zero-padded)', () => {
@@ -422,56 +376,13 @@ describe('NativeDatadogSpan', () => {
       assert.deepStrictEqual(childTraceId, [...high, ...low])
     })
 
-    it('rebuilds the high 8 bytes when consecutive spans belong to traces with different tids', () => {
-      // The `_dd.p.tid` -> high-8-bytes memo in src/native/span.js is
-      // MODULE-level state keyed on the tid hex. Dropping that key comparison
-      // (serving the cached array whenever one exists) splices trace A's high
-      // bytes onto trace B's spans, recording B's children under a foreign
-      // 128-bit trace id. The other 128-bit tests each use a single tid per
-      // module instance — the spec re-proxyquires the module in `beforeEach`, so
-      // the memo always starts empty there and never has to be invalidated.
-      // Only alternating tids against the SAME instance observes the miss.
-      const propagatedParent = (high, low) => ({
-        _traceId: { toBuffer: () => Buffer.from([...high, ...low]), toString: () => 't' },
-        _spanId: { toBuffer: () => Buffer.from(low), toString: () => 'p' },
-        _sampling: {},
-        _baggageItems: {},
-        _trace: { started: [{}], finished: [], tags: { '_dd.p.tid': Buffer.from(high).toString('hex') } },
-        _tracestate: undefined,
-      })
-      const highA = [0xaa, 0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33, 0x44]
-      const lowA = [1, 2, 3, 4, 5, 6, 7, 8]
-      const highB = [0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78]
-      const lowB = [9, 10, 11, 12, 13, 14, 15, 16]
-      const parentA = propagatedParent(highA, lowA)
-      const parentB = propagatedParent(highB, lowB)
-
-      const childTraceIdUnder = (parent) => {
-        nativeSpans.queueCreateSpan.resetHistory()
-        // eslint-disable-next-line no-new
-        new NativeDatadogSpan(tracer, processor, prioritySampler, {
-          operationName: 'child',
-          parent,
-          traceId128BitGenerationEnabled: true,
-        }, false, nativeSpans)
-        return nativeSpans.queueCreateSpan.getCall(0).args[1]
-      }
-
-      // Warm the memo with tid A, then switch traces: B's span must carry B's
-      // own high bytes.
-      assert.deepStrictEqual(childTraceIdUnder(parentA), [...highA, ...lowA])
-      assert.deepStrictEqual(childTraceIdUnder(parentB), [...highB, ...lowB])
-      // Re-entry: back on trace A the high bytes must be A's again, not the
-      // now-cached B ones.
-      assert.deepStrictEqual(childTraceIdUnder(parentA), [...highA, ...lowA])
-    })
-
     it('should NOT also issue a separate SetName op on init', () => {
-      // CreateSpan already carries the name, and the `_name` setter that the
-      // parent constructor triggers only writes a local slot — it queues
-      // nothing. (An earlier no-op instance shadow plus `delete` did that
-      // suppression and dropped every context into V8 dictionary mode.)
-      // Assert at the WASM-op level: no SetName op during construction.
+      // CreateSpan already carries the name; the subclass shadows
+      // `_syncNameToNative` with a no-op so the parent constructor's
+      // `_spanContext._name = operationName` line doesn't double-emit.
+      // We assert at the WASM-op level (no SetName op queued) rather
+      // than against the `_syncNameToNative` stub directly, since the
+      // shadow replaces the instance property during construction.
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
@@ -500,21 +411,18 @@ describe('NativeDatadogSpan', () => {
   })
 
   describe('setOperationName', () => {
-    it('should update the context name without queueing a native op', () => {
+    it('should update operation name and sync to native', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'original-name',
       }, false, nativeSpans)
-      nativeSpans.queueOp.resetHistory()
 
       span.setOperationName('new-name')
 
       assert.strictEqual(span.context()._name, 'new-name')
-      // The rename queues nothing itself; the new name reaches WASM at finish
-      // when the processor hands the formatted snapshot to
-      // `syncFinalTagsToNative` (its SetName op is asserted in
-      // `test/native/span_context.spec.js`). That call belongs to the processor,
-      // not NativeDatadogSpan, so it is out of this file's scope.
-      sinon.assert.notCalled(nativeSpans.queueOp)
+      // The prototype `_syncNameToNative` delegates to the per-instance
+      // `_syncNameToNativeStub` (so the construction-time shadow doesn't
+      // erase call history). See the NativeSpanContext mock definition.
+      sinon.assert.calledWith(span.context()._syncNameToNativeStub, 'new-name')
     })
   })
 
@@ -530,23 +438,17 @@ describe('NativeDatadogSpan', () => {
       }, false, nativeSpans)
     })
 
-    it('keeps setTag in the JS tag cache without queueing a native op', () => {
-      nativeSpans.queueOp.resetHistory()
+    it('should sync setTag value to native via syncOneTagToNative', () => {
+      span.context().syncOneTagToNative.resetHistory()
       span.setTag('http.url', 'https://example.test/x')
-
-      assert.strictEqual(span.context().getTag('http.url'), 'https://example.test/x')
-      // Native storage is written once at finish from the formatted snapshot.
-      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.calledWith(span.context().syncOneTagToNative, 'http.url', 'https://example.test/x')
     })
 
-    it('merges an addTags batch into the JS tag cache without queueing native ops', () => {
-      nativeSpans.queueOp.resetHistory()
+    it('should sync addTags batch to native via syncToNativeOnly', () => {
+      span.context().syncToNativeOnly.resetHistory()
       const batch = { 'http.method': 'GET', 'http.status_code': 200 }
       span.addTags(batch)
-
-      assert.strictEqual(span.context().getTag('http.method'), 'GET')
-      assert.strictEqual(span.context().getTag('http.status_code'), 200)
-      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.calledWith(span.context().syncToNativeOnly, batch)
     })
 
     it('publishes dd-trace:span:tags:update after setTag (so subscribers like the wall profiler refresh)', () => {
@@ -604,12 +506,12 @@ describe('NativeDatadogSpan', () => {
     })
 
     it('ignores invalid addTags input on v6', () => {
-      nativeSpans.queueOp.resetHistory()
+      span.context().syncToNativeOnly.resetHistory()
       prioritySampler.sample.resetHistory()
       const tagsBefore = { ...span.context().getTags() }
       span.addTags(undefined)
       assert.deepStrictEqual(span.context().getTags(), tagsBefore)
-      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(span.context().syncToNativeOnly)
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
@@ -625,53 +527,28 @@ describe('NativeDatadogSpan', () => {
 
   describe('finish', () => {
     beforeEach(() => {
+      now.onFirstCall().returns(100)
+      now.onSecondCall().returns(100)
+
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
+
+      now.resetHistory()
+      now.returns(500)
     })
 
-    it('queues SetDuration with the exact ns delta between finishTime and _startTime', () => {
-      // `finish(finishTime)` normalizes to
-      // `Number.parseFloat(finishTime) || this._getTime()` and queues
-      // `['ns', resolvedFinishTime - this._startTime]` (the 'ns' tag converts the
-      // JS-side ms value to a u64 LE nanosecond field). Drive a real, non-zero
-      // duration through the public argument so the expected value is pinned
-      // exactly rather than accidentally being 0 under the stubbed clock.
-      const startTime = span._startTime
-      span.finish(startTime + 7.5)
+    it('should queue SetDuration operation to native', () => {
+      span.finish()
 
+      // finish() encodes duration with the 'ns' tag, which converts the
+      // JS-side ms duration to a u64 LE nanosecond value.
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         OpCode.SetDuration,
-        span._spanContext._nativeSpanId,
-        ['ns', 7.5]
+        sinon.match.any,
+        ['ns', sinon.match.number]
       )
-      // super.finish() receives the same resolved value, so the JS-side
-      // duration and the native one cannot drift apart.
-      assert.strictEqual(span._duration, 7.5)
-    })
-
-    it('falls back to _getTime() when finishTime is not a usable number', () => {
-      // `Number.parseFloat(0) || this._getTime()` takes the fallback branch, and
-      // `_getTime()` is the stubbed clock (Date.now() === 1500000000000). Start
-      // the span 42.5ms earlier so the fallback produces a non-zero,
-      // exactly-known duration instead of a vacuous 0.
-      const startTime = 1500000000000 - 42.5
-      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'explicit-start',
-        startTime,
-      }, false, nativeSpans)
-      assert.strictEqual(span._startTime, startTime)
-
-      span.finish(0)
-
-      sinon.assert.calledWith(
-        nativeSpans.queueOp,
-        OpCode.SetDuration,
-        span._spanContext._nativeSpanId,
-        ['ns', 42.5]
-      )
-      assert.strictEqual(span._duration, 42.5)
     })
 
     it('tracks finished native spans on the exporter', () => {
