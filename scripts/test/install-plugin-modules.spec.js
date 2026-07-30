@@ -197,6 +197,29 @@ externals.express.push(
     assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
   })
 
+  it('keeps scoped package identities portable across path separators', () => {
+    const preload = path.join(wrapperDirectory, 'windows-package-separators.js')
+    fs.writeFileSync(preload, `
+const path = require('node:path')
+const nativeJoin = path.join
+path.posix = { ...path.posix, join: nativeJoin }
+/**
+ * @param {...string} parts
+ */
+path.join = function join (...parts) {
+  return parts[0].startsWith('@') ? path.win32.join(...parts) : nativeJoin(...parts)
+}
+`)
+
+    runInstall('claude-agent-sdk', undefined, undefined, {
+      NODE_OPTIONS: `--require=${preload}`,
+    })
+
+    const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
+    assert.ok(manifest.dependencies.zod, 'expected the scoped workspace to receive its peer dependency')
+    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
+  })
+
   it('trusts the transitive native builder required by pg-native', () => {
     runInstall('pg')
 
@@ -253,12 +276,14 @@ function readVersionsManifest () {
  * @param {string} plugin
  * @param {string} [binDirectory]
  * @param {string} [traceFile]
+ * @param {NodeJS.ProcessEnv} [env]
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
-function runInstall (plugin, binDirectory, traceFile) {
+function runInstall (plugin, binDirectory, traceFile, env) {
   const result = spawnInstall(plugin, {
     PATH: `${binDirectory ?? wrapperDirectory}:/usr/bin:/bin`,
     ...(traceFile && { DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile }),
+    ...env,
   })
 
   assert.strictEqual(
