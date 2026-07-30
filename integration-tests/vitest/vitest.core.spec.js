@@ -66,6 +66,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const {
   TELEMETRY_CODE_COVERAGE_STARTED,
@@ -478,6 +479,64 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('does not advertise or enable TIA for typecheck-only runs', async () => {
+      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: typecheckSuite },
+      }])
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          `${typecheckSuite} --reporter=verbose`,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) =>
+          url === '/api/v2/citestcycle' ||
+          url === '/api/v2/citestcov' ||
+          url === '/api/v2/ci/tests/skippable',
+        (payloads) => {
+          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
+
+          const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+          const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+          assert.ok(metadataEntries.length > 0, testOutput)
+          for (const metadata of metadataEntries) {
+            assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+          }
+
+          const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+        },
+        { hardTimeout: 60_000 }
+      )
+
+      assert.strictEqual(childProcess.exitCode, 0, testOutput)
     })
 
     typecheckIt('honors Known Tests metadata for typecheck tests', async () => {
@@ -1269,6 +1328,47 @@ versions.forEach((version) => {
               ['ci-visibility/vitest-tests/bad-sum.mjs', secondSuite].sort()
             )
           }, { coverageProvider })
+
+          assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        })
+      }
+
+      it('does not apply user Istanbul include filters to per-suite TIA coverage', async () => {
+        await runTiaTests((payloads) => {
+          const { coverageBySuite } = getTiaPayloads(payloads)
+
+          assert.deepStrictEqual(
+            coverageBySuite.get(firstSuite),
+            [firstSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
+          )
+          assert.deepStrictEqual(
+            coverageBySuite.get(secondSuite),
+            ['ci-visibility/vitest-tests/bad-sum.mjs', secondSuite].sort()
+          )
+        }, {
+          coverageProvider: 'istanbul',
+          env: {
+            COVERAGE_INCLUDE: firstSuite,
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      for (const inspectorFailure of ['connect', 'take']) {
+        it(`does not report incomplete coverage when inspector ${inspectorFailure} fails`, async () => {
+          await runTiaTests((payloads) => {
+            const { testSuiteEvents, coverages } = getTiaPayloads(payloads)
+
+            assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+            assert.strictEqual(coverages.length, 0, testOutput)
+          }, {
+            env: {
+              NODE_OPTIONS:
+                '--import dd-trace/register.js -r dd-trace/ci/init -r ./ci-visibility/vitest-block-inspector.cjs',
+              VITEST_INSPECTOR_FAILURE: inspectorFailure,
+            },
+          })
 
           assert.strictEqual(childProcess.exitCode, 0, testOutput)
         })

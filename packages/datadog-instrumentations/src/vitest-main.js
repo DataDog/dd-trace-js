@@ -76,6 +76,7 @@ let testCodeCoverageLinesTotal
 let coverageRootDir
 let requestErrorTags = {}
 let isSessionStarted = false
+let isTestImpactAnalysisDisabled = false
 let isVitestNoWorkerInitActive = false
 let isVitestBrowserModeActive = false
 let vitestPool = null
@@ -256,6 +257,7 @@ function resetSessionSuiteSkippingState () {
   areAllSuitesSkipped = false
   hasRunnableSuites = false
   hasSelectedSuites = false
+  isTestImpactAnalysisDisabled = false
 }
 
 /**
@@ -572,7 +574,8 @@ async function runMainProcessSetup (
   frameworkVersion,
   testSpecifications,
   shouldInstallNoWorkerInit,
-  shouldInstallBrowserReporter
+  shouldInstallBrowserReporter,
+  disableTestImpactAnalysis
 ) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
@@ -580,6 +583,8 @@ async function runMainProcessSetup (
 
   resetSuiteSkippingRunState()
   isVitestBrowserModeActive ||= shouldInstallBrowserReporter
+  isTestImpactAnalysisDisabled =
+    disableTestImpactAnalysis || shouldInstallNoWorkerInit || isVitestBrowserModeActive
   let repositoryRoot = process.cwd()
   let testSessionConfiguration
   let testFilepaths
@@ -605,7 +610,7 @@ async function runMainProcessSetup (
       requestErrorTags: receivedRequestErrorTags = {},
     } = await getChannelPromise(libraryConfigurationCh, {
       frameworkVersion,
-      disableTestImpactAnalysis: shouldInstallNoWorkerInit || isVitestBrowserModeActive,
+      disableTestImpactAnalysis: isTestImpactAnalysisDisabled,
       isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || isVitestBrowserModeActive,
     })
     requestErrorTags = receivedRequestErrorTags
@@ -819,10 +824,18 @@ function getNoWorkerInitState () {
   }
 }
 
-function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
+function ensureMainProcessSetup (
+  ctx,
+  frameworkVersion,
+  testSpecifications,
+  shouldDeactivateOnFallback = false,
+  forceDisableTestImpactAnalysis = false
+) {
   const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
   const shouldInstallBrowserReporter = shouldUseBrowserReporter(frameworkVersion, testSpecifications)
   const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
+  const disableTestImpactAnalysis =
+    forceDisableTestImpactAnalysis || isTypecheckOnlyRun(ctx, testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
   if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
@@ -832,7 +845,8 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shou
     !setupState ||
     setupState.specificationsKey !== specificationsKey ||
     setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit ||
-    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter
+    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter ||
+    setupState.disableTestImpactAnalysis !== disableTestImpactAnalysis
   ) {
     setupState = {
       setupPromise: runMainProcessSetup(
@@ -840,8 +854,10 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shou
         frameworkVersion,
         testSpecifications,
         shouldInstallNoWorkerInit,
-        shouldInstallBrowserReporter
+        shouldInstallBrowserReporter,
+        disableTestImpactAnalysis
       ),
+      disableTestImpactAnalysis,
       shouldInstallBrowserReporter,
       shouldInstallMainReporter,
       shouldInstallNoWorkerInit,
@@ -1118,6 +1134,43 @@ function getTestSpecificationPool (testSpecification) {
   const project = getTestSpecificationProject(testSpecification)
   return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
     testSpecification?.pool
+}
+
+/**
+ * Detect whether Vitest selected only TypeScript typecheck specifications.
+ *
+ * @param {unknown} testSpecifications
+ * @returns {boolean}
+ */
+function hasOnlyTypecheckTestSpecifications (testSpecifications) {
+  if (!Array.isArray(testSpecifications) || testSpecifications.length === 0) return false
+
+  for (const testSpecification of testSpecifications) {
+    if (getTestSpecificationPool(testSpecification) !== 'typescript') return false
+  }
+  return true
+}
+
+/**
+ * Detect whether every selected Vitest project can only run typecheck specifications.
+ *
+ * @param {object} ctx
+ * @param {unknown} testSpecifications
+ * @returns {boolean}
+ */
+function isTypecheckOnlyRun (ctx, testSpecifications) {
+  if (hasOnlyTypecheckTestSpecifications(testSpecifications)) return true
+
+  const projectConfigs = getVitestProjectConfigs(ctx, testSpecifications)
+  if (projectConfigs.length === 0) return false
+
+  for (const { config } of projectConfigs) {
+    const typecheck = config.typecheck
+    if (!typecheck?.enabled || (!typecheck.only && config.include?.length !== 0)) {
+      return false
+    }
+  }
+  return true
 }
 
 function isBrowserTestSpecification (testSpecification) {
@@ -1451,6 +1504,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
     testCommand: sessionConfiguration.testCommand,
     repositoryRoot: sessionConfiguration.repositoryRoot,
     codeOwnersEntries: sessionConfiguration.codeOwnersEntries,
+    disableTestImpactAnalysis: isTestImpactAnalysisDisabled,
   }
   testSuiteStartCh.runStores(testSuiteCtx, () => {})
 
@@ -1477,7 +1531,13 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
   if (!Array.isArray(result?.files)) return
 
   if (ctx) {
-    await ensureMainProcessSetup(ctx, frameworkVersion, result.files)
+    await ensureMainProcessSetup(
+      ctx,
+      frameworkVersion,
+      result.files,
+      false,
+      !mainProcessSetupStates.has(ctx)
+    )
   }
   const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers

@@ -403,6 +403,7 @@ class VitestPlugin extends CiPlugin {
         frameworkVersion,
         isTestFrameworkWorker,
         isVitestNoWorkerInitActive,
+        disableTestImpactAnalysis,
         isBrowserMode,
         browserDriver,
         browserName,
@@ -431,6 +432,7 @@ class VitestPlugin extends CiPlugin {
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
         const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, {
+          disableTestImpactAnalysis,
           isVitestNoWorkerInitActive,
         })
         this.tracer._exporter.addMetadataTags({
@@ -646,13 +648,14 @@ class VitestPlugin extends CiPlugin {
    * Returns Vitest library capability metadata tags.
    * @param {string} frameworkVersion - The Vitest version.
    * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.disableTestImpactAnalysis] - Whether TIA is unsupported for this run.
    * @param {boolean} [ctx.isVitestNoWorkerInitActive] - Whether no-worker init is active for this run.
    * @returns {Record<string, string|undefined>}
    */
   getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
     return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion, {
       omitFailedTestReplay: ctx.isVitestNoWorkerInitActive,
-      omitTestImpactAnalysis: ctx.isVitestNoWorkerInitActive,
+      omitTestImpactAnalysis: ctx.disableTestImpactAnalysis || ctx.isVitestNoWorkerInitActive,
     })
   }
 

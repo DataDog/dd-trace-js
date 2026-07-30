@@ -7,14 +7,12 @@ async function runProgrammaticTests () {
       test: {
         environment: 'node',
       },
-      run: true,
-      watch: false,
+      watch: true,
     })
 
-    if (!vitest) {
-      throw new Error('Vitest did not start')
-    }
-    await vitest.runTestFiles(['./tia-programmatic-second.mjs'])
+    const globTestSpecifications = vitest.globTestSpecifications || vitest.globTestFiles
+    const testSpecifications = await globTestSpecifications.call(vitest, ['./tia-programmatic-second.mjs'])
+    await vitest.runTestSpecifications(testSpecifications)
   } catch (error) {
     process.stderr.write(`${error?.stack || error}\n`)
     process.exitCode = 1

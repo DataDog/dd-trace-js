@@ -61,6 +61,7 @@ let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
 let preciseCoverageSession
+let isPreciseCoverageUnavailable = false
 let vitestCoverageSnapshot
 const wrappedCoverageWorkerStates = new WeakSet()
 
@@ -85,7 +86,8 @@ function postInspectorCommand (session, method, params) {
 }
 
 async function startPreciseCoverage () {
-  if (preciseCoverageSession) return
+  if (preciseCoverageSession) return true
+  if (isPreciseCoverageUnavailable) return false
 
   let session
   try {
@@ -98,9 +100,14 @@ async function startPreciseCoverage () {
       detailed: false,
     })
     preciseCoverageSession = session
+    return true
   } catch (error) {
-    session?.disconnect()
+    isPreciseCoverageUnavailable = true
+    try {
+      session?.disconnect()
+    } catch {}
     log.warn('Could not start Vitest TIA code coverage: %s', error?.message)
+    return false
   }
 }
 
@@ -149,48 +156,33 @@ function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
   return coveredFiles
 }
 
-function getCoveredFilesFromIstanbulResult (coverage, repositoryRoot) {
-  const coveredFiles = []
-  for (const [filename, fileCoverage] of Object.entries(coverage || {})) {
-    if (!isFileInRepository(filename, repositoryRoot)) continue
-
-    for (const count of Object.values(fileCoverage?.s || {})) {
-      if (count > 0) {
-        coveredFiles.push(filename)
-        break
-      }
-    }
-  }
-  return coveredFiles
-}
-
 function getVitestCoverageOptions () {
   return globalThis.__vitest_worker__?.config?.coverage
 }
 
-function usesVitestCoverageSnapshot (coverageOptions) {
+function usesVitestV8CoverageSnapshot (coverageOptions) {
   return coverageOptions?.enabled === true &&
-    (coverageOptions.provider === 'v8' || coverageOptions.provider === 'istanbul')
+    coverageOptions.provider === 'v8'
 }
 
 async function getPreciseCoverageFiles (repositoryRoot) {
-  await startPreciseCoverage()
-  if (!preciseCoverageSession) return []
+  if (!await startPreciseCoverage()) return
 
   try {
     const coverage = await postInspectorCommand(preciseCoverageSession, 'Profiler.takePreciseCoverage')
     return getCoveredFilesFromV8Result(coverage, repositoryRoot)
   } catch (error) {
+    isPreciseCoverageUnavailable = true
+    try {
+      preciseCoverageSession.disconnect()
+    } catch {}
+    preciseCoverageSession = undefined
     log.warn('Could not collect Vitest TIA code coverage: %s', error?.message)
-    return []
   }
 }
 
-function getVitestCoverageFiles (coverageOptions, repositoryRoot) {
-  if (coverageOptions.provider === 'v8') {
-    return getCoveredFilesFromV8Result(vitestCoverageSnapshot, repositoryRoot)
-  }
-  return getCoveredFilesFromIstanbulResult(vitestCoverageSnapshot, repositoryRoot)
+function getVitestCoverageFiles (repositoryRoot) {
+  return getCoveredFilesFromV8Result(vitestCoverageSnapshot, repositoryRoot)
 }
 
 function wrapVitestCoverageRpc () {
@@ -806,8 +798,8 @@ addHook({
     const repositoryRoot = providedContext.repositoryRoot || process.cwd()
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, repositoryRoot)
     const coverageOptions = getVitestCoverageOptions()
-    const shouldUseVitestCoverage = usesVitestCoverageSnapshot(coverageOptions)
-    const coverageLibrary = shouldUseVitestCoverage ? coverageOptions.provider : 'v8'
+    const shouldUseVitestCoverage = usesVitestV8CoverageSnapshot(coverageOptions)
+    const coverageLibrary = 'v8'
     vitestCoverageSnapshot = undefined
     if (providedContext.isCodeCoverageEnabled) {
       if (shouldUseVitestCoverage) {
@@ -982,7 +974,7 @@ addHook({
     let coverageFiles
     if (providedContext.isCodeCoverageEnabled) {
       coverageFiles = shouldUseVitestCoverage
-        ? getVitestCoverageFiles(coverageOptions, repositoryRoot)
+        ? getVitestCoverageFiles(repositoryRoot)
         : await getPreciseCoverageFiles(repositoryRoot)
     }
 
