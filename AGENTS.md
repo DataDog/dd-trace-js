@@ -354,7 +354,7 @@ as the real error rather than raising the timeout.
 
 ## Review Guidelines
 
-Before pushing, run the [code-review](./.agents/skills/code-review/SKILL.md) skill on the committed changes in addition to any required publication checks, unless the user specifically says not to. Re-run it after any commit, amend, or rebase.
+Before pushing code or creating a pull request, you must run the [code-review](./.agents/skills/code-review/SKILL.md) skill on the committed changes unless the user specifically says not to; all other required publication checks still apply.
 
 ## Pull Requests and CI
 
