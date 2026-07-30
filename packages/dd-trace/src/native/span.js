@@ -19,6 +19,29 @@ const { OpCode } = require('./index')
 // profiler's web-tag refresh) still receive tag updates on the native path.
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
+// Parsed high 8 bytes of the most recent `_dd.p.tid`. The tid is constant for a
+// whole trace, and spans of one trace are created consecutively in the common
+// case, so a 1-entry memo removes 8 `slice` + 8 `parseInt` calls per child span
+// (measured ~100ns/span, on every span when 128-bit ids are on — the default).
+let lastTidHex = null
+let lastTidHigh = null
+
+function tidHighBytes (tidHex) {
+  if (tidHex === lastTidHex) return lastTidHigh
+  lastTidHigh = [
+    Number.parseInt(tidHex.slice(0, 2), 16),
+    Number.parseInt(tidHex.slice(2, 4), 16),
+    Number.parseInt(tidHex.slice(4, 6), 16),
+    Number.parseInt(tidHex.slice(6, 8), 16),
+    Number.parseInt(tidHex.slice(8, 10), 16),
+    Number.parseInt(tidHex.slice(10, 12), 16),
+    Number.parseInt(tidHex.slice(12, 14), 16),
+    Number.parseInt(tidHex.slice(14, 16), 16),
+  ]
+  lastTidHex = tidHex
+  return lastTidHigh
+}
+
 // Build the native trace id passed to queueCreateSpan. When 128-bit ids are in
 // play, all spans in the trace must share the SAME id: a 16-byte
 // [high 8 from the trace's `_dd.p.tid` hex][low 8 from the 64-bit id]. Children
@@ -34,15 +57,9 @@ function buildNativeTraceId (lowId, tidHex) {
   // the HIGH bytes of a 16-byte id and record the child under a bogus id).
   const buf = lowId.toBuffer()
   const low = buf.length > 8 ? buf.slice(-8) : buf
+  const high = tidHighBytes(tidHex)
   return [
-    Number.parseInt(tidHex.slice(0, 2), 16),
-    Number.parseInt(tidHex.slice(2, 4), 16),
-    Number.parseInt(tidHex.slice(4, 6), 16),
-    Number.parseInt(tidHex.slice(6, 8), 16),
-    Number.parseInt(tidHex.slice(8, 10), 16),
-    Number.parseInt(tidHex.slice(10, 12), 16),
-    Number.parseInt(tidHex.slice(12, 14), 16),
-    Number.parseInt(tidHex.slice(14, 16), 16),
+    high[0], high[1], high[2], high[3], high[4], high[5], high[6], high[7],
     low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
   ]
 }
@@ -176,13 +193,11 @@ function encodeSpanEventAttrs (attributes) {
 // guard below).
 let pendingNativeSpans = null
 
-// Shadows `NativeSpanContext.prototype._syncNameToNative` on the
-// instance during construction so the parent's
-// `this._spanContext._name = operationName` line (opentracing/span.js)
-// does not emit a redundant SetName WASM op alongside the combined
-// CreateSpan op we queue ourselves. The subclass constructor deletes
-// the shadow once super() returns.
-const noopSyncName = () => {}
+// (The `_name` setter only writes a Symbol-keyed slot; it queues no WASM op, so
+// the parent constructor's `this._spanContext._name = operationName` needs no
+// suppression. An earlier instance-shadow + `delete` dance did that suppression
+// and, because `delete` of a non-last own property drops the object into V8
+// dictionary mode, left EVERY native span context on the slow-properties path.)
 
 /**
  * NativeDatadogSpan stores span data in native Rust storage via
@@ -217,27 +232,14 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore the prototype `_syncNameToNative` (shadowed in
-    // `_createContext`) so later `setOperationName` calls reach the
-    // real WASM-syncing method.
-    delete this._spanContext._syncNameToNative
-
-    // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
-    // which bypasses NativeSpanContext.setTag's native-sync path. Push
-    // them to WASM now (no JS-cache write — the parent already did it).
-    if (fields.tags) {
-      this._spanContext.syncToNativeOnly(fields.tags)
-    }
-
     processor?._exporter?._trackSpanStart?.()
   }
 
   /**
-   * Allocate a native slot, build a NativeSpanContext, queue the
-   * combined CreateSpan op (Create + SetName + SetStart in one WASM
-   * call), and silently set the initial name. The subclass constructor
-   * (after super) restores the prototype `_syncNameToNative` so future
-   * name changes reach WASM normally.
+   * Build a NativeSpanContext and queue the combined CreateSpan op
+   * (Create + SetName + SetStart in one WASM call). The final name,
+   * resource, service, type, error and tag set are re-sent once at
+   * finish from the formatted snapshot (`syncFinalTagsToNative`).
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -253,7 +255,6 @@ class NativeDatadogSpan extends DatadogSpan {
     const operationName = String(fields.operationName)
     const tracer = this.tracer()
     const propagationBehavior = tracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
-    const tracerService = tracer?._service
 
     let spanContext
     let startTime
@@ -267,9 +268,10 @@ class NativeDatadogSpan extends DatadogSpan {
     }
 
     if (fields.context) {
-      // Re-wrapping a NativeSpanContext would either leak the freshly
-      // allocated slot (early return) or duplicate the span across two
-      // slots. Free the slot and throw loudly.
+      // Re-wrapping a NativeSpanContext would register the same span id under a
+      // second CreateSpan op. Reject it loudly rather than duplicating the span.
+      // (Nothing is allocated before this point: `_nativeSpanId` is derived from
+      // `props.spanId` in the context constructor, and `allocSegment()` runs later.)
       const existingContext = fields.context
       if (existingContext._nativeSpanId !== undefined) {
         throw new Error('NativeDatadogSpan cannot wrap an existing NativeSpanContext')
@@ -284,7 +286,6 @@ class NativeDatadogSpan extends DatadogSpan {
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
-        tracerService,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -300,7 +301,6 @@ class NativeDatadogSpan extends DatadogSpan {
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate,
-        tracerService,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -314,7 +314,6 @@ class NativeDatadogSpan extends DatadogSpan {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: spanId,
         spanId,
-        tracerService,
       })
       spanContext._trace.startTime = startTime
 
@@ -344,17 +343,16 @@ class NativeDatadogSpan extends DatadogSpan {
     // this method returns. Otherwise the WASM span's `start` (sent below) and the
     // JS `_startTime` (read by consumers like LLMObs) would drift by the
     // intervening constructor work, and the exported span's start+duration would
-    // not add up to its finish time.
-    const createStartTime = fields.startTime === undefined
-      ? spanContext._trace.startTime + now() - spanContext._trace.ticks
-      : fields.startTime
+    // not add up to its finish time. Coerce with `||`, exactly as the parent
+    // does: an `=== undefined` check diverged for the documented `startTime: 0`
+    // option, recording start=0 (1970) in WASM while `_startTime` became now.
+    const createStartTime = fields.startTime ||
+      (spanContext._trace.startTime + now() - spanContext._trace.ticks)
     fields.startTime = createStartTime
 
-    // CreateSpan carries the name natively, so we set it silently on
-    // the JS side and shadow `_syncNameToNative` with a no-op for the
-    // duration of super(). See the constructor for the delete-restore.
+    // CreateSpan already carries the name natively; set it on the JS side without
+    // re-deriving it from the formatted snapshot.
     spanContext._setNameLocal(operationName)
-    spanContext._syncNameToNative = noopSyncName
 
     // One segment id per local trace, shared by all its spans via the
     // shared `_trace` object (the local root allocates; children reuse).
@@ -409,8 +407,6 @@ class NativeDatadogSpan extends DatadogSpan {
     const tags = this._spanContext.getTags()
     tags[key] = value
 
-    this._spanContext.syncOneTagToNative(key, value)
-
     if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
@@ -439,12 +435,11 @@ class NativeDatadogSpan extends DatadogSpan {
     // `tagger.add` for object input is just `Object.assign(parsedTags, kv)`,
     // so we skip the parsedTags allocation and copy kv straight in.
     // Use `Object.assign` (not `for-in`) so Symbol-keyed entries like
-    // `IGNORE_OTEL_ERROR` reach the JS cache; `syncToNativeOnly` filters
-    // symbol keys back out before they hit WASM.
+    // `IGNORE_OTEL_ERROR` reach the JS cache. Native storage is written once at
+    // finish from the formatted snapshot, so there is nothing to sync here.
     if (keyValuePairs !== null && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
       const tags = this._spanContext.getTags()
       Object.assign(tags, keyValuePairs)
-      this._spanContext.syncToNativeOnly(keyValuePairs)
       mayChangeSamplingPriority =
         MANUAL_KEEP in keyValuePairs ||
         MANUAL_DROP in keyValuePairs ||
@@ -459,7 +454,6 @@ class NativeDatadogSpan extends DatadogSpan {
         const parsedTags = {}
         tagger.add(parsedTags, keyValuePairs)
         Object.assign(tags, parsedTags)
-        this._spanContext.syncToNativeOnly(parsedTags)
         mayChangeSamplingPriority = true
       } else {
         return this

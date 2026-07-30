@@ -1,6 +1,7 @@
 'use strict'
 
 const os = require('os')
+const fs = require('fs')
 const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
 const JsSpanProcessor = require('../js_span_processor')
@@ -13,6 +14,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const NativeExporter = require('../exporters/native')
 const defaults = require('../config/defaults')
 const { getIsAWSLambda } = require('../serverless')
+const { DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
@@ -34,7 +36,19 @@ function getNativeModule () {
   return nativeModule
 }
 
-function isMissingLibdatadog (error) {
+// Two distinct ways the native pipeline can be unavailable on a runtime that is
+// otherwise fine, both of which must degrade to the JS pipeline rather than
+// abort tracer construction (proxy.js swallows the throw into a NoopTracer, so
+// rethrowing here silently disables tracing altogether):
+//
+//   1. the optional dependency was not installed;
+//   2. the runtime has no `WebAssembly` - `node --jitless`, and any hardened or
+//      JIT-disabled deployment. libdatadog's loader throws a bare ReferenceError
+//      there, with no `code` to match on.
+//
+// A corrupt native install is neither, and still fails hard.
+function isNativeUnavailable (error) {
+  if (typeof WebAssembly === 'undefined') return true
   return error?.code === 'MODULE_NOT_FOUND' &&
     /^Cannot find module ['"]@datadog\/libdatadog['"]/.test(String(error.message))
 }
@@ -73,29 +87,53 @@ class DatadogTracer {
       !config.isCiVisibility &&
       !useElectronExporter &&
       !useOtlpExporter
+    // A Lambda with neither the Datadog extension layer nor the mini agent has no
+    // local agent to receive traces: the Datadog Forwarder ships them from stdout
+    // instead. Probe for both markers exactly as the pre-native-spans exporter
+    // selection did, otherwise these functions POST every span to a loopback port
+    // nothing listens on (config forces flushInterval=0 there) and lose all traces.
+    // Kept independent of `useLambdaJsPipeline` (which excludes OTLP) so the
+    // missing-libdatadog degrade path below can reuse it.
+    const lambdaWithoutLocalAgent = getIsAWSLambda() &&
+      !fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) &&
+      !fs.existsSync(DATADOG_MINI_AGENT_PATH)
+    const useLambdaLogExporter = useLambdaJsPipeline && lambdaWithoutLocalAgent
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
       !useElectronExporter &&
       !useLambdaJsPipeline &&
       !config.isCiVisibility
 
+    // Built once for every pipeline: the JS and native processors both take it,
+    // and config forces DD_TRACE_STATS_COMPUTATION_ENABLED when it is enabled, so
+    // a branch that omits it silently ships v0.6 client stats to the agent instead.
+    let otlpStatsExporter
+    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+      otlpStatsExporter = createOtlpSpanStatsExporter(config)
+    }
+
     if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline) {
       this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
-        : useLambdaJsPipeline
-          ? require('../exporters/agent')
-          : getExporter(configuredExporter)
+        : useLambdaLogExporter
+          ? require('../exporters/log')
+          : useLambdaJsPipeline
+            ? require('../exporters/agent')
+            : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
-      this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
+      this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
       this._url = this._exporter._url
 
       log.debug(useElectronExporter
         ? 'Electron exporter enabled (JS span pipeline)'
-        : useLambdaJsPipeline
-          ? 'AWS Lambda environment detected (JS span pipeline)'
-          : 'CI Visibility mode enabled (JS span pipeline)')
+        : useLambdaLogExporter
+          ? 'AWS Lambda environment detected without a local agent (JS span pipeline, stdout export)'
+          : useLambdaJsPipeline
+            ? 'AWS Lambda environment detected (JS span pipeline)'
+            : 'CI Visibility mode enabled (JS span pipeline)')
     } else {
       if (unsupportedApmExporter) {
         log.warn(
@@ -108,15 +146,29 @@ class DatadogTracer {
       try {
         NativeSpansInterface = getNativeModule().NativeSpansInterface
       } catch (e) {
-        if (isMissingLibdatadog(e) && config.OTEL_TRACES_EXPORTER !== 'otlp') {
+        if (isNativeUnavailable(e)) {
+          const reason = typeof WebAssembly === 'undefined'
+            ? 'this runtime has no WebAssembly support'
+            : 'optional dependency @datadog/libdatadog is not installed'
+          if (config.OTEL_TRACES_EXPORTER === 'otlp') {
+            // OTLP export lives in libdatadog, so it cannot be honoured here.
+            // Degrade rather than aborting tracer construction: proxy.js swallows
+            // a throw and leaves a NoopTracer, which means zero telemetry — and
+            // AWS Lambda layers deliberately omit this optional dependency, so
+            // OTLP + Lambda would otherwise always be untraced.
+            log.error(
+              'OTLP trace export is unavailable because %s; %s instead',
+              reason,
+              lambdaWithoutLocalAgent ? 'writing traces to stdout' : 'using agent export'
+            )
+          }
           this._useJsSpans = true
           this._isCiVisibility = false
-          let otlpStatsExporter
-          if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-            const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
-            otlpStatsExporter = createOtlpSpanStatsExporter(config)
-          }
-          const Exporter = require('../exporters/agent')
+          // Same probe as the JS-pipeline branch: a Lambda with no local agent
+          // must not be handed an HTTP exporter pointed at a dead loopback port.
+          const Exporter = lambdaWithoutLocalAgent
+            ? require('../exporters/log')
+            : require('../exporters/agent')
           this._exporter = new Exporter(config, this._prioritySampler)
           this._processor = new JsSpanProcessor(
             this._exporter,
@@ -125,10 +177,7 @@ class DatadogTracer {
             otlpStatsExporter
           )
           this._url = this._exporter._url
-          log.warn(
-            'Native spans unavailable because optional dependency %s is not installed; using JS span pipeline',
-            '@datadog/libdatadog'
-          )
+          log.warn('Native spans unavailable because %s; using JS span pipeline', reason)
         } else {
           throw e
         }
@@ -169,12 +218,6 @@ class DatadogTracer {
           // agent skips its own APM stats/sampling for these traces.
           clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
         })
-
-        let otlpStatsExporter
-        if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-          const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
-          otlpStatsExporter = createOtlpSpanStatsExporter(config)
-        }
 
         this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
         this._processor = new SpanProcessor(

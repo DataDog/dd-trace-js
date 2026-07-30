@@ -1,9 +1,9 @@
 'use strict'
 
 /**
- * Protobuf Loader for OpenTelemetry Logs, Traces, and Metrics
+ * Protobuf Loader for OpenTelemetry Logs and Metrics
  *
- * This module loads protobuf definitions for OpenTelemetry logs, traces, and metrics.
+ * This module loads protobuf definitions for OpenTelemetry logs and metrics.
  *
  * VERSION SUPPORT:
  * - OTLP Protocol: v1.7.0
@@ -20,8 +20,6 @@ const protobuf = require('../../../../../vendor/dist/protobufjs')
 let _root = null
 let protoLogsService = null
 let protoSeverityNumber = null
-let protoTraceService = null
-let protoSpanKind = null
 let protoMetricsService = null
 let protoAggregationTemporality = null
 
@@ -30,8 +28,6 @@ function getProtobufTypes () {
     return {
       protoLogsService,
       protoSeverityNumber,
-      protoTraceService,
-      protoSpanKind,
       protoMetricsService,
       protoAggregationTemporality,
     }
@@ -43,8 +39,6 @@ function getProtobufTypes () {
     'resource.proto',
     'logs.proto',
     'logs_service.proto',
-    'trace.proto',
-    'trace_service.proto',
     'metrics.proto',
     'metrics_service.proto',
   ].map(file => path.join(protoDir, file))
@@ -55,10 +49,6 @@ function getProtobufTypes () {
   protoLogsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')
   protoSeverityNumber = _root.lookupEnum('opentelemetry.proto.logs.v1.SeverityNumber')
 
-  // Get the message types for traces
-  protoTraceService = _root.lookupType('opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest')
-  protoSpanKind = _root.lookupEnum('opentelemetry.proto.trace.v1.SpanKind')
-
   // Get the message types for metrics
   protoMetricsService = _root.lookupType('opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest')
   protoAggregationTemporality = _root.lookupEnum('opentelemetry.proto.metrics.v1.AggregationTemporality')
@@ -66,8 +56,6 @@ function getProtobufTypes () {
   return {
     protoLogsService,
     protoSeverityNumber,
-    protoTraceService,
-    protoSpanKind,
     protoMetricsService,
     protoAggregationTemporality,
   }

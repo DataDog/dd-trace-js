@@ -52,7 +52,6 @@ describe('SpanProcessor', () => {
         setTag: (key, value) => { tags[key] = value },
         hasTag: (key) => key in tags,
         clearTags: () => { tags = Object.create(null) },
-        syncErrorMetaToNative: sinon.stub(),
         syncFinalTagsToNative: sinon.stub(),
       }),
     }
@@ -469,7 +468,10 @@ describe('SpanProcessor', () => {
     const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(SpanSampler, sinon.match({ nativeSpans }))
+    sinon.assert.calledWith(SpanSampler, sinon.match({
+      spanSamplingRules: config.sampler.spanSamplingRules,
+      nativeSpans,
+    }))
   })
 
   it('should erase the trace and stop execution when tracing=false', () => {
@@ -539,6 +541,13 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  it('should not carry process tags when propagation is disabled', () => {
+    config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = false
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
+
+    assert.strictEqual(processor._processTags, false)
   })
 
   it('should add APM disabled marker to every native span in a chunk when APM tracing is disabled', () => {
@@ -651,6 +660,10 @@ describe('SpanProcessor', () => {
       const spanA = { ...finishedSpan, _duration: 100 }
       const spanB = { ...finishedSpan, _duration: 100 }
       const spanC = { ...finishedSpan, _duration: 100 }
+      // All three share `finishedSpan`'s context stub, so one setTag gives every
+      // span a service.name: registerExtraService is then only skipped because
+      // the trace stays below flushMinSpans.
+      spanA.context().setTag('service.name', 'my-service')
 
       trace.started = [spanA, spanB, spanC]
       trace.finished = [spanA]

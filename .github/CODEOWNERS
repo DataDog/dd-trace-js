@@ -115,10 +115,8 @@
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/exporters/agentless/ @DataDog/ci-app-libraries
 /packages/dd-trace/src/git_metadata.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
@@ -340,9 +338,9 @@
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
 /benchmark/sirun/dogstatsd/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
-/benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
+/benchmark/sirun/native-span-drain.js @DataDog/lang-platform-js
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
@@ -372,7 +370,6 @@
 /packages/datadog-core/ @DataDog/lang-platform-js
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
-/benchmark/sirun/native-spans/ @DataDog/lang-platform-js
 /packages/dd-trace/src/native/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/native/ @DataDog/lang-platform-js
 /packages/dd-trace/test/native/ @DataDog/lang-platform-js
@@ -388,7 +385,6 @@
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/encode/ @DataDog/lang-platform-js
 /packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
-/packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/ @DataDog/lang-platform-js
 /packages/dd-trace/test/external-logger/ @DataDog/lang-platform-js
 /packages/dd-trace/test/flare.spec.js @DataDog/lang-platform-js

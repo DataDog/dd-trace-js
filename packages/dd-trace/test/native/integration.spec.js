@@ -49,11 +49,14 @@ describe('Native Spans Integration', () => {
     Tracer = require('../../src/tracer')
     tracer = new Tracer(config)
 
-    if (tracer._exporter && tracer._exporter.export) {
-      sinon.stub(tracer._exporter, 'export').callsFake((spans) => {
-        exportedSpans.push(...spans)
-      })
-    }
+    // The tracer's NativeExporter arms an unref'd flush timer; without this
+    // stub a leftover timer can fire mid-suite and attempt a real HTTP POST
+    // to the agent from inside an unrelated test.
+    sinon.stub(tracer._nativeSpans, 'flushSpansGrouped').resolves('unchanged')
+
+    sinon.stub(tracer._exporter, 'export').callsFake((spans) => {
+      exportedSpans.push(...spans)
+    })
   })
 
   afterEach(() => {
@@ -66,7 +69,7 @@ describe('Native Spans Integration', () => {
     assert.ok(tracer._exporter instanceof NativeExporter, 'tracer should use NativeExporter')
   })
 
-  it('runs a full span lifecycle end-to-end (create, tag, link, event, finish, export)', (done) => {
+  it('runs a full span lifecycle end-to-end (create, tag, link, event, finish, export)', () => {
     const linked = tracer.startSpan('linked')
     linked.finish()
 
@@ -77,11 +80,9 @@ describe('Native Spans Integration', () => {
     span.addLink({ context: linked.context(), attributes: { reason: 'test' } })
     span.addEvent('event-1', { key: 'value' })
 
-    const start = Date.now()
-    while (Date.now() - start < 5) { /* busy wait for measurable duration */ }
-    span.finish()
+    span.finish(span._startTime + 5)
 
-    assert.ok(span._duration > 0, 'duration should be positive')
+    assert.strictEqual(span._duration, 5)
     assert.strictEqual(span.context()._isFinished, true)
     assert.strictEqual(span.context().getTags()['custom.tag'], 'custom-value')
     assert.strictEqual(span.context().getTags()['numeric.tag'], 42)
@@ -96,11 +97,12 @@ describe('Native Spans Integration', () => {
     assert.strictEqual(span._events.length, 1)
     assert.strictEqual(span._events[0].name, 'event-1')
 
-    setTimeout(() => {
-      const exported = exportedSpans.find(s => s.context()._name === 'lifecycle')
-      assert.ok(exported, 'finished span should reach the exporter')
-      done()
-    }, 50)
+    // The export path is fully synchronous: finish() -> processor.process() ->
+    // exporter.export(), and export is stubbed to push into `exportedSpans`.
+    // Asserting inside a setTimeout would turn a real failure into an async
+    // uncaught exception instead of a test failure.
+    const exported = exportedSpans.find(s => s.context()._name === 'lifecycle')
+    assert.ok(exported, 'finished span should reach the exporter')
   })
 
   it('only finishes once (double-finish is a no-op)', () => {
@@ -113,7 +115,7 @@ describe('Native Spans Integration', () => {
     assert.strictEqual(processSpy.callCount, 1, 'processor.process should be called once')
   })
 
-  it('propagates parent → child via tracer.trace under an active scope and exports both', (done) => {
+  it('propagates parent → child via tracer.trace under an active scope and exports both', () => {
     const parent = tracer.startSpan('parent')
 
     tracer.scope().activate(parent, () => {
@@ -133,13 +135,10 @@ describe('Native Spans Integration', () => {
 
     parent.finish()
 
-    setTimeout(() => {
-      const parentExport = exportedSpans.find(s => s.context()._name === 'parent')
-      const childExport = exportedSpans.find(s => s.context()._name === 'child')
-      assert.ok(parentExport, 'parent should be exported')
-      assert.ok(childExport, 'child should be exported')
-      done()
-    }, 50)
+    const parentExport = exportedSpans.find(s => s.context()._name === 'parent')
+    const childExport = exportedSpans.find(s => s.context()._name === 'child')
+    assert.ok(parentExport, 'parent should be exported')
+    assert.ok(childExport, 'child should be exported')
   })
 
   it('applies service/resource/type via tracer.trace options', () => {

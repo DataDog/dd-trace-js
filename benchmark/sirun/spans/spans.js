@@ -12,10 +12,16 @@ nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).re
 const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
 const nativeSpanDrain = createNativeSpanDrain(tracer)
 
-tracer._tracer._processor.process = function process (span) {
-  const trace = span.context()._trace
-  nativeSpanDrain.add(span)
-  this._erase(trace, [])
+// Replace only the exporter, not the processor: the whole per-span cost this
+// bench measures (priority/span sampling, trace-tag sync to native, span
+// formatting and the final meta/metrics batch in syncFinalTagsToNative) lives in
+// SpanProcessor#process. Overriding process() would drop all of it and the
+// with-tags variants would measure a tag-less span. The collector keeps real
+// network I/O out of the measurement while native spans still get drained.
+tracer._tracer._processor._exporter = {
+  export (spans) {
+    nativeSpanDrain.addAll(spans)
+  },
 }
 
 const { FINISH, SHAPE = 'plain' } = process.env

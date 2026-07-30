@@ -1,7 +1,6 @@
 'use strict'
 module.exports = {
   AGENT: 'agent',
-  AGENTLESS: 'agentless',
   DATADOG: 'datadog',
   AGENT_PROXY: 'agent_proxy',
   CI_VALIDATION: 'ci_validation',

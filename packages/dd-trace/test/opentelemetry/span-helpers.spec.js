@@ -313,25 +313,25 @@ describe('OTel bridge helpers', () => {
     it('ignores UNSET and missing codes, returning currentCode unchanged', () => {
       const ddSpan = createMockDdSpan()
 
-      assert.strictEqual(applyOtelStatus(ddSpan, 0, { code: 0 }, false), 0)
-      assert.strictEqual(applyOtelStatus(ddSpan, 0, undefined, false), 0)
-      assert.strictEqual(applyOtelStatus(ddSpan, 2, { code: 0 }, false), 2)
+      assert.strictEqual(applyOtelStatus(ddSpan, 0, { code: 0 }), 0)
+      assert.strictEqual(applyOtelStatus(ddSpan, 0, undefined), 0)
+      assert.strictEqual(applyOtelStatus(ddSpan, 2, { code: 0 }), 2)
       assert.deepStrictEqual(ddSpan.tags, {})
     })
 
     it('locks at OK once set', () => {
       const ddSpan = createMockDdSpan()
-      const fromUnset = applyOtelStatus(ddSpan, 0, { code: 1 }, false)
+      const fromUnset = applyOtelStatus(ddSpan, 0, { code: 1 })
       assert.strictEqual(fromUnset, 1)
 
-      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' }, false)
+      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' })
       assert.strictEqual(stillOk, 1)
       assert.deepStrictEqual(ddSpan.tags, {})
     })
 
     it('writes ERROR tags on transition to ERROR', () => {
       const ddSpan = createMockDdSpan()
-      const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' }, false)
+      const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' })
 
       assert.strictEqual(after, 2)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'boom')
@@ -340,23 +340,31 @@ describe('OTel bridge helpers', () => {
 
     it('lets ERROR replace ERROR with a fresh message', () => {
       const ddSpan = createMockDdSpan()
-      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, false)
-      const after = applyOtelStatus(ddSpan, 2, { code: 2, message: 'second' }, false)
+      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' })
+      const after = applyOtelStatus(ddSpan, 2, { code: 2, message: 'second' })
 
       assert.strictEqual(after, 2)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'second')
     })
 
-    it('clears ERROR tags and records error=0 when OK overrides ERROR', () => {
+    it('clears every error tag and records error=0 when OK overrides ERROR', () => {
       const ddSpan = createMockDdSpan()
-      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, false)
-      const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 }, false)
+      recordException(ddSpan, new Error('boom'))
+      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' })
+
+      const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 })
+
       assert.strictEqual(afterOk, 1)
+      // All three error keys must go, not just the message: span_format re-asserts
+      // `error = 1` for any of them once IGNORE_OTEL_ERROR (deleted here) is gone,
+      // so leaving type/stack behind made OK *set* the error it should clear.
+      assert.strictEqual(ddSpan.tags[ERROR_TYPE], undefined)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
+      assert.strictEqual(ddSpan.tags[ERROR_STACK], undefined)
       assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
       assert.strictEqual(ddSpan.tags.error, 0)
 
-      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, false)
+      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' })
       assert.strictEqual(stillOk, 1)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
     })
@@ -378,41 +386,6 @@ describe('OTel bridge helpers', () => {
 
         assert.strictEqual(ddSpan.tags['resource.name'], 'GET /users')
         assert.strictEqual(ddSpan.operationName, undefined)
-      })
-    })
-
-    describe('otelTraceSemanticsEnabled', () => {
-      it('writes ERROR tags on transition to ERROR', () => {
-        const ddSpan = createMockDdSpan()
-        const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' }, true)
-
-        assert.strictEqual(after, 2)
-        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'boom')
-        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], false)
-      })
-
-      it('OK still locks against subsequent ERROR calls', () => {
-        const ddSpan = createMockDdSpan()
-        applyOtelStatus(ddSpan, 0, { code: 1 }, true)
-        const after = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' }, true)
-
-        assert.strictEqual(after, 1)
-        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
-        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
-      })
-
-      it('clears error tags when a subsequent call is blocked by OK', () => {
-        const ddSpan = createMockDdSpan()
-        applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, true)
-        const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 }, true)
-        assert.strictEqual(afterOk, 1)
-
-        const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, true)
-        assert.strictEqual(stillOk, 1)
-
-        // In compat mode, when OK blocks a later ERROR, the error marker is cleaned up.
-        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
-        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
       })
     })
   })

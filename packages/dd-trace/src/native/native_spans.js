@@ -19,7 +19,10 @@ function spanNotFoundId (e) {
 const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
-const EMPTY_FLUSH_BUFFER = Buffer.alloc(0)
+
+// Live interned strings tolerated between chunk flushes before an idle drain
+// evicts them. Only a cardinality guard: chunk flush evicts unconditionally.
+const STRING_TABLE_IDLE_EVICT_SIZE = 4096
 
 const COLLAPSED_SPANS_HEALTH_METRIC = 'datadog.tracer.stats.collapsed_spans'
 const COLLAPSED_SPANS_WHOLE_KEY_TAG = 'collapsed_spans:whole_key'
@@ -123,6 +126,16 @@ function normalizeStatsFlushResult (result) {
 }
 
 class NativeSpansInterface {
+  // In-flight stats flush, so the 10s interval and an explicit force-flush can
+  // never re-enter the native collector concurrently (see #flushStatsOnce).
+  #statsFlushInFlight = null
+  // Whether the in-flight stats flush was a forced one, so a later force is
+  // chained rather than aliased onto a weaker periodic flush.
+  #statsFlushForced = false
+  // In-flight `sendPreparedChunk`. Tracked here (not only in the exporter) so
+  // `#releaseState` can tell when a superseded state is safe to free.
+  #sendInFlight = null
+
   /**
    * @param {object} options Configuration options
    * @param {string} options.agentUrl URL of the Datadog agent
@@ -208,7 +221,7 @@ class NativeSpansInterface {
     // Start stats flush interval if stats are enabled
     if (this._options.statsEnabled) {
       this._statsInterval = setInterval(() => {
-        this._state.flushStats(false).then(normalizeStatsFlushResult).catch((err) => {
+        this.#flushStatsOnce(false).catch((err) => {
           log.error('Error flushing native stats:', err)
         })
       }, 10_000)
@@ -297,7 +310,9 @@ class NativeSpansInterface {
 
     // Atomic swap: only after the new state is fully constructed do we
     // commit to it and reset JS-side counters.
+    const oldState = this._state
     this._state = newState
+    this.#releaseState(oldState)
     this._cqbIndex = 8
     this._cqbCount = 0
     this._stringMap.clear()
@@ -313,6 +328,32 @@ class NativeSpansInterface {
     this.#refreshViews()
 
     log.debug('Native spans interface reinitialized with new URL:', url)
+  }
+
+  /**
+   * Free a `WasmSpanState` that `setAgentUrl` has replaced.
+   *
+   * Each state owns an 8 MB change queue inside the single shared
+   * `WebAssembly.Memory`, and WASM linear memory never shrinks — so dropping the
+   * old state on the JS side without freeing it leaks 8 MB per rebuild and walks
+   * into the wasm32 4 GB ceiling, which aborts the process. Measured over 300
+   * rebuilds: 2428 MB without this call, a flat 18 MB with it.
+   *
+   * `sendPreparedChunk` and `flushStats` hold a Rust borrow of the state across
+   * their await, so freeing while either is pending would be a use-after-free.
+   * Defer until they settle rather than trusting callers to be idle.
+   *
+   * @param {object} state The superseded state
+   */
+  #releaseState (state) {
+    const pending = []
+    if (this.#sendInFlight !== null) pending.push(this.#sendInFlight)
+    if (this.#statsFlushInFlight !== null) pending.push(this.#statsFlushInFlight)
+    if (pending.length === 0) {
+      state.free()
+      return
+    }
+    Promise.allSettled(pending).then(() => state.free())
   }
 
   /**
@@ -352,7 +393,57 @@ class NativeSpansInterface {
    */
   flushStats () {
     if (!this._options.statsEnabled) return Promise.resolve(true)
-    return this._state.flushStats(true).then(normalizeStatsFlushResult)
+    return this.#flushStatsOnce(true)
+  }
+
+  /**
+   * Serialize stats flushes. The native collector holds a `RefCell` borrow of the
+   * stats aggregator across its await, and `prepare_chunk` takes the same borrow,
+   * so an overlapping flush (the 10s tick landing while an explicit force-flush
+   * is awaiting its HTTP response, or vice versa) is a Rust `BorrowMutError` —
+   * a wasm trap that aborts the host process rather than a rejected promise.
+   *
+   * A forced flush is strictly stronger than the periodic one (it also ships the
+   * current partial bucket), so it must never be satisfied by an in-flight
+   * non-forced flush: aliasing them silently dropped the last bucket at process
+   * exit whenever the 10s tick happened to be in flight. Chain it instead —
+   * still serialized, never swallowed.
+   *
+   * @param {boolean} force Flush partial buckets too
+   * @returns {Promise<boolean>}
+   */
+  #flushStatsOnce (force) {
+    if (this.#statsFlushInFlight !== null) {
+      if (!force || this.#statsFlushForced) return this.#statsFlushInFlight
+      return this.#statsFlushInFlight.then(
+        () => this.#flushStatsOnce(true),
+        () => this.#flushStatsOnce(true)
+      )
+    }
+
+    const flush = this._state.flushStats(force).then(normalizeStatsFlushResult)
+    this.#statsFlushInFlight = flush
+    this.#statsFlushForced = force
+    const clear = () => {
+      if (this.#statsFlushInFlight === flush) {
+        this.#statsFlushInFlight = null
+        this.#statsFlushForced = false
+      }
+    }
+    flush.then(clear, clear)
+    return flush
+  }
+
+  /**
+   * Stop the periodic stats flush. Without this the interval keeps calling into
+   * WASM (and logging errors against a dead agent) for the life of the process
+   * once the exporter has disabled itself, and pins the 8 MB change queue.
+   */
+  stopStatsFlush () {
+    if (this._statsInterval !== undefined) {
+      clearInterval(this._statsInterval)
+      this._statsInterval = undefined
+    }
   }
 
   /**
@@ -367,9 +458,16 @@ class NativeSpansInterface {
       this.#checkDetach()
       this.resetChangeQueue()
     } catch (e) {
+      // Refresh views BEFORE scanning: the failed `flushChangeQueue` may have
+      // grown WASM memory (interning strings, growing per-span tag vectors),
+      // which detaches `_cqbView`/`_cqbBytes`. Reading a detached buffer throws,
+      // the scan's catch turns that into `null`, and recovery silently degrades
+      // to dropping the whole batch — exactly in the large-batch case where
+      // per-op recovery matters most. `_cqbPtr` is stable across growth and
+      // `memory.grow` copies the contents, so the refreshed views are valid.
+      this.#checkDetach()
       const preserved = this.#copyOpsAfterSpanNotFound(e)
       this.resetChangeQueue()
-      this.#checkDetach()
       if (preserved !== null) {
         this.#restoreQueuedOps(preserved)
         if (preserved.count > 0) this.flushChangeQueue()
@@ -387,8 +485,13 @@ class NativeSpansInterface {
         log.warn('Native spans: dropped a change-queue batch after "span not found"; affected spans were lost', e)
         return
       }
-      log.error('Error flushing change queue to native spans:', e)
-      throw e
+      // Never rethrow: this runs synchronously inside `span.finish()`,
+      // `span.setTag()` and `addTags()`, so throwing would surface a native
+      // failure (OOM during memory growth, a wasm trap, an op desync) as an
+      // exception in instrumented application code. The legacy pipeline confined
+      // encode/send faults to the writer and never threw from span mutation.
+      // The queue was reset above, so state is consistent; drop the batch.
+      log.error('Native spans: dropped a change-queue batch after a native error:', e)
     }
   }
 
@@ -411,7 +514,14 @@ class NativeSpansInterface {
           }
         }
       }
-    } catch {
+    } catch (walkError) {
+      // An unknown opcode or a record-size drift between `#nextOpOffset` and the
+      // writers lands here. Log it: otherwise per-op recovery silently stops
+      // working and batches disappear with a message that blames the native layer.
+      log.debug(
+        'Native spans: could not walk the change queue to isolate the orphaned op: %s',
+        walkError.message
+      )
       return null
     }
     return null
@@ -476,7 +586,14 @@ class NativeSpansInterface {
   }
 
   #evictIdleStringTable () {
-    if (this._cqbCount === 0) this.#evictStringTable(false)
+    // Gate on real cardinality. `setMetaStruct`/`addSpanEvent` drain the queue
+    // before writing, so an unconditional idle evict wiped the working set on the
+    // first queue write after any span carrying a span event or meta_struct:
+    // measured 0.4 -> 15 WASM string inserts per span (~1.1us of a ~3us span).
+    // Chunk flush still calls #evictStringTable(true), which bounds cardinality.
+    if (this._cqbCount === 0 && this._stringMap.size >= STRING_TABLE_IDLE_EVICT_SIZE) {
+      this.#evictStringTable(false)
+    }
   }
 
   /**
@@ -758,6 +875,19 @@ class NativeSpansInterface {
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
+      if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+        // A single batch larger than the whole queue. `_cqbBytes` spans all of
+        // WASM memory (no byteLength bound), so writing past the queue would
+        // silently corrupt the Rust heap rather than throw. Split instead.
+        const maxCount = Math.floor((CHANGE_QUEUE_BUFFER_SIZE - idx - 16) / 8)
+        if (maxCount < 1) {
+          log.error('Native spans: dropped %d meta tags that cannot fit the change queue', tags.length)
+          return
+        }
+        this.queueBatchMeta(spanId, tags.slice(0, maxCount))
+        this.queueBatchMeta(spanId, tags.slice(maxCount))
+        return
+      }
     }
 
     // Resolve all string IDs first (may trigger memory growth)
@@ -809,11 +939,26 @@ class NativeSpansInterface {
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
+      if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+        // See queueBatchMeta: an oversized batch must be split, never written
+        // past the queue into the Rust heap.
+        const maxCount = Math.floor((CHANGE_QUEUE_BUFFER_SIZE - idx - 16) / 8)
+        if (maxCount < 1) {
+          log.error('Native spans: dropped %d meta tags that cannot fit the change queue', count)
+          return
+        }
+        this.queueBatchMetaFlat(spanId, tags.slice(0, maxCount * 2))
+        this.queueBatchMetaFlat(spanId, tags.slice(maxCount * 2))
+        return
+      }
     }
 
     // Resolve all string IDs first (may trigger memory growth). This array is a
-    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
-    for (let i = 0; i < tags.length; i++) {
+    // local scratch buffer from the caller, so mutating it is safe. Bound
+    // by `count * 2`: an odd-length array would otherwise write one pair more
+    // than the header records and desync every following op in the batch.
+    const end = count * 2
+    for (let i = 0; i < end; i++) {
       tags[i] = this.getStringId(tags[i])
     }
 
@@ -826,7 +971,7 @@ class NativeSpansInterface {
     idx += 8
     view.setUint32(idx, count, true)
     idx += 4
-    for (let i = 0; i < tags.length; i += 2) {
+    for (let i = 0; i < end; i += 2) {
       view.setUint32(idx, tags[i], true)
       idx += 4
       view.setUint32(idx, tags[i + 1], true)
@@ -857,6 +1002,17 @@ class NativeSpansInterface {
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
+      if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+        // See queueBatchMeta.
+        const maxCount = Math.floor((CHANGE_QUEUE_BUFFER_SIZE - idx - 16) / 12)
+        if (maxCount < 1) {
+          log.error('Native spans: dropped %d metric tags that cannot fit the change queue', tags.length)
+          return
+        }
+        this.queueBatchMetrics(spanId, tags.slice(0, maxCount))
+        this.queueBatchMetrics(spanId, tags.slice(maxCount))
+        return
+      }
     }
 
     // Resolve all string IDs first (may trigger memory growth)
@@ -907,11 +1063,24 @@ class NativeSpansInterface {
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
+      if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+        // See queueBatchMeta.
+        const maxCount = Math.floor((CHANGE_QUEUE_BUFFER_SIZE - idx - 16) / 12)
+        if (maxCount < 1) {
+          log.error('Native spans: dropped %d metric tags that cannot fit the change queue', count)
+          return
+        }
+        this.queueBatchMetricsFlat(spanId, tags.slice(0, maxCount * 2))
+        this.queueBatchMetricsFlat(spanId, tags.slice(maxCount * 2))
+        return
+      }
     }
 
     // Resolve all string IDs first (may trigger memory growth). This array is a
-    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
-    for (let i = 0; i < tags.length; i += 2) {
+    // local scratch buffer from the caller, so mutating it is safe. Bound
+    // by `count * 2` so an odd-length array cannot write past the header count.
+    const end = count * 2
+    for (let i = 0; i < end; i += 2) {
       tags[i] = this.getStringId(tags[i])
     }
 
@@ -924,7 +1093,7 @@ class NativeSpansInterface {
     idx += 8
     view.setUint32(idx, count, true)
     idx += 4
-    for (let i = 0; i < tags.length; i += 2) {
+    for (let i = 0; i < end; i += 2) {
       view.setUint32(idx, tags[i], true)
       idx += 4
       view.setFloat64(idx, tags[i + 1], true)
@@ -1000,50 +1169,17 @@ class NativeSpansInterface {
     return this.flushSpansGrouped([{ spanIds, firstIsLocalRoot }])
   }
 
-  /**
-   * Remove finished spans from native storage without sending them. This is the
-   * closest protocol available in the current WASM API: `prepareChunk` drains
-   * the change queue, materializes deferred tags, removes the span slots, and
-   * feeds native stats; we then replace the staged discarded chunk with an empty
-   * prepared chunk so a later real send cannot transmit discarded spans.
-   *
-   * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
-   * @returns {number} number of non-empty groups discarded
-   */
-  discardSpansGrouped (groups) {
-    this.flushChangeQueue()
-
-    let discarded = 0
-    try {
-      for (const group of groups) {
-        const spanIds = group.spanIds
-        if (!spanIds || spanIds.length === 0) continue
-        this.#prepareGroup(group)
-        discarded++
-      }
-
-      if (discarded > 0) {
-        this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
-        this.#checkDetach()
-      }
-      this.#evictStringTable(true)
-      return discarded
-    } catch (e) {
-      this.resetChangeQueue()
-      this.#checkDetach()
-      if (discarded > 0) {
-        try {
-          this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
-          this.#checkDetach()
-        } catch {
-          // Best-effort cleanup: the caller will still fall back to the idle
-          // whole-state reset path when possible.
-        }
-      }
-      log.warn('Native spans: failed to discard dropped spans from native storage:', e)
-      return discarded
-    }
-  }
+  // Note: there is deliberately no "discard these spans" operation.
+  //
+  // `prepareChunk` is the only call that removes a span from the WASM map, and it
+  // stages everything it removes; `sendPreparedChunk` is the only drain. So a
+  // discard built on `prepareChunk` would transmit the dropped spans with the next
+  // flush. (`prepareChunk(0, ...)` does not help: it returns early and
+  // deliberately leaves chunks staged for other traces alone.) Dropped traces are
+  // therefore handed to the exporter like any other - libdatadog applies its own
+  // client-side p0 drop before writing a payload, so a sampler-rejected trace
+  // never reaches the wire - and callers that need the slots back rebuild the
+  // whole state via `setAgentUrl` once idle.
 
   #prepareGroup (group) {
     const spanIds = group.spanIds
@@ -1064,7 +1200,7 @@ class NativeSpansInterface {
   }
 
   /**
-   * Prepare one chunk per trace and send them as a single multi-trace request.
+   * Prepare and send one chunk per trace.
    *
    * Each group is `{ spanIds, firstIsLocalRoot }` for exactly one trace
    * (segment), with the local-root span first. Grouping by trace is essential:
@@ -1073,44 +1209,65 @@ class NativeSpansInterface {
    * local root. Passing many traces as one chunk would lump distinct trace_ids
    * together and stamp only the first — corrupting sampling/grouping under load.
    *
+   * `prepareChunk` appends to a native chunk Vec and `sendPreparedChunk` drains
+   * all of it into a single multi-trace request (libdatadog-nodejs #159), which
+   * is the same shape the legacy writer sends. So stage the whole flush, then
+   * send once: one HTTP request per flush carrying one chunk per trace.
+   *
+   * Staging synchronously also matters for correctness. `prepareChunk` is what
+   * drains the change buffer and removes spans from the WASM map, so with no
+   * await between groups nothing can finish into a half-staged flush, and the
+   * string table can be evicted exactly once at a provably drained point.
+   *
    * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
+   * @returns {Promise<string>} The agent response body, or a no-op marker
    */
   flushSpansGrouped (groups) {
     // Drain all pending ops (creates, tags, per-trace sampling/trace tags) once
-    // up front so every chunk prepared below sees a fully-applied span map.
+    // up front so every chunk staged below sees a fully-applied span map.
     this.flushChangeQueue()
 
-    let prepared = 0
-    for (const group of groups) {
-      const spanIds = group.spanIds
-      if (!spanIds || spanIds.length === 0) continue
-
-      try {
-        // prepareChunk extracts this trace's spans and stages a chunk; multiple
-        // calls accumulate in native storage until sendPreparedChunk.
-        if (this.#prepareGroup(group)) prepared++
-      } catch (e) {
-        // prepareChunk may throw partway through, after consuming some of the
-        // change queue or growing WASM memory. Reset JS-side queue state and
-        // refresh views so the next caller starts from a known-good baseline.
-        // Already-staged chunks from earlier groups are dropped with the
-        // rejection (they were extracted out of native storage).
-        this.resetChangeQueue()
-        this.#checkDetach()
-        log.error('Error preparing spans to flush:', e)
-        return Promise.reject(e)
+    let staged = 0
+    try {
+      for (const group of groups) {
+        if (!group.spanIds?.length) continue
+        if (this.#prepareGroup(group)) staged++
       }
+    } catch (e) {
+      // prepareChunk may throw partway through (`flush_chunk` errors on an
+      // absent span id), after consuming some of the change queue or growing
+      // WASM memory. Reset JS-side queue state and refresh views so the next
+      // caller starts from a known-good baseline. Groups staged before the
+      // throw stay staged and ship with the next flush - they are real spans we
+      // wanted to send, so delaying beats dropping them.
+      this.resetChangeQueue()
+      this.#checkDetach()
+      log.error('Error preparing spans to flush:', e)
+      return Promise.reject(e)
     }
+
+    // Safe here and only here: `prepareChunk` drained the change buffer and
+    // resolved every interned id into the staged spans, and nothing can have
+    // queued an op since (staging above is synchronous). `#evictStringTable(true)`
+    // also resets `_stringIdCounter`, so running it while ops are queued - e.g.
+    // from a `.finally()` after the async send - would re-issue live ids to
+    // different strings and silently mis-tag exported spans.
     this.#evictStringTable(true)
 
-    if (prepared === 0) {
-      return Promise.resolve('no spans to flush')
-    }
+    if (staged === 0) return Promise.resolve('no spans to flush')
 
-    return this._state.sendPreparedChunk()
+    const send = this._state.sendPreparedChunk()
+    this.#sendInFlight = send
+    const clearSend = () => {
+      if (this.#sendInFlight === send) this.#sendInFlight = null
+    }
+    send.then(clearSend, clearSend)
+
+    return send
       .catch(e => {
         // A send failure is a *network* fault for the already-serialized chunks;
-        // those are lost, which is expected on a transient agent outage.
+        // `sendPreparedChunk` took them out of the native Vec before sending, so
+        // they are lost, which is expected on a transient agent outage.
         //
         // Crucially, do NOT resetChangeQueue() here. sendPreparedChunk is async,
         // so by the time this rejection lands, ops for *other* spans (including
@@ -1123,7 +1280,10 @@ class NativeSpansInterface {
         // pending work; leave it intact for the next flush. Only refresh views
         // (memory may have grown during the send) and propagate the error.
         this.#checkDetach()
-        log.error('Error flushing spans to agent:', e)
+        // Non-transmitting: the exporter logs the user-facing message for this
+        // same rejection, and telemetry ships through the agent we just failed to
+        // reach - transmitting here would feed the unreachable agent more payloads.
+        log.errorWithoutTelemetry('Error flushing spans to agent:', e)
         throw e
       })
   }

@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const opentracing = require('opentracing')
 require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
+const { DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH } = require('../../src/constants')
 const formats = require('../../../../ext/formats')
 
 const Reference = opentracing.Reference
@@ -31,6 +32,8 @@ describe('Tracer', () => {
   let jsProcessor
   let agentExporter
   let AgentExporter
+  let logExporter
+  let LogExporter
   let nativeSpansInstance
   let NativeSpansInterface
   let spanContext
@@ -83,6 +86,11 @@ describe('Tracer', () => {
     }
     AgentExporter = sinon.stub().returns(agentExporter)
 
+    logExporter = {
+      export: sinon.spy(),
+    }
+    LogExporter = sinon.stub().returns(logExporter)
+
     nativeSpansInstance = {}
     NativeSpansInterface = sinon.stub().returns(nativeSpansInstance)
 
@@ -117,27 +125,40 @@ describe('Tracer', () => {
       debug: sinon.spy(),
     }
 
-    loadTracer = ({ isAWSLambda = false, nativeError } = {}) => proxyquire('../../src/opentracing/tracer', {
-      './span_context': SpanContext,
-      '../priority_sampler': PrioritySampler,
-      '../span_processor': SpanProcessor,
-      '../js_span_processor': JsSpanProcessor,
-      './propagation/text_map': TextMapPropagator,
-      './propagation/http': HttpPropagator,
-      './propagation/binary': BinaryPropagator,
-      './propagation/log': LogPropagator,
-      '../log': log,
-      '../exporters/native': NativeExporter,
-      '../exporters/agent': AgentExporter,
-      '../serverless': { getIsAWSLambda: () => isAWSLambda },
-      '../native': {
-        get NativeSpansInterface () {
-          if (nativeError) throw nativeError
-          return NativeSpansInterface
+    // `lambdaAgentPaths` lists the marker files that exist, so the two probes
+    // (Datadog extension layer vs. mini agent) can be told apart: a real Lambda
+    // has exactly one of them, never both. `createOtlpSpanStatsExporter` backs
+    // the lazily required OTLP span-metrics factory.
+    loadTracer = ({
+      isAWSLambda = false,
+      nativeError,
+      lambdaAgentPaths = [],
+      createOtlpSpanStatsExporter = sinon.stub(),
+    } = {}) =>
+      proxyquire('../../src/opentracing/tracer', {
+        './span_context': SpanContext,
+        '../priority_sampler': PrioritySampler,
+        '../span_processor': SpanProcessor,
+        '../js_span_processor': JsSpanProcessor,
+        './propagation/text_map': TextMapPropagator,
+        './propagation/http': HttpPropagator,
+        './propagation/binary': BinaryPropagator,
+        './propagation/log': LogPropagator,
+        '../log': log,
+        '../exporters/native': NativeExporter,
+        '../exporters/agent': AgentExporter,
+        '../exporters/log': LogExporter,
+        '../opentelemetry/metrics': { createOtlpSpanStatsExporter, '@noCallThru': true },
+        fs: { existsSync: (path) => lambdaAgentPaths.includes(path) },
+        '../serverless': { getIsAWSLambda: () => isAWSLambda },
+        '../native': {
+          get NativeSpansInterface () {
+            if (nativeError) throw nativeError
+            return NativeSpansInterface
+          },
+          get NativeDatadogSpan () { return NativeDatadogSpan },
         },
-        get NativeDatadogSpan () { return NativeDatadogSpan },
-      },
-    })
+      })
     Tracer = loadTracer()
   })
 
@@ -171,8 +192,11 @@ describe('Tracer', () => {
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
   })
 
-  it('uses the JS agent pipeline in AWS Lambda environments', () => {
-    Tracer = loadTracer({ isAWSLambda: true })
+  it('uses the JS agent pipeline in AWS Lambda when a local agent is present', () => {
+    Tracer = loadTracer({
+      isAWSLambda: true,
+      lambdaAgentPaths: [DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH],
+    })
 
     tracer = new Tracer(config)
 
@@ -180,9 +204,56 @@ describe('Tracer', () => {
     assert.strictEqual(tracer._isCiVisibility, false)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.notCalled(NativeSpansInterface)
+    sinon.assert.notCalled(LogExporter)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
     sinon.assert.calledWith(log.debug, 'AWS Lambda environment detected (JS span pipeline)')
+  })
+
+  it('uses the JS agent pipeline in a Lambda where only the extension layer marker exists', () => {
+    // A real Lambda has exactly ONE marker, so the both-absent and both-present
+    // cases above cannot tell `!EXT && !MINI` from `!EXT || !MINI` (nor from
+    // probing the same constant twice). With `||`, every extension-layer Lambda
+    // would write its traces to stdout while the extension sat idle, waiting for
+    // an HTTP payload that never arrives.
+    Tracer = loadTracer({ isAWSLambda: true, lambdaAgentPaths: [DATADOG_LAMBDA_EXTENSION_PATH] })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    sinon.assert.notCalled(LogExporter)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+  })
+
+  it('uses the JS agent pipeline in a Lambda where only the mini agent marker exists', () => {
+    // The mirror image of the case above: the mini agent (Azure/GCP-style local
+    // agent dropped at /tmp) listens on the loopback port, so HTTP export is
+    // correct and stdout export would double-report or lose traces.
+    Tracer = loadTracer({ isAWSLambda: true, lambdaAgentPaths: [DATADOG_MINI_AGENT_PATH] })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    sinon.assert.notCalled(LogExporter)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+  })
+
+  it('exports to stdout in AWS Lambda when neither the extension nor the mini agent is present', () => {
+    // The Datadog Forwarder deployment has no local agent: traces are written to
+    // stdout and shipped from CloudWatch. Sending them to 127.0.0.1:8126 instead
+    // (config also forces flushInterval=0 here) loses every trace silently.
+    Tracer = loadTracer({ isAWSLambda: true, lambdaAgentPaths: [] })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.notCalled(NativeSpansInterface)
+    sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledOnceWithExactly(LogExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, logExporter, prioritySampler, config, undefined)
   })
 
   it('preserves explicit OTLP export in AWS Lambda environments', () => {
@@ -213,23 +284,78 @@ describe('Tracer', () => {
     sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
     sinon.assert.calledWith(
       log.warn,
-      'Native spans unavailable because optional dependency %s is not installed; using JS span pipeline',
-      '@datadog/libdatadog'
+      'Native spans unavailable because %s; using JS span pipeline',
+      'optional dependency @datadog/libdatadog is not installed'
     )
 
     tracer.inject(spanCtx, opentracing.FORMAT_TEXT_MAP, carrier)
     sinon.assert.calledWith(propagator.inject, spanCtx, carrier)
   })
 
-  it('does not fall back to the JS agent pipeline when native OTLP export is requested', () => {
+  it('degrades to agent export when native OTLP is requested but libdatadog is missing', () => {
     const nativeError = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
       code: 'MODULE_NOT_FOUND',
     })
     config.OTEL_TRACES_EXPORTER = 'otlp'
     Tracer = loadTracer({ nativeError })
 
-    assert.throws(() => new Tracer(config), nativeError)
+    tracer = new Tracer(config)
+
+    // Throwing here would leave proxy.js with a NoopTracer, i.e. no telemetry at
+    // all — and Lambda layers deliberately omit this optional dependency, so
+    // OTLP + Lambda would always be untraced. Degrade loudly instead.
+    assert.strictEqual(tracer._useJsSpans, true)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledWith(
+      log.error,
+      'OTLP trace export is unavailable because %s; %s instead',
+      'optional dependency @datadog/libdatadog is not installed',
+      'using agent export'
+    )
+  })
+
+  it('uses the JS agent pipeline when the runtime has no WebAssembly', () => {
+    // libdatadog's loader throws a bare ReferenceError with no `code`, so the
+    // missing-module predicate cannot match it. Rethrowing leaves proxy.js with a
+    // NoopTracer, so `node --jitless` - and any JIT-disabled or hardened
+    // deployment - loses tracing entirely, silently, on a runtime where the JS
+    // pipeline works fine.
+    const nativeError = new ReferenceError('WebAssembly is not defined')
+    Tracer = loadTracer({ nativeError })
+    const wasm = globalThis.WebAssembly
+    delete globalThis.WebAssembly
+    try {
+      tracer = new Tracer(config)
+    } finally {
+      globalThis.WebAssembly = wasm
+    }
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledWith(
+      log.warn,
+      'Native spans unavailable because %s; using JS span pipeline',
+      'this runtime has no WebAssembly support'
+    )
+  })
+
+  it('writes traces to stdout when OTLP is requested in a Lambda with no local agent', () => {
+    // useLambdaJsPipeline excludes OTLP, so this path is reached through the
+    // missing-libdatadog degrade branch — it must still honour the no-local-agent
+    // probe or the Forwarder deployment loses every trace.
+    const nativeError = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
+      code: 'MODULE_NOT_FOUND',
+    })
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    Tracer = loadTracer({ nativeError, isAWSLambda: true, lambdaAgentPaths: [] })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledOnceWithExactly(LogExporter, config, prioritySampler)
   })
 
   it('does not fall back to the JS agent pipeline when installed libdatadog is corrupt', () => {
@@ -251,6 +377,43 @@ describe('Tracer', () => {
     assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.notCalled(log.warn)
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+  })
+
+  it('forwards the OTLP span stats exporter to the JS span processor', () => {
+    // Every other JsSpanProcessor assertion in this file expects `undefined` as
+    // the stats-exporter argument, because nothing else here sets
+    // OTEL_TRACES_SPAN_METRICS_ENABLED — so a branch that hardcoded `undefined`
+    // would pass the whole suite. Config forces
+    // DD_TRACE_STATS_COMPUTATION_ENABLED when OTLP span metrics are on, so
+    // dropping the exporter here ships v0.6 client stats to the agent instead of
+    // OTLP metrics.
+    const otlpStats = { export: sinon.spy() }
+    const createOtlpSpanStatsExporter = sinon.stub().returns(otlpStats)
+    config.OTEL_TRACES_SPAN_METRICS_ENABLED = true
+    Tracer = loadTracer({
+      isAWSLambda: true,
+      lambdaAgentPaths: [DATADOG_LAMBDA_EXTENSION_PATH],
+      createOtlpSpanStatsExporter,
+    })
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledOnceWithExactly(createOtlpSpanStatsExporter, config)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, otlpStats)
+  })
+
+  it('forwards the OTLP span stats exporter to the native span processor', () => {
+    const otlpStats = { export: sinon.spy() }
+    const createOtlpSpanStatsExporter = sinon.stub().returns(otlpStats)
+    config.OTEL_TRACES_SPAN_METRICS_ENABLED = true
+    Tracer = loadTracer({ createOtlpSpanStatsExporter })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, false)
+    sinon.assert.calledOnceWithExactly(
+      SpanProcessor, exporter, prioritySampler, config, nativeSpansInstance, otlpStats
+    )
   })
 
   describe('startSpan', () => {

@@ -123,7 +123,7 @@ describe('JsSpanProcessor', () => {
     sinon.assert.calledOnceWithExactly(onSpanFinished, spanFormat.firstCall.returnValue)
   })
 
-  it('stamps the APM-disabled marker on the first finished span in each chunk', () => {
+  it('stamps the APM-disabled marker on every finished span in a chunk', () => {
     config.apmTracingEnabled = false
     const processor = new JsSpanProcessor(exporter, prioritySampler, config)
     const first = createSpan('first')
@@ -133,8 +133,10 @@ describe('JsSpanProcessor', () => {
 
     processor.process(first)
 
+    // Every span carries it, not just the chunk's first (#9483/#9506): the agent
+    // reads the marker per span, and the native processor stamps it per span too.
     assert.strictEqual(first.context().getTag(APM_TRACING_ENABLED_KEY), 0)
-    assert.strictEqual(second.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
+    assert.strictEqual(second.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     sinon.assert.calledWithExactly(spanFormat.firstCall, first, true, false)
     sinon.assert.calledWithExactly(spanFormat.secondCall, second, false, false)
   })

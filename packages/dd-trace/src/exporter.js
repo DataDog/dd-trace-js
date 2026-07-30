@@ -8,8 +8,8 @@ const { isTrue } = require('./util')
 // pipeline — regular APM tracing uses the native exporter (see
 // `opentracing/tracer.js`). `ci/init.js` sets `experimental.exporter` to one of
 // the CI-vis exporter names below, so this maps those names to the matching
-// CI-vis exporter. The APM exporters (agent/agentless/log/electron) are not part
-// of this pipeline and are intentionally not referenced here.
+// CI-vis exporter. The APM exporters (agent/electron) are not part of this
+// pipeline and are intentionally not referenced here.
 module.exports = function getExporter (name) {
   switch (name) {
     case exporters.DATADOG:

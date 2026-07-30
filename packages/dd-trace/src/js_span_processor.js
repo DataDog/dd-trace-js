@@ -66,12 +66,15 @@ class JsSpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
+      // Every span in an APM-standalone chunk carries the marker, not just the
+      // chunk's first one (#9483/#9506); the native processor does the same.
+      const stampApmDisabled = this._config.apmTracingEnabled === false
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          if (isFirstSpanInChunk && this._config.apmTracingEnabled === false) {
+          if (stampApmDisabled) {
             span.context().setTag(APM_TRACING_ENABLED_KEY, 0)
           }
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)

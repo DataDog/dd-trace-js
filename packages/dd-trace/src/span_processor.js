@@ -235,17 +235,27 @@ class SpanProcessor {
       if (!trace.tags[DECISION_MAKER_KEY] && mechanism !== undefined) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
-    } else if (DECISION_MAKER_KEY in trace.tags) {
-      // Guard the `delete` so the common drop path doesn't pay the V8
-      // dictionary-mode transition unless a prior keep decision actually
-      // set the tag.
-      delete trace.tags[DECISION_MAKER_KEY]
+    } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {
+      // Clear by assigning undefined rather than deleting, matching
+      // priority_sampler: `delete` drops trace.tags into V8 dictionary (slow)
+      // mode for the propagation and `_syncTraceTagsToNative` scans that follow.
+      // Those scans already skip non-string values, so the output is unchanged.
+      trace.tags[DECISION_MAKER_KEY] = undefined
     }
   }
 
-  _discardNativeSpans (spans) {
-    if (spans.length === 0) return
-    this._exporter._discardNativeSpans?.(spans)
+  /**
+   * Seal spans that are being dropped instead of exported, so a late `setTag`
+   * cannot queue a native op against them.
+   *
+   * These spans stay resident in the WASM map: `prepareChunk` is the only call
+   * that releases a span, and it stages what it releases with no way to unstage,
+   * so "releasing" a dropped trace would transmit it on the next flush. Callers
+   * reclaim the slots with `_resetNativeStateWhenIdle()` instead.
+   *
+   * @param {Array<object>} spans
+   */
+  _sealDroppedSpans (spans) {
     for (const span of spans) {
       const context = span.context()
       if (typeof context.markExported === 'function') context.markExported()
@@ -258,16 +268,12 @@ class SpanProcessor {
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
-    if (trace.record === false) {
-      this._discardNativeSpans(started)
+    if (trace.record === false || DD_TRACE_ENABLED === false) {
+      // Count before `_erase`, which repoints `trace.started`.
+      const dropped = started.length
+      this._sealDroppedSpans(started)
       this._erase(trace, [])
-      this._exporter._resetNativeStateWhenIdle?.()
-      return
-    }
-    if (DD_TRACE_ENABLED === false) {
-      this._discardNativeSpans(started)
-      this._erase(trace, [])
-      this._exporter._resetNativeStateWhenIdle?.()
+      this._exporter._resetNativeStateWhenIdle?.(dropped)
       return
     }
     const allStartedFinished = started.length === finished.length
@@ -321,7 +327,7 @@ class SpanProcessor {
             // before export. Done after final DD snapshot sync because the remap
             // reads JS tags and writes only OTel output names.
             if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
-              context.applyOtelHttpSemantics()
+              context.applyOtelHttpSemantics(formattedSpan)
             }
             const serviceName = context.getTag('service.name')
             if (typeof serviceName === 'string' && serviceName.length > 0) {
@@ -355,8 +361,8 @@ class SpanProcessor {
 
       this._erase(trace, active)
       if (trace.isRecording === false) {
-        this._discardNativeSpans(finishedSpansToExport)
-        this._exporter._resetNativeStateWhenIdle?.()
+        this._sealDroppedSpans(finishedSpansToExport)
+        this._exporter._resetNativeStateWhenIdle?.(finishedSpansToExport.length)
       }
     }
 

@@ -40,6 +40,26 @@ function getPipeline () {
   // in a noop async context, so internal HTTP/IO done by the native exporter
   // doesn't get re-instrumented by our http/fs plugins.
   pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
+
+  // The agent returns its container-tags hash only as a response HEADER, which the
+  // wasm response body does not surface. Without this the native path computes DSM
+  // pathway hashes and the DBM `ddsh` comment from process tags alone, so they
+  // silently disagree with every other tracer (and with our own JS path, where
+  // `exporters/agent/writer.js` reads the same header). The observer receives
+  // Node's flat [name, value, ...] raw-header array and must not throw.
+  if (typeof pipeline.setResponseHeaderObserver === 'function') {
+    pipeline.setResponseHeaderObserver((rawHeaders) => {
+      if (!Array.isArray(rawHeaders)) return
+      for (let i = 0; i < rawHeaders.length - 1; i += 2) {
+        if (String(rawHeaders[i]).toLowerCase() === 'datadog-container-tags-hash') {
+          const hash = rawHeaders[i + 1]
+          if (hash) require('../propagation-hash').updateContainerTagsHash(String(hash))
+          return
+        }
+      }
+    })
+  }
+
   return pipeline
 }
 
