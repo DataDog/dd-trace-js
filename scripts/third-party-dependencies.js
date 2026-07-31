@@ -77,6 +77,15 @@ function listBunLockDependencies (lockPath) {
     for (const child of Object.keys(meta.optionalDependencies ?? {})) {
       queue.push(resolveBunLockKey(lock, key, child))
     }
+    // A production package's peers ship with it: `bun install --production` resolves them, so they land in the OCI
+    // package and need attribution like any other shipped dependency. `@openfeature/server-sdk` reaches the artifact
+    // exactly this way, as the peer of the `@datadog/openfeature-node-server` optional dependency, even though the
+    // range pinning it is declared under `devDependencies`. Walking the manifest's own sections instead would treat it
+    // as dev-only and leave it unattributed. A peer that is not installed has no `packages` entry and drops out at the
+    // `Array.isArray` check above.
+    for (const child of Object.keys(meta.peerDependencies ?? {})) {
+      queue.push(resolveBunLockKey(lock, key, child))
+    }
   }
 
   return [...dependencies.values()].sort(compareDependencies)

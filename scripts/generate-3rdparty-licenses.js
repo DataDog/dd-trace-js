@@ -439,7 +439,10 @@ function formatCsv (entries) {
       `"${escapeCsv(entry.license)}","${escapeCsv(entry.copyright)}"`
     )
   }
-  return `${lines.join('\n')}\n`
+  // CRLF per RFC 4180, matching `.github/vendored-dependencies.csv`. The license workflow appends that file to this
+  // one, so the two have to agree; mixed endings make editors re-LF the file on save and the release tooling then
+  // re-commits it on every run.
+  return `${lines.join('\r\n')}\r\n`
 }
 
 /**
