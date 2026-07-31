@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval'],
+  SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval', 'experiment'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
   SESSION_ID: '_ml_obs.session_id',
   SESSION_ID_TRACE_DEFAULT_KEY: '_ml_obs.trace_session_id',

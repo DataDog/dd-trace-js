@@ -18,6 +18,7 @@ const {
   GIT_REPOSITORY_URL,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
@@ -75,7 +76,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
 }
 
 function resolveTilde (filePath) {
@@ -215,7 +216,7 @@ const githubWellKnownDiagnosticDirPatternsUnix = [
 ]
 const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
 
-const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+const githubJobIDRegex = /"job":\s*\{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
   const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
@@ -649,7 +650,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/g, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }
@@ -697,6 +698,7 @@ module.exports = {
         BUILDKITE_TAG,
         BUILDKITE_BUILD_ID,
         BUILDKITE_PIPELINE_SLUG,
+        BUILDKITE_PIPELINE_NAME,
         BUILDKITE_BUILD_NUMBER,
         BUILDKITE_BUILD_URL,
         BUILDKITE_JOB_ID,
@@ -720,6 +722,7 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'buildkite',
         [CI_PIPELINE_ID]: BUILDKITE_BUILD_ID,
         [CI_PIPELINE_NAME]: BUILDKITE_PIPELINE_SLUG,
+        [CI_PIPELINE_DISPLAY_NAME]: BUILDKITE_PIPELINE_NAME,
         [CI_PIPELINE_NUMBER]: BUILDKITE_BUILD_NUMBER,
         [CI_PIPELINE_URL]: BUILDKITE_BUILD_URL,
         [CI_JOB_URL]: `${BUILDKITE_BUILD_URL}#${BUILDKITE_JOB_ID}`,

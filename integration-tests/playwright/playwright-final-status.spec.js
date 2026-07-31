@@ -27,8 +27,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 const NUM_RETRIES_EFD = 3
 const RETRY_FINAL_STATUS_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
