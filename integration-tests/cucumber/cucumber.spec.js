@@ -3845,6 +3845,7 @@ describe(`cucumber@${version} commonJS`, () => {
         })
 
       let exitCode
+      let stdout = ''
       childProcess = exec(
         './node_modules/.bin/cucumber-js' +
         ' ci-visibility/features-test-management-parallel/disabled.feature' +
@@ -3856,13 +3857,18 @@ describe(`cucumber@${version} commonJS`, () => {
         }
       )
 
+      childProcess.stdout?.on('data', data => { stdout += data })
+      childProcess.stderr?.on('data', data => { stdout += data })
       childProcess.on('exit', (code) => { exitCode = code })
 
       await Promise.all([
         eventsPromise,
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
       ])
 
+      assert.match(stdout, /Disabled: 1 test skipped\./)
       assert.strictEqual(exitCode, 0)
     })
 
@@ -3883,6 +3889,7 @@ describe(`cucumber@${version} commonJS`, () => {
       })
 
       let exitCode
+      let stdout = ''
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3911,14 +3918,19 @@ describe(`cucumber@${version} commonJS`, () => {
         }
       )
 
+      childProcess.stdout?.on('data', data => { stdout += data })
+      childProcess.stderr?.on('data', data => { stdout += data })
       childProcess.on('exit', (code) => { exitCode = code })
 
       await Promise.all([
         eventsPromise,
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
       ])
 
       // Quarantined test fails but exit code should be 0
+      assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
       assert.strictEqual(exitCode, 0)
     })
 

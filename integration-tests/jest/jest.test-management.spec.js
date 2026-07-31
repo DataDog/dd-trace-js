@@ -1415,7 +1415,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
               if (isReportEnabled) {
-                assert.match(stdout, /Disabled: \d+ tests? skipped\./)
+                assert.match(stdout, /Disabled: 1 test skipped\./)
               } else {
                 assert.doesNotMatch(stdout, /Datadog Test Optimization/)
               }

@@ -922,14 +922,16 @@ function wrapRun (pl, isLatestVersion, version) {
 
         const error = getErrorFromCucumberResult(result)
 
-        recordTestManagementExecution({
-          testSuite: testSuitePath,
-          testName,
-          status,
-          isAttemptToFix,
-          isDisabled,
-          isQuarantined,
-        })
+        if (!testStartPayload.isParallel) {
+          recordTestManagementExecution({
+            testSuite: testSuitePath,
+            testName,
+            status,
+            isAttemptToFix,
+            isDisabled,
+            isQuarantined,
+          })
+        }
 
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {

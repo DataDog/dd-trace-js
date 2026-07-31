@@ -1564,14 +1564,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
           return
         }
-        recordTestManagementExecution({
-          testSuite: ctx.suite,
-          testName: ctx.name,
-          status,
-          isAttemptToFix: ctx.isAttemptToFix,
-          isDisabled: ctx.isDisabled,
-          isQuarantined: ctx.isQuarantined,
-        })
+        if (!isJestWorker) {
+          recordTestManagementExecution({
+            testSuite: ctx.suite,
+            testName: ctx.name,
+            status,
+            isAttemptToFix: ctx.isAttemptToFix,
+            isDisabled: ctx.isDisabled,
+            isQuarantined: ctx.isQuarantined,
+          })
+        }
         if (ctx.concurrentTestState && !ctx.currentStore && !ctx.isDisabled) {
           testStartCh.runStores(ctx, () => {})
         }
