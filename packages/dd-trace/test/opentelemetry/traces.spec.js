@@ -617,6 +617,38 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Exporter', () => {
+    it('waits for in-flight requests when force flushed', async () => {
+      let finishResponse
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        const response = {
+          statusCode: 200,
+          on: () => {},
+          once (event, handler) {
+            if (event === 'end') finishResponse = handler
+          },
+        }
+        const request = {
+          write: () => {},
+          end: () => callback(response),
+          on: () => request,
+          once: () => request,
+        }
+        return request
+      })
+
+      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
+      exporter.export([createMockSpan()])
+
+      let flushed = false
+      const flush = exporter.forceFlush().then(() => { flushed = true })
+      await Promise.resolve()
+      assert.strictEqual(flushed, false)
+
+      finishResponse()
+      await flush
+      assert.strictEqual(flushed, true)
+    })
+
     it('exports spans via OTLP HTTP with JSON encoding', () => {
       mockOtlpExport((decoded) => {
         const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]

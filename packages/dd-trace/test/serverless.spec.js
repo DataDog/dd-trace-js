@@ -6,7 +6,7 @@ const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, retainVercelRequest } = require('../src/serverless')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -34,5 +34,37 @@ describe('enableGCPPubSubPushSubscription', () => {
     process.env.K_SERVICE = 'svc'
     process.env.DD_TRACE_GCP_PUBSUB_PUSH_ENABLED = 'false'
     assert.strictEqual(enableGCPPubSubPushSubscription(), false)
+  })
+})
+
+describe('retainVercelRequest', () => {
+  const requestContext = Symbol.for('@vercel/request-context')
+  const originalVercel = process.env.VERCEL
+  const originalRequestContext = globalThis[requestContext]
+
+  afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
+
+    if (originalRequestContext === undefined) delete globalThis[requestContext]
+    else globalThis[requestContext] = originalRequestContext
+  })
+
+  it('retains a promise in the active Vercel request context', () => {
+    const promise = Promise.resolve()
+    let retained
+    process.env.VERCEL = '1'
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: value => { retained = value } }),
+    }
+
+    assert.strictEqual(retainVercelRequest(promise), true)
+    assert.strictEqual(retained, promise)
+  })
+
+  it('does nothing outside Vercel', () => {
+    delete process.env.VERCEL
+
+    assert.strictEqual(retainVercelRequest(Promise.resolve()), false)
   })
 })
