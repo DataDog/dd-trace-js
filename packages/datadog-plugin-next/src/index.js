@@ -97,7 +97,7 @@ class NextPlugin extends ServerPlugin {
     this.config.hooks.request(span, req, res)
 
     span.finish()
-    scheduleVercelFlush(this.tracer)
+    if (!store.httpParentSpan) scheduleVercelFlush(this.tracer)
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false, isFilesystemPath = isAppPath }) {
