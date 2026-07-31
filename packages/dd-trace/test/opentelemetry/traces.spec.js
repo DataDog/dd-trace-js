@@ -25,9 +25,11 @@ const OTEL_ENV_KEYS = [
   'OTEL_EXPORTER_OTLP_TIMEOUT',
   'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT',
 ]
+const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 
 describe('OpenTelemetry Traces', () => {
   let originalEnv
+  let originalVercelRequestContext
 
   /**
    * Creates a mock DD-formatted span (as produced by span_format.js).
@@ -113,12 +115,15 @@ describe('OpenTelemetry Traces', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env }
+    originalVercelRequestContext = globalThis[VERCEL_REQUEST_CONTEXT]
     // Clear OTEL env vars that may be set by the host environment to prevent test pollution.
     for (const key of OTEL_ENV_KEYS) delete process.env[key]
   })
 
   afterEach(() => {
     process.env = originalEnv
+    if (originalVercelRequestContext === undefined) delete globalThis[VERCEL_REQUEST_CONTEXT]
+    else globalThis[VERCEL_REQUEST_CONTEXT] = originalVercelRequestContext
     sinon.restore()
   })
 
@@ -617,6 +622,38 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Exporter', () => {
+    it('retains in-flight requests in Vercel', async () => {
+      let finishResponse
+      let retained
+      process.env.VERCEL = '1'
+      globalThis[VERCEL_REQUEST_CONTEXT] = {
+        get: () => ({ waitUntil: promise => { retained = promise } }),
+      }
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        const response = {
+          statusCode: 200,
+          on: () => {},
+          once (event, handler) {
+            if (event === 'end') finishResponse = handler
+          },
+        }
+        const request = {
+          write: () => {},
+          end: () => callback(response),
+          on: () => request,
+          once: () => request,
+        }
+        return request
+      })
+
+      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
+      exporter.export([createMockSpan()])
+
+      assert.ok(retained)
+      finishResponse()
+      await retained
+    })
+
     it('waits for in-flight requests when force flushed', async () => {
       let finishResponse
       sinon.stub(http, 'request').callsFake((options, callback) => {
