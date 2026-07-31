@@ -7,7 +7,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
 const processTags = require('./process-tags')
-const { MAX_META_VALUE_LENGTH } = require('./encode/tags-processors')
+const { MAX_META_VALUE_LENGTH, normalizeSpan } = require('./encode/tags-processors')
 const {
   APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_MANUAL,
@@ -313,7 +313,15 @@ class SpanProcessor {
 
             if (typeof context.syncFinalTagsToNative === 'function') {
               formattedSpan ??= spanFormat(span, isFirstSpanInChunk, this._processTags)
-              context.syncFinalTagsToNative(formattedSpan)
+              // The v0.4 encoder runs `normalizeSpan` on every span as it encodes
+              // (encode/0.4.js picks it as the per-span formatter), so the JS
+              // pipeline never ships a span without the intake defaults and the
+              // 100-char caps on service/name/type. The native path writes these
+              // fields straight into WASM, so apply the same pass here or it
+              // becomes the only pipeline sending un-normalized core fields.
+              // Applied after the stats snapshot, matching the legacy ordering
+              // where normalization happens at encode time rather than at finish.
+              context.syncFinalTagsToNative(normalizeSpan(formattedSpan))
             }
 
             // Remap Datadog HTTP tags to OpenTelemetry names on the native span

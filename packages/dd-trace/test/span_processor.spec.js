@@ -136,6 +136,31 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(syncOrder, ['sync', 'export'])
   })
 
+  it('normalizes core fields before syncing them to native storage', () => {
+    // The v0.4 encoder runs `normalizeSpan` per span as it encodes, so the JS
+    // pipeline never ships an over-long service/name or a missing resource. The
+    // native path writes these straight into WASM, so without the same pass it
+    // would be the only pipeline sending un-normalized core fields.
+    spanFormat.returns({
+      name: 'n'.repeat(150),
+      service: 's'.repeat(150),
+      type: 't'.repeat(150),
+      metrics: {},
+      meta: {},
+    })
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    const synced = finishedSpan.context().syncFinalTagsToNative.getCall(0).args[0]
+    assert.strictEqual(synced.name.length, 100)
+    assert.strictEqual(synced.service.length, 100)
+    assert.strictEqual(synced.type.length, 100)
+    // A missing resource falls back to the (already truncated) name.
+    assert.strictEqual(synced.resource, synced.name)
+  })
+
   it('should generate sampling priority when sampling manually', () => {
     trace.started = [finishedSpan]
     processor.sample(finishedSpan)
