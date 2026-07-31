@@ -343,9 +343,15 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       // Only off-thread loaders install the matcher; see initialize.mjs.
       if (semver.satisfies(process.versions.node, '>=18.19.0')) {
         context('import-in-the-middle include matcher', () => {
-          useEnv({ NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs' })
+          useEnv({
+            NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
+            pm2_env: JSON.stringify({
+              DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+                'SANITIZER:*:init/security-control-module.mjs:sanitize',
+            }),
+          })
 
-          it('wraps instrumented modules and nothing else', () =>
+          it('wraps instrumented and PM2 security control modules and nothing else', () =>
             testFile('init/loader-matcher.mjs', 'true\n', [], ''))
         })
       }
