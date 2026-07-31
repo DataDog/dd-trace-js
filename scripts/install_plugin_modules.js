@@ -413,7 +413,14 @@ async function patchPeerDependencies ({ folder, externalName }) {
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      versionPkgJson.dependencies[name] = capKnownRange(name, version || latests[name])
+      // An explicit `version` in externals.js wins, then the range the installed package declares for itself, and
+      // only then the newest published version. The declared range matters because a forced transitive has to stay
+      // in the same generation as the sandbox consuming it: resolving `*` against the registry grafts the newest
+      // major onto an old client (a `@smithy/*` v4 handler onto the v2-era `@aws-sdk/client-bedrock-runtime@3.422.0`),
+      // and that handler's own transitives then resolve independently of the rest of the sandbox. Which majors
+      // collide changes every time the dependency publishes, so the sandbox breaks on an unrelated day.
+      const range = version ?? pkgJson.dependencies?.[name] ?? latests[name]
+      versionPkgJson.dependencies[name] = capKnownRange(name, range)
     }
   }
 
