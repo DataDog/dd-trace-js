@@ -184,8 +184,22 @@ class Profiler extends EventEmitter {
     this.#systemInfoReport = systemInfoReport
 
     // Recompute tags after a MicroVM clone resume, so profiles upload under the clone's
-    // identity instead of the snapshot's.
-    this.#identityRefreshListener = () => { this.#tags = getProfilingTags(config) }
+    // identity instead of the snapshot's. Also push the refreshed tags to sub-profilers that
+    // bake them into state of their own, e.g. NativeSpaceProfiler's OOM export command.
+    this.#identityRefreshListener = () => {
+      this.#tags = getProfilingTags(config)
+      for (const profiler of this.#profilers) {
+        // A refresh failure (e.g. NativeSpaceProfiler re-registering its native OOM handler) must not
+        // propagate: this runs synchronously off the diagnostic channel publish, which the MicroVM
+        // /run HTTP hook fires from inside request handling, and channel.publish() does not catch
+        // subscriber errors.
+        try {
+          profiler.refreshTags?.(this.#tags)
+        } catch (error) {
+          log.error(error)
+        }
+      }
+    }
     identityRefreshChannel.subscribe(this.#identityRefreshListener)
 
     this._setInterval()

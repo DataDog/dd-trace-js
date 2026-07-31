@@ -60,7 +60,7 @@ class DatadogTracer extends Tracer {
     }
 
     unsubscribeIdentityRefresh?.()
-    const onIdentityRefresh = (refreshedConfig) => this.refreshMetadata(refreshedConfig)
+    const onIdentityRefresh = (refreshedConfig) => this.#refreshMetadata(refreshedConfig)
     identityRefreshChannel.subscribe(onIdentityRefresh)
     unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
   }
@@ -70,7 +70,14 @@ class DatadogTracer extends Tracer {
     this._prioritySampler.configure(env, sampler, config)
   }
 
-  refreshMetadata (config) {
+  /**
+   * Re-serializes the process-discovery metadata file after a MicroVM clone resume, so it reflects the
+   * clone's refreshed identity instead of the snapshot's. No-ops if process-discovery metadata was never
+   * stored (e.g. serverless) or if storeConfig() fails to produce a new handle.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #refreshMetadata (config) {
     if (this._inmem_cfg === undefined) return
     const storeConfig = require('./tracer_metadata')
     const metadata = storeConfig(config)

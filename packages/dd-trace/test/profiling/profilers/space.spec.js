@@ -222,4 +222,47 @@ describe('profilers/native/space', () => {
     assert.strictEqual(logsEnabled, true)
     assert.deepStrictEqual(exportCommand, [])
   })
+
+  it('should re-register the OOM export command with refreshed tags', () => {
+    const url = new URL('http://127.0.0.1:8126/')
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      exportStrategies: ['process'],
+      tags: { 'runtime-id': 'initial-id' },
+      exporters: [new AgentExporter({ url, DD_PROFILING_UPLOAD_TIMEOUT: 60_000 })],
+    })
+
+    profiler.start()
+    profiler.refreshTags({ 'runtime-id': 'refreshed-id' })
+
+    sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
+    const exportCommand = pprof.heap.monitorOutOfMemory.secondCall.args[3]
+    assert.deepStrictEqual(exportCommand, [
+      process.execPath,
+      exporterCliPath,
+      'http://127.0.0.1:8126/',
+      'runtime-id:refreshed-id,snapshot:on_oom',
+      'space',
+    ])
+  })
+
+  it('should not re-register the OOM export command when not started', () => {
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      exportStrategies: ['process'],
+    })
+
+    profiler.refreshTags({ 'runtime-id': 'refreshed-id' })
+
+    sinon.assert.notCalled(pprof.heap.monitorOutOfMemory)
+  })
+
+  it('should not re-register the OOM export command when OOM monitoring is disabled', () => {
+    const profiler = makeSpace(NativeSpaceProfiler, { oomMonitoringEnabled: false })
+
+    profiler.start()
+    profiler.refreshTags({ 'runtime-id': 'refreshed-id' })
+
+    sinon.assert.notCalled(pprof.heap.monitorOutOfMemory)
+  })
 })
