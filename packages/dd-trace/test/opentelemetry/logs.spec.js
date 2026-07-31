@@ -209,6 +209,22 @@ describe('OpenTelemetry Logs', () => {
       logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
     })
 
+    it('timestamps logs with UNIX-epoch nanoseconds', () => {
+      const lowerBoundNano = Date.now() * 1e6
+      mockOtlpExport((decoded) => {
+        const upperBoundNano = (Date.now() + 1000) * 1e6
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+
+        assert(
+          timeUnixNano >= lowerBoundNano && timeUnixNano <= upperBoundNano,
+          `timeUnixNano ${timeUnixNano} should be within [${lowerBoundNano}, ${upperBoundNano}]`
+        )
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Timestamp test' })
+    })
+
     it('exports logs using JSON protocol', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
       mockOtlpExport((decoded, capturedHeaders) => {
