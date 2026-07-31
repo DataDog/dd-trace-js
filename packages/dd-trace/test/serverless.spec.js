@@ -5,6 +5,7 @@ const { AsyncLocalStorage } = require('node:async_hooks')
 const http = require('node:http')
 
 const { describe, it, afterEach } = require('mocha')
+const { logs } = require('@opentelemetry/api-logs')
 
 require('./setup/core')
 
@@ -50,6 +51,7 @@ describe('Vercel request-lifetime flush', () => {
     else process.env.VERCEL = originalVercel
     delete globalThis[nextRequestContext]
     delete globalThis[vercelRequestContext]
+    logs.disable()
   })
 
   for (const requestContext of [nextRequestContext, vercelRequestContext]) {
@@ -110,10 +112,44 @@ describe('Vercel request-lifetime flush', () => {
     }
   })
 
+  it('retains OTLP logs until their exporter completes', async () => {
+    process.env.VERCEL = '1'
+    let requestTask
+    let finishLogExport
+    const loggerProvider = {
+      getLogger () {},
+      forceFlush () {
+        return new Promise(resolve => { finishLogExport = resolve })
+      },
+    }
+    logs.setGlobalLoggerProvider(loggerProvider)
+    globalThis[vercelRequestContext] = createRequestContext(promise => { requestTask = promise })
+
+    const tracer = {
+      _config: {
+        DD_LOGS_OTEL_ENABLED: true,
+        experimental: { exporter: 'agent' },
+      },
+      _exporter: { flush: assert.fail },
+    }
+    assert.strictEqual(scheduleVercelFlush(tracer), true)
+    await nextImmediate()
+
+    let requestCompleted = false
+    requestTask.then(() => { requestCompleted = true })
+    await Promise.resolve()
+    assert.strictEqual(requestCompleted, false)
+    finishLogExport()
+    await requestTask
+    assert.strictEqual(requestCompleted, true)
+  })
+
   it('does not schedule outside Vercel or for non-agentless exporters', () => {
     let waitUntilCalls = 0
     globalThis[vercelRequestContext] = createRequestContext(() => { waitUntilCalls++ })
     assert.strictEqual(scheduleVercelFlush(createAgentlessTracer(assert.fail)), false)
+    logs.setGlobalLoggerProvider({ getLogger () {}, forceFlush: assert.fail })
+    assert.strictEqual(scheduleVercelFlush({ _config: { DD_LOGS_OTEL_ENABLED: true } }), false)
     process.env.VERCEL = '1'
     const agentTracer = {
       _config: { experimental: { exporter: 'agent' } },
