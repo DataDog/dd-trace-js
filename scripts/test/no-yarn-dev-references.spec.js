@@ -425,18 +425,22 @@ describe('no yarn dev references', function () {
       auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort(),
       ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
     )
-    const auditCommand = auditWorkflow.jobs.dependencies.steps.at(-1).run
-    assert.match(auditCommand, /^bun audit --audit-level=high/m)
-    assert.deepStrictEqual(
-      [...auditCommand.matchAll(/--ignore (GHSA-[\w-]+)/g)].map(match => match[1]),
-      [
-        'GHSA-vxpw-j846-p89q',
-        'GHSA-hmw2-7cc7-3qxx',
-        'GHSA-5c6j-r48x-rmvq',
-        'GHSA-j3q9-mxjg-w52f',
-        'GHSA-mh99-v99m-4gvg',
-      ]
+    assert.match(auditWorkflow.jobs.dependencies.steps.at(-1).run, /^node scripts\/audit\.js /m)
+    // The allowlist carries the severity threshold and the accepted advisories for every audited directory. Pinning
+    // the two lists to each other stops a newly added lockfile directory from being audited against a missing entry,
+    // which the wrapper reports as a hard error rather than as a clean run.
+    const { directories } = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, '.github/audit-allowlist.json'), 'utf8')
     )
+    assert.deepStrictEqual(
+      Object.keys(directories).sort(),
+      auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort()
+    )
+    for (const [directory, config] of Object.entries(directories)) {
+      for (const entry of config.allow) {
+        assert.ok(entry.reason?.trim(), `${directory} allowlist entry ${entry.id} needs a reason`)
+      }
+    }
   })
 
   it('regenerates licenses when any generator input changes', () => {
