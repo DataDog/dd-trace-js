@@ -50,7 +50,15 @@ module.exports = {
     const trackGc = config.runtimeMetrics.gc !== false
 
     client = createMetricsClient(config)
-    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config, () => {
+      // Reset baselines so the next CPU/event-loop/ELU deltas don't span the snapshot pause.
+      lastTime = performance.now()
+      lastElu = performance.eventLoopUtilization()
+      if (!nativeMetrics) {
+        lastCpuUsage = process.cpuUsage()
+      }
+      eventLoopDelayObserver?.reset()
+    })
 
     if (trackGc) {
       startGCObserver()

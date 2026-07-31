@@ -103,7 +103,10 @@ function initializeOpenTelemetryMetrics (config) {
   registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 
   unsubscribeMetricsIdentityRefresh?.()
-  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
+  const onIdentityRefresh = () => {
+    exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
+    reader.resetPendingState()
+  }
   identityRefreshChannel.subscribe(onIdentityRefresh)
   unsubscribeMetricsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }

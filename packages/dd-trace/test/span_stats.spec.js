@@ -6,8 +6,11 @@ const { hostname } = require('os')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
@@ -591,6 +594,36 @@ describe('SpanStatsProcessor', () => {
 
     assert.strictEqual(p.buckets.size, 1)
     p.onInterval()
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('drops pending buckets when the identity-refresh channel fires (OTLP path)', () => {
+    const localConfig = { ...config, tags: { 'runtime-id': 'initial-id' } }
+    const p = new SpanStatsProcessor(localConfig, otlpExporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    assert.strictEqual(p.buckets.size, 1)
+
+    // Simulates a MicroVM clone resume; the pre-refresh bucket must be dropped, not exported
+    // under the refreshed identity at the next interval.
+    localConfig.tags['runtime-id'] = 'refreshed-id'
+    identityRefreshChannel.publish(localConfig)
+
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('drops pending buckets when the identity-refresh channel fires (legacy /v0.6/stats path)', () => {
+    const localConfig = { ...config, tags: { 'runtime-id': 'initial-id' } }
+    const p = new SpanStatsProcessor(localConfig)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    assert.strictEqual(p.buckets.size, 1)
+
+    localConfig.tags['runtime-id'] = 'refreshed-id'
+    identityRefreshChannel.publish(localConfig)
+
     assert.strictEqual(p.buckets.size, 0)
   })
 

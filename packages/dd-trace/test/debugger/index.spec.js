@@ -343,6 +343,97 @@ describe('debugger/index', () => {
     })
   })
 
+  describe('pending start', () => {
+    // A DynamicInstrumentation instance whose fetchAgentInfo callback is captured instead of
+    // invoked, so tests can simulate stop() racing the pending start.
+    function createPendingInstrumentation () {
+      let deferredCallback
+      const PendingWorker = sinon.stub()
+      PendingWorker.prototype.on = sinon.stub().returnsThis()
+      PendingWorker.prototype.once = sinon.stub().returnsThis()
+      PendingWorker.prototype.unref = sinon.stub()
+      PendingWorker.prototype.terminate = sinon.stub()
+      PendingWorker.prototype.removeAllListeners = sinon.stub()
+
+      const instrumentation = proxyquire('../../src/debugger/index', {
+        fs: {
+          readFile: sinon.stub(),
+        },
+        '../agent/info': {
+          fetchAgentInfo: (url, callback) => { deferredCallback = callback },
+        },
+        './config': proxyquire('../../src/debugger/config', {
+          '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
+        }),
+        worker_threads: {
+          Worker: PendingWorker,
+          MessageChannel: class MessageChannel {
+            constructor () {
+              this.port1 = { unref: sinon.stub(), on: sinon.stub() }
+              this.port2 = { unref: sinon.stub(), on: sinon.stub(), postMessage: sinon.stub() }
+            }
+          },
+          threadId: 0,
+        },
+      })
+
+      return { instrumentation, Worker: PendingWorker, resolveAgentInfo: (...args) => deferredCallback(...args) }
+    }
+
+    it('reports isStarted() while still waiting on detectDebuggerEndpoint()', () => {
+      const { instrumentation, Worker: PendingWorker } = createPendingInstrumentation()
+
+      instrumentation.start(config, rc)
+
+      assert.strictEqual(instrumentation.isStarted(), true)
+      sinon.assert.notCalled(PendingWorker)
+    })
+
+    it('runs cleanup when stopped while still waiting on detectDebuggerEndpoint()', () => {
+      const { instrumentation, Worker: PendingWorker, resolveAgentInfo } = createPendingInstrumentation()
+
+      instrumentation.start(config, rc)
+      instrumentation.stop()
+
+      assert.strictEqual(instrumentation.isStarted(), false)
+      sinon.assert.calledWith(rc.removeProductHandler, 'LIVE_DEBUGGING')
+
+      // Fires after stop() already ran cleanup - must not construct a worker.
+      resolveAgentInfo(null, { endpoints: [] })
+
+      sinon.assert.notCalled(PendingWorker)
+    })
+
+    it('stops reacting to identity refresh once cancelled during a pending start', () => {
+      const { instrumentation, resolveAgentInfo } = createPendingInstrumentation()
+
+      instrumentation.start(config, rc)
+      instrumentation.stop()
+      resolveAgentInfo(null, { endpoints: [] })
+
+      // Should not throw even though the worker/configPort were never created.
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+      identityRefreshChannel.publish(config)
+    })
+
+    it('can start again after a cancelled pending start', () => {
+      const { instrumentation, Worker: PendingWorker, resolveAgentInfo } = createPendingInstrumentation()
+
+      instrumentation.start(config, rc)
+      instrumentation.stop()
+      resolveAgentInfo(null, { endpoints: [] }) // late; must not construct a worker for the cancelled start
+
+      instrumentation.start(config, rc)
+      assert.strictEqual(instrumentation.isStarted(), true)
+
+      // Resolves the second (still in-flight) start's own detectDebuggerEndpoint call.
+      resolveAgentInfo(null, { endpoints: [] })
+      sinon.assert.calledOnce(PendingWorker)
+
+      instrumentation.stop()
+    })
+  })
+
   describe('readProbeFile', () => {
     it('should do nothing when path is not provided', () => {
       // probeFile is undefined by default (not set in config)

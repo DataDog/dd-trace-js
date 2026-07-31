@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
@@ -16,6 +17,8 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -919,6 +922,62 @@ describe('OpenTelemetry Logs', () => {
       exporter.export([{ body: 'test', severityNumber: 9, timestamp: [1700000000, 0] }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('recomputes resource attributes when the identity-refresh channel fires', () => {
+      const { config, loggerProvider } = setupLogs()
+      const exporter = loggerProvider.processor.exporter
+      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(updateSpy)
+      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
+    })
+
+    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
+      // One proxyquired instance for both calls, so the unsubscribe guard is actually exercised -
+      // setupLogs() reloads the module fresh each time, which would give each its own guard.
+      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
+      const config = getConfigFresh()
+
+      initializeOpenTelemetryLogs(config)
+      const firstExporter = logs.getLoggerProvider().processor.exporter
+      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+
+      logs.disable()
+      initializeOpenTelemetryLogs(config)
+      const secondExporter = logs.getLoggerProvider().processor.exporter
+      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.notCalled(firstSpy)
+      sinon.assert.calledOnce(secondSpy)
+    })
+
+    it('drops queued log records recorded before the identity-refresh channel fires', () => {
+      // Batch size > 1 so the emitted record stays queued instead of exporting immediately.
+      const { config, loggerProvider } = setupLogs(true, '10')
+      const exportSpy = sinon.stub(loggerProvider.processor.exporter, 'export')
+      const logger = logs.getLogger('test-logger')
+
+      // Queued under the pre-refresh identity; must be dropped, not exported under the new one.
+      logger.emit({ body: 'pre-refresh log' })
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      loggerProvider.processor.forceFlush()
+
+      sinon.assert.calledOnce(exportSpy)
+      assert.deepStrictEqual(exportSpy.firstCall.args[0], [])
     })
   })
 })

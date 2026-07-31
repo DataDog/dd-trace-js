@@ -447,9 +447,10 @@ class CustomMetrics {
   #registryEntry
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    const dogStatsDClient = new DogStatsDClient(clientConfig)
-    this.#client = new MetricsAggregationClient(dogStatsDClient)
-    this.#registryEntry = { client: dogStatsDClient, config }
+    this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    // Registers the aggregator, not the raw client, so a refresh also drops its pending
+    // counters/gauges/histograms (MetricsAggregationClient#updateTags resets those too).
+    this.#registryEntry = { client: this.#client, config }
     customMetricsClients.add(new WeakRef(this.#registryEntry))
 
     const flush = this.flush.bind(this)
