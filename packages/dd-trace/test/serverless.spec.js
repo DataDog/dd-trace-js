@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
+const { logs } = require('@opentelemetry/api-logs')
 
 require('./setup/core')
 
@@ -48,6 +49,7 @@ describe('Vercel request-lifetime native OTLP flush', () => {
     else process.env.VERCEL = originalVercel
     delete globalThis[nextRequestContext]
     delete globalThis[vercelRequestContext]
+    logs.disable()
   })
 
   it('registers before deferring native OTLP export and retains it until completion', async () => {
@@ -80,6 +82,38 @@ describe('Vercel request-lifetime native OTLP flush', () => {
     done()
     await requestTask
     assert.strictEqual(requestTaskResolved, true)
+  })
+
+  it('retains OTLP logs until their exporter completes', async () => {
+    process.env.VERCEL = '1'
+    let requestTask
+    let finishLogExport
+    const loggerProvider = {
+      getLogger () {},
+      forceFlush () {
+        return new Promise(resolve => { finishLogExport = resolve })
+      },
+    }
+    logs.setGlobalLoggerProvider(loggerProvider)
+    globalThis[vercelRequestContext] = {
+      get: () => ({ waitUntil: promise => { requestTask = promise } }),
+    }
+
+    assert.strictEqual(scheduleVercelFlush({
+      _config: {
+        DD_LOGS_OTEL_ENABLED: true,
+        OTEL_TRACES_EXPORTER: 'none',
+      },
+    }), true)
+    await nextImmediate()
+
+    let requestCompleted = false
+    requestTask.then(() => { requestCompleted = true })
+    await Promise.resolve()
+    assert.strictEqual(requestCompleted, false)
+    finishLogExport()
+    await requestTask
+    assert.strictEqual(requestCompleted, true)
   })
 
   it('does not schedule outside Vercel or for non-OTLP exporters', () => {
