@@ -591,20 +591,24 @@ function containsExecutionCommand (source, value) {
     if (!match) return false
     if (!/^\|[+-]?$/.test(match[1])) return match[1] === command
 
-    const indent = /^\s*/.exec(line)[0].length
+    const indicatorIndent = /^\s*/.exec(line)[0].length
     const block = []
+    let contentIndent
     for (let next = index + 1; next < lines.length; next++) {
       if (!lines[next].trim()) {
         block.push('')
         continue
       }
       const nextIndent = /^\s*/.exec(lines[next])[0].length
-      if (nextIndent <= indent) break
+      if (contentIndent === undefined) {
+        if (nextIndent <= indicatorIndent) break
+        contentIndent = nextIndent
+      } else if (nextIndent < contentIndent) {
+        break
+      }
       block.push(lines[next])
     }
-    const contentLines = block.filter(candidate => candidate.trim())
-    if (contentLines.length === 0) return false
-    const contentIndent = Math.min(...contentLines.map(candidate => /^\s*/.exec(candidate)[0].length))
+    if (contentIndent === undefined) return false
     const blockCommand = block.map(candidate => candidate.slice(contentIndent)).join('\n').trim()
     return blockCommand === command
   })

@@ -160,7 +160,7 @@ async function main (argv) {
       verbose: options.verbose,
     })
     activeApprovedPlanSha256 = options.approvedPlanSha256
-    const packageCheck = needsInstalledPackageCheck(options.scenarios)
+    const packageCheck = hasLocalScenarios(options.scenarios)
       ? checkInstalledPackage()
       : undefined
     options.requireExecutableApproval = true
@@ -303,18 +303,18 @@ async function validateFramework ({ framework, manifest, options, out, packageCh
     return
   }
 
+  if (framework.status !== 'runnable') {
+    results.push(getFrameworkStatusResult(framework))
+    if (ciResult) results.push(ciResult)
+    addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
+    return
+  }
+
   if (packageCheck?.ok === false) {
     const packageFailure = getInstalledPackageFailure(framework, packageCheck)
     results.push(packageFailure)
     if (ciResult) results.push(ciResult)
     addAdvancedNotReached(results, framework, options.scenarios, packageFailure)
-    return
-  }
-
-  if (framework.status !== 'runnable') {
-    results.push(getFrameworkStatusResult(framework))
-    if (ciResult) results.push(ciResult)
-    addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
     return
   }
 
@@ -421,14 +421,15 @@ function initializeManifest (options) {
 function printPlan (manifest, options) {
   const out = validateOutputPath(manifest, options.out)
   const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-  if (needsInstalledPackageCheck(options.scenarios) &&
+  const localScenariosSelected = hasLocalScenarios(options.scenarios)
+  if (!localScenariosSelected ||
     !approvalManifest.frameworks.some(framework => framework.status === 'runnable')) {
     return writeStaticOnlyReport(approvalManifest, out, options)
   }
   ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
   const publicationLock = acquireExecutionLock({ out, approvedPlanSha256: 'plan-publication' })
   try {
-    const packageCheck = needsInstalledPackageCheck(options.scenarios)
+    const packageCheck = localScenariosSelected
       ? checkInstalledPackage()
       : undefined
     if (packageCheck?.ok === false) throw getInstalledPackageCheckError(packageCheck)
@@ -470,7 +471,7 @@ function printPlan (manifest, options) {
 }
 
 /**
- * Produces a final report without an approval artifact when no local framework can run.
+ * Produces a final report without approval when no local check can run or only static checks were selected.
  *
  * @param {object} manifest selected validation manifest
  * @param {string} out output directory
@@ -479,9 +480,12 @@ function printPlan (manifest, options) {
  */
 function writeStaticOnlyReport (manifest, out, options) {
   const results = []
+  const localScenariosSelected = hasLocalScenarios(options.scenarios)
   for (const framework of manifest.frameworks) {
-    results.push(getFrameworkStatusResult(framework))
-    addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
+    if (localScenariosSelected) {
+      results.push(getFrameworkStatusResult(framework))
+      addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
+    }
     if (options.scenarios.has(CI_WIRING)) results.push(runCiWiring({ manifest, framework }))
   }
   const annotatedResults = annotateResults(results)
@@ -509,9 +513,12 @@ function writeStaticOnlyReport (manifest, out, options) {
   } finally {
     releaseExecutionLock(publicationLock)
   }
+  const reason = localScenariosSelected
+    ? 'No selected framework has an eligible local command.'
+    : 'The selected CI-only audit does not require local execution.'
   console.log(sanitizeConsoleText(
-    'No selected framework has an eligible local command. A final static-only report was written; no new approval ' +
-    'artifact or live validation command was created. Present the report and stop.'
+    `${reason} A final static-only report was written; no new approval artifact or live validation command was ` +
+    'created. Present the report and stop.'
   ))
   process.exitCode = validatorExitCode
 }
@@ -545,12 +552,12 @@ function reuseExistingManifest (manifestPath) {
 }
 
 /**
- * Returns whether the selected checks need to load the installed Test Optimization initialization path.
+ * Returns whether the selected checks include local validation.
  *
  * @param {Set<string>} scenarios selected scenarios
  * @returns {boolean} whether local validation is selected
  */
-function needsInstalledPackageCheck (scenarios) {
+function hasLocalScenarios (scenarios) {
   return [...scenarios].some(scenario => scenario !== CI_WIRING)
 }
 

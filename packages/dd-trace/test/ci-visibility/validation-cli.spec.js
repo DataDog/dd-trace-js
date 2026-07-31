@@ -362,6 +362,84 @@ describe('test optimization validation CLI', () => {
     }
   })
 
+  it('preserves a non-runnable framework blocker when the installed package check fails', async () => {
+    const fixture = createRepositoryFixture({ framework: 'cypress' })
+    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+    const manifest = {
+      __path: path.join(fixture.root, 'dd-test-optimization-validation-manifest.json'),
+      frameworks: [{
+        blockerCategory: 'UNSUPPORTED_VERSION',
+        framework: 'cypress',
+        id: 'cypress:fixture',
+        notes: ['The installed Cypress version is unsupported.'],
+        status: 'unsupported_by_validator',
+      }],
+      repository: { root: fixture.root },
+    }
+    let reportInput
+    const originalExitCode = process.exitCode
+    const consoleLog = sinon.stub(console, 'log')
+    const isolatedCli = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './approval': { assertApprovalDigest () {} },
+      './approval-artifacts': {
+        loadApprovedPlan: () => ({
+          material: {
+            manifest: { path: manifest.__path },
+            selection: { frameworks: [], scenario: 'basic-reporting' },
+            validation: {
+              keepTemporaryFiles: false,
+              offlineFixtureNonce: 'fixture-nonce',
+              outputDirectory: out,
+              verbose: false,
+            },
+          },
+        }),
+      },
+      './ci-discovery': { annotateCiDiscovery () {} },
+      './execution-lock': {
+        acquireExecutionLock: () => ({ path: path.join(out, EXECUTION_LOCK_FILENAME) }),
+        releaseExecutionLock () {},
+      },
+      './generated-files': {
+        cleanupGeneratedFiles: async () => ({ directoriesRemoved: 0, filesRemoved: 0, status: 'completed' }),
+      },
+      './manifest-loader': { loadManifest: () => manifest },
+      './package-check': {
+        checkInstalledPackage: () => ({
+          diagnosis: 'The installed package did not load.',
+          ok: false,
+          recommendation: 'Reinstall the package.',
+        }),
+      },
+      './report-writer': {
+        writePendingReport () {},
+        async writeReport (input) { reportInput = input },
+      },
+      './safe-files': { ensureSafeDirectory () {} },
+      './static-diagnosis': {
+        getStaticBlocker: () => undefined,
+        runStaticDiagnosis: () => ({ report: {}, reportPath: path.join(out, 'diagnosis.json') }),
+      },
+    })
+    try {
+      await isolatedCli.main([
+        '--run-approved-plan', path.join(out, 'approval.json'),
+        '--sha256', 'a'.repeat(64),
+      ])
+
+      const frameworkStatus = reportInput.results.find(result => result.scenario === 'all')
+      const basicReporting = reportInput.results.find(result => result.scenario === 'basic-reporting')
+      assert.strictEqual(frameworkStatus.evidence.frameworkStatus, 'unsupported_by_validator')
+      assert.strictEqual(frameworkStatus.evidence.blockerCategory, 'UNSUPPORTED_VERSION')
+      assert.strictEqual(basicReporting.evidence.blockerCategory, 'UNSUPPORTED_VERSION')
+      assert.strictEqual(reportInput.results.some(result => result.evidence.installedPackageIncomplete), false)
+    } finally {
+      process.exitCode = originalExitCode
+      consoleLog.restore()
+      removeFixture(fixture.root)
+    }
+  })
+
   it('does not publish an approval failure without owning the execution lock', function () {
     this.timeout(20_000)
     const fixture = createRepositoryFixture({ framework: 'mocha' })
@@ -484,24 +562,22 @@ describe('test optimization validation CLI', () => {
     }
   })
 
-  it('prints a CI-only plan with no approved project command', function () {
+  it('writes a final CI-only report without approval', function () {
     this.timeout(20_000)
     const fixture = createRepositoryFixture({ framework: 'mocha' })
     try {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
-      const approval = JSON.parse(fs.readFileSync(path.join(
-        fixture.root,
-        'dd-test-optimization-validation-results',
-        'approval.json'
-      )))
+      const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.strictEqual(planned.status, 0, planned.stderr)
-      assert.match(planned.stdout, /static CI audit only; no project test command is selected/)
-      assert.doesNotMatch(planned.stdout, /Basic Reporting command/)
-      assert.deepStrictEqual(approval.commands, [])
-      assert.deepStrictEqual(approval.executables, [])
-      assert.deepStrictEqual(approval.generatedFiles, [])
+      assert.strictEqual(planned.status, 2, planned.stderr)
+      assert.match(planned.stdout, /selected CI-only audit does not require local execution/)
+      assert.match(planned.stdout, /final static-only report was written/)
+      assert.doesNotMatch(planned.stdout, /CUSTOMER APPROVAL PLAN/)
+      assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
+      assert.match(report, /CI audit is incomplete/)
+      assert.match(report, /\*\*Report state: FINAL\*\*/)
     } finally {
       removeFixture(fixture.root)
     }
@@ -514,22 +590,14 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       fs.rmSync(fixture.runner)
       const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
-      assert.strictEqual(planned.status, 0, planned.stderr)
-
       const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
-      const approvalPath = path.join(out, 'approval.json')
-      const approval = fs.readFileSync(approvalPath)
-      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
-      const executed = runCli(fixture.root, [
-        '--run-approved-plan', approvalPath,
-        '--sha256', digest,
-      ])
       const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.strictEqual(executed.status, 2, executed.stderr)
+      assert.strictEqual(planned.status, 2, planned.stderr)
       assert.doesNotMatch(report, /direct runner is unavailable|runner-unavailable/)
       assert.match(report, /CI audit is incomplete/)
       assert.match(report, /Cleanup: completed/)
+      assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
       assert.strictEqual(fs.existsSync(path.join(out, EXECUTION_LOCK_FILENAME)), false)
     } finally {
       removeFixture(fixture.root)
@@ -547,21 +615,13 @@ describe('test optimization validation CLI', () => {
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 
       const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
-      assert.strictEqual(planned.status, 0, planned.stderr)
-
       const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
-      const approvalPath = path.join(out, 'approval.json')
-      const approval = fs.readFileSync(approvalPath)
-      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
-      const executed = runCli(fixture.root, [
-        '--run-approved-plan', approvalPath,
-        '--sha256', digest,
-      ])
       const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.strictEqual(executed.status, 2, executed.stderr)
+      assert.strictEqual(planned.status, 2, planned.stderr)
       assert.match(report, /No supported CI configuration file was found by bounded repository discovery/)
       assert.doesNotMatch(report, /validator orchestration error/)
+      assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
     } finally {
       removeFixture(fixture.root)
     }

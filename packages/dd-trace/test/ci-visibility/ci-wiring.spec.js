@@ -225,6 +225,9 @@ describe('test optimization validation CI audit', () => {
       '      - run: |',
       '          node ./scripts/prepare.js',
       `          ${command}`,
+      '        working-directory: packages/fixture',
+      '        env:',
+      '          NODE_ENV: test',
       '',
     ].join('\n'))
     completeReview({ command: blockCommand, initialization: 'not_configured', transport: 'none' })
