@@ -237,19 +237,53 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('timestamps logs with UNIX-epoch nanoseconds', () => {
-      const lowerBoundNano = Date.now() * 1e6
+      const now = new Date('2023-11-14T22:13:20.123Z')
+      sinon.useFakeTimers({ now })
       mockOtlpExport((decoded) => {
-        const upperBoundNano = (Date.now() + 1000) * 1e6
         const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
-
-        assert(
-          timeUnixNano >= lowerBoundNano && timeUnixNano <= upperBoundNano,
-          `timeUnixNano ${timeUnixNano} should be within [${lowerBoundNano}, ${upperBoundNano}]`
-        )
+        assert.strictEqual(timeUnixNano.toString(), '1700000000123000000')
       })
 
       const { logs } = setupLogs()
       logs.getLogger('test').emit({ body: 'Timestamp test' })
+    })
+
+    it('normalizes all OpenTelemetry timestamp input types without losing precision', () => {
+      mockOtlpExport((decoded) => {
+        const records = decoded.resourceLogs[0].scopeLogs[0].logRecords
+        assert.deepStrictEqual(records.map(record => record.timeUnixNano.toString()), [
+          '1700000000123000000',
+          '1700000000456000000',
+          '1700000000789123456',
+        ])
+        assert.strictEqual(records[0].observedTimeUnixNano.toString(), '1700000000987654321')
+      })
+
+      const { logs } = setupLogs(true, '3')
+      const logger = logs.getLogger('test')
+      logger.emit({
+        body: 'number timestamp',
+        timestamp: 1700000000123,
+        observedTimestamp: [1700000000, 987654321],
+      })
+      logger.emit({ body: 'date timestamp', timestamp: new Date('2023-11-14T22:13:20.456Z') })
+      logger.emit({ body: 'hrtime timestamp', timestamp: [1700000000, 789123456] })
+    })
+
+    it('encodes exact timestamp strings using the OTLP JSON protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      mockOtlpExport((decoded) => {
+        const record = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(record.timeUnixNano, '1700000000789123456')
+        assert.strictEqual(record.observedTimeUnixNano, '1700000000987654321')
+      }, 'json')
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({
+        body: 'JSON timestamp test',
+        timestamp: [1700000000, 789123456],
+        observedTimestamp: [1700000000, 987654321],
+      })
     })
 
     it('exports logs using JSON protocol', () => {
@@ -374,7 +408,7 @@ describe('OpenTelemetry Logs', () => {
         traceFlags: 1,
       }
       logs.getLogger('test-service', '1.0.0').emit({
-        observedTimestamp: Date.now() * 1000000,
+        observedTimestamp: new Date(),
         severityText: 'ERROR',
         severityNumber: 17,
         body: 'HTTP test message',
@@ -687,7 +721,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})
-      exporter.export([{ body: 'test', severityNumber: 9, timestamp: Date.now() * 1000000 }], () => {})
+      exporter.export([{ body: 'test', severityNumber: 9, timestamp: new Date() }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
     })
