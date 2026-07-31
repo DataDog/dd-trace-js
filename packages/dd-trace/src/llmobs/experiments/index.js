@@ -1,9 +1,9 @@
 'use strict'
 
 const log = require('../../log')
-const { ExperimentsClient, API_BASE_PATH } = require('./client')
+const { ExperimentsClient } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
-const { Experiment } = require('./experiment')
+const { Experiment, ExperimentRecorder } = require('./experiment')
 const NoopExperiments = require('./noop')
 
 // Poll `attempt` with exponential backoff until it returns true or the time
@@ -26,17 +26,27 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #config
   #llmobs
   #projectName
 
   constructor (config, llmobs) {
+    this.#config = config
     this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
-    this.#client = new ExperimentsClient({
-      apiKey: config.DD_API_KEY,
-      appKey: config.DD_APP_KEY,
-      site: config.site,
-      projectName: this.#projectName,
+    this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  /**
+   * @param {string} projectName
+   * @returns {ExperimentsClient}
+   */
+  #clientForProject (projectName) {
+    return new ExperimentsClient({
+      apiKey: this.#config.DD_API_KEY,
+      appKey: this.#config.DD_APP_KEY,
+      site: this.#config.site,
+      projectName,
     })
   }
 
@@ -78,15 +88,12 @@ class Experiments {
     const succeeded = await retryWithBackoff(async () => {
       try {
         if (datasetId === null) {
-          const listed = await this.#client.request(
-            'GET',
-            `${API_BASE_PATH}/${projectId}/datasets?filter[name]=${encodeURIComponent(name)}`
-          )
-          for (const item of listed?.data ?? []) {
-            if (item?.attributes?.name === name) {
-              datasetId = String(item?.id ?? '')
-              description = String(item?.attributes?.description ?? '')
-              latestVersion = item?.attributes?.current_version ?? null
+          const listed = await this.#client.listDatasets(projectId, { name })
+          for (const item of listed) {
+            if (item.name() === name) {
+              datasetId = item.id()
+              description = item.description()
+              latestVersion = item.latestVersion()
               datasetVersion = version ?? latestVersion
               break
             }
@@ -99,26 +106,16 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = new URLSearchParams()
-          if (cursor) query.set('page[cursor]', cursor)
-          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           // eslint-disable-next-line no-await-in-loop
-          const resp = await this.#client.request(
-            'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
-          )
-          for (const item of resp?.data ?? []) {
-            const attrs = item?.attributes ?? item
-            const recordId = String(item?.id ?? attrs?.id ?? '')
-            recs.push(new DatasetRecord(
-              attrs?.input ?? null,
-              attrs?.expected_output ?? null,
-              attrs?.metadata ?? {},
-              recordId === '' ? null : recordId
-            ))
-            ids.push(recordId)
+          const resp = await this.#client.listDatasetRecords(projectId, datasetId, {
+            cursor,
+            version: datasetVersion,
+          })
+          for (const record of resp.records) {
+            recs.push(record)
+            ids.push(record.id ?? '')
           }
-          cursor = resp?.meta?.after ?? ''
+          cursor = resp.after
           if (!cursor) break
         }
         records = recs
@@ -164,6 +161,21 @@ class Experiments {
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
     return new Experiment(this.#client, options, this.#llmobs)
+  }
+
+  /**
+   * Start an externally-driven experiment for eval frameworks that already own
+   * task execution. Call submitSpan() once per completed row, then
+   * submitEvaluationMetrics() with the generated span id.
+   *
+   * @param {object} options
+   * @returns {Promise<ExperimentRecorder>}
+   */
+  async startExperiment (options) {
+    const client = options?.projectName === undefined || options.projectName === this.#projectName
+      ? this.#client
+      : this.#clientForProject(options.projectName)
+    return new ExperimentRecorder(client, options).start()
   }
 }
 
