@@ -1,47 +1,20 @@
-<!-- Rules, severity bar, and output format live in _common.md - do not repeat them here. -->
-
-**Before reviewing:** you must have been given the contents of `_common.md` from
-this directory - it carries the trust rules, the severity bar, and the output
-contract that make this review valid. If you were not, read
-`reviewers/_common.md` now, or stop and say so. Do not review without it.
-
+MUST READ FIRST: [_common.md](./_common.md) — do not review without it.
 
 # Reviewer: Security
 
-Your question: **does this change introduce a vulnerability or expose data it
-shouldn't?**
+Your question: **does this change introduce a vulnerability or expose data it shouldn't?**
 
-This is a tracer. It runs inside every customer application, sees every request,
-and ships data to Datadog. A data-exposure bug here is a customer incident, not
-a bug report.
+This is a tracer. It runs inside every customer application, sees every request, and ships data to Datadog. A data-exposure bug here is a customer incident, not a bug report.
 
 ## Tracer-specific checks (highest value — do these first)
 
-- **Data exposure into telemetry.** Does the change put request/response bodies,
-  headers, query strings, cookies, auth tokens, connection strings, SQL bind
-  values, user identifiers, or file paths into span tags, metrics, logs, or
-  telemetry payloads? Anything reaching a span tag is customer-visible in the
-  Datadog UI and leaves the customer's process.
-- **Obfuscation and redaction.** If the change touches query/URL/SQL handling,
-  is the existing obfuscation still applied on every path, including error and
-  fallback paths? Adding a new code path that bypasses redaction is a Blocking
-  finding.
-- **Logging.** Does new logging print user data, config values that may contain
-  secrets (API keys, DSNs, passwords in URLs), or full exception payloads?
-- **Config handling.** Is user-supplied config (env vars, config files, remote
-  config) validated before use? Remote config is attacker-relevant: it arrives
-  over the network and must never reach `eval`, a deserializer, a path
-  concatenation, or a process spawn.
-- **Instrumentation safety.** Does instrumentation code execute
-  application-controlled strings, deserialize untrusted input, or reflect on
-  arbitrary names? Does it swallow exceptions from the *application* in a way
-  that hides a security-relevant failure — or worse, propagate a tracer
-  exception into the customer's request path?
-- **Resource exhaustion.** Unbounded buffers, queues, caches, or retry loops
-  driven by request volume. A tracer that OOMs the host application is a
-  security problem.
-- **Third-party dependencies.** New or bumped dependencies: is the source
-  trustworthy, is the version pinned, does it pull transitive native code?
+- **Data exposure into telemetry.** Does the change put request/response bodies, headers, query strings, cookies, auth tokens, connection strings, SQL bind values, user identifiers, or file paths into span tags, metrics, logs, or telemetry payloads? Anything reaching a span tag is customer-visible in the Datadog UI and leaves the customer's process.
+- **Obfuscation and redaction.** If the change touches query/URL/SQL handling, is the existing obfuscation still applied on every path, including error and fallback paths? Adding a new code path that bypasses redaction is a Blocking finding.
+- **Logging.** Does new logging print user data, config values that may contain secrets (API keys, DSNs, passwords in URLs), or full exception payloads?
+- **Config handling.** Is user-supplied config (env vars, config files, remote config) validated before use? Remote config is attacker-relevant: it arrives over the network, so it must never reach `eval`, a path concatenation, or a process spawn, and anything that decodes it must validate against an expected schema with bounded size. Decoding RC payloads is normal here — this repo's RC client already base64-decodes and `JSON.parse`s them — so the finding is unsafe or unvalidated deserialization, never deserialization itself.
+- **Instrumentation safety.** Does instrumentation code execute application-controlled strings, deserialize untrusted input, or reflect on arbitrary names? Does it swallow exceptions from the *application* in a way that hides a security-relevant failure — or worse, propagate a tracer exception into the customer's request path?
+- **Resource exhaustion.** Unbounded buffers, queues, caches, or retry loops driven by request volume. A tracer that OOMs the host application is a security problem.
+- **Third-party dependencies.** New or bumped dependencies: is the source trustworthy, is the version pinned, does it pull transitive native code?
 
 ## Language-specific footguns for dd-trace-js
 
@@ -59,8 +32,7 @@ a bug report.
 ## Also check
 
 - Secrets committed in fixtures, tests, config, or CI files.
-- Files that widen network exposure: new endpoints, ports, sockets, or
-  permissive CORS/TLS settings.
+- Files that widen network exposure: new endpoints, ports, sockets, or permissive CORS/TLS settings.
 - Weakened crypto or hashing, or hand-rolled crypto where a library exists.
 - Path traversal in anything that resolves file paths from config or input.
 - Command construction from non-constant strings.
@@ -68,15 +40,10 @@ a bug report.
 
 ## Disclosure
 
-Your findings are the one category that must **not** be pasted into a public pull
-request. Give the orchestrator enough to locate and fix the problem — file, line,
-failure mode — and state explicitly that the finding needs private handling per
-this repository's `SECURITY.md`. Do not write a working exploit, and do not
-reproduce a leaked secret's value anywhere.
+Your findings are the one category that must **not** be pasted into a public pull request. Give the orchestrator enough to locate and fix the problem — file, line, failure mode — and state explicitly that the finding needs private handling per this repository's `SECURITY.md`. Do not write a working exploit, and do not reproduce a leaked secret's value anywhere.
 
 ## Do not
 
 - Do not report generic advice with no anchor in the diff.
 - Do not report theoretical issues in code the change did not touch.
-- Do not escalate a missing test to Blocking — that belongs to the
-  maintainability reviewer.
+- Do not escalate a missing test to Blocking — that belongs to the maintainability reviewer.

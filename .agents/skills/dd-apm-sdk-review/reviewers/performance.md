@@ -1,17 +1,10 @@
-<!-- Rules, severity bar, and output format live in _common.md - do not repeat them here. -->
-
-**Before reviewing:** you must have been given the contents of `_common.md` from
-this directory - it carries the trust rules, the severity bar, and the output
-contract that make this review valid. If you were not, read
-`reviewers/_common.md` now, or stop and say so. Do not review without it.
-
+MUST READ FIRST: [_common.md](./_common.md) — do not review without it.
 
 # Reviewer: Performance
 
 Your question: **what does this cost, and does it cost it on a hot path?**
 
-A tracer's overhead is charged to every customer request, forever. Overhead
-that would be irrelevant in application code is a defect here.
+A tracer's overhead is charged to every customer request, forever. Overhead that would be irrelevant in application code is a defect here.
 
 ## Hot paths in dd-trace-js
 
@@ -28,9 +21,7 @@ Startup / require-time:
 - `packages/dd-trace/src/index.js`, `proxy.js`, `bootstrap.js`, `packages/dd-trace/src/guardrails/index.js` (runs before anything, must stay dependency-free), `ritm.js`/`iitm.js` (require hooks — run for every `require()` in the app), `packages/datadog-instrumentations/src/helpers/hooks.js` (lazy hook table; adding eager `require`s here inflates startup), `packages/dd-trace/src/config/index.js`, `startup-log.js`.
 Anything added to these files pays cost on every span/request/require — measure it.
 
-**First determine whether the change touches one.** A slow function on a
-once-per-process path is a non-issue; the same function on span start is a
-Blocking finding. State which category each finding falls into.
+**First determine whether the change touches one.** A slow function on a once-per-process path is a non-issue; the same function on span start is a Blocking finding. State which category each finding falls into.
 
 ## Language-specific cost model for dd-trace-js
 
@@ -45,29 +36,15 @@ The following are NOT in that section - they are derived from repo code, with th
 
 ## Checks
 
-- **Allocation on hot paths.** New objects, closures, strings, boxes, or
-  collections per span / per request / per call. Look for allocations hidden in
-  convenience APIs (string formatting, interpolation, iterator chains, varargs,
-  lambdas capturing state).
-- **Work done eagerly that could be lazy** — and work done per-call that could be
-  computed once and cached.
-- **Startup and import cost.** New imports/requires/reflection/type loading at
-  module load time. Startup time is a customer-visible metric, especially for
-  serverless and short-lived processes.
-- **Synchronization.** New locks, atomics, or contended shared state on a
-  concurrent path. Note lock scope and whether it can be narrowed or removed.
-- **I/O and syscalls** on request paths: file reads, DNS, network calls, clock
-  calls in tight loops.
-- **Unbounded growth.** Caches without eviction, maps keyed by unbounded
-  cardinality (URLs, user IDs, span IDs), queues without backpressure.
-- **Complexity regressions.** Nested loops over request-sized data, repeated
-  linear scans that were previously hash lookups, or repeated recompilation of
-  regexes.
-- **Data-volume growth.** More tags/metrics/spans per request increases payload
-  size, serialization cost, and customer bill. Adding a high-cardinality tag is
-  at least Should-fix.
-- **Regex use** on hot paths: is it precompiled, anchored, and free of
-  catastrophic backtracking?
+- **Allocation on hot paths.** New objects, closures, strings, boxes, or collections per span / per request / per call. Look for allocations hidden in convenience APIs (string formatting, interpolation, iterator chains, varargs, lambdas capturing state).
+- **Work done eagerly that could be lazy** — and work done per-call that could be computed once and cached.
+- **Startup and import cost.** New imports/requires/reflection/type loading at module load time. Startup time is a customer-visible metric, especially for serverless and short-lived processes.
+- **Synchronization.** New locks, atomics, or contended shared state on a concurrent path. Note lock scope and whether it can be narrowed or removed.
+- **I/O and syscalls** on request paths: file reads, DNS, network calls, clock calls in tight loops.
+- **Unbounded growth.** Caches without eviction, maps keyed by unbounded cardinality (URLs, user IDs, span IDs), queues without backpressure.
+- **Complexity regressions.** Nested loops over request-sized data, repeated linear scans that were previously hash lookups, or repeated recompilation of regexes.
+- **Data-volume growth.** More tags/metrics/spans per request increases payload size, serialization cost, and customer bill. Adding a high-cardinality tag is at least Should-fix.
+- **Regex use** on hot paths: is it precompiled, anchored, and free of catastrophic backtracking?
 
 ## Evidence
 
@@ -81,15 +58,10 @@ node ../run-all-variants.js | sirun --summarize | node ../means.js
 ```
 - Ad-hoc perf verification per AGENTS.md § "Performance and Memory" → "Verifying perf-motivated changes": a one-file microbenchmark, ~1 s warmup, ≥5 trials each impl, re-run in a fresh shell; delete it afterwards or graduate it to `benchmark/sirun/`. A perf-justified rewrite in the diff without numbers is a finding.
 
-If a benchmark exists that covers the changed path, say whether it was run and
-what it showed. If the change plausibly regresses a hot path and no benchmark
-result is available, say so as a Should-fix ("unmeasured change on hot path") —
-do not invent numbers, and do not report an unmeasured suspicion as Blocking
-unless the cost is obvious from the code (e.g. an allocation in a per-span loop).
+If a benchmark exists that covers the changed path, say whether it was run and what it showed. If the change plausibly regresses a hot path and no benchmark result is available, say so as a Should-fix ("unmeasured change on hot path") — do not invent numbers, and do not report an unmeasured suspicion as Blocking unless the cost is obvious from the code (e.g. an allocation in a per-span loop).
 
 ## Do not
 
-- Do not micro-optimize cold paths, tests, build scripts, or tooling.
+- Do not micro-optimize genuinely cold paths, tests, build scripts, or tooling. Startup and require-time work is not cold: it runs once per process, and that once is a customer-visible cost for serverless and short-lived processes, so measure it rather than dismissing it as one-time.
 - Do not propose optimizations that reduce clarity for immeasurable gain.
-- Do not speculate about compiler/JIT behavior without evidence from this repo's
-  own benchmarks or comments.
+- Do not speculate about compiler/JIT behavior without evidence from this repo's own benchmarks or comments.

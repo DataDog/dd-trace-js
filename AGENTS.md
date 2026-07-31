@@ -354,15 +354,13 @@ as the real error rather than raising the timeout.
 
 ## Pull Requests and CI
 
-### Before pushing
+### Review Guidelines
 
-Run the `dd-apm-sdk-review` skill (`.agents/skills/dd-apm-sdk-review/`) on your change set, and do not push or open a
-non-draft PR while it reports a `Blocking` finding. Fix it, or get explicit authorization from the human you are
-working with and record the unresolved finding verbatim in the PR description. Security findings are the exception:
-route those through [`SECURITY.md`](SECURITY.md) instead — a PR description is a public forum.
+Before pushing code or creating a pull request, you must run the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/) skill on your unpushed changes unless the user specifically says not to. If any `Blocking` issues are reported, you must either fix them or get explicit authorization from the human you are working with and record the unresolved finding verbatim in the PR description. `Should-fix` and `Nit` findings should be fixed before pushing, but can be dismissed by the human.
 
-The skill owns the rest: what counts as `Blocking`, which changes are in scope, and what to do when the review cannot
-run. Nothing in the build enforces this, and it binds agents rather than human contributors.
+Exception: security findings route through [SECURITY.md](SECURITY.md) instead. A PR description is a public forum, so posting one there is an improper disclosure.
+
+The skill owns the rest: what counts as `Blocking`, which changes are in scope, and what to do when the review cannot run. Nothing in the build enforces this, and it binds agents rather than human contributors.
 
 ### Commit Messages
 
