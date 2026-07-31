@@ -57,6 +57,45 @@ describe('third-party dependency locks', () => {
     ])
   })
 
+  it('walks the peers of a production dependency and skips uninstalled optional peers', () => {
+    // `bun install --production` resolves a production package's peers, so they reach the shipped OCI package and need
+    // attribution even when the range pinning them is declared under `devDependencies` (recorded separately in the
+    // lock and never read by this walk). An optional peer nobody installed has no `packages` entry and drops out.
+    const lockPath = writeFixture('bun.lock', `{
+      "workspaces": {
+        "": {
+          "dependencies": {
+            "provider": "1.0.0"
+          },
+          "devDependencies": {
+            "dev-only": "9.9.9"
+          }
+        }
+      },
+      "packages": {
+        "provider": ["provider@1.0.0", "", {
+          "peerDependencies": {
+            "peer-sdk": ">=1.15.1",
+            "absent-optional-peer": "^1.0.0"
+          }
+        }],
+        "peer-sdk": ["peer-sdk@1.22.0", "", {
+          "dependencies": {
+            "peer-core": "1.11.0"
+          }
+        }],
+        "peer-core": ["peer-core@1.11.0", "", {}],
+        "dev-only": ["dev-only@9.9.9", "", {}],
+      },
+    }`)
+
+    assert.deepStrictEqual(listBunLockDependencies(lockPath), [
+      { name: 'peer-core', version: '1.11.0' },
+      { name: 'peer-sdk', version: '1.22.0' },
+      { name: 'provider', version: '1.0.0' },
+    ])
+  })
+
   it('reads aliases and vendored names', () => {
     const rootPackagePath = writeFixture('package.json', JSON.stringify({
       dependencies: {

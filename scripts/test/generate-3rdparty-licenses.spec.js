@@ -96,8 +96,13 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       DD_TEST_LICENSE_TRACE: tracePath,
     })
 
+    // Split on CRLF rather than LF: the workflow appends `.github/vendored-dependencies.csv`, which is CRLF, so this
+    // file has to match or the result carries mixed endings and editors keep re-LF-ing it on save.
+    const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
+    assert.match(generated, /\r\n$/, 'generated CSV must use CRLF line endings')
+    assert.doesNotMatch(generated, /(?<!\r)\n/, 'generated CSV must not contain a bare LF')
     assert.deepStrictEqual(
-      fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8').trim().split('\n'),
+      generated.trim().split('\r\n'),
       [
         '"component","origin","license","copyright"',
         '"dd-fixture","https://github.com/DataDog/dd-fixture","[\'BSD-3-Clause\']","[\'Fixture author\']"',
