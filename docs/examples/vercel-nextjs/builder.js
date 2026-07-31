@@ -55,12 +55,36 @@ async function findPackageRoot (packageName, searchPath) {
 }
 
 async function resolveTracerRoot (workPath) {
+  let tracerRoot
+
   try {
-    return await findPackageRoot('dd-trace', workPath)
+    tracerRoot = await findPackageRoot('dd-trace', workPath)
   } catch (error) {
     if (error.code !== 'MODULE_NOT_FOUND') throw error
-    return findPackageRoot('dd-trace', __dirname)
+    tracerRoot = await findPackageRoot('dd-trace', __dirname)
   }
+
+  return validateTracerRoot(tracerRoot)
+}
+
+async function validateTracerRoot (tracerRoot) {
+  const manifestPath = path.join(tracerRoot, 'package.json')
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'))
+
+  if (manifest.name !== 'dd-trace') {
+    throw new Error(`Expected ${manifestPath} to describe dd-trace`)
+  }
+
+  try {
+    await fs.access(path.join(tracerRoot, 'initialize.mjs'))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    throw new Error(
+      `dd-trace ${manifest.version || 'unknown'} does not provide initialize.mjs; install a supported version`
+    )
+  }
+
+  return tracerRoot
 }
 
 async function collectPackageGraph (tracerRoot) {
@@ -233,4 +257,5 @@ module.exports = {
   instrumentBuildOutput,
   mergeNodeOptions,
   resolveTracerRoot,
+  validateTracerRoot,
 }
