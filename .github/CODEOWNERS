@@ -1,14 +1,13 @@
 # TODO: Restructure the project by product and clean up this file.
 
-# Shared repository tooling
+# Default recursive ownership. GitHub applies the last matching rule, so the per-product entries
+# further down re-assign the parts of these trees that a product team owns.
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
-/.github/actions/ @DataDog/lang-platform-js
-/.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
+/.github/ @DataDog/lang-platform-js
 /.gitlab/ @DataDog/lang-platform-js
 /.husky/ @DataDog/lang-platform-js
 /.vscode/ @DataDog/lang-platform-js
-/.github/all-green/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 /vendor/ @DataDog/lang-platform-js
 
@@ -354,8 +353,6 @@
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
-/docs/bun.lock @DataDog/lang-platform-js
-/vendor/bun.lock @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/lang-platform-js
@@ -385,6 +382,9 @@
 /.github/dependabot.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/lang-platform-js
+
+/docs/bun.lock @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
