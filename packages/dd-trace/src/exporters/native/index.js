@@ -493,14 +493,24 @@ class NativeExporter {
     // into the handler below and leaves later groups unsent — acceptable since
     // flushInterval:0 only runs against a local test agent or a short-lived
     // lambda.
+    // Each request carries its own `rate_by_service`, so feed every response to
+    // the sampler rather than only whatever the chain settles with: an early
+    // request can return fresh rates while a later one returns `unchanged`, and
+    // taking just the last would leave agent-driven sampling stale.
+    const applyResponse = (response) => {
+      this.#updateSamplingRates(response)
+      return response
+    }
     let sendGrouped
     try {
       sendGrouped = this._config.flushInterval === 0 && groups.length > 1
         ? groups.reduce(
-          (previous, group) => previous.then(() => this._nativeSpans.flushSpansGrouped([group])),
+          (previous, group) => previous
+            .then(() => this._nativeSpans.flushSpansGrouped([group]))
+            .then(applyResponse),
           Promise.resolve('no spans to flush')
         )
-        : this._nativeSpans.flushSpansGrouped(groups)
+        : this._nativeSpans.flushSpansGrouped(groups).then(applyResponse)
     } catch (err) {
       this.#handleSendError(err)
       return
@@ -510,10 +520,6 @@ class NativeExporter {
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        // The agent's response carries per-service sampling rates. Feed them
-        // back into the priority sampler so adaptive (agent-driven) sampling
-        // works in native mode, matching the legacy AgentWriter behaviour.
-        this.#updateSamplingRates(response)
         // Drain any spans that arrived while the send was in flight. Flush
         // callbacks wait until the exporter is idle so explicit flush endpoints
         // only acknowledge once all queued sends have reached the agent.

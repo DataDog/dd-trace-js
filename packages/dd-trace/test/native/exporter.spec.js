@@ -667,6 +667,31 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
     })
 
+    it('applies rates from every request when a zero-interval flush sends per group', async () => {
+      // At flushInterval:0 a coalesced flush sends one request per group. Each
+      // carries its own `rate_by_service`, so taking only whatever the chain
+      // settles with loses fresh rates whenever a later request says 'unchanged'.
+      const rates = { 'service:web,env:prod': 0.5 }
+      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
+
+      let release
+      nativeSpans.flushSpansGrouped = sinon.stub()
+      nativeSpans.flushSpansGrouped.onCall(0).returns(new Promise(resolve => { release = resolve }))
+      nativeSpans.flushSpansGrouped.onCall(1).resolves(JSON.stringify({ rate_by_service: rates }))
+      nativeSpans.flushSpansGrouped.onCall(2).resolves('unchanged')
+
+      // First export starts a send; the next two queue behind it and are drained
+      // together, which is what produces the multi-group per-request chain.
+      exporter.export([createMockSpan(1n)])
+      exporter.export([createMockSpan(2n)])
+      exporter.export([createMockSpan(3n)])
+      release('unchanged')
+      await clock.tickAsync(0)
+
+      assert.strictEqual(nativeSpans.flushSpansGrouped.callCount, 3)
+      sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
+    })
+
     it('does not update rates for sentinel responses (unchanged / no spans / empty)', async () => {
       // The native layer resolves 'unchanged' when the rates payload-version
       // header matches the previous flush, 'no spans to flush' when nothing
