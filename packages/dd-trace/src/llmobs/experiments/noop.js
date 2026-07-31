@@ -88,6 +88,53 @@ class NoopExperiment {
   }
 }
 
+class NoopExperimentRecorder {
+  #name
+
+  /**
+   * @param {string} name
+   */
+  constructor (name = '') {
+    this.#name = name
+    this.experimentId = null
+  }
+
+  /**
+   * @returns {string}
+   */
+  name () {
+    return this.#name
+  }
+
+  /**
+   * @returns {null}
+   */
+  url () {
+    return null
+  }
+
+  /**
+   * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
+   */
+  submitSpan () {
+    return Promise.resolve({ experimentId: null, spanId: null, traceId: null, url: null })
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics () {
+    return Promise.resolve()
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  close () {
+    return Promise.resolve()
+  }
+}
+
 // No-op Experiments used when LLM Observability is disabled or the API/APP keys
 // are not configured. Operations warn and return inert objects rather than
 // throwing, so intentionally disabled experiments remain graceful.
@@ -115,6 +162,15 @@ class NoopExperiments {
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<NoopExperimentRecorder>}
+   */
+  startExperiment (options = {}) {
+    this.#warn()
+    return Promise.resolve(new NoopExperimentRecorder(options.name))
   }
 }
 
