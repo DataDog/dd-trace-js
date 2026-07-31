@@ -67,8 +67,8 @@ class Logger {
     }
 
     // Note: timestamp is in nanoseconds (as defined by OpenTelemetry LogRecord API)
-    if (!logRecord.timestamp) {
-      logRecord.timestamp = Number(process.hrtime.bigint())
+    if (logRecord.timestamp === undefined) {
+      logRecord.timestamp = Date.now() * 1e6
     }
 
     if (!logRecord.context) {
