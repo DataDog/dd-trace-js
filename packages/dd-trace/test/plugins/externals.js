@@ -528,9 +528,6 @@ module.exports = {
       version: '0.0.34',
       dep: true,
       forced: true,
-      overrides: {
-        '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
-      },
     },
   ],
   langgraph: [
