@@ -6,27 +6,39 @@ const { getSizeOrZero } = require('../../dd-trace/src/datastreams')
 /** @typedef {Record<string, KafkaHeaderValue | KafkaHeaderValue[]>} KafkaHeaderMap */
 /** @typedef {Array<Record<string, KafkaHeaderValue>>} NativeHeaderList */
 
+/** @typedef {Record<string, string | string[]>} TextMap */
+
 /**
- * Repeated fields collapse to the last usable value: every propagation key the
- * tracer reads expects a scalar, and handing it the duplicates instead invents
- * context nobody sent — trace ids `123` and `456` extract as trace `1686`.
- *
- * @param {KafkaHeaderMap | NativeHeaderList | null | undefined} bufferMap
+ * @param {TextMap} textMap
+ * @param {string} key
+ * @param {KafkaHeaderValue} value
  */
+function addHeaderValue (textMap, key, value) {
+  if (value === null || value === undefined) return
+
+  const existing = textMap[key]
+  if (existing === undefined) {
+    textMap[key] = value.toString()
+  } else if (typeof existing === 'string') {
+    textMap[key] = [existing, value.toString()]
+  } else {
+    existing.push(value.toString())
+  }
+}
+
+/** @param {KafkaHeaderMap | NativeHeaderList | null | undefined} bufferMap */
 function convertToTextMap (bufferMap) {
   if (!bufferMap) return null
 
-  /** @type {Record<string, string>} */
-  const textMap = {}
+  // A `toString` or `__proto__` wire key would read an inherited value back as a repeat.
+  /** @type {TextMap} */
+  const textMap = Object.create(null)
 
   // rdKafka reports one single-key record per wire field.
   if (Array.isArray(bufferMap)) {
     for (const headerMap of bufferMap) {
       for (const key of Object.keys(headerMap)) {
-        const value = headerMap[key]
-        if (value !== null && value !== undefined) {
-          textMap[key] = value.toString()
-        }
+        addHeaderValue(textMap, key, headerMap[key])
       }
     }
     return textMap
@@ -35,15 +47,11 @@ function convertToTextMap (bufferMap) {
   for (const key of Object.keys(bufferMap)) {
     const value = bufferMap[key]
     if (Array.isArray(value)) {
-      for (let index = value.length - 1; index >= 0; index--) {
-        const repeated = value[index]
-        if (repeated !== null && repeated !== undefined) {
-          textMap[key] = repeated.toString()
-          break
-        }
+      for (const repeated of value) {
+        addHeaderValue(textMap, key, repeated)
       }
-    } else if (value !== null && value !== undefined) {
-      textMap[key] = value.toString()
+    } else {
+      addHeaderValue(textMap, key, value)
     }
   }
   return textMap
