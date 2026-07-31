@@ -2,6 +2,7 @@
 
 const { performance } = require('node:perf_hooks')
 
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
@@ -41,6 +42,7 @@ const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
 const attemptToFixExecutions = new Map()
+const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
 function waitForHitProbe () {
   const promises = {}
@@ -643,14 +645,16 @@ function getTestFinishInfo (test, status, config, error) {
     isFinalAttempt,
   })
 
-  recordTestManagementExecution({
-    testSuite: getTestSuitePath(test.file, process.cwd()),
-    testName: test.fullTitle(),
-    status,
-    isAttemptToFix: _ddIsAttemptToFix,
-    isDisabled: _ddIsDisabled,
-    isQuarantined: _ddIsQuarantined,
-  })
+  if (!isMochaWorker) {
+    recordTestManagementExecution({
+      testSuite: getTestSuitePath(test.file, process.cwd()),
+      testName: test.fullTitle(),
+      status,
+      isAttemptToFix: _ddIsAttemptToFix,
+      isDisabled: _ddIsDisabled,
+      isQuarantined: _ddIsQuarantined,
+    })
+  }
 
   if (_ddIsAttemptToFix) {
     recordAttemptToFixExecution(attemptToFixExecutions, {

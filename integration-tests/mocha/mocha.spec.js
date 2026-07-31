@@ -5878,7 +5878,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
-              assert.match(stdout, /Disabled: \d+ tests? skipped\./)
+              assert.match(stdout, /Disabled: 1 test skipped\./)
               assert.strictEqual(exitCode, 0)
             } else {
               assert.match(stdout, /I am running/)
@@ -6012,7 +6012,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.match(
                 stdout,
-                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+                /Quarantined: 1 test run; 1 failure did not affect the test session\./
               )
               assert.strictEqual(exitCode, 0)
             } else {
