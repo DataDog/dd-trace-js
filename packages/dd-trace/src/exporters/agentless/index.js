@@ -3,11 +3,19 @@
 const { URL } = require('node:url')
 const os = require('node:os')
 
+const { channel } = require('dc-polyfill')
+
 const log = require('../../log')
 const { entityId } = require('../common/docker')
 const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Replaces the previous subscription on each construction, so re-creating the exporter
+// (e.g. across tests) doesn't accumulate listeners.
+let unsubscribeIdentityRefresh = null
 
 /**
  * Agentless exporter for APM trace intake.
@@ -55,6 +63,11 @@ class AgentlessExporter {
       site,
       metadata,
     })
+
+    unsubscribeIdentityRefresh?.()
+    const onIdentityRefresh = () => this._writer.resetPendingBatch()
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
     if (ddTrace?.beforeExitHandlers) {

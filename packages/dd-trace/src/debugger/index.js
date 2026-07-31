@@ -40,12 +40,13 @@ module.exports = {
 }
 
 /**
- * Check if the Debugger worker is currently running
+ * Whether a debugger session is running or still starting (waiting on detectDebuggerEndpoint()).
+ * Must cover the pending window too, or proxy.js#updateDebugger never calls stop() for it.
  *
- * @returns {boolean} True if the worker is started, false otherwise
+ * @returns {boolean} True if start() has been called and cleanup() hasn't run since.
  */
 function isStarted () {
-  return worker !== null
+  return configChannel !== null
 }
 
 /**
@@ -58,7 +59,8 @@ function isStarted () {
  * @param {RemoteConfig} rcInstance - The RemoteConfig instance
  */
 function start (config, rcInstance) {
-  if (worker !== null) return
+  // configChannel lives from here until cleanup(), covering the async gap before worker exists.
+  if (worker !== null || configChannel !== null) return
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
@@ -108,6 +110,10 @@ function start (config, rcInstance) {
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
   detectDebuggerEndpoint(config, (_inputPath) => {
+    // stop() may have already run cleanup() while this was in flight - don't start a worker
+    // for a session that's been told to stop.
+    if (configChannel === null) return
+
     inputPath = _inputPath
 
     worker = new Worker(
@@ -172,9 +178,16 @@ function configure (config) {
  * Safe to call even if the worker is not started.
  */
 function stop () {
-  if (worker === null) return
+  if (worker === null && configChannel === null) return
 
   log.debug('[debugger] Stopping Dynamic Instrumentation client...')
+
+  if (worker === null) {
+    // Still waiting on detectDebuggerEndpoint() - no worker to terminate, but start()'s
+    // subscriptions and remote-config handler still need cleanup.
+    cleanup()
+    return
+  }
 
   try {
     worker.terminate()

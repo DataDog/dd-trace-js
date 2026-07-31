@@ -6,8 +6,11 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('profiler', function () {
   let Profiler
@@ -47,6 +50,7 @@ describe('profiler', function () {
         systemInfoReport: { oomMonitoring: { enabled: false } },
       }
     },
+    getProfilingTags: (config) => ({ ...config.tags }),
   }
 
   async function waitForExport () {
@@ -544,6 +548,39 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.hasMissingSourceMaps, false)
+    })
+
+    it('recomputes tags when the identity-refresh channel fires', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(startOptions)
+
+      clock.tick(interval)
+
+      const { tags } = await exporterPromise
+
+      assert.strictEqual(tags['runtime-id'], 'refreshed-id')
+    })
+
+    it('stops reacting to identity refresh after stop', async () => {
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+      profiler.stop()
+
+      // Should not throw even though the profiler is no longer running.
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(startOptions)
     })
   })
 

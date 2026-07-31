@@ -36,7 +36,7 @@ for (let i = 0; i < 12; i++) MANY_TAGS.push(`dim_${i}:value_${i}`)
 
 function preflight () {
   client._add(NAME, 42, 'g', FEW_TAGS)
-  // flush() also resets the buffer/offset/queue, leaving the client clean for the run below.
+  // flush() also clears the buffer/offset/queue, so the run below starts clean.
   client.flush()
   assert.ok(sent?.toString().includes(NAME) && sent.toString().includes('env:bench'),
     '_add did not format the metric line with global tags')
@@ -59,8 +59,8 @@ if (VARIANT === 'aggregated') {
   const type = VARIANT === 'no-tags' ? 'c' : 'g'
   for (let i = 0; i < OPERATIONS; i++) {
     client._add(NAME, i, type, tags)
-    // Drain the datagram queue without sending so memory stays flat. _enqueue() returns the live
-    // queue array, so truncating it in place is O(1) and skips flush()'s send-path work entirely.
+    // _enqueue() returns the live queue array; truncating it drains memory in O(1) without
+    // flush()'s send-path overhead.
     if ((i & 0x7FF) === 0) client._enqueue().length = 0
   }
 }
