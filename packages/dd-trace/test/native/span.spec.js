@@ -678,6 +678,21 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(nativeSpans.addSpanEvent.getCall(0).args[1], 'good')
     })
 
+    it('uses the native event slot for OTLP even when the agent flag is disabled', () => {
+      // The meta fallback exists for agents that cannot read the native slot. An
+      // OTLP collector would receive it as a JSON string attribute instead of
+      // structured events, so OTLP must always take the native path.
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = false
+      tracer._config.OTEL_TRACES_EXPORTER = 'otlp'
+      span._events.push({ name: 'exception', startTime: 4 })
+
+      span.finish()
+
+      sinon.assert.calledOnce(nativeSpans.addSpanEvent)
+      assert.strictEqual(nativeSpans.addSpanEvent.getCall(0).args[1], 'exception')
+      assert.strictEqual(span._spanContext.getTag('events'), undefined)
+    })
+
     it('falls back to the `events` meta tag when the flag is disabled', () => {
       tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = false
       span._events.push({ name: 'evt', startTime: 1, attributes: { k: 'v' } })

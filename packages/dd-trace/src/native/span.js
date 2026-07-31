@@ -559,15 +559,18 @@ class NativeDatadogSpan extends DatadogSpan {
    * shape the legacy JS encoder writes (`meta.events` via stringifySpanEvents),
    * which is what the agent expects when it doesn't support native span events
    * (system-tests Test_SpanEvents_WithoutAgentSupport).
+   *
+   * The meta fallback exists purely for agents that cannot read the native slot,
+   * so it must not apply to OTLP: libdatadog maps the native `span_events` into
+   * real OTLP events, whereas the meta tag would reach the collector as a JSON
+   * string attribute. The deleted OTLP transformer converted events regardless of
+   * this agent-protocol flag, so OTLP always takes the native path.
    */
   #serializeSpanEvents () {
     if (!this._events?.length) return
 
-    // When native span events are enabled (matching the legacy encoder's
-    // `DD_TRACE_NATIVE_SPAN_EVENTS` gate), append each event to the top-level
-    // v0.4 `span_events` field via the native setter — no truncation, typed
-    // attributes. Otherwise fall back to the `events` meta tag (plain JSON).
-    if (this.tracer()._config.DD_TRACE_NATIVE_SPAN_EVENTS) {
+    const config = this.tracer()._config
+    if (config.DD_TRACE_NATIVE_SPAN_EVENTS || config.OTEL_TRACES_EXPORTER === 'otlp') {
       for (const event of this._events) {
         // `addEvent` and the OTel bridge do not type-check `name`. A non-string
         // reaches the WASM string parameter and throws out of `finish()` into
