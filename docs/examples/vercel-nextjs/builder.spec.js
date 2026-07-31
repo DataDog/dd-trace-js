@@ -26,6 +26,8 @@ describe('Vercel Next Builder prototype', () => {
       optionalDependencies: { 'missing-optional-dependency': '1.0.0' },
     }))
     await fs.writeFile(path.join(tracerRoot, 'initialize.mjs'), 'globalThis.__datadogInitialized = true\n')
+    await fs.mkdir(path.join(tracerRoot, 'vendor'), { recursive: true })
+    await fs.writeFile(path.join(tracerRoot, 'vendor', 'runtime.js'), 'module.exports = true\n')
 
     const dependencyRoot = path.join(workPath, 'packages', 'node_modules', 'tracer-dependency')
     await fs.mkdir(dependencyRoot, { recursive: true })
@@ -71,8 +73,12 @@ describe('Vercel Next Builder prototype', () => {
       '.datadog/vercel-runtime/node_modules/dd-trace/initialize.mjs'
     )
     assert.strictEqual(
-      nodeConfig.filePathMap['node_modules/dd-trace/node_modules/tracer-dependency/index.js'],
-      '.datadog/vercel-runtime/node_modules/dd-trace/node_modules/tracer-dependency/index.js'
+      nodeConfig.filePathMap['node_modules/tracer-dependency/index.js'],
+      '.datadog/vercel-runtime/node_modules/tracer-dependency/index.js'
+    )
+    assert.strictEqual(
+      nodeConfig.filePathMap['node_modules/dd-trace/vendor/runtime.js'],
+      '.datadog/vercel-runtime/node_modules/dd-trace/vendor/runtime.js'
     )
     await fs.access(path.join(workPath, nodeConfig.filePathMap['node_modules/dd-trace/initialize.mjs']))
     await assert.rejects(fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace')))
