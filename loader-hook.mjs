@@ -31,12 +31,10 @@ const includeModuleNames = new Set()
 let moduleNameAlternation = ''
 
 if (!isInitializeMainThread) {
-  const applyPm2Env = require('./packages/dd-trace/src/guardrails/apply-pm2-env.js')
+  require('./packages/dd-trace/src/guardrails/apply-pm2-env.js')
   const regexpEscapeModule = require('./vendor/dist/escape-string-regexp/index.js')
   const hooks = require('./packages/datadog-instrumentations/src/helpers/hooks.js')
   const { isRelativeRequire } = require('./packages/datadog-instrumentations/src/helpers/shared-utils.js')
-
-  applyPm2Env()
 
   regexpEscape = regexpEscapeModule.default
 

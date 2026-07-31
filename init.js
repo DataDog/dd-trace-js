@@ -1,7 +1,6 @@
 'use strict'
 
-var applyPm2Env = require('./packages/dd-trace/src/guardrails/apply-pm2-env')
-applyPm2Env()
+require('./packages/dd-trace/src/guardrails/apply-pm2-env')
 
 var guard = require('./packages/dd-trace/src/guardrails')
 

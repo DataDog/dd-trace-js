@@ -300,9 +300,9 @@ describe('init.js', () => {
       return checkEnv({ DD_TRACE_SAMPLE_RATE: '0.5' })
     })
 
-    it('skips keys with null values', () => {
+    it('coerces null values to strings', () => {
       process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
-      return checkEnv({ DD_SERVICE: undefined })
+      return checkEnv({ DD_SERVICE: 'null' })
     })
 
     it('does not crash on malformed pm2_env JSON', () => {
