@@ -24,7 +24,7 @@ This lane exists because that class of defect kept escaping. On this skill's own
 Anchor both sides. A coherence finding names the two things that disagree:
 
 ```
-Blocking | src/writer.js:33 contradicts src/writer.js:20 (its own JSDoc) |
+P0 | src/writer.js:33 contradicts src/writer.js:20 (its own JSDoc) |
 the guard excludes `status === undefined`, but the doc above it says the function
 reports connection failures - which are exactly the no-status case
 Reviewer: coherence

@@ -21,7 +21,7 @@ Startup / require-time:
 - `packages/dd-trace/src/index.js`, `proxy.js`, `bootstrap.js`, `packages/dd-trace/src/guardrails/index.js` (runs before anything, must stay dependency-free), `ritm.js`/`iitm.js` (require hooks — run for every `require()` in the app), `packages/datadog-instrumentations/src/helpers/hooks.js` (lazy hook table; adding eager `require`s here inflates startup), `packages/dd-trace/src/config/index.js`, `startup-log.js`.
 Anything added to these files pays cost on every span/request/require — measure it.
 
-**First determine whether the change touches one.** A slow function on a once-per-process path is a non-issue; the same function on span start is a Blocking finding. State which category each finding falls into.
+**First determine whether the change touches one.** A slow function on a once-per-process path is a non-issue; the same function on span start is a P0 finding. State which category each finding falls into.
 
 ## Language-specific cost model for dd-trace-js
 
@@ -43,7 +43,7 @@ The following are NOT in that section - they are derived from repo code, with th
 - **I/O and syscalls** on request paths: file reads, DNS, network calls, clock calls in tight loops.
 - **Unbounded growth.** Caches without eviction, maps keyed by unbounded cardinality (URLs, user IDs, span IDs), queues without backpressure.
 - **Complexity regressions.** Nested loops over request-sized data, repeated linear scans that were previously hash lookups, or repeated recompilation of regexes.
-- **Data-volume growth.** More tags/metrics/spans per request increases payload size, serialization cost, and customer bill. Adding a high-cardinality tag is at least Should-fix.
+- **Data-volume growth.** More tags/metrics/spans per request increases payload size, serialization cost, and customer bill. Adding a high-cardinality tag is at least P1.
 - **Regex use** on hot paths: is it precompiled, anchored, and free of catastrophic backtracking?
 
 ## Evidence
@@ -58,7 +58,7 @@ node ../run-all-variants.js | sirun --summarize | node ../means.js
 ```
 - Ad-hoc perf verification per AGENTS.md § "Performance and Memory" → "Verifying perf-motivated changes": a one-file microbenchmark, ~1 s warmup, ≥5 trials each impl, re-run in a fresh shell; delete it afterwards or graduate it to `benchmark/sirun/`. A perf-justified rewrite in the diff without numbers is a finding.
 
-If a benchmark exists that covers the changed path, say whether it was run and what it showed. If the change plausibly regresses a hot path and no benchmark result is available, say so as a Should-fix ("unmeasured change on hot path") — do not invent numbers, and do not report an unmeasured suspicion as Blocking unless the cost is obvious from the code (e.g. an allocation in a per-span loop).
+If a benchmark exists that covers the changed path, say whether it was run and what it showed. If the change plausibly regresses a hot path and no benchmark result is available, say so as a P1 ("unmeasured change on hot path") — do not invent numbers, and do not report an unmeasured suspicion as P0 unless the cost is obvious from the code (e.g. an allocation in a per-span loop).
 
 ## Do not
 

@@ -26,7 +26,7 @@ Read enough of the surrounding code to know what the existing shape *is* before 
 
 - **Layer placement.** Is each new piece in the right module/package/layer? Does it reach across a boundary the architecture keeps separate (e.g. core logic importing from an integration, an integration reaching into tracer internals, public API depending on private internals)?
 - **Direction of dependencies.** Does the change introduce a cycle, or make a lower layer depend on a higher one?
-- **Duplication of an existing mechanism.** Does the repo already have a helper/abstraction/registry for this? Adding a second way to do an existing thing is a Should-fix at minimum.
+- **Duplication of an existing mechanism.** Does the repo already have a helper/abstraction/registry for this? Adding a second way to do an existing thing is a P1 at minimum.
 - **Abstraction fit.** Is a new abstraction earning its keep, or is it a wrapper with one caller? Conversely, is logic that should be shared being copy-pasted into a second integration?
 - **Extension points.** If this is an integration/plugin/instrumentation, does it use the repo's standard extension mechanism rather than a bespoke hook?
 - **Configuration surface.** Does a new option follow the existing config registration path, or does it read an env var directly, bypassing precedence, validation, and telemetry? The path is:
@@ -38,7 +38,7 @@ Only the parts AGENTS.md does not state:
 - Naming: size/time options carry unit suffixes (`timeoutMs`, `maxBytes`, `intervalSeconds`).
 - A missing `supported-configurations.json` entry is a CI failure, not a nit - so a diff that reads a new `DD_*` var without registering it is Blocking.
 - **Lifecycle.** Startup/shutdown ordering, lazy init, fork/thread safety, and cleanup: does the change respect the existing lifecycle, or does it assume eager initialization or single-threaded use?
-- **Error strategy.** Does the change match the repo's convention for tracer failures (fail-soft, log-and-continue, never break the app)? A new hard throw on a customer path is a Blocking finding.
+- **Error strategy.** Does the change match the repo's convention for tracer failures (fail-soft, log-and-continue, never break the app)? A new hard throw on a customer path is a P0 finding.
 - **Public API surface.** Does the change add to it intentionally, and is that addition necessary? Public surface is forever. What counts as public here:
 
 Read **AGENTS.md § "Public TypeScript Types"** for the two-surface rule (`index.d.ts` vs `index.d.v5.ts`) and its stance on adding to npm-exported classes. Judge the diff against that section rather than a summary of it.

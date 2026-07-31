@@ -30,7 +30,10 @@ Read **AGENTS.md § "Code Style & Linting"** for the style rules and the lint en
 ```bash
 npm run lint        # check_licenses + check-no-* + eslint --max-warnings 0 + codeowners audit + verify-exercised-tests
 npm run type:check  # tsc --noEmit -p tsconfig.dev.json
-./node_modules/.bin/eslint --max-warnings 0 <changed files>
+./node_modules/.bin/eslint --no-warn-ignored --max-warnings 0 <changed .js/.mjs/.ts files only>
+# --no-warn-ignored matters: without it, passing a .md or other ignored file makes
+# eslint exit nonzero on "File ignored because no matching configuration was
+# supplied", so a docs- or agent-file-only change can never review clean.
 ```
 
 Generated-artifact verifiers CI runs, which a config or plugin change can break:
@@ -51,8 +54,8 @@ Report the actual output. If a command fails to run (missing toolchain, missing 
 
 - **Lint / format / type clean** on the changed files, per the commands above.
 - **File placement and naming.** Does a new file live where this repo puts that kind of file, with the naming pattern this repo uses? Compare against the nearest existing sibling, not against a generic idiom.
-- **Prior art.** Find the most similar existing code in the repo and compare structure. Deviating from an established local pattern without reason is a Should-fix. Name the file you compared against.
-- **Config options.** Is a new option registered through this repo's own registration path, named per its `DD_*` conventions, documented, and given telemetry where the repo does that? Bypassing the registry is Blocking: it silently breaks precedence, validation, and config telemetry. The path is:
+- **Prior art.** Find the most similar existing code in the repo and compare structure. Deviating from an established local pattern without reason is a P1. Name the file you compared against.
+- **Config options.** Is a new option registered through this repo's own registration path, named per its `DD_*` conventions, documented, and given telemetry where the repo does that? Bypassing the registry is P0: it silently breaks precedence, validation, and config telemetry. The path is:
 
 Read **AGENTS.md § "Adding New Configuration Options"** - it lists the required steps and the file for each. Do not restate them from memory; open the section and check the diff against it.
 
@@ -64,7 +67,7 @@ Only the parts AGENTS.md does not state:
 - **Error/logging conventions.** Does the change use the repo's logger, log levels, and error-wrapping idioms rather than language defaults?
 - **Test conventions.** Right framework, right directory, right helpers, right fixture style, right naming. Does it use the repo's existing test utilities instead of hand-rolling setup?
 - **Imports and visibility.** Import ordering/grouping per repo style; internal vs public symbol placement; no reaching into another module's private namespace.
-- **Build and CI wiring.** New files, tests, or integrations that need to be registered somewhere (build list, test matrix, integration registry, package manifest, CODEOWNERS) — is that registration present? Missing wiring means the code silently never runs, which is Blocking.
+- **Build and CI wiring.** New files, tests, or integrations that need to be registered somewhere (build list, test matrix, integration registry, package manifest, CODEOWNERS) — is that registration present? Missing wiring means the code silently never runs, which is P0.
 - **Commit and PR hygiene** as this repo requires:
 
 Read **AGENTS.md § "Pull Requests and CI"** and its subsections "Commit Messages", "PR Requirements", and "Flaky tests", plus **§ "Always Consider Backportability"**. Those own the title format and allowed types, the semver label rules, the PR template, the all-green policy, the flaky-test policy, and the `DD_MAJOR` guard for breaking changes.

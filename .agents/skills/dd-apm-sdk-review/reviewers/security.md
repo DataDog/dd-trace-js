@@ -9,7 +9,7 @@ This is a tracer. It runs inside every customer application, sees every request,
 ## Tracer-specific checks (highest value — do these first)
 
 - **Data exposure into telemetry.** Does the change put request/response bodies, headers, query strings, cookies, auth tokens, connection strings, SQL bind values, user identifiers, or file paths into span tags, metrics, logs, or telemetry payloads? Anything reaching a span tag is customer-visible in the Datadog UI and leaves the customer's process.
-- **Obfuscation and redaction.** If the change touches query/URL/SQL handling, is the existing obfuscation still applied on every path, including error and fallback paths? Adding a new code path that bypasses redaction is a Blocking finding.
+- **Obfuscation and redaction.** If the change touches query/URL/SQL handling, is the existing obfuscation still applied on every path, including error and fallback paths? Adding a new code path that bypasses redaction is a P0 finding.
 - **Logging.** Does new logging print user data, config values that may contain secrets (API keys, DSNs, passwords in URLs), or full exception payloads?
 - **Config handling.** Is user-supplied config (env vars, config files, remote config) validated before use? Remote config is attacker-relevant: it arrives over the network, so it must never reach `eval`, a path concatenation, or a process spawn, and anything that decodes it must validate against an expected schema with bounded size. Decoding RC payloads is normal here — this repo's RC client already base64-decodes and `JSON.parse`s them — so the finding is unsafe or unvalidated deserialization, never deserialization itself.
 - **Instrumentation safety.** Does instrumentation code execute application-controlled strings, deserialize untrusted input, or reflect on arbitrary names? Does it swallow exceptions from the *application* in a way that hides a security-relevant failure — or worse, propagate a tracer exception into the customer's request path?
@@ -46,4 +46,4 @@ Your findings are the one category that must **not** be pasted into a public pul
 
 - Do not report generic advice with no anchor in the diff.
 - Do not report theoretical issues in code the change did not touch.
-- Do not escalate a missing test to Blocking — that belongs to the maintainability reviewer.
+- Do not escalate a missing test to P0 — that belongs to the maintainability reviewer.
