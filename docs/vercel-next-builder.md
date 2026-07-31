@@ -11,7 +11,9 @@ Vercel's Node File Trace for its declared runtime dependencies. It maps that
 runtime into each Node `.func` and prepends
 `--import=dd-trace/initialize.mjs` to each function's existing `NODE_OPTIONS`.
 It preserves handlers and Edge output and does not use project-global
-`NODE_OPTIONS`, trace drain, source mapping, debug logging, or customer secrets.
+`NODE_OPTIONS`, Trace Drain, source mapping, debug logging, or customer secrets.
+The Datadog integration configures direct OTLP intake for traces, logs, and
+metrics independently of the Builder's packaging work.
 
 The target package name is `@datadog/vercel-next-builder`. It must declare
 `@vercel/next`, `@vercel/nft`, and a supported `dd-trace` version as

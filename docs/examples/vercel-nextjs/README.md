@@ -1,4 +1,4 @@
-# Datadog APM For Next.js On Vercel
+# Datadog APM for Next.js on Vercel
 
 This prototype shows the Builder boundary required to initialize `dd-trace`
 before Next.js in Vercel Node functions. It delegates the framework build to
@@ -26,9 +26,11 @@ It does not change the function handler, set project-global `NODE_OPTIONS`,
 alter Edge output, or depend on Trace Drain.
 
 Use Vercel's normal source-build deployment path. The Datadog integration must
-configure the selected agentless exporter, `DD_API_KEY`, and normal Datadog
-service tags as encrypted project settings. Do not commit API keys or enable
-`DD_TRACE_DEBUG` in production.
+configure direct OTLP endpoints and encrypted headers for traces, logs, and
+metrics. It must also enable `OTEL_TRACES_EXPORTER=otlp`,
+`DD_LOGS_OTEL_ENABLED=true`, and `DD_METRICS_OTEL_ENABLED=true`, alongside the
+normal Datadog service tags. Customers do not commit API keys or OTLP headers
+to their application, and `DD_TRACE_DEBUG` remains disabled in production.
 
 ## Release Status
 
