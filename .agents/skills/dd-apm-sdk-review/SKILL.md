@@ -3,7 +3,6 @@ name: dd-apm-sdk-review
 description: "ALWAYS USE BEFORE PUSHING CODE! Multi-perspective read-only review of changes in dd-trace-js, consolidated into one report with an explicit go / no-go verdict."
 model: opus
 effort: high
-compatibility: "Requires a git checkout and a shell. Parallel subagents strongly preferred; degrades to sequential passes without them. Network access only for cross-SDK verification."
 ---
 
 # dd-apm-sdk-review
@@ -78,6 +77,8 @@ Also note, for the reviewers' benefit:
 2. **Sequential isolated subagents** — no parallelism available, but isolated contexts are. Run them in order.
 3. **Single-context sequential passes** — neither available. Run one pass per perspective yourself, and label the final report `DEGRADED MODE: single context, findings may bleed between perspectives`.
 
+**Before you hand anything over, scan the diff for secrets.** Step 1 prints the contents of committed, staged, and unstaged changes, so a credential that was accidentally committed or staged is now in your context — and delegating it verbatim would put it in every reviewer's context too, which is exactly what their own rules forbid. Look for tokens, API keys, private keys, connection strings, `.env` values, and anything shaped like a long random secret. Replace each value with `[REDACTED — see location]`, keep the `path:line`, and delegate the redacted diff. Report the leak by location, tell the human immediately, and route it through the process in `SECURITY.md`: a committed credential needs rotating, not just deleting. Never paste the value into the report, a PR, or a reviewer prompt.
+
 Give every reviewer two things:
 
 1. the full text of its own `reviewers/<perspective>.md` — each already carries the repo context that perspective needs, so do not restate architecture, hot paths, commands, or release-note policy here
@@ -96,7 +97,7 @@ Collect their reports. Then:
     | verdict | condition | gate effect |
     |---|---|---|
     | `BLOCK` | ≥1 P0 finding | `DO NOT PUSH` |
-    | `APPROVE_WITH_COMMENTS` | P1 and/or P2 only | fixes preferred, but not required |
+    | `APPROVE_WITH_COMMENTS` | P1 and/or P2 only | push allowed **after the human sees the findings**; fixes preferred, and only the human may dismiss them |
     | `APPROVE` | nothing to raise | push allowed |
 
 A reviewer that could not do its job reports `NOT VERIFIED (<reason>)` for its area. `NOT VERIFIED` never blocks.
@@ -133,7 +134,7 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED
 - <changed files with no test changes; missing release note; etc.>
 ```
 
-Then state plainly: `READY TO PUSH` or `DO NOT PUSH`.
+Then state plainly: `READY TO PUSH` or `DO NOT PUSH`. On `APPROVE_WITH_COMMENTS`, `READY TO PUSH` is not yours to declare unattended: show the P1 and P2 findings and ask whether to fix or dismiss them. Dismissal is the human's call, never a default.
 
 ## Step 4 — Fix and re-review
 

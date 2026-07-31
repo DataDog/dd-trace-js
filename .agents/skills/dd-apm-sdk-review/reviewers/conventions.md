@@ -73,7 +73,7 @@ Only the parts AGENTS.md does not state:
 Read **AGENTS.md § "Pull Requests and CI"** and its subsections "Commit Messages", "PR Requirements", and "Flaky tests", plus **§ "Always Consider Backportability"**. Those own the title format and allowed types, the semver label rules, the PR template, the all-green policy, the flaky-test policy, and the `DD_MAJOR` guard for breaking changes.
 
 Only the parts not stated there:
-- The authoritative list of allowed title types is `.github/workflows/pr-title.yml` (`PR_TITLE_PATTERN`), which also auto-syncs the type/scope/semver labels from the title - so a wrong title produces a wrong release label.
+- `.github/workflows/pr-title.yml` (`PR_TITLE_PATTERN`) is what actually gates the title, and it auto-syncs the type/scope/semver labels - so a wrong title produces a wrong release label. Its accepted set is wider than the list in AGENTS.md (it also allows `style` and `build`). Treat the workflow as the enforced gate and AGENTS.md as the house preference: a title the workflow accepts is not a finding, but flag the divergence itself as P2 so one of the two gets fixed.
 - `only-land-on-next` is applied by hand for changes that must not land on stable release lines (CONTRIBUTING.md, "Indicate intended release targets").
 - There is no changelog file in this repo: the PR title is the release note. Audit the title and labels rather than asking for a changelog entry.
 - No in-repo rule mandates `gh --repo` flags or a fork-vs-branch policy; do not invent one.
