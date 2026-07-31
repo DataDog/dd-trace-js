@@ -6,7 +6,6 @@ const shimmer = require('../../datadog-shimmer')
 const {
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
-  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -678,16 +677,6 @@ addHook({
       if (result) {
         const { state, duration, errors } = result
         const testError = getCurrentAttemptTestError(task, errors)
-        const status = switchedStatus ??
-          (state === 'fail' ? 'fail' : state === 'skip' ? 'skip' : 'pass')
-        recordTestManagementExecution({
-          testSuite: getTaskTestSuite(task),
-          testName: getTestName(task),
-          status,
-          isAttemptToFix: attemptToFixTasks.has(task),
-          isDisabled: disabledTasks.has(task),
-          isQuarantined: quarantinedTasks.has(task),
-        })
         if (attemptToFixTasks.has(task)) {
           const attemptToFixStatus = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
           recordFinalAttemptToFixExecution(task, attemptToFixStatus, providedContext)
@@ -791,14 +780,6 @@ addHook({
           }
         }
       } else { // test.skip or test.todo
-        recordTestManagementExecution({
-          testSuite: getTaskTestSuite(task),
-          testName: getTestName(task),
-          status: 'skip',
-          isAttemptToFix: attemptToFixTasks.has(task),
-          isDisabled: disabledTasks.has(task),
-          isQuarantined: quarantinedTasks.has(task),
-        })
         testSkipCh.publish({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
