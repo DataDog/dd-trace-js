@@ -839,23 +839,5 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.notCalled(firstSpy)
       sinon.assert.calledOnce(secondSpy)
     })
-
-    it('drops queued log records recorded before the identity-refresh channel fires', () => {
-      // Batch size > 1 so the emitted record stays queued instead of exporting immediately.
-      const { config, loggerProvider } = setupLogs(true, '10')
-      const exportSpy = sinon.stub(loggerProvider.processor.exporter, 'export')
-      const logger = logs.getLogger('test-logger')
-
-      // Queued under the pre-refresh identity; must be dropped, not exported under the new one.
-      logger.emit({ body: 'pre-refresh log' })
-
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      loggerProvider.processor.forceFlush()
-
-      sinon.assert.calledOnce(exportSpy)
-      assert.deepStrictEqual(exportSpy.firstCall.args[0], [])
-    })
   })
 })

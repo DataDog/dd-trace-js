@@ -28,6 +28,11 @@ let rcAckCallbacks = null
 let rc = null
 let inputPath = null
 let onIdentityRefresh = null
+// Incremented on every start(); lets a pending detectDebuggerEndpoint() callback tell whether it
+// still belongs to the session that started it, or whether a stop()+start() cycle has superseded
+// it while it was in flight (configChannel would be non-null again by then, so that check alone
+// can't tell the two apart).
+let generation = 0
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -61,6 +66,8 @@ function isStarted () {
 function start (config, rcInstance) {
   // configChannel lives from here until cleanup(), covering the async gap before worker exists.
   if (worker !== null || configChannel !== null) return
+
+  const myGeneration = ++generation
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
@@ -112,9 +119,12 @@ function start (config, rcInstance) {
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
   detectDebuggerEndpoint(config, (_inputPath) => {
-    // stop() may have already run cleanup() while this was in flight - don't start a worker
-    // for a session that's been told to stop.
-    if (configChannel === null) return
+    // stop() may have already run cleanup() while this was in flight - don't start a worker for a
+    // session that's been told to stop. A generation mismatch means a stop()+start() cycle already
+    // superseded this callback - configChannel is non-null again by then (the new session's), so
+    // that check alone can't catch it; building a worker here would mix this session's probe/log
+    // ports with the new session's config port and detach a port already transferred elsewhere.
+    if (configChannel === null || myGeneration !== generation) return
 
     inputPath = _inputPath
 
@@ -180,6 +190,8 @@ function configure (config) {
  * Safe to call even if the worker is not started.
  */
 function stop () {
+  // Also checks configChannel for a pending start (no worker yet) - otherwise stop() here would
+  // skip cleanup() and leak the identity-refresh subscription.
   if (worker === null && configChannel === null) return
 
   log.debug('[debugger] Stopping Dynamic Instrumentation client...')

@@ -6,11 +6,8 @@ const URL = require('url').URL
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 require('../../setup/core')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('Exporter', () => {
   let url
@@ -30,7 +27,6 @@ describe('Exporter', () => {
       append: sinon.spy(),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
-      resetPendingBatch: sinon.spy(),
     }
     prioritySampler = {}
     Writer = sinon.stub().returns(writer)
@@ -126,32 +122,6 @@ describe('Exporter', () => {
       const url = new URL('http://example2.com')
       assert.deepStrictEqual(exporter._url, url)
       sinon.assert.calledWith(writer.setUrl, url)
-    })
-  })
-
-  describe('identity refresh', () => {
-    it('drops the pending batch when the identity-refresh channel fires', () => {
-      const config = { url, flushInterval, tags: { 'runtime-id': 'initial-id' } }
-      exporter = new Exporter(config, prioritySampler)
-
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(writer.resetPendingBatch)
-    })
-
-    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-      const config = { url, flushInterval, tags: {} }
-      // eslint-disable-next-line no-unused-vars -- constructed only to be superseded below
-      const firstExporter = new Exporter(config, prioritySampler)
-      exporter = new Exporter(config, prioritySampler)
-
-      identityRefreshChannel.publish(config)
-
-      // Both share the mocked writer; if the first subscription weren't replaced, this fires twice.
-      sinon.assert.calledOnce(writer.resetPendingBatch)
     })
   })
 })

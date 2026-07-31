@@ -99,10 +99,7 @@ function initializeOpenTelemetryMetrics (config) {
   metrics.setGlobalMeterProvider(meterProvider)
 
   unsubscribeMetricsIdentityRefresh?.()
-  const onIdentityRefresh = () => {
-    exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
-    reader.resetPendingState()
-  }
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
   identityRefreshChannel.subscribe(onIdentityRefresh)
   unsubscribeMetricsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }

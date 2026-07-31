@@ -404,6 +404,9 @@ describe('Tracer', () => {
   })
 
   describe('refreshMetadata', () => {
+    const { channel } = require('dc-polyfill')
+    const identityRefreshChannel = channel('datadog:identity:refresh')
+
     let storeConfigStub
     let PatchedTracer
 
@@ -420,7 +423,7 @@ describe('Tracer', () => {
       assert.strictEqual(t._inmem_cfg, undefined)
       storeConfigStub.resetHistory()
 
-      t.refreshMetadata(config)
+      identityRefreshChannel.publish(config)
 
       sinon.assert.notCalled(storeConfigStub)
     })
@@ -432,7 +435,7 @@ describe('Tracer', () => {
       storeConfigStub.onSecondCall().returns(newHandle)
       const t = new PatchedTracer(config)
 
-      t.refreshMetadata(config)
+      identityRefreshChannel.publish(config)
 
       assert.strictEqual(t._inmem_cfg, newHandle)
     })
@@ -443,7 +446,7 @@ describe('Tracer', () => {
       storeConfigStub.onSecondCall().returns(undefined)
       const t = new PatchedTracer(config)
 
-      t.refreshMetadata(config)
+      identityRefreshChannel.publish(config)
 
       assert.strictEqual(t._inmem_cfg, initialHandle)
     })
@@ -454,7 +457,7 @@ describe('Tracer', () => {
       const t = new PatchedTracer(config)
       assert.strictEqual(t._inmem_cfg, 0)
 
-      t.refreshMetadata(config)
+      identityRefreshChannel.publish(config)
 
       // once at construction, once on refresh
       sinon.assert.calledTwice(storeConfigStub)
@@ -489,13 +492,16 @@ describe('Tracer', () => {
     it('should only react via the most recently constructed tracer', () => {
       const first = new PatchedTracer(config)
       const second = new PatchedTracer(config)
-      const firstRefreshMetadata = sinon.spy(first, 'refreshMetadata')
-      const secondRefreshMetadata = sinon.spy(second, 'refreshMetadata')
+      const firstHandleBeforePublish = first._inmem_cfg
+      storeConfigStub.resetHistory()
+      storeConfigStub.returns({ handle: 'refreshed-again' })
 
       identityRefreshChannel.publish(config)
 
-      sinon.assert.notCalled(firstRefreshMetadata)
-      sinon.assert.calledOnceWithExactly(secondRefreshMetadata, config)
+      // Only one listener reacts (the second tracer's); the first's was unsubscribed at construction.
+      sinon.assert.calledOnceWithExactly(storeConfigStub, config)
+      assert.strictEqual(second._inmem_cfg.handle, 'refreshed-again')
+      assert.strictEqual(first._inmem_cfg, firstHandleBeforePublish)
     })
   })
 

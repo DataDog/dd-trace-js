@@ -432,6 +432,55 @@ describe('debugger/index', () => {
 
       instrumentation.stop()
     })
+
+    it('does not build a worker from a callback superseded by a stop()+start() cycle', () => {
+      // Needs two independently-resolvable fetchAgentInfo callbacks (one per start()), so this
+      // doesn't reuse createPendingInstrumentation()'s single deferredCallback slot.
+      const deferredCallbacks = []
+      const PendingWorker = sinon.stub()
+      PendingWorker.prototype.on = sinon.stub().returnsThis()
+      PendingWorker.prototype.once = sinon.stub().returnsThis()
+      PendingWorker.prototype.unref = sinon.stub()
+      PendingWorker.prototype.terminate = sinon.stub()
+      PendingWorker.prototype.removeAllListeners = sinon.stub()
+
+      const instrumentation = proxyquire('../../src/debugger/index', {
+        fs: {
+          readFile: sinon.stub(),
+        },
+        '../agent/info': {
+          fetchAgentInfo: (url, callback) => { deferredCallbacks.push(callback) },
+        },
+        './config': proxyquire('../../src/debugger/config', {
+          '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
+        }),
+        worker_threads: {
+          Worker: PendingWorker,
+          MessageChannel: class MessageChannel {
+            constructor () {
+              this.port1 = { unref: sinon.stub(), on: sinon.stub() }
+              this.port2 = { unref: sinon.stub(), on: sinon.stub(), postMessage: sinon.stub() }
+            }
+          },
+          threadId: 0,
+        },
+      })
+
+      instrumentation.start(config, rc)
+      instrumentation.stop()
+      instrumentation.start(config, rc) // second session starts while the first's endpoint check is still pending
+
+      // Second session's own detectDebuggerEndpoint call resolves first.
+      deferredCallbacks[1](null, { endpoints: [] })
+      sinon.assert.calledOnce(PendingWorker)
+
+      // The stale first session's callback resolves late - must not build a second, mismatched worker
+      // (it would otherwise mix this session's probe/log ports with the second session's config port).
+      deferredCallbacks[0](null, { endpoints: [] })
+      sinon.assert.calledOnce(PendingWorker)
+
+      instrumentation.stop()
+    })
   })
 
   describe('readProbeFile', () => {

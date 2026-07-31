@@ -330,32 +330,6 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           sinon.assert.notCalled(client.updateTags)
         })
 
-        const cpuIt = nativeMetrics ? it.skip : it
-        cpuIt('resets the CPU/time baseline when the identity-refresh channel fires', () => {
-          const cpuUsageStub = sinon.stub(process, 'cpuUsage')
-          const nowStub = sinon.stub(performance, 'now')
-
-          try {
-            client.gauge.resetHistory()
-
-            // Simulates a snapshot pause; without the reset, this gap lands in the next CPU%
-            // computation instead of being dropped at the identity boundary.
-            cpuUsageStub.onCall(0).returns({ user: 100_000, system: 0 }) // baseline reset at refresh
-            nowStub.onCall(0).returns(1_000) // baseline reset at refresh
-            identityRefreshChannel.publish(config)
-
-            cpuUsageStub.onCall(1).returns({ user: 150_000, system: 0 }) // next interval capture
-            nowStub.onCall(1).returns(2_000) // next interval capture
-            clock.tick(config.DD_RUNTIME_METRICS_FLUSH_INTERVAL)
-
-            // (150000 - 100000) user-usec / ((2000 - 1000)ms * 10) = 5.00
-            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user', '5.00')
-          } finally {
-            cpuUsageStub.restore()
-            nowStub.restore()
-          }
-        })
-
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -1106,7 +1080,7 @@ FakePerformanceObserverForOtlp.instances = []
  *   batchCallbacks: Array<{ cb: Function, observables: object[] }>,
  *   fireBatchCallbacks: () => Map<object, Array<{ v: number, a: object }>>,
  *   fakeMetricsClient: object,
- *   identityRefreshCalls: Array<{ client: object, config: object, onRefresh: Function, unsubscribe: Function }>,
+ *   identityRefreshCalls: Array<{ client: object, config: object, unsubscribe: Function }>,
  * }}
  */
 function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
@@ -1183,9 +1157,9 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
-      subscribeToIdentityRefresh: (client, config, onRefresh) => {
+      subscribeToIdentityRefresh: (client, config) => {
         const unsubscribe = sinon.spy()
-        identityRefreshCalls.push({ client, config, onRefresh, unsubscribe })
+        identityRefreshCalls.push({ client, config, unsubscribe })
         return unsubscribe
       },
     },
@@ -1562,45 +1536,6 @@ describe('otlp_runtime_metrics', () => {
     ctx.otlpMetrics.stop()
 
     sinon.assert.calledOnce(ctx.identityRefreshCalls[0].unsubscribe)
-  })
-
-  it('resets the event-loop histogram and ELU baseline when identity refresh fires', () => {
-    const fakeH = makeFakeEventLoopDelayHistogram({ count: 5 })
-    const { performance } = require('node:perf_hooks')
-    const eluStub = sinon.stub(performance, 'eventLoopUtilization')
-    let ctx
-
-    try {
-      eluStub.onCall(0).returns({ idle: 1000, active: 500 }) // baseline read at start()
-
-      ctx = loadOtlpRuntimeMetricsTestModule({
-        monitorEventLoopDelay: () => fakeH,
-      })
-      ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
-
-      assert.strictEqual(ctx.identityRefreshCalls.length, 1)
-
-      // Simulates a snapshot pause; without the fix this gap lands in the next observation's
-      // delta instead of being dropped at the boundary.
-      eluStub.onCall(1).returns({ idle: 999_999, active: 499_999 }) // baseline reset at refresh
-      ctx.identityRefreshCalls[0].onRefresh()
-
-      assert.strictEqual(fakeH.getResetCallCount(), 1,
-        'event-loop histogram should reset on identity refresh, not just after a batch emit')
-
-      eluStub.onCall(2).returns({ idle: 1_000_099, active: 500_001 }) // first observation after refresh
-      const eluGauge = ctx.createdInstruments['nodejs.eventloop.utilization']
-      const [callback] = ctx.callbacks[eluGauge.name]
-      const observed = []
-      callback({ observe: (v) => observed.push(v) })
-
-      // idle delta 100, active delta 2 -> ~0.02 with the reset; without it the delta spans the
-      // simulated pause and utilization jumps to ~0.33.
-      assert.ok(observed[0] < 0.05, `expected a small post-refresh-only utilization, got ${observed[0]}`)
-    } finally {
-      ctx?.otlpMetrics.stop()
-      eluStub.restore()
-    }
   })
 })
 
