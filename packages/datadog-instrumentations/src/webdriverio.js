@@ -24,8 +24,10 @@ const {
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
   WORKER_READY,
+  WORKER_READY_RESPONSE,
 } = require('./mocha/webdriverio-protocol')
 
+const jasmineDoneCh = channel('ci:webdriverio:jasmine:done')
 const testFinishCh = channel('ci:mocha:test:finish')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -51,6 +53,7 @@ const MOCHA_FRAMEWORK_ADAPTER = 'mocha'
 const SUPPORTED_FRAMEWORK_ADAPTERS = new Set([JASMINE_FRAMEWORK_ADAPTER, MOCHA_FRAMEWORK_ADAPTER])
 const TEST_FRAMEWORK = 'webdriverio'
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
+let jasmineWorkerRequestId = 0
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -167,10 +170,14 @@ function createWorkerConfiguration () {
 /**
  * Configures a Jasmine worker for reporting-only execution and notifies its coordinator.
  *
- * @param {{_specs?: string[]}} adapter
+ * @param {{_jrunner?: {env?: {addReporter?: (reporter: object) => void}}, _specs?: string[]}} adapter
+ * @param {{
+ *   resolveCallback?: (onDone: () => void) => void,
+ *   rejectCallback?: (onDone: () => void) => void
+ * }} context
  * @returns {void}
  */
-function initializeJasmineWorker (adapter) {
+function initializeJasmineWorker (adapter, context) {
   if (!isWebdriverioWorker) {
     return
   }
@@ -182,17 +189,79 @@ function initializeJasmineWorker (adapter) {
     testFramework: TEST_FRAMEWORK,
     testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
   })
-  sendWebdriverioWorkerMessage({
-    origin: 'datadog',
-    name: WORKER_READY,
-    content: {
-      testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
-    },
-  }, error => {
-    if (error) {
-      log.error('WebdriverIO Test Optimization IPC error', error)
+
+  if (jasmineDoneCh.hasSubscribers) {
+    adapter?._jrunner?.env?.addReporter?.({
+      /**
+       * Publishes run-level failures that are absent from suiteDone.
+       *
+       * @param {object} result
+       * @returns {void}
+       */
+      jasmineDone (result) {
+        jasmineDoneCh.publish({ result })
+      },
+    })
+  }
+
+  /**
+   * Waits until the coordinator has started this worker's parent spans.
+   *
+   * @param {() => void} onDone
+   * @returns {void}
+   */
+  const waitForCoordinator = onDone => {
+    const requestId = `${process.pid}-${++jasmineWorkerRequestId}`
+    let finished = false
+
+    /**
+     * Releases Jasmine initialization exactly once.
+     *
+     * @returns {void}
+     */
+    function finish () {
+      if (finished) {
+        return
+      }
+      finished = true
+      clearTimeout(timeout)
+      process.off('message', onMessage)
+      process.off('disconnect', finish)
+      onDone()
     }
-  })
+
+    /**
+     * Receives coordinator readiness for this worker.
+     *
+     * @param {object} message
+     * @returns {void}
+     */
+    function onMessage (message) {
+      if (message?.name === WORKER_READY_RESPONSE && message.content?.requestId === requestId) {
+        finish()
+      }
+    }
+
+    const timeout = setTimeout(finish, 30_000)
+    process.on('message', onMessage)
+    process.once('disconnect', finish)
+    sendWebdriverioWorkerMessage({
+      origin: 'datadog',
+      name: WORKER_READY,
+      content: {
+        requestId,
+        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+      },
+    }, error => {
+      if (error) {
+        log.error('WebdriverIO Test Optimization IPC error', error)
+      }
+      finish()
+    })
+  }
+
+  context.resolveCallback = waitForCoordinator
+  context.rejectCallback = waitForCoordinator
 }
 
 /**
@@ -738,6 +807,13 @@ function handleWorkerMessage (state, workerRecord, message) {
       if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
         startWorkerSuites(workerRecord, workerRecord.specs)
       }
+      if (message.content?.requestId) {
+        sendWorkerMessage(workerRecord, {
+          origin: 'datadog',
+          name: WORKER_READY_RESPONSE,
+          content: { requestId: message.content.requestId },
+        })
+      }
     })
     return
   }
@@ -906,7 +982,7 @@ function finishCoordinator (state, error, onDone) {
 // @ts-expect-error
 jasmineAdapterInitCh.subscribe({
   asyncEnd (context) {
-    initializeJasmineWorker(context.result || context.self)
+    initializeJasmineWorker(context.result || context.self, context)
   },
 })
 

@@ -105,6 +105,13 @@ const scenarioConfig = {
       './second.e2e.js',
     ]],
   },
+  groupedEmpty: {
+    maxInstances: 1,
+    specs: [[
+      './empty.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
   hookFailure: {
     maxInstances: 1,
     specs: [[
@@ -123,6 +130,17 @@ const scenarioConfig = {
   jasmineAfterAllFailure: {
     maxInstances: 1,
     specs: ['./jasmine-after-all-fail.e2e.js'],
+  },
+  jasmineDelayedSettings: {
+    maxInstances: 1,
+    specs: ['./first.e2e.js'],
+  },
+  jasmineGlobalAfterAllFailure: {
+    maxInstances: 1,
+    specs: [[
+      './jasmine-global-after-all-fail.e2e.js',
+      './first.e2e.js',
+    ]],
   },
   jasmineHooks: {
     maxInstances: 1,

@@ -61,6 +61,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
+const jasmineDoneCh = 'ci:webdriverio:jasmine:done'
 const jasmineReporterSpecDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end'
 const jasmineReporterSpecStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end'
 const jasmineReporterSuiteDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteDone:end'
@@ -72,7 +73,7 @@ const workerFinishCh = channel('ci:mocha:worker:finish')
 
 /**
  * @typedef {object} WebdriverioJasmineResult
- * @property {string} id
+ * @property {string|undefined} id
  * @property {string|undefined} description
  * @property {Array<{message?: string, stack?: string}>|undefined} failedExpectations
  * @property {string|undefined} file
@@ -119,6 +120,32 @@ function getJasmineError (result) {
     error.stack = failedExpectation.stack
   }
   return error
+}
+
+/**
+ * Resolves the spec file responsible for a run-level Jasmine failure.
+ *
+ * @param {WebdriverioJasmineResult|undefined} result
+ * @param {string[]} specs
+ * @returns {string|undefined}
+ */
+function getJasmineFailureFile (result, specs) {
+  const resultFile = normalizeJasmineFile(result?.file || result?.filename)
+  if (resultFile) {
+    return resultFile
+  }
+
+  const stack = result?.failedExpectations?.[0]?.stack
+  if (stack) {
+    for (const spec of specs) {
+      const file = normalizeJasmineFile(spec)
+      if (file && stack.includes(file)) {
+        return file
+      }
+    }
+  }
+
+  return specs.length === 1 ? normalizeJasmineFile(specs[0]) : undefined
 }
 
 class MochaPlugin extends CiPlugin {
@@ -186,6 +213,18 @@ class MochaPlugin extends CiPlugin {
           state.suiteFiles.get(suite?.id) ||
           (state.specs.length === 1 ? state.specs[0] : undefined)
         )
+        if (error && file) {
+          state.suiteErrors.set(file, error)
+          state.suiteStatuses.set(file, 'fail')
+        }
+      }
+    })
+
+    this.addSub(jasmineDoneCh, ({ result } = {}) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const state = this._webdriverioJasmineState
+        const error = result && getJasmineError(result)
+        const file = getJasmineFailureFile(result, state.specs)
         if (error && file) {
           state.suiteErrors.set(file, error)
           state.suiteStatuses.set(file, 'fail')
@@ -727,6 +766,7 @@ class MochaPlugin extends CiPlugin {
   #finishWebdriverioJasmineWorker (context) {
     const state = this._webdriverioJasmineState
     const results = []
+    const reportedFiles = new Set()
     for (const [file, status] of state?.suiteStatuses || []) {
       const error = state.suiteErrors.get(file)
       const result = { file, status }
@@ -737,6 +777,13 @@ class MochaPlugin extends CiPlugin {
         }
       }
       results.push(result)
+      reportedFiles.add(file)
+    }
+    for (const spec of state?.specs || []) {
+      const file = normalizeJasmineFile(spec)
+      if (!reportedFiles.has(file)) {
+        results.push({ file, status: 'skip' })
+      }
     }
 
     const waitForWorker = onDone => {

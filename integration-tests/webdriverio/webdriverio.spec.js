@@ -457,6 +457,22 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
+    it('reports an empty grouped Jasmine spec as skipped', async () => {
+      await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 2)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['empty.e2e.js', 'skip'],
+            ['first.e2e.js', 'pass'],
+          ]
+        )
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }, 0, { framework: 'jasmine' })
+    })
+
     it('attributes a Jasmine hook-only failure to its grouped spec', async () => {
       await runScenario('hookFailure', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
@@ -481,6 +497,40 @@ for (const version of versions) {
         assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
         assert.strictEqual(tests.length, 1)
         assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('reports a Jasmine global afterAll failure on its suite', async () => {
+      await runScenario('jasmineGlobalAfterAllFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 2)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['first.e2e.js', 'pass'],
+            ['jasmine-global-after-all-fail.e2e.js', 'fail'],
+          ]
+        )
+        const failedSuite = suites.find(suite => suite.meta[TEST_STATUS] === 'fail')
+        assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
+      }, 0, { framework: 'jasmine' })
+    })
+
+    it('starts Jasmine parent spans before tests when settings are delayed', async () => {
+      receiver.setSettingsResponseDelay(1_000)
+
+      await runScenario('jasmineDelayedSettings', 1, ({ session, module, suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        const test = tests[0]
+        const testEnd = test.start + BigInt(test.duration)
+
+        for (const parent of [session, module, suites[0]]) {
+          assert.ok(parent.start <= test.start)
+          assert.ok(parent.start + BigInt(parent.duration) >= testEnd)
+        }
       }, 0, { framework: 'jasmine' })
     })
 

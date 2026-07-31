@@ -73,6 +73,20 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
+    astQuery: 'VariableDeclarator[id.name="JasmineAdapter"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="init"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"], ' +
+      'ClassDeclaration[id.name="JasmineAdapter"] > ClassBody > MethodDefinition[key.name="init"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'JasmineAdapter_init',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: '@wdio/jasmine-framework',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
     functionQuery: {
       className: 'JasmineAdapter',
       methodName: 'run',

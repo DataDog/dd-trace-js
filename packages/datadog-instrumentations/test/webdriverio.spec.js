@@ -165,6 +165,43 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('waits for coordinator readiness before resolving JasmineAdapter.init', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-init-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const initCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.resolveCallback = onDone => {
+          setImmediate(() => {
+            steps.push('coordinator')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    initCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const adapter = new JasmineAdapter([])
+      const resultPromise = adapter.init()
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      assert.strictEqual(await resultPromise, adapter)
+      assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator'])
+    } finally {
+      initCh.unsubscribe(subscriber)
+    }
+  })
+
   it('waits for Jasmine worker reporting before preserving a JasmineAdapter.run rejection', async () => {
     const source = fs.readFileSync(jasmineFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')

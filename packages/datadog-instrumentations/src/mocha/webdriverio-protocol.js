@@ -37,6 +37,7 @@ module.exports = {
   sendWebdriverioWorkerMessage,
   SUITE_FINISH: 'dd:test-optimization:webdriverio:test-suite:finish',
   WORKER_READY: 'dd:test-optimization:webdriverio:worker:ready',
+  WORKER_READY_RESPONSE: 'dd:test-optimization:webdriverio:worker:ready:response',
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
