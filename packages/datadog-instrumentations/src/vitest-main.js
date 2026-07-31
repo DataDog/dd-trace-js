@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
@@ -44,6 +43,7 @@ const {
   workerReportLogsCh,
   workerReportTelemetryCh,
   codeCoverageReportCh,
+  realpath,
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
@@ -225,20 +225,6 @@ function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   return getTestSuitePath(realpath(testSuiteAbsolutePath), realpath(repositoryRoot))
 }
 
-/**
- * Resolves a path without failing Test Optimization when the path is unavailable.
- *
- * @param {string} filepath
- * @returns {string}
- */
-function realpath (filepath) {
-  try {
-    return fs.realpathSync(filepath)
-  } catch {
-    return filepath
-  }
-}
-
 function resetSuiteSkippingRunState () {
   skippableSuites = []
   resetAppliedSuiteSkippingState()
@@ -321,7 +307,21 @@ function getTypecheckTestSuites (testSpecifications) {
  * @returns {unknown[]}
  */
 function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
-  if (!Array.isArray(testSpecifications) || !isSuitesSkippingEnabled) {
+  if (!Array.isArray(testSpecifications)) {
+    setProvidedContext(ctx, {
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+    }, 'Could not send TIA configuration to workers.')
+    return testSpecifications
+  }
+
+  if (testSpecifications.length > 0) {
+    hasSelectedSuites = true
+  }
+  if (!isSuitesSkippingEnabled) {
+    if (testSpecifications.length > 0) {
+      hasRunnableSuites = true
+    }
+    areAllSuitesSkipped = hasSelectedSuites && !hasRunnableSuites
     setProvidedContext(ctx, {
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
     }, 'Could not send TIA configuration to workers.')
@@ -371,9 +371,6 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
 
   if (currentSkippedSuites.length) {
     itrSkippedSuitesCh.publish({ skippedSuites: currentSkippedSuites, frameworkVersion })
-  }
-  if (testSpecifications.length > 0) {
-    hasSelectedSuites = true
   }
   if (testSpecificationsToRun.length > 0) {
     hasRunnableSuites = true
@@ -875,6 +872,7 @@ function ensureMainProcessSetup (
   const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
   const disableTestImpactAnalysis =
     forceDisableTestImpactAnalysis ||
+    safeConfig(ctx)?.watch === true ||
     hasOnlyTypecheckTestSpecifications(testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)

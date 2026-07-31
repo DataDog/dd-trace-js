@@ -26,6 +26,12 @@ const config = {
   },
 }
 
+if (process.env.VITEST_PRESERVE_SYMLINKS) {
+  config.resolve = {
+    preserveSymlinks: true,
+  }
+}
+
 const poolConfig = process.env.POOL_CONFIG || 'forks'
 if (!process.env.USE_VITEST_DEFAULT_POOL) {
   config.test.pool = poolConfig

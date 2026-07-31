@@ -1,11 +1,5 @@
 import { startVitest } from 'vitest/node'
 
-const keepServerOpenReporter = {
-  onInit (vitest) {
-    vitest.shouldKeepServer = () => true
-  },
-}
-
 async function runProgrammaticTests () {
   let vitest
   try {
@@ -13,8 +7,7 @@ async function runProgrammaticTests () {
       test: {
         environment: 'node',
       },
-      reporters: [keepServerOpenReporter],
-      watch: false,
+      watch: true,
     })
 
     const globTestSpecifications = vitest.globTestSpecifications || vitest.globTestFiles

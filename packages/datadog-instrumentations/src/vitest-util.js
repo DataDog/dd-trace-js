@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('node:fs')
+
 const log = require('../../dd-trace/src/log')
 const { channel } = require('./helpers/instrument')
 
@@ -32,6 +34,20 @@ const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
 const workerReportTelemetryCh = channel('ci:vitest:worker-report:telemetry')
 const codeCoverageReportCh = channel('ci:vitest:coverage-report')
+
+/**
+ * Resolves a path without failing Test Optimization when the path is unavailable.
+ *
+ * @param {string} filepath
+ * @returns {string}
+ */
+function realpath (filepath) {
+  try {
+    return fs.realpathSync(filepath)
+  } catch {
+    return filepath
+  }
+}
 
 function findExportByName (pkg, name) {
   for (const [key, value] of Object.entries(pkg)) {
@@ -248,6 +264,7 @@ module.exports = {
   workerReportLogsCh,
   workerReportTelemetryCh,
   codeCoverageReportCh,
+  realpath,
   findExportByName,
   getTestRunnerExport,
   getTypeTasks,

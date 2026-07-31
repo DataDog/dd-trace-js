@@ -31,6 +31,7 @@ const {
   getTypeTasks,
   getTestName,
   getProvidedContext,
+  realpath,
   isFlakyTestRetriesEnabledForTask,
   getVitestTestProperties,
 } = require('./vitest-util')
@@ -149,8 +150,11 @@ function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
   for (const scriptCoverage of coverage?.result || []) {
     if (!isV8ScriptCovered(scriptCoverage)) continue
 
-    const filename = getCoverageFilename(scriptCoverage.url)
-    if (filename && isFileInRepository(filename, repositoryRoot)) {
+    const coverageFilename = getCoverageFilename(scriptCoverage.url)
+    if (!coverageFilename) continue
+
+    const filename = realpath(coverageFilename)
+    if (isFileInRepository(filename, repositoryRoot)) {
       coveredFiles.push(filename)
     }
   }

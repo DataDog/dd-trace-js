@@ -17,6 +17,7 @@ async function runProgrammaticTests () {
       watch: false,
     })
 
+    vitest.config.watch = true
     const globTestSpecifications = vitest.globTestSpecifications || vitest.globTestFiles
     const testSpecifications = await globTestSpecifications.call(vitest, ['./tia-programmatic-second.mjs'])
     await vitest.runTestSpecifications(testSpecifications)

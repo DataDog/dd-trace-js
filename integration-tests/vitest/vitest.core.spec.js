@@ -1492,6 +1492,35 @@ versions.forEach((version) => {
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
 
+      it('reports workspace sources imported through preserved node_modules symlinks', async () => {
+        const testSuite = 'ci-visibility/vitest-tests/tia-workspace-symlink.mjs'
+        const workspaceSource = 'ci-visibility/vitest-workspace-package/source.mjs'
+        const workspacePackage = path.join(cwd, 'ci-visibility/vitest-workspace-package')
+        const workspaceLink = path.join(cwd, 'node_modules/tia-workspace-package')
+
+        fs.symlinkSync(workspacePackage, workspaceLink, 'dir')
+        try {
+          await runTiaTests((payloads) => {
+            const { coverageBySuite } = getTiaPayloads(payloads)
+
+            assert.deepStrictEqual(
+              coverageBySuite.get(testSuite),
+              [testSuite, workspaceSource].sort()
+            )
+          }, {
+            env: {
+              NODE_OPTIONS: '--preserve-symlinks --import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: testSuite,
+              VITEST_PRESERVE_SYMLINKS: '1',
+            },
+          })
+        } finally {
+          fs.rmSync(workspaceLink, { force: true })
+        }
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
       for (const coverageProvider of ['v8', 'istanbul']) {
         it(`reports per-suite covered files when the user enables ${coverageProvider} coverage`, async () => {
           await runTiaTests((payloads) => {
@@ -2425,6 +2454,82 @@ versions.forEach((version) => {
           assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 1)
         }, {
           command: 'node run-programmatic-api-tia-rerun.mjs',
+          currentWorkingDirectory: path.join(cwd, 'ci-visibility/vitest-tests-programmatic-api'),
+          env: {
+            TEST_DIR: './tia-programmatic-*.mjs',
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      newerVitestIt('does not apply TIA during programmatic watch reruns', async () => {
+        const programmaticFirstSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-first.mjs'
+        const programmaticSecondSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-second.mjs'
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: { suite: programmaticFirstSuite },
+          },
+          {
+            type: 'suite',
+            attributes: { suite: programmaticSecondSuite },
+          },
+        ])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const urls = payloads.map(({ url }) => url)
+
+          assert.strictEqual(urls.includes(skippableUrl), false)
+          assert.strictEqual(coverages.length, 0)
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.ok(testSuiteEvents.every(({ content }) => content.meta[TEST_STATUS] === 'pass'))
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 2)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+        }, {
+          command: 'node run-programmatic-api-tia-watch.mjs',
+          currentWorkingDirectory: path.join(cwd, 'ci-visibility/vitest-tests-programmatic-api'),
+          env: {
+            TEST_DIR: './tia-programmatic-*.mjs',
+          },
+          requestFilter: tiaRequestFilter,
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      newerVitestIt('keeps a passing session when a later programmatic rerun disables TIA', async () => {
+        const programmaticFirstSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-first.mjs'
+        const programmaticSecondSuite =
+          'ci-visibility/vitest-tests-programmatic-api/tia-programmatic-second.mjs'
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: programmaticFirstSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents } = getTiaPayloads(payloads)
+          const firstSuiteEvent = testSuiteEvents
+            .find(({ content }) => content.meta[TEST_SUITE] === programmaticFirstSuite).content
+          const secondSuiteEvent = testSuiteEvents
+            .find(({ content }) => content.meta[TEST_SUITE] === programmaticSecondSuite).content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testModule = events.find(event => event.type === 'test_module_end').content
+
+          assert.strictEqual(firstSuiteEvent.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(firstSuiteEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(secondSuiteEvent.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'pass')
+        }, {
+          command: 'node run-programmatic-api-tia-unsupported-rerun.mjs',
           currentWorkingDirectory: path.join(cwd, 'ci-visibility/vitest-tests-programmatic-api'),
           env: {
             TEST_DIR: './tia-programmatic-*.mjs',
