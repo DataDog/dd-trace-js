@@ -1290,5 +1290,62 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.notCalled(firstSpy)
       sinon.assert.calledOnce(secondSpy)
     })
+
+    it('drops pending measurements recorded before the identity-refresh channel fires', () => {
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      const config = {
+        service: 'svc',
+        version: '1.0.0',
+        env: 'prod',
+        tags: { 'runtime-id': 'initial-id' },
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 5000,
+        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
+      }
+
+      initializeOpenTelemetryMetrics(config)
+      const provider = metrics.getMeterProvider()
+      const exportSpy = sinon.stub(provider.reader.exporter, 'export')
+      const meter = metrics.getMeter('app')
+
+      // Recorded under the pre-refresh identity; must be dropped, not exported under the new one.
+      meter.createCounter('test.pre_refresh').add(5)
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      provider.reader.forceFlush()
+
+      sinon.assert.notCalled(exportSpy)
+    })
+
+    it('preserves the ObservableCounter delta baseline across an identity refresh', (done) => {
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(counter.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics()
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      setTimeout(() => {
+        // Refresh happens after the first export already established a baseline of 20.
+        config.tags['runtime-id'] = 'refreshed-id'
+        identityRefreshChannel.publish(config)
+        value = 25
+
+        setTimeout(() => {
+          assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
+          assert.strictEqual(exportedValues[0], 20, 'first export should be the absolute baseline')
+          assert.strictEqual(
+            exportedValues[1], 5, 'delta after refresh should be 5, not the absolute reading of 25'
+          )
+          done()
+        }, 120)
+      }, 120)
+    })
   })
 })

@@ -7,12 +7,15 @@ const https = require('node:https')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const OTEL_ENV_KEYS = [
   'OTEL_TRACES_EXPORTER',
@@ -943,6 +946,36 @@ describe('OpenTelemetry Traces', () => {
       exporter.sendPayload(Buffer.from('{}'), () => {})
 
       assert.ok(httpsStub.calledOnce, 'https.request should have been called after switching to https')
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('recomputes resource attributes when the identity-refresh channel fires', () => {
+      const config = getConfigFresh()
+      const exporter = createOtlpTraceExporter(config)
+      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(updateSpy)
+      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
+    })
+
+    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
+      const firstExporter = createOtlpTraceExporter(getConfigFresh())
+      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+
+      const config = getConfigFresh()
+      const secondExporter = createOtlpTraceExporter(config)
+      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.notCalled(firstSpy)
+      sinon.assert.calledOnce(secondSpy)
     })
   })
 })

@@ -2,9 +2,16 @@
 
 const os = require('os')
 
+const { channel } = require('dc-polyfill')
+
 /**
  * @typedef {import('../../config')} Config
  */
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Replaces the previous subscription on each call, so restarting doesn't accumulate listeners.
+let unsubscribeLogsIdentityRefresh = null
 
 /**
  * OpenTelemetry Logs Implementation for `dd-trace-js`
@@ -32,11 +39,12 @@ const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 
 /**
- * Initializes OpenTelemetry Logs support
+ * Builds the resource attributes for the OTel logs exporter. Shared by
+ * `initializeOpenTelemetryLogs()` and the identity-refresh handler so they can't drift apart.
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {object} Resource attributes
  */
-function initializeOpenTelemetryLogs (config) {
-  // Build resource attributes
+function buildResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
@@ -58,13 +66,21 @@ function initializeOpenTelemetryLogs (config) {
     resourceAttributes['host.name'] = os.hostname()
   }
 
+  return resourceAttributes
+}
+
+/**
+ * Initializes OpenTelemetry Logs support
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
+ */
+function initializeOpenTelemetryLogs (config) {
   // Create OTLP exporter using resolved config values
   const exporter = new OtlpHttpLogExporter(
     config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
     config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
     config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
-    resourceAttributes
+    buildResourceAttributes(config)
   )
 
   // Create batch processor for exporting logs to Datadog Agent
@@ -79,6 +95,14 @@ function initializeOpenTelemetryLogs (config) {
 
   // Register the logger provider globally with OpenTelemetry API
   loggerProvider.register()
+
+  unsubscribeLogsIdentityRefresh?.()
+  const onIdentityRefresh = () => {
+    exporter.updateResourceAttributes(buildResourceAttributes(config))
+    processor.resetPendingState()
+  }
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeLogsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
 
 module.exports = {

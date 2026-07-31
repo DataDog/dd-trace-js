@@ -48,11 +48,14 @@ function createMetricsClient (config) {
  *
  * @param {MetricsAggregationClient} client - The client returned by `createMetricsClient()`
  * @param {import('../config/config-base')} config - Tracer configuration
+ * @param {() => void} [onRefresh] - Runs after the tag update, so callers can reset their own
+ *   sampler baselines (event-loop, CPU/ELU) at the same identity boundary.
  * @returns {() => void} Unsubscribe function; call it from the owning module's `stop()`
  */
-function subscribeToIdentityRefresh (client, config) {
+function subscribeToIdentityRefresh (client, config, onRefresh) {
   const onIdentityRefresh = () => {
     client.updateTags(buildClientConfig(config).tags)
+    onRefresh?.()
   }
   identityRefreshChannel.subscribe(onIdentityRefresh)
   return () => identityRefreshChannel.unsubscribe(onIdentityRefresh)

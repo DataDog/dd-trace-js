@@ -17,6 +17,18 @@ class Writer {
 
   #isFirstFlush = true
 
+  /**
+   * Drops the pending batch without sending it, so data encoded before a MicroVM clone resume
+   * isn't resent (and duplicated) under the clone's new identity.
+   */
+  resetPendingBatch () {
+    const count = this._encoder.count()
+    if (count > 0) {
+      log.debug('Dropping %d pending item(s) on an identity refresh.', count)
+    }
+    this._encoder.reset()
+  }
+
   flush (done = () => {}, options) {
     const count = this._encoder.count()
 

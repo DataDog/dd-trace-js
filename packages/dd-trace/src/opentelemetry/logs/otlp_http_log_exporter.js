@@ -34,6 +34,16 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
   }
 
   /**
+   * Recomputes the resource attributes baked into the transformer (e.g. after a MicroVM clone
+   * resume regenerates `runtime-id`).
+   *
+   * @param {Resource} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.transformer.updateResourceAttributes(resourceAttributes)
+  }
+
+  /**
    * Exports log records via OTLP over HTTP.
    *
    * @param {LogRecord[]} logRecords - Array of enriched log records to export

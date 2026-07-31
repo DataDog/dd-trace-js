@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { VERSION } = require('../../../../../version')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
@@ -7,6 +9,11 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  * @typedef {import('../../config/config-base')} Config
  * @typedef {import('../../opentracing/tracer')} DatadogTracer
  */
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Replaces the previous subscription on each call, so restarting doesn't accumulate listeners.
+let unsubscribeTraceIdentityRefresh = null
 
 /**
  * OpenTelemetry Trace Export for dd-trace-js
@@ -59,13 +66,20 @@ function buildResourceAttributes (config) {
  * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
  */
 function createOtlpTraceExporter (config) {
-  return new OtlpHttpTraceExporter(
+  const exporter = new OtlpHttpTraceExporter(
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
     buildResourceAttributes(config),
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
+
+  unsubscribeTraceIdentityRefresh?.()
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildResourceAttributes(config))
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeTraceIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+
+  return exporter
 }
 
 module.exports = {
