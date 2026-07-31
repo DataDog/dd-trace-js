@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/experiments/c85229a7-f9ee-4c23-803c-3945a698c466/events",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "956"
+    },
+    "body": "{\"data\":{\"type\":\"experiments\",\"attributes\":{\"spans\":[{\"span_id\":\"0000000000000001\",\"trace_id\":\"00000000000000000000000000000001\",\"project_id\":\"5645ffb8-c97e-4ce4-89f2-c41931318fd9\",\"dataset_id\":\"23fd65b0-d25f-45d7-b15f-cb75447cd6eb\",\"name\":\"dd-trace-js-experiments-vcr-client-task\",\"start_ns\":1785530507136000000,\"duration\":1000000,\"status\":\"ok\",\"meta\":{\"input\":{\"value\":1},\"output\":{\"value\":2},\"expected_output\":{\"value\":2},\"metadata\":{\"source\":\"client-test\"}},\"tags\":[\"experiment_id:c85229a7-f9ee-4c23-803c-3945a698c466\",\"dataset_id:23fd65b0-d25f-45d7-b15f-cb75447cd6eb\",\"dataset_record_id:0f80c0b4-01a2-431b-8524-1beed38f22b0\"]}],\"metrics\":[{\"metric_source\":\"custom\",\"label\":\"exact\",\"span_id\":\"0000000000000001\",\"trace_id\":\"00000000000000000000000000000001\",\"timestamp_ms\":1785530507136,\"tags\":[\"experiment_id:c85229a7-f9ee-4c23-803c-3945a698c466\"],\"experiment_id\":\"c85229a7-f9ee-4c23-803c-3945a698c466\",\"metric_type\":\"boolean\",\"boolean_value\":true}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 202,
+      "message": "Accepted"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "0",
+      "date": "Fri, 31 Jul 2026 20:41:47 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": ""
+  }
+}
