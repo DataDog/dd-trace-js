@@ -60,7 +60,13 @@ jobs:
       - run: mkdir -p /tmp/app
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
-      - run: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
+      - name: Install packed package
+        run: |
+          cd /tmp/app
+          ${{ matrix.manager.install }} /tmp/dd-trace.tgz 2>&1 | tee /tmp/package-manager-install.log
+      - name: Reject Yarn build warnings
+        if: matrix.manager.name == 'yarn-berry'
+        run: "! grep -F 'YN0007:' /tmp/package-manager-install.log"
       - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
       - run: node /tmp/app
 
