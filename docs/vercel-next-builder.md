@@ -20,8 +20,8 @@ ownership because the current release workflow publishes only the root
 `dd-trace` package. The prototype intentionally supports only the current public
 Build Output API directory contract.
 
-Live source-build verification on Next.js 16 exercised App and Pages Router
-routes, concurrent requests, and outbound calls. Direct OTLP intake received a
-14-span distributed trace containing `web.request`, `next.request`, `fetch`,
-TCP, and DNS spans. Mixed Edge output still requires a dedicated acceptance
-deployment before release.
+Live source-build verification on Next.js 16 exercised App Router, Pages
+Router, and Edge routes, concurrent requests, and outbound calls. The Edge
+route remained unmodified and returned successfully. Direct OTLP intake
+received a 14-span distributed Node trace containing `web.request`,
+`next.request`, `fetch`, TCP, and DNS spans.

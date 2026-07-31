@@ -6,7 +6,7 @@ const Module = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
-const { build, instrumentBuildOutput, mergeNodeOptions } = require('./builder')
+const { build, instrumentBuildOutput, mergeNodeOptions, validateTracerRoot } = require('./builder')
 
 describe('Vercel Next Builder prototype', () => {
   let outputPath
@@ -85,6 +85,15 @@ describe('Vercel Next Builder prototype', () => {
     assert.strictEqual(
       mergeNodeOptions('--import=dd-trace/initialize.mjs --enable-source-maps'),
       '--import=dd-trace/initialize.mjs --enable-source-maps'
+    )
+  })
+
+  it('rejects an installed tracer that cannot be preloaded', async () => {
+    await fs.rm(path.join(tracerRoot, 'initialize.mjs'))
+
+    await assert.rejects(
+      validateTracerRoot(tracerRoot),
+      /dd-trace 1\.0\.0 does not provide initialize\.mjs; install a supported version/
     )
   })
 
