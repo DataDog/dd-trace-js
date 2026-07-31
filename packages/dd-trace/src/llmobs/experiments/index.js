@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { ExperimentsClient, API_BASE_PATH } = require('./client')
+const { ExperimentsClient } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
 const { Experiment } = require('./experiment')
 const NoopExperiments = require('./noop')
@@ -78,15 +78,12 @@ class Experiments {
     const succeeded = await retryWithBackoff(async () => {
       try {
         if (datasetId === null) {
-          const listed = await this.#client.request(
-            'GET',
-            `${API_BASE_PATH}/${projectId}/datasets?filter[name]=${encodeURIComponent(name)}`
-          )
-          for (const item of listed?.data ?? []) {
-            if (item?.attributes?.name === name) {
-              datasetId = String(item?.id ?? '')
-              description = String(item?.attributes?.description ?? '')
-              latestVersion = item?.attributes?.current_version ?? null
+          const listed = await this.#client.listDatasets(projectId, { name })
+          for (const item of listed) {
+            if (item.name() === name) {
+              datasetId = item.id()
+              description = item.description()
+              latestVersion = item.latestVersion()
               datasetVersion = version ?? latestVersion
               break
             }
@@ -99,26 +96,16 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = new URLSearchParams()
-          if (cursor) query.set('page[cursor]', cursor)
-          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           // eslint-disable-next-line no-await-in-loop
-          const resp = await this.#client.request(
-            'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
-          )
-          for (const item of resp?.data ?? []) {
-            const attrs = item?.attributes ?? item
-            const recordId = String(item?.id ?? attrs?.id ?? '')
-            recs.push(new DatasetRecord(
-              attrs?.input ?? null,
-              attrs?.expected_output ?? null,
-              attrs?.metadata ?? {},
-              recordId === '' ? null : recordId
-            ))
-            ids.push(recordId)
+          const resp = await this.#client.listDatasetRecords(projectId, datasetId, {
+            cursor,
+            version: datasetVersion,
+          })
+          for (const record of resp.records) {
+            recs.push(record)
+            ids.push(record.id ?? '')
           }
-          cursor = resp?.meta?.after ?? ''
+          cursor = resp.after
           if (!cursor) break
         }
         records = recs
