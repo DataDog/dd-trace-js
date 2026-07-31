@@ -2,6 +2,11 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const VERCEL_REQUEST_CONTEXTS = [
+  Symbol.for('@next/request-context'),
+  Symbol.for('@vercel/request-context'),
+]
+
 function getIsAWSLambda () {
   return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
 }
@@ -45,11 +50,59 @@ function isInServerlessEnvironment () {
   return getIsAWSLambda() || isGCPFunction || isAzureFunction
 }
 
+function getVercelNativeOtlpExporter (tracer) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return
+
+  tracer = tracer?._tracer || tracer
+  if (tracer?._config?.OTEL_TRACES_EXPORTER !== 'otlp') return
+  if (typeof tracer._exporter?.flush !== 'function') return
+  return tracer._exporter
+}
+
+function getVercelWaitUntil () {
+  for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
+    try {
+      const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+      if (typeof waitUntil === 'function') return waitUntil
+    } catch {
+      // The other context symbol may still be available in this runtime.
+    }
+  }
+}
+
+function scheduleVercelFlush (tracer) {
+  const exporter = getVercelNativeOtlpExporter(tracer)
+  if (!exporter) return false
+
+  const waitUntil = getVercelWaitUntil()
+  if (!waitUntil) return false
+
+  let resolveFlush
+  const flushPromise = new Promise(resolve => {
+    resolveFlush = resolve
+  })
+
+  try {
+    waitUntil(flushPromise)
+  } catch {
+    resolveFlush()
+    return false
+  }
+
+  try {
+    exporter.flush(resolveFlush)
+  } catch {
+    resolveFlush()
+  }
+  return true
+}
+
 module.exports = {
   getIsAWSLambda,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  scheduleVercelFlush,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }
