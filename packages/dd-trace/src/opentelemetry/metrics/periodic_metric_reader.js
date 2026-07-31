@@ -105,6 +105,7 @@ class PeriodicMetricReader {
   #exportInterval
   #aggregator
   #batchCallbacks = []
+  #pendingExports = new Set()
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -197,14 +198,15 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   forceFlush () {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
-      return
+      return Promise.resolve()
     }
     this.#collectAndExport()
+    return Promise.all(this.#pendingExports).then(() => {})
   }
 
   /**
@@ -302,7 +304,20 @@ class PeriodicMetricReader {
       this.#lastExportedState
     )
 
-    this.exporter.export(metrics, callback)
+    const pendingExport = new Promise(resolve => {
+      this.exporter.export(metrics, resolve)
+    })
+    this.#pendingExports.add(pendingExport)
+    pendingExport.then(
+      () => {
+        this.#pendingExports.delete(pendingExport)
+        callback()
+      },
+      () => {
+        this.#pendingExports.delete(pendingExport)
+        callback()
+      }
+    )
   }
 }
 

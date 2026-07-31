@@ -36,8 +36,9 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    *
    * @returns {void}
    */
-  export (metrics) {
+  export (metrics, resultCallback = () => {}) {
     if (metrics.size === 0) {
+      resultCallback({ code: 0 })
       return
     }
 
@@ -56,6 +57,7 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
       if (result.code === 0) {
         this.recordTelemetry('otel.metrics_export_successes', 1, additionalTags)
       }
+      resultCallback(result)
     })
   }
 }

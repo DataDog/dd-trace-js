@@ -71,6 +71,18 @@ function getVercelOtelLoggerProvider (tracer) {
   return loggerProvider
 }
 
+function getVercelOtelMetricReader (tracer) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return
+
+  tracer = tracer?._tracer || tracer
+  if (tracer?._config?.DD_METRICS_OTEL_ENABLED !== true) return
+
+  const { metrics } = require('@opentelemetry/api')
+  const metricReader = metrics.getMeterProvider()?.reader
+  if (typeof metricReader?.forceFlush !== 'function') return
+  return metricReader
+}
+
 function getVercelWaitUntil () {
   for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
     try {
@@ -85,7 +97,8 @@ function getVercelWaitUntil () {
 function scheduleVercelFlush (tracer) {
   const exporter = getVercelNativeOtlpExporter(tracer)
   const loggerProvider = getVercelOtelLoggerProvider(tracer)
-  if (!exporter && !loggerProvider) return false
+  const metricReader = getVercelOtelMetricReader(tracer)
+  if (!exporter && !loggerProvider && !metricReader) return false
 
   const waitUntil = getVercelWaitUntil()
   if (!waitUntil) return false
@@ -102,17 +115,20 @@ function scheduleVercelFlush (tracer) {
     return false
   }
 
-  setImmediate(flushExporters, exporter, loggerProvider, resolveFlush)
+  setImmediate(flushExporters, exporter, loggerProvider, metricReader, resolveFlush)
   return true
 }
 
-async function flushExporters (exporter, loggerProvider, done) {
+async function flushExporters (exporter, loggerProvider, metricReader, done) {
   const flushes = []
   if (exporter) {
     flushes.push(new Promise(resolve => exporter.flush(resolve)))
   }
   if (loggerProvider) {
     flushes.push(Promise.resolve().then(() => loggerProvider.forceFlush()))
+  }
+  if (metricReader) {
+    flushes.push(Promise.resolve().then(() => metricReader.forceFlush()))
   }
   await Promise.allSettled(flushes)
   done()

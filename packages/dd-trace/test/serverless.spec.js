@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
+const { metrics } = require('@opentelemetry/api')
 const { logs } = require('@opentelemetry/api-logs')
 
 require('./setup/core')
@@ -49,6 +50,7 @@ describe('Vercel request-lifetime native OTLP flush', () => {
     else process.env.VERCEL = originalVercel
     delete globalThis[nextRequestContext]
     delete globalThis[vercelRequestContext]
+    metrics.disable()
     logs.disable()
   })
 
@@ -112,6 +114,39 @@ describe('Vercel request-lifetime native OTLP flush', () => {
     await Promise.resolve()
     assert.strictEqual(requestCompleted, false)
     finishLogExport()
+    await requestTask
+    assert.strictEqual(requestCompleted, true)
+  })
+
+  it('retains OTLP metrics until their exporter completes', async () => {
+    process.env.VERCEL = '1'
+    let requestTask
+    let finishMetricExport
+    metrics.setGlobalMeterProvider({
+      getMeter () {},
+      reader: {
+        forceFlush () {
+          return new Promise(resolve => { finishMetricExport = resolve })
+        },
+      },
+    })
+    globalThis[vercelRequestContext] = {
+      get: () => ({ waitUntil: promise => { requestTask = promise } }),
+    }
+
+    assert.strictEqual(scheduleVercelFlush({
+      _config: {
+        DD_METRICS_OTEL_ENABLED: true,
+        OTEL_TRACES_EXPORTER: 'none',
+      },
+    }), true)
+    await nextImmediate()
+
+    let requestCompleted = false
+    requestTask.then(() => { requestCompleted = true })
+    await Promise.resolve()
+    assert.strictEqual(requestCompleted, false)
+    finishMetricExport()
     await requestTask
     assert.strictEqual(requestCompleted, true)
   })
