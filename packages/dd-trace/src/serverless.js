@@ -64,11 +64,46 @@ function retainVercelRequest (promise) {
   return false
 }
 
+function flushVercelOtlp (tracer) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return false
+
+  tracer = tracer?._tracer || tracer
+  const flushes = []
+
+  if (tracer?._config?.OTEL_TRACES_EXPORTER === 'otlp' && typeof tracer._exporter?.forceFlush === 'function') {
+    flushes.push(() => tracer._exporter.forceFlush())
+  }
+
+  if (tracer?._config?.DD_LOGS_OTEL_ENABLED === true) {
+    const { logs } = require('@opentelemetry/api-logs')
+    const loggerProvider = logs.getLoggerProvider()
+    if (typeof loggerProvider?.forceFlush === 'function') flushes.push(() => loggerProvider.forceFlush())
+  }
+
+  if (tracer?._config?.DD_METRICS_OTEL_ENABLED === true) {
+    const { metrics } = require('@opentelemetry/api')
+    const metricReader = metrics.getMeterProvider()?.reader
+    if (typeof metricReader?.forceFlush === 'function') flushes.push(() => metricReader.forceFlush())
+  }
+
+  if (flushes.length === 0) return false
+
+  const pending = flushes.map(flush => {
+    try {
+      return flush()
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  })
+  return retainVercelRequest(Promise.allSettled(pending))
+}
+
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  flushVercelOtlp,
   retainVercelRequest,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

@@ -84,7 +84,7 @@ class LoggerProvider {
 
   /**
    * Forces a flush of all pending log records.
-   * @returns {undefined} Promise that resolves when flush is n ssue cncomplete
+   * @returns {Promise<void> | undefined} Promise that resolves when flush is complete
    */
   forceFlush () {
     if (!this.isShutdown) {

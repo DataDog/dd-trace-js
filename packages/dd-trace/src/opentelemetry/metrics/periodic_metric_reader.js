@@ -197,14 +197,15 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   forceFlush () {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
-      return
+      return Promise.resolve()
     }
     this.#collectAndExport()
+    return this.exporter.forceFlush()
   }
 
   /**
