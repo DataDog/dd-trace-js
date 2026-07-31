@@ -2,48 +2,39 @@
 
 This prototype shows the Builder boundary required to initialize `dd-trace`
 before Next.js in Vercel Node functions. It delegates the framework build to
-Vercel's official `@vercel/next` Builder, then changes only the public Build
-Output API handler in each Node `.func`. Edge functions are left unchanged.
+Vercel's official `@vercel/next` Builder, then packages the tracer and configures
+an early Node preload in each public Node `.func`. Edge functions are left
+unchanged.
 
 ## Application Setup
 
-Install `dd-trace` as a production dependency and add
-[`instrumentation.js`](./instrumentation.js) at the application root. If the
-application already has one, merge the Node-runtime import into `register`.
-
-Keep `dd-trace` external in `next.config.js` so Next's output-file tracing
-includes its runtime dependency closure:
-
-```js
-/** @type {import('next').NextConfig} */
-module.exports = {
-  serverExternalPackages: ['dd-trace'],
-}
-```
+No application source or Next.js configuration is required. The published
+Builder owns a supported `dd-trace` dependency and uses the application's
+installed version when one is available.
 
 ## Builder Setup
 
 Configure the intended Datadog Builder once in `vercel.json`, as shown in
-[`vercel.json`](./vercel.json). Its package must provide `builder.js` from this
-directory and declare `@vercel/next` as its dependency.
+[`vercel.json`](./vercel.json). The Datadog Vercel integration should eventually
+own this configuration so the customer only enables APM and deploys.
 
-The Builder writes a CommonJS launcher next to each public Node function
-handler. The launcher requires `dd-trace/init` before loading the unchanged
-Next launcher. It does not set project-global `NODE_OPTIONS`, mutate a local
-prebuilt deployment, alter Edge output, use Vercel private file maps, or depend
-on Trace Drain.
+The Builder stages the complete installed tracer dependency graph once, keeps
+its transitive dependencies isolated under `dd-trace/node_modules`, maps those
+files into each Node function, and merges
+`--import=dd-trace/initialize.mjs` into that function's existing `NODE_OPTIONS`.
+It does not change the function handler, set project-global `NODE_OPTIONS`,
+alter Edge output, or depend on Trace Drain.
 
-Use Vercel's normal source-build deployment path. Configure `DD_API_KEY` and
-normal Datadog service tags through the Vercel integration or encrypted project
-environment settings. Do not commit API keys or enable `DD_TRACE_DEBUG` in
-production.
+Use Vercel's normal source-build deployment path. The Datadog integration must
+configure the selected agentless exporter, `DD_API_KEY`, and normal Datadog
+service tags as encrypted project settings. Do not commit API keys or enable
+`DD_TRACE_DEBUG` in production.
 
 ## Release Status
 
-`@datadog/vercel-next-builder` is not published by this repository. The
-repository release workflow publishes only `dd-trace`, and
-`packages/datadog-plugin-next` is not an independently publishable package.
-This directory is therefore a tested prototype and onboarding contract, not a
+`@datadog/vercel-next-builder` is not published by this repository. This
+directory is therefore a tested prototype and onboarding contract, not a
 customer-installable release. Publishing the Builder requires a package owner,
-package manifest, registry/release workflow, and live Vercel acceptance before
-this configuration can be supported.
+package manifest with `@vercel/next` and `dd-trace` dependencies,
+registry/release workflow, and live Vercel acceptance before this configuration
+can be supported.

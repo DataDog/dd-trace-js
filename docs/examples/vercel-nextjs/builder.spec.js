@@ -6,80 +6,101 @@ const Module = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
-const { build, instrumentBuildOutput } = require('./builder')
+const { build, instrumentBuildOutput, mergeNodeOptions } = require('./builder')
 
 describe('Vercel Next Builder prototype', () => {
   let outputPath
+  let tracerRoot
+  let workPath
 
   beforeEach(async () => {
     outputPath = await fs.mkdtemp(path.join(os.tmpdir(), 'dd-vercel-build-output-'))
+    workPath = path.join(outputPath, 'work')
+    tracerRoot = path.join(workPath, 'packages', 'node_modules', 'dd-trace')
+
+    await fs.mkdir(tracerRoot, { recursive: true })
+    await fs.writeFile(path.join(tracerRoot, 'package.json'), JSON.stringify({
+      name: 'dd-trace',
+      version: '1.0.0',
+      dependencies: { 'tracer-dependency': '1.0.0' },
+      optionalDependencies: { 'missing-optional-dependency': '1.0.0' },
+    }))
+    await fs.writeFile(path.join(tracerRoot, 'initialize.mjs'), 'globalThis.__datadogInitialized = true\n')
+
+    const dependencyRoot = path.join(workPath, 'packages', 'node_modules', 'tracer-dependency')
+    await fs.mkdir(dependencyRoot, { recursive: true })
+    await fs.writeFile(path.join(dependencyRoot, 'package.json'), JSON.stringify({
+      name: 'tracer-dependency',
+      version: '1.0.0',
+    }))
+    await fs.writeFile(path.join(dependencyRoot, 'index.js'), 'module.exports = true\n')
   })
 
   afterEach(async () => {
     await fs.rm(outputPath, { force: true, recursive: true })
   })
 
-  it('preloads dd-trace for Node functions and preserves Edge functions', async () => {
+  it('packages dd-trace and preloads it for Node functions without changing handlers', async () => {
     const nodeFunction = path.join(outputPath, 'functions', 'api', 'ping.func')
     const edgeFunction = path.join(outputPath, 'functions', 'api', 'edge.func')
-    const orderPath = path.join(nodeFunction, 'initialization-order')
     await fs.mkdir(nodeFunction, { recursive: true })
     await fs.mkdir(edgeFunction, { recursive: true })
-    await fs.mkdir(path.join(nodeFunction, 'node_modules', 'dd-trace'), { recursive: true })
     await fs.writeFile(path.join(nodeFunction, '.vc-config.json'), JSON.stringify({
+      environment: { NODE_OPTIONS: '--enable-source-maps', USER_SETTING: 'preserved' },
       handler: '___next_launcher.cjs',
       runtime: 'nodejs22.x',
     }))
-    await fs.writeFile(
-      path.join(nodeFunction, 'node_modules', 'dd-trace', 'init.js'),
-      `require('node:fs').appendFileSync(${JSON.stringify(orderPath)}, 'dd-trace\\n')\n`
-    )
-    await fs.writeFile(
-      path.join(nodeFunction, '___next_launcher.cjs'),
-      `require('node:fs').appendFileSync(${JSON.stringify(orderPath)}, 'next\\n')\n`
-    )
     await fs.writeFile(path.join(edgeFunction, '.vc-config.json'), JSON.stringify({
       handler: 'index.js',
       runtime: 'edge',
     }))
 
-    await instrumentBuildOutput(outputPath)
+    await instrumentBuildOutput(outputPath, tracerRoot, workPath)
 
     const nodeConfig = JSON.parse(await fs.readFile(path.join(nodeFunction, '.vc-config.json'), 'utf8'))
     const edgeConfig = JSON.parse(await fs.readFile(path.join(edgeFunction, '.vc-config.json'), 'utf8'))
-    require(path.join(nodeFunction, nodeConfig.handler))
 
-    assert.strictEqual(nodeConfig.handler, '___datadog_next_launcher.cjs')
-    assert.deepStrictEqual((await fs.readFile(orderPath, 'utf8')).trim().split('\n'), ['dd-trace', 'next'])
+    assert.strictEqual(nodeConfig.handler, '___next_launcher.cjs')
+    assert.strictEqual(
+      nodeConfig.environment.NODE_OPTIONS,
+      '--import=dd-trace/initialize.mjs --enable-source-maps'
+    )
+    assert.strictEqual(nodeConfig.environment.USER_SETTING, 'preserved')
+    assert.strictEqual(
+      nodeConfig.filePathMap['node_modules/dd-trace/initialize.mjs'],
+      '.datadog/vercel-runtime/node_modules/dd-trace/initialize.mjs'
+    )
+    assert.strictEqual(
+      nodeConfig.filePathMap['node_modules/dd-trace/node_modules/tracer-dependency/index.js'],
+      '.datadog/vercel-runtime/node_modules/dd-trace/node_modules/tracer-dependency/index.js'
+    )
+    await fs.access(path.join(workPath, nodeConfig.filePathMap['node_modules/dd-trace/initialize.mjs']))
+    await assert.rejects(fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace')))
+
     assert.deepStrictEqual(edgeConfig, { handler: 'index.js', runtime: 'edge' })
-    await assert.rejects(fs.access(path.join(edgeFunction, '___datadog_next_launcher.cjs')))
+    await assert.rejects(fs.access(path.join(edgeFunction, 'node_modules', 'dd-trace')))
   })
 
-  it('does not wrap an already transformed Node function again', async () => {
-    const functionPath = path.join(outputPath, 'functions', 'api.func')
-    await fs.mkdir(functionPath, { recursive: true })
-    await fs.writeFile(path.join(functionPath, '.vc-config.json'), JSON.stringify({
-      handler: '___datadog_next_launcher.cjs',
-      runtime: 'nodejs22.x',
-    }))
-
-    await instrumentBuildOutput(outputPath)
-
-    await assert.rejects(fs.access(path.join(functionPath, '___datadog_next_launcher.cjs')))
+  it('does not add the preload twice', async () => {
+    assert.strictEqual(
+      mergeNodeOptions('--import=dd-trace/initialize.mjs --enable-source-maps'),
+      '--import=dd-trace/initialize.mjs --enable-source-maps'
+    )
   })
 
   it('preserves a static-only Build Output directory', async () => {
     await fs.mkdir(path.join(outputPath, 'static'), { recursive: true })
 
-    await instrumentBuildOutput(outputPath)
+    await instrumentBuildOutput(outputPath, tracerRoot, workPath)
 
     await fs.access(path.join(outputPath, 'static'))
+    await assert.rejects(fs.access(path.join(workPath, '.datadog')))
   })
 
   it('instruments the public directory returned by the Next Builder', async () => {
     const functionPath = path.join(outputPath, 'functions', 'api.func')
     const originalLoad = Module._load
-    const options = { workPath: '/app' }
+    const options = { workPath }
     const result = { buildOutputPath: outputPath, buildOutputVersion: 3 }
     await fs.mkdir(functionPath, { recursive: true })
     await fs.writeFile(path.join(functionPath, '.vc-config.json'), JSON.stringify({
@@ -99,13 +120,22 @@ describe('Vercel Next Builder prototype', () => {
       return originalLoad(request, parent, isMain)
     }
 
+    const originalResolve = Module._resolveFilename
+    Module._resolveFilename = (request, parent, isMain, options) => {
+      if (request === 'dd-trace/package.json') return path.join(tracerRoot, 'package.json')
+      return originalResolve(request, parent, isMain, options)
+    }
+
     try {
       assert.strictEqual(await build(options), result)
     } finally {
       Module._load = originalLoad
+      Module._resolveFilename = originalResolve
     }
 
     const config = JSON.parse(await fs.readFile(path.join(functionPath, '.vc-config.json'), 'utf8'))
-    assert.strictEqual(config.handler, '___datadog_next_launcher.cjs')
+    assert.strictEqual(config.handler, '___next_launcher.cjs')
+    assert.strictEqual(config.environment.NODE_OPTIONS, '--import=dd-trace/initialize.mjs')
+    assert.ok(config.filePathMap['node_modules/dd-trace/initialize.mjs'])
   })
 })
