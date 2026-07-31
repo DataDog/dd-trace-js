@@ -81,7 +81,7 @@ function buildCallbackArgsContext (rrtype) {
     const captured = [...args]
     captured.pop() // remove the callback
     if (rrtype) {
-      captured.push(rrtype)
+      captured.splice(1, 0, rrtype)
     }
     return { args: captured }
   }
@@ -91,7 +91,7 @@ function buildPromiseArgsContext (rrtype) {
   return function (_, args) {
     const captured = [...args]
     if (rrtype) {
-      captured.push(rrtype)
+      captured.splice(1, 0, rrtype)
     }
     return { args: captured }
   }

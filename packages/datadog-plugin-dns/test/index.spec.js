@@ -163,6 +163,50 @@ describe('Plugin', () => {
         dns.resolveAny('localhost', err => err && done(err))
       })
 
+      it('should preserve the shorthand rrtype when callback options are passed', done => {
+        agent
+          .assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'dns.resolve',
+              service: 'test',
+              resource: 'AAAA fakedomain.faketld',
+            })
+            assertObjectContains(traces[0][0].meta, {
+              component: 'dns',
+              'span.kind': 'client',
+              'dns.hostname': 'fakedomain.faketld',
+              'dns.rrtype': 'AAAA',
+            })
+          })
+          .then(done)
+          .catch(done)
+
+        dns.resolve6('fakedomain.faketld', { ttl: true }, () => {})
+      })
+
+      it('should preserve the shorthand rrtype on callback Resolver instances when options are passed', done => {
+        const resolver = new dns.Resolver()
+
+        agent
+          .assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'dns.resolve',
+              service: 'test',
+              resource: 'AAAA fakedomain.faketld',
+            })
+            assertObjectContains(traces[0][0].meta, {
+              component: 'dns',
+              'span.kind': 'client',
+              'dns.hostname': 'fakedomain.faketld',
+              'dns.rrtype': 'AAAA',
+            })
+          })
+          .then(done)
+          .catch(done)
+
+        resolver.resolve6('fakedomain.faketld', { ttl: true }, () => {})
+      })
+
       it('should instrument reverse', done => {
         agent
           .assertSomeTraces(traces => {
@@ -374,6 +418,50 @@ describe('Plugin', () => {
           return Promise.all([
             tracePromise,
             dns.promises.resolveAny('localhost').catch(() => {}),
+          ])
+        })
+
+        it('should preserve the shorthand rrtype when promise options are passed', () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'dns.resolve',
+              service: 'test',
+              resource: 'AAAA fakedomain.faketld',
+            })
+            assertObjectContains(traces[0][0].meta, {
+              component: 'dns',
+              'span.kind': 'client',
+              'dns.hostname': 'fakedomain.faketld',
+              'dns.rrtype': 'AAAA',
+            })
+          })
+
+          return Promise.all([
+            tracePromise,
+            dns.promises.resolve6('fakedomain.faketld', { ttl: true }).catch(() => {}),
+          ])
+        })
+
+        it('should preserve the shorthand rrtype on promise Resolver instances when options are passed', () => {
+          const resolver = new dns.promises.Resolver()
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'dns.resolve',
+              service: 'test',
+              resource: 'AAAA fakedomain.faketld',
+            })
+            assertObjectContains(traces[0][0].meta, {
+              component: 'dns',
+              'span.kind': 'client',
+              'dns.hostname': 'fakedomain.faketld',
+              'dns.rrtype': 'AAAA',
+            })
+          })
+
+          return Promise.all([
+            tracePromise,
+            resolver.resolve6('fakedomain.faketld', { ttl: true }).catch(() => {}),
           ])
         })
 
