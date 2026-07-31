@@ -3,7 +3,7 @@
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
-const { Experiment } = require('./experiment')
+const { Experiment, ExperimentRecorder } = require('./experiment')
 const NoopExperiments = require('./noop')
 
 // Poll `attempt` with exponential backoff until it returns true or the time
@@ -26,18 +26,28 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #config
   #llmobs
   #projectName
 
   constructor (config, llmobs) {
+    this.#config = config
     this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
-    this.#client = new ExperimentsClient({
-      apiKey: config.DD_API_KEY,
-      appKey: config.DD_APP_KEY,
-      site: config.site,
-      apiBase: config.llmobs?.experimentsApiBase,
-      projectName: this.#projectName,
+    this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  /**
+   * @param {string} projectName
+   * @returns {ExperimentsClient}
+   */
+  #clientForProject (projectName) {
+    return new ExperimentsClient({
+      apiKey: this.#config.DD_API_KEY,
+      appKey: this.#config.DD_APP_KEY,
+      site: this.#config.site,
+      projectName,
+      apiBase: this.#config.llmobs?.experimentsApiBase,
     })
   }
 
@@ -152,6 +162,21 @@ class Experiments {
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
     return new Experiment(this.#client, options, this.#llmobs)
+  }
+
+  /**
+   * Start an externally-driven experiment for eval frameworks that already own
+   * task execution. Call submitSpan() once per completed row, then
+   * submitEvaluationMetrics() with the generated span id.
+   *
+   * @param {object} options
+   * @returns {Promise<ExperimentRecorder>}
+   */
+  startExperiment (options) {
+    const client = options?.projectName === undefined || options.projectName === this.#projectName
+      ? this.#client
+      : this.#clientForProject(options.projectName)
+    return new ExperimentRecorder(client, options).start()
   }
 }
 

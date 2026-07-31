@@ -392,4 +392,125 @@ describe('LLMObs Experiments facade', () => {
       console.log(`Datadog experiment URL: ${result.url}`)
     })
   })
+
+  describe('externally-driven experiments', () => {
+    function stubExperimentRecorderClient () {
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves('proj')
+      sinon.stub(ExperimentsClient.prototype, 'createDataset').resolves({
+        id: () => 'dataset',
+        version: () => 1,
+      })
+      sinon.stub(ExperimentsClient.prototype, 'createExperiment').resolves({
+        experimentId: 'exp',
+        rows: [],
+        url: 'https://app.datadoghq.com/llm/experiments/exp',
+      })
+      sinon.stub(ExperimentsClient.prototype, 'postExperimentEvents').resolves()
+      sinon.stub(ExperimentsClient.prototype, 'updateExperiment').resolves()
+    }
+
+    it('starts an experiment, submits a generated row span, and submits metrics for that span', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'eve-run',
+        description: 'eve eval run',
+        tags: { source: 'eve' },
+        metadata: { suite: 'smoke' },
+        config: { revision: 'abc123' },
+      })
+      assert.equal(recorder.experimentId, 'exp')
+      assert.equal(recorder.url(), 'https://app.datadoghq.com/llm/experiments/exp')
+
+      const span = await recorder.submitSpan({
+        id: 'smoke',
+        name: 'smoke eval',
+        input: 'Say hello.',
+        output: { message: 'hello' },
+        expectedOutput: 'hello',
+        metadata: { verdict: 'passed' },
+        tags: { eval: 'smoke' },
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedAt: '2026-01-01T00:00:01.000Z',
+      })
+
+      assert.equal(span.experimentId, 'exp')
+      assert.match(span.spanId, /^[a-f0-9]{16}$/)
+      assert.match(span.traceId, /^[a-f0-9]{32}$/)
+
+      await recorder.submitEvaluationMetrics(span, [
+        { label: 'gate:succeeded', value: true },
+        { label: 'similarity', value: 0.92 },
+        { label: 'verdict', value: 'passed' },
+        { label: 'details', value: { assertions: 3 } },
+        { label: 'judge_error', error: 'judge unavailable' },
+      ])
+      await recorder.close({ status: 'completed' })
+
+      sinon.assert.calledWith(ExperimentsClient.prototype.createDataset, 'proj', {
+        name: 'eve-run dataset',
+        description: "Placeholder dataset for externally-driven experiment 'eve-run'",
+      })
+      sinon.assert.calledWith(ExperimentsClient.prototype.createExperiment, {
+        name: 'eve-run',
+        project_id: 'proj',
+        dataset_id: 'dataset',
+        description: 'eve eval run',
+        ensure_unique: true,
+        dataset_version: 1,
+        config: { revision: 'abc123' },
+        metadata: { suite: 'smoke' },
+        tags: { source: 'eve' },
+      })
+
+      const submittedSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
+      assert.equal(submittedSpan.span_id, span.spanId)
+      assert.equal(submittedSpan.trace_id, span.traceId)
+      assert.equal(submittedSpan.project_id, 'proj')
+      assert.equal(submittedSpan.name, 'smoke eval')
+      assert.equal(submittedSpan.start_ns, new Date('2026-01-01T00:00:00.000Z').getTime() * 1e6)
+      assert.equal(submittedSpan.duration, 1_000_000_000)
+      assert.deepEqual(submittedSpan.meta, {
+        input: 'Say hello.',
+        output: { message: 'hello' },
+        expected_output: 'hello',
+        metadata: { verdict: 'passed' },
+      })
+      assert.equal(submittedSpan.dataset_id, 'dataset')
+      assert.deepEqual(new Set(submittedSpan.tags), new Set([
+        'source:eve',
+        'eval:smoke',
+        'experiment_id:exp',
+        'dataset_id:dataset',
+      ]))
+
+      const metrics = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].metrics
+      assert.equal(metrics.length, 5)
+      assert.deepEqual(metrics.map(metric => metric.span_id), Array(5).fill(span.spanId))
+      assert.deepEqual(metrics.map(metric => metric.tags), Array(5).fill(['source:eve', 'experiment_id:exp']))
+      assert.equal(metrics[0].metric_type, 'boolean')
+      assert.equal(metrics[0].boolean_value, true)
+      assert.equal(metrics[1].metric_type, 'score')
+      assert.equal(metrics[1].score_value, 0.92)
+      assert.equal(metrics[2].metric_type, 'categorical')
+      assert.equal(metrics[2].categorical_value, 'passed')
+      assert.equal(metrics[3].metric_type, 'json')
+      assert.deepEqual(metrics[3].json_value, { assertions: 3 })
+      assert.deepEqual(metrics[4].error, { message: 'judge unavailable' })
+      sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', { status: 'completed' })
+    })
+
+    it('supports no-op external experiments when LLM Obs is disabled', async () => {
+      const warn = sinon.spy(log, 'warn')
+      const experiments = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
+
+      const recorder = await experiments.startExperiment({ name: 'disabled' })
+      assert.equal(recorder.url(), null)
+      assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
+      await recorder.submitEvaluationMetrics({ spanId: 'span' }, [{ label: 'score', value: 1 }])
+      await recorder.close({ status: 'completed' })
+
+      sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
+    })
+  })
 })
