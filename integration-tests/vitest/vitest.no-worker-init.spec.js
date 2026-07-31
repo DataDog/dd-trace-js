@@ -40,6 +40,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
+  TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
@@ -48,6 +49,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
@@ -56,6 +58,7 @@ const {
   TEST_NAME,
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
+  TEST_SKIPPED_BY_ITR,
   TEST_SOURCE_FILE,
   TEST_STATUS,
   TEST_SUITE,
@@ -899,14 +902,38 @@ SUPPORTED_VERSIONS.forEach((version) => {
       })
     }
 
-    it('does not advertise unsupported capabilities in no-worker mode', async () => {
+    it('does not advertise or apply unsupported capabilities in no-worker mode', async () => {
+      const testSuite = 'ci-visibility/vitest-tests/vitest-worker-env.mjs'
       receiver.setSettings({
         di_enabled: true,
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: false,
+        tests_skipping: true,
       })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: testSuite },
+      }])
 
-      const metadataPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+      const runPromise = runVitest({
+        TEST_DIR: testSuite,
+        POOL_CONFIG: 'forks',
+        EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+        EXPECT_NO_DD_TRACE_INIT: '1',
+      })
+      const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) =>
+          url === '/api/v2/citestcycle' ||
+          url === '/api/v2/citestcov' ||
+          url === '/api/v2/ci/tests/skippable',
+        payloads => {
+          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
+          assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+
+          const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+          const metadataDicts = cyclePayloads.flatMap(({ payload }) => payload.metadata)
 
           assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
           metadataDicts.forEach(metadata => {
@@ -927,17 +954,20 @@ SUPPORTED_VERSIONS.forEach((version) => {
               `Available keys: ${inspect(Object.keys(metadata.test))}`
             )
           })
-        })
 
-      const exitCode = await Promise.all([
-        runVitest({
-          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
-          POOL_CONFIG: 'forks',
-          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
-          EXPECT_NO_DD_TRACE_INIT: '1',
-        }),
-        metadataPromise,
-      ]).then(([exitCode]) => exitCode)
+          const events = getEvents(cyclePayloads)
+          const [testSession] = getEventContents(events, 'test_session_end')
+          const [testSuiteEvent] = getEventContents(events, 'test_suite_end')
+
+          assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
+          assert.ok(!(TEST_SKIPPED_BY_ITR in testSuiteEvent.meta))
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+        },
+        { hardTimeout: 60_000 }
+      )
+
+      const [exitCode] = await Promise.all([runPromise, payloadsPromise])
 
       assert.strictEqual(exitCode, 0, testOutput)
     })

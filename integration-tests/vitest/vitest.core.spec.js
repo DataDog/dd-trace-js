@@ -1351,12 +1351,13 @@ versions.forEach((version) => {
           currentWorkingDirectory = cwd,
           env = {},
           requestFilter = ({ url }) => url === '/api/v2/citestcycle' || url === '/api/v2/citestcov',
+          testOptimizationEnvironment = getCiVisAgentlessConfig(receiver.port),
         } = options
         const coverageArgument = coverageProvider ? ' --coverage' : ''
         childProcess = exec(`${command}${coverageArgument}`, {
           cwd: currentWorkingDirectory,
           env: {
-            ...getCiVisAgentlessConfig(receiver.port),
+            ...testOptimizationEnvironment,
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             TEST_DIR: 'ci-visibility/vitest-tests/tia-{first,second}.mjs',
             COVERAGE_PROVIDER: coverageProvider,
@@ -1381,7 +1382,7 @@ versions.forEach((version) => {
 
       function getTiaPayloads (payloads) {
         const events = payloads
-          .filter(({ url }) => url === '/api/v2/citestcycle')
+          .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
           .flatMap(({ payload }) => payload.events)
         const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
         const suiteById = new Map(testSuiteEvents.map(({ content }) => [
@@ -1389,7 +1390,7 @@ versions.forEach((version) => {
           content.meta[TEST_SUITE],
         ]))
         const coverages = payloads
-          .filter(({ url }) => url === '/api/v2/citestcov')
+          .filter(({ url }) => url.endsWith('/api/v2/citestcov'))
           .flatMap(({ payload }) => payload)
           .flatMap(({ content }) => content.coverages)
         const coverageBySuite = new Map(coverages.map(coverage => [
@@ -1459,6 +1460,32 @@ versions.forEach((version) => {
           env: {
             TEST_DIR: firstSuite,
             VITEST_SETUP_FILE: setupFile,
+          },
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('reports dynamic imports and mocked implementations with isolation disabled', async () => {
+        const testSuite = 'ci-visibility/vitest-tests/tia-dynamic-mock.mjs'
+        const dynamicSource = 'ci-visibility/vitest-tests/tia-dynamic-source.mjs'
+        const mockedImplementation = 'ci-visibility/vitest-tests/tia-mocked-implementation.mjs'
+        const mockedTarget = 'ci-visibility/vitest-tests/tia-mocked-target.mjs'
+
+        await runTiaTests((payloads) => {
+          const { coverageBySuite } = getTiaPayloads(payloads)
+          const coverage = coverageBySuite.get(testSuite)
+
+          assert.ok(coverage, testOutput)
+          assert.ok(coverage.includes(testSuite), testOutput)
+          assert.ok(coverage.includes(dynamicSource), testOutput)
+          assert.ok(coverage.includes(mockedImplementation), testOutput)
+          assert.strictEqual(coverage.includes(mockedTarget), false, testOutput)
+        }, {
+          command: './node_modules/.bin/vitest run --maxWorkers=1 --no-file-parallelism',
+          env: {
+            NO_ISOLATE: 'true',
+            TEST_DIR: testSuite,
           },
         })
 
@@ -1856,6 +1883,107 @@ versions.forEach((version) => {
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
 
+      it('reports TIA payloads through the event platform proxy', async () => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
+          const skippedSuite = testSuiteEvents
+            .find(({ content }) => content.meta[TEST_SUITE] === secondSuite)
+            .content
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const urls = payloads.map(({ url }) => url)
+
+          assert.ok(urls.some(url => url.endsWith('/api/v2/libraries/tests/services/setting')))
+          assert.ok(urls.some(url => url.endsWith('/api/v2/ci/tests/skippable')))
+          assert.ok(urls.some(url => url.endsWith('/api/v2/citestcov')))
+          assert.ok(urls.every(url => url.startsWith('/evp_proxy/')), inspect(urls))
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.deepStrictEqual(
+            coverageBySuite.get(firstSuite),
+            [firstSuite, 'ci-visibility/vitest-tests/sum.mjs'].sort()
+          )
+          assert.strictEqual(coverageBySuite.has(secondSuite), false)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, {
+          testOptimizationEnvironment: getCiVisEvpProxyConfig(receiver.port),
+          requestFilter: ({ url }) =>
+            url.endsWith('/api/v2/libraries/tests/services/setting') ||
+            url.endsWith('/api/v2/ci/tests/skippable') ||
+            url.endsWith('/api/v2/citestcycle') ||
+            url.endsWith('/api/v2/citestcov'),
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('does not request TIA when the agent does not support the event platform proxy', async () => {
+        receiver.setInfoResponse({ endpoints: [] })
+
+        await runTiaTests((payloads) => {
+          const urls = payloads.map(({ url }) => url)
+
+          assert.ok(urls.includes('/v0.4/traces'), inspect(urls))
+          assert.strictEqual(
+            urls.some(url =>
+              url.endsWith('/api/v2/libraries/tests/services/setting') ||
+              url.endsWith('/api/v2/ci/tests/skippable') ||
+              url.endsWith('/api/v2/citestcov')
+            ),
+            false,
+            inspect(urls)
+          )
+        }, {
+          testOptimizationEnvironment: getCiVisEvpProxyConfig(receiver.port),
+          requestFilter: ({ url }) =>
+            url === '/v0.4/traces' ||
+            url.endsWith('/api/v2/libraries/tests/services/setting') ||
+            url.endsWith('/api/v2/ci/tests/skippable') ||
+            url.endsWith('/api/v2/citestcov'),
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
+      it('does not request skippable suites when git metadata upload fails', async () => {
+        receiver.setGitUploadStatus(404)
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: { suite: secondSuite },
+        }])
+
+        await runTiaTests((payloads) => {
+          const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.strictEqual(
+            payloads.some(({ url }) => url.endsWith('/api/v2/ci/tests/skippable')),
+            false
+          )
+          assert.strictEqual(testSuiteEvents.length, 2, testOutput)
+          assert.ok(testSuiteEvents.every(({ content }) => content.meta[TEST_STATUS] === 'pass'))
+          assert.strictEqual(coverages.length, 2, testOutput)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+        }, {
+          requestFilter: ({ url }) =>
+            url.endsWith('/api/v2/git/repository/packfile') ||
+            url.endsWith('/api/v2/ci/tests/skippable') ||
+            url.endsWith('/api/v2/citestcycle') ||
+            url.endsWith('/api/v2/citestcov'),
+        })
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
+      })
+
       const noIsolateConfigurations = [
         { name: 'NO_ISOLATE', env: { NO_ISOLATE: 'true' } },
         { name: 'POOL_NO_ISOLATE', env: { POOL_NO_ISOLATE: 'true' } },
@@ -1935,6 +2063,11 @@ versions.forEach((version) => {
         {
           description: 'with user V8 coverage',
           coverageProvider: 'v8',
+          env: { NO_ISOLATE: 'true' },
+        },
+        {
+          description: 'with user Istanbul coverage',
+          coverageProvider: 'istanbul',
           env: { NO_ISOLATE: 'true' },
         },
         {
