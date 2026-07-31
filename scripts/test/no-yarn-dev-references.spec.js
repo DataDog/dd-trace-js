@@ -420,7 +420,14 @@ describe('no yarn dev references', function () {
       'docs/bun.lock',
       'vendor/bun.lock',
     ]
-    assert.deepStrictEqual(auditWorkflow.on.pull_request.paths.sort(), lockPaths)
+    // An exemption is only as good as the run that re-checks it, so the policy and the wrapper that
+    // enforces it trigger the workflow alongside the lockfiles they gate.
+    const policyPaths = [
+      '.github/audit-allowlist.json',
+      '.github/workflows/audit.yml',
+      'scripts/audit.js',
+    ]
+    assert.deepStrictEqual(auditWorkflow.on.pull_request.paths.sort(), [...lockPaths, ...policyPaths].sort())
     assert.deepStrictEqual(
       auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort(),
       ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
