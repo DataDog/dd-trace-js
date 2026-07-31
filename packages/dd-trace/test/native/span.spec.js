@@ -660,6 +660,24 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(span._spanContext.getTag('events'), undefined)
     })
 
+    it('drops events with a non-string name instead of throwing out of finish()', () => {
+      // `addEvent` and the OTel bridge do not type-check `name`, and the WASM
+      // string parameter throws on a non-string - which would surface inside
+      // application code at finish(). The legacy v0.4 encoder drops these, so the
+      // rest of the span still ships.
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      span._events.push({ name: { toString: () => 'not-a-string' }, startTime: 1 })
+      span._events.push({ name: 42, startTime: 2 })
+      span._events.push(null)
+      span._events.push({ name: 'good', startTime: 3 })
+
+      // A throw here fails the test directly.
+      span.finish()
+
+      sinon.assert.calledOnce(nativeSpans.addSpanEvent)
+      assert.strictEqual(nativeSpans.addSpanEvent.getCall(0).args[1], 'good')
+    })
+
     it('falls back to the `events` meta tag when the flag is disabled', () => {
       tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = false
       span._events.push({ name: 'evt', startTime: 1, attributes: { k: 'v' } })

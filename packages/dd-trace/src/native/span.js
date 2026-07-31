@@ -569,6 +569,11 @@ class NativeDatadogSpan extends DatadogSpan {
     // attributes. Otherwise fall back to the `events` meta tag (plain JSON).
     if (this.tracer()._config.DD_TRACE_NATIVE_SPAN_EVENTS) {
       for (const event of this._events) {
+        // `addEvent` and the OTel bridge do not type-check `name`. A non-string
+        // reaches the WASM string parameter and throws out of `finish()` into
+        // application code, so drop the bad event and keep the rest of the span -
+        // exactly what the legacy v0.4 span_events encoder does (encode/0.4.js).
+        if (event === null || typeof event !== 'object' || typeof event.name !== 'string') continue
         this._nativeSpans.addSpanEvent(
           this._spanContext._nativeSpanId,
           event.name,
