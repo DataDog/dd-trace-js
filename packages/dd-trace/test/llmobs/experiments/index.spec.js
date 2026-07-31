@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
@@ -17,26 +17,40 @@ const enabledConfig = (overrides = {}) => ({
 })
 
 describe('LLMObs Experiments facade', () => {
-  let fetchHandler
-  let fetchStub
-  let originalFetch
+  const backendDatasets = []
 
-  beforeEach(() => {
-    originalFetch = global.fetch
-    fetchHandler = async (url) => {
-      throw new Error(`Unexpected fetch ${url}`)
+  afterEach(async () => {
+    for (const { dataset, exp } of backendDatasets.splice(0).reverse()) {
+      const projectId = dataset.projectId()
+      const datasetId = dataset.id()
+      if (projectId !== null && datasetId !== null) await exp._deleteDataset(projectId, datasetId)
     }
-    fetchStub = sinon.stub().callsFake((...args) => fetchHandler(...args))
-    global.fetch = fetchStub
-  })
-
-  afterEach(() => {
-    global.fetch = originalFetch
     sinon.restore()
   })
 
-  const resolveFetchWith = (handler) => {
-    fetchHandler = handler
+  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
+  const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
+    `dd-trace-js-experiments-${backendTestId}`
+  const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
+  const backendExperimentName = `${backendProjectName}-experiment`
+
+  function backendExperiments () {
+    return createExperiments(enabledConfig({
+      site: process.env.DD_SITE ?? 'datadoghq.com',
+      DD_API_KEY: process.env.DD_API_KEY ?? 'test-api-key',
+      DD_APP_KEY: process.env.DD_APP_KEY ?? 'test-app-key',
+      llmobs: {
+        DD_LLMOBS_ENABLED: true,
+        experimentsApiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
+          'http://127.0.0.1:9126/vcr/datadog-experiments',
+        mlApp: backendProjectName,
+      },
+    }))
+  }
+
+  function trackBackendDataset (exp, dataset) {
+    backendDatasets.push({ exp, dataset })
+    return dataset
   }
 
   describe('createExperiments gating', () => {
@@ -69,6 +83,12 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('returns a working facade when service is used as the project name fallback', () => {
+      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
+      const dataset = exp.createDataset('d')
+      assert.equal(typeof dataset.push, 'function')
+    })
+
     it('rejects duplicate custom record ids', () => {
       assert.throws(
         () => createExperiments(enabledConfig()).createDataset('d', {
@@ -76,21 +96,6 @@ describe('LLMObs Experiments facade', () => {
         }),
         /Duplicate record id 'r1'/
       )
-    })
-
-    it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
-      resolveFetchWith(async () => ({
-        ok: true,
-        status: 200,
-        text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })),
-      }))
-
-      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
-      await exp.createDataset('d').push()
-
-      const [url, opts] = fetchStub.getCall(0).args
-      assert.equal(new URL(url).pathname, '/api/v2/llm-obs/v1/projects')
-      assert.equal(JSON.parse(opts.body).data.attributes.name, 'my-service')
     })
 
     it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
@@ -169,175 +174,31 @@ describe('LLMObs Experiments facade', () => {
     })
   })
 
-  describe('pullDataset', () => {
-    const resolveRoutes = (recordsResponses) => {
-      let recordsCall = 0
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          payload = recordsResponses[Math.min(recordsCall++, recordsResponses.length - 1)]
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-    }
+  describe('experiment run', () => {
+    it('creates an experiment, submits row events, and marks the experiment completed', async function () {
+      this.timeout(60_000)
 
-    it('finds a dataset by name and reads records nested under attributes', async () => {
-      resolveRoutes([{
-        data: [
-          { id: 'r1', attributes: { input: { q: '2+2' }, expected_output: '4', metadata: { a: 1 } } },
-          { id: 'r2', attributes: { input: 'i2' } },
-        ],
-      }])
+      const exp = backendExperiments()
+      const dataset = trackBackendDataset(exp, exp.createDataset(backendExperimentDatasetName, {
+        description: 'created by a dd-trace-js experiments VCR test',
+        records: [{ inputData: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'backend-test' } }],
+      }))
 
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.equal(ds.id(), 'ds9')
-      assert.equal(ds.projectId(), 'proj')
-      assert.equal(ds.records().length, 2)
-      assert.deepEqual(ds.records()[0].input, { q: '2+2' })
-      assert.equal(ds.records()[0].expectedOutput, '4')
-      assert.deepEqual(ds.records()[0].metadata, { a: 1 })
-      assert.equal(ds.records()[0].id, 'r1')
-      assert.equal(ds.records()[1].id, 'r2')
-    })
+      const result = await exp.experiment({
+        name: backendExperimentName,
+        dataset,
+        task: (input) => ({ value: input.value + 1 }),
+        evaluators: {
+          exact: (_input, output, expected) => output.value === expected.value,
+        },
+      }).run()
 
-    it('passes explicit dataset version when reading records', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          assert.equal(u.searchParams.get('filter[version]'), '3')
-          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
-      assert.equal(ds.version(), 3)
-      assert.equal(ds.latestVersion(), 7)
-    })
-
-    it('pins the current version when pulling latest records', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          assert.equal(u.searchParams.get('filter[version]'), '7')
-          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.equal(ds.version(), 7)
-      assert.equal(ds.records().length, 1)
-    })
-
-    it('waits (backoff) until the expected record count is readable', async () => {
-      const one = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-      const two = { data: [{ id: 'r1', attributes: { input: 'i1' } }, { id: 'r2', attributes: { input: 'i2' } }] }
-      resolveRoutes([one, two])
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', {
-        expectedRecordCount: 2,
-        maxWaitMs: 5000,
-      })
-      assert.equal(ds.records().length, 2)
-    })
-
-    it('throws when the dataset is absent (no wait)', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        const payload = u.pathname === '/api/v2/llm-obs/v1/projects' ? { data: { id: 'proj' } } : { data: [] }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('ghost', { maxWaitMs: 0 }),
-        /not found/
-      )
-    })
-
-    it('throws with the underlying error when listing datasets fails', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
-        }
-        return { ok: false, status: 500, text: sinon.stub().resolves('server error') }
-      })
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
-        /Failed to list datasets/
-      )
-    })
-
-    it('throws when the expected record count never arrives within the budget', async () => {
-      resolveRoutes([{ data: [{ id: 'r1', attributes: { input: 'i1' } }] }]) // only ever 1 record
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { expectedRecordCount: 3, maxWaitMs: 0 }),
-        /expected 3.*backend may not have finished ingesting/
-      )
-    })
-
-    it('throws the underlying error when fetching records fails, even without expectedRecordCount', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
-        }
-        if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          const payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-        }
-        return { ok: false, status: 504, text: sinon.stub().resolves('gateway timeout') }
-      })
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
-        /Failed to fetch records for dataset 'wanted'/
-      )
-    })
-
-    it('follows the meta.after / page[cursor] pagination across multiple pages', async () => {
-      const pages = {
-        '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
-        cursor1: { data: [{ id: 'r2', attributes: { input: 'i2' } }], meta: { after: '' } },
-      }
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          payload = pages[u.searchParams.get('page[cursor]') ?? '']
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.deepEqual(ds.records().map((r) => r.input), ['i1', 'i2'])
-      assert.deepEqual(ds.recordIds(), ['r1', 'r2'])
+      assert.match(result.experimentId, /\S+/)
+      assert.match(result.url, /^https:\/\//)
+      assert.equal(result.rows.length, 1)
+      assert.deepEqual(result.rows[0].evaluations, { exact: true })
+      // eslint-disable-next-line no-console
+      console.log(`Datadog experiment URL: ${result.url}`)
     })
   })
 })

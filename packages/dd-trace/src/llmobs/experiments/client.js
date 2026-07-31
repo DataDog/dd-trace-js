@@ -63,14 +63,16 @@ class ExperimentsClient {
   #site
   #projectName
   #timeout
+  #apiBase
   #cachedProjectId
 
-  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000 } = {}) {
+  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000, apiBase } = {}) {
     this.#apiKey = apiKey
     this.#appKey = appKey
     this.#site = site
     this.#projectName = projectName
     this.#timeout = timeout
+    this.#apiBase = apiBase?.replace(/\/$/, '') ?? `https://${apiHost(this.#site)}`
     this.#cachedProjectId = null
   }
 
@@ -96,7 +98,7 @@ class ExperimentsClient {
   // Low-level request. Builds https://api.<site><path>, attaches both keys, and
   // returns the parsed JSON body. Throws with status + body on a non-2xx.
   async request (method, path, body) {
-    const url = `https://${apiHost(this.#site)}${path}`
+    const url = `${this.#apiBase}${path}`
     const headers = {
       'DD-API-KEY': this.#apiKey,
       'DD-APPLICATION-KEY': this.#appKey,
@@ -143,6 +145,13 @@ class ExperimentsClient {
     return datasetFromResource(this, projectId, response?.data ?? null)
   }
 
+  deleteDataset (projectId, datasetId) {
+    return this.jsonApiRequest('POST', `${API_BASE_PATH}/${projectId}/datasets/delete`, 'datasets', {
+      type: 'soft',
+      dataset_ids: [datasetId],
+    })
+  }
+
   async listDatasets (projectId, options = {}) {
     const query = new URLSearchParams()
     if (options.name !== undefined) query.set('filter[name]', options.name)
@@ -173,7 +182,10 @@ class ExperimentsClient {
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
     const queryString = query.toString() ? `?${query.toString()}` : ''
-    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`)
+    const response = await this.request(
+      'GET',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
+    )
     const records = Array.isArray(response?.data) ? response.data.map(datasetRecordFromResource) : []
     return { records, after: response?.meta?.after ?? '' }
   }
