@@ -3696,9 +3696,9 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
-      it('should enable the Test Management report by default', () => {
+      it('should leave the Test Management report setting unset by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, true)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, undefined)
       })
       it('should disable the Test Management report from the environment', () => {
         process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'

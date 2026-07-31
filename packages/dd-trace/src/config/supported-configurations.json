@@ -1945,7 +1945,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
+        "default": null,
         "namespace": "testOptimization"
       }
     ],
