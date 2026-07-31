@@ -1,11 +1,10 @@
 # TODO: Restructure the project by product and clean up this file.
 
-# Shared repository tooling
+# Default recursive ownership. GitHub applies the last matching rule, so the per-product entries
+# further down re-assign the parts of these trees that a product team owns.
 /.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/all-green/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -357,9 +356,6 @@
 /.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/docs/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
-/vendor/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/workflows/install-smoke.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -394,6 +390,9 @@
 /.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
+
+/docs/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
