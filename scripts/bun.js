@@ -29,10 +29,15 @@ function getBunBinary () {
         [`bun@${bunVersion}`]: true,
       },
     }))
+    // Reuse the npm that invoked us so the bootstrap inherits its registry and proxy settings. Bun and Yarn set
+    // `npm_execpath` too, but to their own executable rather than to a JavaScript entry point, and `node <binary>`
+    // makes Node parse a 60 MB executable as CJS and exit on a bare `SyntaxError` before the version check below can
+    // report anything useful. That path is reached whenever the bootstrapped binary is missing, which is what
+    // `bun install --ignore-scripts` leaves behind.
     const npmExecPath = process.env.npm_execpath
     let npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
     const npmArguments = ['install']
-    if (npmExecPath) {
+    if (npmExecPath && /\.[cm]?js$/.test(npmExecPath)) {
       npm = process.execPath
       npmArguments.unshift(npmExecPath)
     }
