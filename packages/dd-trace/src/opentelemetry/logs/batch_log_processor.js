@@ -18,6 +18,7 @@ class BatchLogRecordProcessor {
   #timer
   #batchTimeout
   #maxExportBatchSize
+  #pendingExports
 
   /**
    * Creates a new BatchLogRecordProcessor instance.
@@ -32,6 +33,7 @@ class BatchLogRecordProcessor {
     this.#maxExportBatchSize = maxExportBatchSize
     this.#logRecords = []
     this.#timer = null
+    this.#pendingExports = new Set()
   }
 
   /**
@@ -53,10 +55,14 @@ class BatchLogRecordProcessor {
 
   /**
    * Forces an immediate flush of all pending log records.
-   * @returns {undefined} Promise that resolves when flush is complete
+   * @returns {Promise<void>} Promise that resolves when flush is complete
    */
   forceFlush () {
-    this.#export()
+    this.#clearTimer()
+    while (this.#logRecords.length > 0) {
+      this.#export()
+    }
+    return Promise.all(this.#pendingExports).then(() => {})
   }
 
   /**
@@ -82,7 +88,16 @@ class BatchLogRecordProcessor {
     this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
 
     this.#clearTimer()
-    this.exporter.export(logRecords, () => {})
+    if (logRecords.length === 0) return
+
+    const pendingExport = new Promise(resolve => {
+      this.exporter.export(logRecords, resolve)
+    })
+    this.#pendingExports.add(pendingExport)
+    pendingExport.then(
+      () => this.#pendingExports.delete(pendingExport),
+      () => this.#pendingExports.delete(pendingExport)
+    )
   }
 
   /**
