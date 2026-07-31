@@ -50,11 +50,14 @@ const FETCH_CONCURRENCY = 16
  */
 
 /**
+ * @typedef {{ component: string, origin: string, license: string, copyright: string }} CsvRow
+ */
+
+/**
  * @typedef {{
  *   name: string,
  *   versions?: Set<string>,
- *   isRoot?: boolean,
- *   metadata?: { component: string, origin: string, license: string, copyright: string }
+ *   isRoot?: boolean
  * }} WantedComponent
  */
 
@@ -67,7 +70,8 @@ async function run () {
   const wanted = collectWantedComponents()
   const previous = parseCsv(readFileSync(csvPath, 'utf8'))
   const augmented = await fillMetadata(wanted, previous)
-  const next = formatCsv(augmented)
+  const vendored = [...parseCsv(readFileSync(vendoredCsvPath, 'utf8'), false).values()]
+  const next = formatCsv(augmented, vendored)
 
   const check = process.argv.includes('--check')
   if (check) {
@@ -105,10 +109,6 @@ function collectWantedComponents () {
     addWantedVersion(wanted, name, version)
   }
 
-  for (const metadata of parseCsv(readFileSync(vendoredCsvPath, 'utf8'), false).values()) {
-    wanted.set(metadata.component, { name: metadata.component, metadata })
-  }
-
   return wanted
 }
 
@@ -131,7 +131,7 @@ function addWantedVersion (wanted, name, version) {
 /**
  * @param {string} content
  * @param {boolean} [hasHeader]
- * @returns {Map<string, { component: string, origin: string, license: string, copyright: string }>}
+ * @returns {Map<string, CsvRow>}
  */
 function parseCsv (content, hasHeader = true) {
   const rows = new Map()
@@ -185,7 +185,7 @@ function parseCsvLine (line) {
 
 /**
  * @param {Map<string, WantedComponent>} wanted
- * @param {Map<string, { component: string, origin: string, license: string, copyright: string }>} previous
+ * @param {Map<string, CsvRow>} previous
  */
 async function fillMetadata (wanted, previous) {
   const out = []
@@ -194,10 +194,6 @@ async function fillMetadata (wanted, previous) {
   for (const entry of wanted.values()) {
     if (entry.isRoot) {
       out.push({ component: entry.name, ...rootSelfMetadata() })
-      continue
-    }
-    if (entry.metadata) {
-      out.push(entry.metadata)
       continue
     }
     for (const version of entry.versions ?? []) {
@@ -428,20 +424,30 @@ function getJson (url) {
 }
 
 /**
- * @param {Array<{ component: string, origin: string, license: string, copyright: string }>} entries
+ * `vendored` rows trail the sorted dependency rows and must stay out of the sort: they attribute copied source, not
+ * packages any lockfile resolves.
+ *
+ * @param {CsvRow[]} entries
+ * @param {CsvRow[]} vendored
  */
-function formatCsv (entries) {
+function formatCsv (entries, vendored) {
   const sorted = [...entries].sort((a, b) => a.component.localeCompare(b.component))
+  const components = new Set(sorted.map(entry => entry.component))
+  for (const row of vendored) {
+    // `check_licenses.js` compares name sets, so a duplicate row reaches the published artifact unnoticed.
+    if (components.has(row.component)) {
+      throw new Error(`'${row.component}' is both a resolved dependency and a vendored-source entry`)
+    }
+  }
   const lines = ['"component","origin","license","copyright"']
-  for (const entry of sorted) {
+  for (const entry of [...sorted, ...vendored]) {
     lines.push(
       `"${escapeCsv(entry.component)}","${escapeCsv(entry.origin)}",` +
       `"${escapeCsv(entry.license)}","${escapeCsv(entry.copyright)}"`
     )
   }
-  // CRLF per RFC 4180, matching `.github/vendored-dependencies.csv`. The license workflow appends that file to this
-  // one, so the two have to agree; mixed endings make editors re-LF the file on save and the release tooling then
-  // re-commits it on every run.
+  // CRLF per RFC 4180, matching `.github/vendored-dependencies.csv`, whose rows this file embeds verbatim; mixed
+  // endings make editors re-LF the file on save and the release tooling then re-commits it on every run.
   return `${lines.join('\r\n')}\r\n`
 }
 
