@@ -27,6 +27,30 @@ let isLoading = false
 
 let pipeline = null
 
+const CONTAINER_TAGS_HASH_HEADER = 'datadog-container-tags-hash'
+
+/**
+ * Pull `Datadog-Container-Tags-Hash` out of an agent response and hand it to the
+ * propagation hash, mirroring `exporters/agent/writer.js`.
+ *
+ * libdatadog's transport passes Node's `res.rawHeaders`: a flat
+ * `[name, value, name, value, ...]` array that preserves the sender's casing and
+ * repeats a header as another pair. Walk the name slots and take the first
+ * match. The transport wraps this call in its own try/catch, but there is
+ * nothing here that can throw on a well-formed array.
+ *
+ * @param {unknown} rawHeaders
+ */
+function observeResponseHeaders (rawHeaders) {
+  if (!Array.isArray(rawHeaders)) return
+  for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+    if (String(rawHeaders[i]).toLowerCase() !== CONTAINER_TAGS_HASH_HEADER) continue
+    const hash = rawHeaders[i + 1]
+    if (hash) require('../propagation-hash').updateContainerTagsHash(hash)
+    return
+  }
+}
+
 function getPipeline () {
   if (pipeline) return pipeline
   const libdatadog = require('@datadog/libdatadog')
@@ -40,6 +64,12 @@ function getPipeline () {
   // in a noop async context, so internal HTTP/IO done by the native exporter
   // doesn't get re-instrumented by our http/fs plugins.
   pipeline.setStorage(legacyStorage.run.bind(legacyStorage, { noop: true }))
+  // The agent returns `Datadog-Container-Tags-Hash` whenever the request carried
+  // a container id. The legacy writer feeds it to the propagation hash so DBM SQL
+  // comments and DSM pathway hashes correlate with container tags; without this
+  // the native path keeps hashing process tags alone. Registered on the module
+  // (not the state), so it survives the `setAgentUrl` state rebuild.
+  pipeline.setResponseHeaderObserver(observeResponseHeaders)
   return pipeline
 }
 
@@ -112,4 +142,7 @@ module.exports = {
     }
     return NativeDatadogSpanModule
   },
+
+  // Exposed for unit tests; registered on the pipeline module by getPipeline().
+  observeResponseHeaders,
 }
