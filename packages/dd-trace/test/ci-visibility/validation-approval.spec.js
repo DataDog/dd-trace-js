@@ -9,6 +9,7 @@ const {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getApprovalProjectFiles,
   serializeApprovalMaterial,
 } = require('../../../../ci/test-optimization-validation/approval')
 const {
@@ -89,6 +90,28 @@ describe('test optimization validation approval', () => {
       'browser_process',
       'localhost_socket',
     ])
+  })
+
+  it('derives mandatory browser capability from an inherently browser-backed framework', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'cypress'
+    delete framework.browserRequired
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+
+    framework.browserRequired = false
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+  })
+
+  it('refuses to publish approval artifacts when project inputs changed during preflight', () => {
+    const expectedProjectFiles = getApprovalProjectFiles(input.manifest)
+    fs.appendFileSync(fixture.testFile, '\n// changed during preflight\n')
+
+    assert.throws(
+      () => writeApprovalArtifacts({ ...input, expectedProjectFiles }),
+      /project inputs changed during plan preflight/
+    )
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval.json')), false)
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval-files.sha256')), false)
   })
 
   it('binds a CI file when local framework validation is unavailable', () => {

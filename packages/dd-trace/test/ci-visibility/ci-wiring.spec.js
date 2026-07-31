@@ -176,6 +176,23 @@ describe('test optimization validation CI audit', () => {
     assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
   })
 
+  for (const [managerCommand, collidingScript] of [
+    ['pnpm exec jest', 'exec'],
+    ['yarn workspace fixture test', 'workspace'],
+  ]) {
+    it(`does not interpret a package-manager built-in as a colliding script: ${managerCommand}`, () => {
+      writeScripts({ [collidingScript]: command })
+      fs.writeFileSync(workflow, workflowSource({ command: managerCommand }))
+      completeReview({ command: managerCommand, initialization: 'not_configured', transport: 'none' })
+
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+      assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
+    })
+  }
+
   it('discards stale Bun wrapper uncertainty only after resolving the local package script', () => {
     framework.framework = 'cypress'
     framework.id = 'cypress:fixture'

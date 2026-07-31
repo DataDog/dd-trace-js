@@ -6,6 +6,9 @@ const { builtinModules } = require('node:module')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
+
 const {
   filterFrameworks,
   normalizeFrameworkTarget,
@@ -288,6 +291,73 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), 'existing lock\n')
       assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
     } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('holds the execution lock through runnable plan preflight and publication', async () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    const calls = []
+    const consoleLog = sinon.stub(console, 'log')
+    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+    const manifest = {
+      __path: path.join(fixture.root, 'dd-test-optimization-validation-manifest.json'),
+      frameworks: [{ id: 'mocha:fixture', status: 'runnable' }],
+      repository: { root: fixture.root },
+    }
+    const isolatedCli = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './execution-lock': {
+        acquireExecutionLock () {
+          calls.push('acquire')
+          return { path: path.join(out, EXECUTION_LOCK_FILENAME) }
+        },
+        assertNoExecutionLock () {
+          calls.push('check')
+        },
+        releaseExecutionLock () {
+          calls.push('release')
+        },
+      },
+      './manifest-loader': { loadManifest: () => manifest },
+      './package-check': {
+        checkInstalledPackage () {
+          calls.push('package-check')
+          return { diagnosis: 'ok', ok: true }
+        },
+      },
+      './plan-writer': {
+        formatExecutionPlanArtifacts (input) {
+          calls.push('publish')
+          assert.deepStrictEqual(input.expectedProjectFiles, [])
+          return { plan: 'approval plan' }
+        },
+        getExecutionPlanPath: () => path.join(out, 'execution-plan.md'),
+      },
+      './safe-files': {
+        ensureSafeDirectory () {
+          calls.push('ensure-directory')
+        },
+      },
+      './scenarios/ci-wiring': {
+        runCiWiring () {
+          calls.push('ci-preflight')
+          return { status: 'error' }
+        },
+      },
+    })
+    try {
+      await isolatedCli.main(['--print-plan', '--manifest', manifest.__path, '--out', out])
+
+      assert.deepStrictEqual(calls, [
+        'ensure-directory',
+        'acquire',
+        'package-check',
+        'ci-preflight',
+        'publish',
+        'release',
+      ])
+    } finally {
+      consoleLog.restore()
       removeFixture(fixture.root)
     }
   })

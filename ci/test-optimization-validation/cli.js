@@ -5,7 +5,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { assertApprovalDigest } = require('./approval')
+const { assertApprovalDigest, getApprovalProjectFiles } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
 const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
 const { annotateCiDiscovery } = require('./ci-discovery')
@@ -13,7 +13,6 @@ const { cleanupGeneratedFiles } = require('./generated-files')
 const { verifyGeneratedTestStrategy } = require('./generated-verifier')
 const {
   acquireExecutionLock,
-  assertNoExecutionLock,
   releaseExecutionLock,
 } = require('./execution-lock')
 const { loadManifest } = require('./manifest-loader')
@@ -421,44 +420,53 @@ function initializeManifest (options) {
  */
 function printPlan (manifest, options) {
   const out = validateOutputPath(manifest, options.out)
-  assertNoExecutionLock(out)
   const approvalManifest = getApprovalManifest(manifest, options.frameworks)
   if (needsInstalledPackageCheck(options.scenarios) &&
     !approvalManifest.frameworks.some(framework => framework.status === 'runnable')) {
     return writeStaticOnlyReport(approvalManifest, out, options)
   }
-  const packageCheck = needsInstalledPackageCheck(options.scenarios)
-    ? checkInstalledPackage()
-    : undefined
-  if (packageCheck?.ok === false) throw getInstalledPackageCheckError(packageCheck)
+  ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
+  const publicationLock = acquireExecutionLock({ out, approvedPlanSha256: 'plan-publication' })
+  try {
+    const packageCheck = needsInstalledPackageCheck(options.scenarios)
+      ? checkInstalledPackage()
+      : undefined
+    if (packageCheck?.ok === false) throw getInstalledPackageCheckError(packageCheck)
 
-  const ciPreflightResults = options.scenarios.has(CI_WIRING)
-    ? new Map(approvalManifest.frameworks.map(framework => [
-      framework.id,
-      runCiWiring({ manifest: approvalManifest, framework }),
-    ]))
-    : new Map()
-  const { plan } = formatExecutionPlanArtifacts({
-    manifest: approvalManifest,
-    out,
-    selectedFrameworkIds: options.frameworks.size > 0
-      ? approvalManifest.frameworks.map(framework => framework.id)
-      : [],
-    requestedScenario: options.requestedScenario,
-    keepTempFiles: options.keepTempFiles,
-    packageCheck,
-    ciPreflightResults,
-    verbose: options.verbose,
-  })
-  console.log(sanitizeConsoleText([
-    '===== CUSTOMER APPROVAL PLAN =====',
-    plan,
-    '===== END CUSTOMER APPROVAL PLAN =====',
-    '',
-    `Saved execution plan: ${getExecutionPlanPath(out)}`,
-    'LIVE VALIDATION HAS NOT RUN.',
-    'Present the complete delimited plan and ask exactly: Approve executing exactly the plan above?',
-  ].join('\n')))
+    const expectedProjectFiles = getApprovalProjectFiles(approvalManifest, {
+      includeLocal: options.requestedScenario !== CI_WIRING,
+    })
+    const ciPreflightResults = options.scenarios.has(CI_WIRING)
+      ? new Map(approvalManifest.frameworks.map(framework => [
+        framework.id,
+        runCiWiring({ manifest: approvalManifest, framework }),
+      ]))
+      : new Map()
+    const { plan } = formatExecutionPlanArtifacts({
+      manifest: approvalManifest,
+      out,
+      selectedFrameworkIds: options.frameworks.size > 0
+        ? approvalManifest.frameworks.map(framework => framework.id)
+        : [],
+      requestedScenario: options.requestedScenario,
+      keepTempFiles: options.keepTempFiles,
+      packageCheck,
+      ciPreflightResults,
+      expectedProjectFiles,
+      verbose: options.verbose,
+    })
+    console.log(sanitizeConsoleText([
+      '===== CUSTOMER APPROVAL PLAN =====',
+      plan,
+      '===== END CUSTOMER APPROVAL PLAN =====',
+      '',
+      `Saved execution plan: ${getExecutionPlanPath(out)}`,
+      'LIVE VALIDATION HAS NOT RUN.',
+      'Present the complete delimited plan and ask exactly: Approve executing exactly the plan above?',
+    ].join('\n')))
+  } finally {
+    releaseExecutionLock(publicationLock)
+  }
 }
 
 /**

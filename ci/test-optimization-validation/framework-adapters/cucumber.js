@@ -7,6 +7,7 @@ const { matchesLiteralGlob } = require('../literal-glob')
 
 const CUCUMBER_PACKAGE = '@cucumber/cucumber'
 const CONFIG_PATTERN = /^cucumber\.(?:[cm]?js|json|ya?ml)$/
+const MAX_CONFIG_BYTES = 512 * 1024
 const GENERATED_STEPS_FILENAME = 'dd-test-optimization-validation.steps.cjs'
 const ISOLATION_CONFIG_PATH = path.join(__dirname, 'cucumber-validation.json')
 const PROFILE_VALUE_OPTIONS = new Map([
@@ -253,6 +254,13 @@ function getIsolationArgs (cwd) {
 }
 
 function readProfileDefinitions (filename) {
+  const stat = fs.lstatSync(filename)
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error('configuration must be a regular non-symbolic-link file')
+  }
+  if (stat.size > MAX_CONFIG_BYTES) {
+    throw new Error(`configuration exceeds the ${MAX_CONFIG_BYTES}-byte limit`)
+  }
   const source = fs.readFileSync(filename, 'utf8')
   const extension = path.extname(filename)
   if (extension === '.json') return getDataProfileDefinitions(JSON.parse(source))

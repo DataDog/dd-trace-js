@@ -174,6 +174,33 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('accepts the last bounded Cucumber config and rejects the first oversized config', () => {
+    const fixture = createRepositoryFixture({ framework: 'cucumber' })
+    const config = path.join(fixture.root, 'cucumber.js')
+    const prefix = "module.exports = { default: '' }\n/*"
+    const suffix = '*/'
+    fs.writeFileSync(config, prefix + 'x'.repeat(512 * 1024 - prefix.length - suffix.length) + suffix)
+    try {
+      const bounded = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+      assert.strictEqual(bounded.status, 'runnable')
+
+      fs.appendFileSync(config, 'x')
+      const oversized = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(oversized.status, 'requires_manual_setup')
+      assert.strictEqual(oversized.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(oversized.notes.join(' '), /configuration exceeds the 524288-byte limit/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('keeps Cucumber 7 static-only because its CLI cannot isolate customer profiles', () => {
     const fixture = createRepositoryFixture({ framework: 'cucumber' })
     const version = '7.3.2'

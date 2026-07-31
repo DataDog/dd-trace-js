@@ -26,10 +26,12 @@ const REQUIRED_CAPABILITIES = new Set(['browser_process', 'localhost_socket'])
  * @param {object} input approval inputs
  * @param {object} input.manifest loaded manifest
  * @param {string} input.out validation output directory
+ * @param {Array<{path: string, sha256: string}>} [input.expectedProjectFiles] preflight project snapshot
  * @returns {{approvalJsonPath: string, coveredFilesPath: string, digest: string}} written artifact details
  */
 function writeApprovalArtifacts (input) {
   const material = getApprovalMaterial(input)
+  assertExpectedProjectFiles(input.expectedProjectFiles, material.projectFiles)
   const approvalJson = `${JSON.stringify(material, null, 2)}\n`
   const digest = crypto.createHash('sha256').update(approvalJson).digest('hex')
   const approvalJsonPath = path.join(input.out, APPROVAL_FILENAME)
@@ -47,6 +49,22 @@ function writeApprovalArtifacts (input) {
   )
 
   return { approvalJsonPath, coveredFilesPath, digest }
+}
+
+/**
+ * Refuses to publish approval artifacts from static evidence read against a different project snapshot.
+ *
+ * @param {Array<{path: string, sha256: string}>|undefined} expected preflight project files
+ * @param {Array<{path: string, sha256: string}>} actual approval project files
+ * @returns {void}
+ */
+function assertExpectedProjectFiles (expected, actual) {
+  if (!expected) return
+  if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+    throw new Error(
+      'Approval-bound project inputs changed during plan preflight. Render a fresh plan from the current checkout.'
+    )
+  }
 }
 
 /**

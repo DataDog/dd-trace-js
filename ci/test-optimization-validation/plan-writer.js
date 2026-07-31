@@ -44,6 +44,7 @@ function formatExecutionPlan (input) {
  * @param {boolean} [input.keepTempFiles] retain temporary files
  * @param {object} [input.packageCheck] installed package-load result
  * @param {Map<string, object>} [input.ciPreflightResults] static CI results by framework
+ * @param {Array<{path: string, sha256: string}>} [input.expectedProjectFiles] preflight project snapshot
  * @param {boolean} [input.verbose] print progress
  * @returns {{plan: string}} written plan
  */
@@ -55,6 +56,7 @@ function formatExecutionPlanArtifacts ({
   keepTempFiles = false,
   packageCheck,
   ciPreflightResults = new Map(),
+  expectedProjectFiles,
   verbose = false,
 }) {
   const offlineFixtureNonce = crypto.randomBytes(16).toString('hex')
@@ -66,6 +68,7 @@ function formatExecutionPlanArtifacts ({
     offlineFixtureNonce,
     keepTempFiles,
     verbose,
+    expectedProjectFiles,
   })
   const validatorArgv = [
     process.execPath,

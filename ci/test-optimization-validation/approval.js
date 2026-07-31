@@ -105,10 +105,7 @@ function getApprovalMaterial ({
       path: path.resolve(manifest.__path),
       sha256: getManifestDigest(manifest),
     },
-    projectFiles: getManifestInputFiles(manifest, { includeLocal }).map(filename => ({
-      path: filename,
-      sha256: getFileDigest(filename),
-    })),
+    projectFiles: getApprovalProjectFiles(manifest, { includeLocal }),
     selection: {
       frameworks: [...selectedFrameworkIds],
       scenario: requestedScenario,
@@ -156,7 +153,8 @@ function getRequiredCapabilities ({ manifest, requestedScenario, selectedFramewo
     return framework.status === 'runnable' && (selected.size === 0 || selected.has(framework.id))
   })
   const capabilities = new Set()
-  if (frameworks.some(framework => framework.browserRequired === true)) {
+  if (frameworks.some(framework => ['cypress', 'playwright'].includes(framework.framework) ||
+    framework.browserRequired === true)) {
     capabilities.add('browser_process')
   }
   if (frameworks.some(framework => framework.localSocketRequired === true ||
@@ -164,6 +162,21 @@ function getRequiredCapabilities ({ manifest, requestedScenario, selectedFramewo
     capabilities.add('localhost_socket')
   }
   return [...capabilities].sort()
+}
+
+/**
+ * Captures the approval-bound project file identities used by static and live validation.
+ *
+ * @param {object} manifest loaded validation manifest
+ * @param {object} [options] file selection options
+ * @param {boolean} [options.includeLocal] include local runner inputs
+ * @returns {Array<{path: string, sha256: string}>} sorted project file identities
+ */
+function getApprovalProjectFiles (manifest, { includeLocal = true } = {}) {
+  return getManifestInputFiles(manifest, { includeLocal }).map(filename => ({
+    path: filename,
+    sha256: getFileDigest(filename),
+  }))
 }
 
 /**
@@ -365,6 +378,7 @@ module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getApprovalProjectFiles,
   getRequiredCapabilities,
   serializeApprovalMaterial,
 }

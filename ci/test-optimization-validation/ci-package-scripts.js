@@ -4,6 +4,19 @@ const { parseLiteralEnvironmentPrefix } = require('./literal-environment')
 
 const MAX_SCRIPT_EXPANSIONS = 16
 const DYNAMIC_VALUE_PATTERN = /[$`]|\r|\n|%[^%\s]+%|![^!\s]+!/
+const RESERVED_PACKAGE_MANAGER_COMMANDS = {
+  pnpm: new Set([
+    'add', 'audit', 'bin', 'config', 'create', 'deploy', 'dlx', 'env', 'exec', 'fetch', 'import', 'init', 'install',
+    'link', 'list', 'outdated', 'pack', 'patch', 'patch-commit', 'prune', 'publish', 'rebuild', 'remove', 'root',
+    'server', 'setup', 'store', 'uninstall', 'unlink', 'update', 'view', 'why',
+  ]),
+  yarn: new Set([
+    'add', 'audit', 'bin', 'cache', 'check', 'config', 'constraints', 'create', 'dedupe', 'dlx', 'exec', 'global',
+    'help', 'import', 'info', 'init', 'install', 'link', 'list', 'node', 'npm', 'outdated', 'owner', 'pack', 'patch',
+    'plugin', 'policies', 'publish', 'rebuild', 'remove', 'set', 'stage', 'tag', 'team', 'unlink', 'unplug', 'up',
+    'upgrade', 'version', 'versions', 'why', 'workspace', 'workspaces',
+  ]),
+}
 
 /**
  * Expands bounded local package-script references without executing them.
@@ -139,6 +152,7 @@ function getPackageScriptInvocation (command) {
   const manager = match[1].replace(/\.cmd$/i, '').replace(/^yarnpkg$/, 'yarn')
   if (manager === 'npm' && !match[2] && !['restart', 'start', 'stop', 'test'].includes(match[3])) return
   if (manager === 'bun' && match[2] !== 'run') return
+  if (!match[2] && RESERVED_PACKAGE_MANAGER_COMMANDS[manager]?.has(match[3])) return
   const args = match[4]?.trim()
   const npmArguments = manager === 'npm' && args ? /^--(?:\s+(.+))?$/.exec(args) : undefined
   if (manager === 'npm' && args && !npmArguments) return
