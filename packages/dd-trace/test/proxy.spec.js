@@ -179,7 +179,7 @@ describe('TracerProxy', () => {
     }
 
     profiler = {
-      start: sinon.spy(),
+      start: sinon.stub().returns(true),
     }
 
     appsec = {
@@ -648,6 +648,38 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(profiler.start)
+      })
+
+      it('should start the profiler via remote config when not already started', () => {
+        config.profiling = { DD_PROFILING_ENABLED: 'false' }
+
+        proxy.init()
+        sinon.assert.notCalled(profiler.start)
+
+        config.profiling.DD_PROFILING_ENABLED = 'true'
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+
+        sinon.assert.calledOnce(profiler.start)
+      })
+
+      it('should not start the profiler again via remote config once already started', () => {
+        config.profiling = { DD_PROFILING_ENABLED: 'true' }
+
+        proxy.init()
+        sinon.assert.calledOnce(profiler.start)
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+
+        sinon.assert.calledOnce(profiler.start)
+      })
+
+      it('should not start the profiler via remote config when still disabled', () => {
+        config.profiling = { DD_PROFILING_ENABLED: 'false' }
+
+        proxy.init()
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+
+        sinon.assert.notCalled(profiler.start)
       })
 
       it('should throw an error since profiler fails to be imported', () => {

@@ -154,6 +154,7 @@ class Tracer extends NoopProxy {
         tracingRemoteConfig.enable(rc, config, () => {
           this.#updateTracing(config)
           this.#updateDebugger(config, rc)
+          this.#updateProfiler(config)
         })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
@@ -351,6 +352,19 @@ class Tracer extends NoopProxy {
     } else if (isCurrentlyStarted) {
       log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
       DynamicInstrumentation.stop()
+    }
+  }
+
+  /**
+   * Starts the profiler if remote config has turned it on and it isn't already running.
+   * Does not support stopping an already-started profiler via remote config.
+   *
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  #updateProfiler (config) {
+    if (!this._profilerStarted && config.profiling.DD_PROFILING_ENABLED === 'true') {
+      log.debug('[proxy] Starting profiler via remote config')
+      this._profilerStarted = this._startProfiler(config)
     }
   }
 
