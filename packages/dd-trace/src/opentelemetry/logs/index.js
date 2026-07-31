@@ -101,10 +101,7 @@ function initializeOpenTelemetryLogs (config) {
   registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 
   unsubscribeLogsIdentityRefresh?.()
-  const onIdentityRefresh = () => {
-    exporter.updateResourceAttributes(buildResourceAttributes(config))
-    processor.resetPendingState()
-  }
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildResourceAttributes(config))
   identityRefreshChannel.subscribe(onIdentityRefresh)
   unsubscribeLogsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }

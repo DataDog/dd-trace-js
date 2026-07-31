@@ -1,18 +1,9 @@
 'use strict'
 
 const { URL } = require('url')
-
-const { channel } = require('dc-polyfill')
-
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
-
-// Replaces the previous subscription on each construction, so re-creating the exporter
-// (e.g. across tests) doesn't accumulate listeners.
-let unsubscribeIdentityRefresh = null
 
 class AgentExporter {
   #timer
@@ -37,11 +28,6 @@ class AgentExporter {
       headers,
       deliveryTracker: this.#serverlessDeliveryTracker,
     })
-
-    unsubscribeIdentityRefresh?.()
-    const onIdentityRefresh = () => this._writer.resetPendingBatch()
-    identityRefreshChannel.subscribe(onIdentityRefresh)
-    unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }

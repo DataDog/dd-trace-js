@@ -856,32 +856,6 @@ describe('dogstatsd', () => {
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
     })
 
-    it('drops a pending aggregated sample recorded before the identity-refresh channel fires', () => {
-      const config = {
-        dogstatsd: {
-          hostname: '127.0.0.1',
-          port: 8125,
-        },
-        lookup: dns.lookup,
-        runtimeMetricsRuntimeId: true,
-        tags: { 'runtime-id': 'initial-id' },
-      }
-
-      client = new CustomMetrics(config)
-
-      // Buffered under the pre-refresh identity; must be dropped, not shipped under the new one.
-      client.gauge('test.pre_refresh', 99)
-
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      client.gauge('test.post_refresh', 1)
-      client.flush()
-
-      sinon.assert.calledOnce(udp4.send)
-      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.post_refresh:1|g|#runtime-id:refreshed-id\n')
-    })
-
     it('skips a dead registry entry during identity-refresh without disrupting live entries', () => {
       const created = []
       const OriginalWeakRef = global.WeakRef
@@ -947,18 +921,6 @@ describe('dogstatsd', () => {
       aggregator.updateTags(['foo:bar'])
 
       sinon.assert.calledOnceWithExactly(inner.updateTags, ['foo:bar'])
-    })
-
-    it('drops pending counters/gauges/histograms recorded before updateTags', () => {
-      aggregator.gauge('test.avg', 5)
-      aggregator.count('test.count', 3)
-      aggregator.histogram('test.hist', 10)
-
-      aggregator.updateTags(['foo:bar'])
-      aggregator.flush()
-
-      assert.deepStrictEqual(gaugeCalls, [])
-      assert.deepStrictEqual(incrementCalls, [])
     })
 
     it('emits a gauge once and then stays silent until it is set again', () => {

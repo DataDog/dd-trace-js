@@ -17,6 +17,8 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // buffering only.
 let sent
 class BenchClient extends DogStatsDClient {
+  // Fakes just enough of dgram.Socket for on()/unref() at construction and send() at flush -
+  // send() only needs the buffer, so the rest of its dgram args go unused.
   _socket () {
     return { send (message) { sent = message }, on () {}, unref () {} }
   }

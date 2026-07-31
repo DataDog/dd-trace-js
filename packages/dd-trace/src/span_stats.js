@@ -1,10 +1,8 @@
 'use strict'
 
 const os = require('node:os')
-
-const { channel } = require('dc-polyfill')
-
 const pkg = require('../../../package.json')
+
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const {
   MEASURED,
@@ -18,12 +16,6 @@ const {
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
 const log = require('./log')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
-
-// Replaces the previous subscription on each construction, so re-creating the processor
-// (e.g. across tests) doesn't accumulate listeners.
-let unsubscribeIdentityRefresh = null
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const ZERO_ID = id('0')
@@ -240,12 +232,6 @@ class SpanStatsProcessor {
     if (this.enabled || this.otlpExporter) {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
-
-      unsubscribeIdentityRefresh?.()
-      // Drop buckets from before a MicroVM clone resume so they aren't exported under the new identity.
-      const onIdentityRefresh = () => { this.buckets = new TimeBuckets() }
-      identityRefreshChannel.subscribe(onIdentityRefresh)
-      unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
     }
   }
 

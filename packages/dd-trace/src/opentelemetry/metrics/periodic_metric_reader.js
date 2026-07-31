@@ -196,24 +196,6 @@ class PeriodicMetricReader {
   }
 
   /**
-   * Drops measurements and cumulative aggregation state recorded before a MicroVM clone resume,
-   * so they aren't exported under the new identity. Registered instruments/callbacks are left
-   * alone. Only clears `#lastExportedState` entries that have a matching `#cumulativeState` entry
-   * (sync Counter/Histogram): observable instruments compute deltas from their own live absolute
-   * readings rather than `#cumulativeState`, so clearing their baseline would make the next
-   * export report the full reading as a delta instead of the change since the last export.
-   * @returns {void}
-   */
-  resetPendingState () {
-    this.#measurements = []
-    for (const stateKey of this.#cumulativeState.keys()) {
-      this.#lastExportedState.delete(stateKey)
-    }
-    this.#cumulativeState = new Map()
-    this.#droppedCount = 0
-  }
-
-  /**
    * Forces an immediate collection and export of all metrics.
    * @param {Function} [done] Called after the metric export completes
    */

@@ -102,16 +102,6 @@ class BatchLogRecordProcessor {
   }
 
   /**
-   * Drops log records queued before a MicroVM clone resume, so they aren't exported under the
-   * new identity. Also clears the pending batch timer, since there's nothing left to flush.
-   * @returns {void}
-   */
-  resetPendingState () {
-    this.#logRecords = []
-    this.#clearTimer()
-  }
-
-  /**
    * Starts the batch timeout timer.
    * @private
    */
