@@ -3,10 +3,12 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
+const { metrics } = require('@opentelemetry/api')
+const { logs } = require('@opentelemetry/api-logs')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription, retainVercelRequest } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, flushVercelOtlp, retainVercelRequest } = require('../src/serverless')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -48,6 +50,8 @@ describe('retainVercelRequest', () => {
 
     if (originalRequestContext === undefined) delete globalThis[requestContext]
     else globalThis[requestContext] = originalRequestContext
+    metrics.disable()
+    logs.disable()
   })
 
   it('retains a promise in the active Vercel request context', () => {
@@ -66,5 +70,42 @@ describe('retainVercelRequest', () => {
     delete process.env.VERCEL
 
     assert.strictEqual(retainVercelRequest(Promise.resolve()), false)
+  })
+
+  it('retains trace, log, and metric flushes until they complete', async () => {
+    process.env.VERCEL = '1'
+    let retained
+    const resolvers = []
+    const pendingFlush = () => new Promise(resolve => resolvers.push(resolve))
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+    logs.setGlobalLoggerProvider({
+      getLogger () {},
+      forceFlush: pendingFlush,
+    })
+    metrics.setGlobalMeterProvider({
+      getMeter () {},
+      reader: { forceFlush: pendingFlush },
+    })
+
+    assert.strictEqual(flushVercelOtlp({
+      _config: {
+        DD_LOGS_OTEL_ENABLED: true,
+        DD_METRICS_OTEL_ENABLED: true,
+        OTEL_TRACES_EXPORTER: 'otlp',
+      },
+      _exporter: { forceFlush: pendingFlush },
+    }), true)
+    assert.strictEqual(resolvers.length, 3)
+
+    let completed = false
+    retained.then(() => { completed = true })
+    for (const resolve of resolvers.slice(0, -1)) resolve()
+    await Promise.resolve()
+    assert.strictEqual(completed, false)
+    resolvers.at(-1)()
+    await retained
+    assert.strictEqual(completed, true)
   })
 })
