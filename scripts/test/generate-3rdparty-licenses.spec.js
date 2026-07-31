@@ -96,8 +96,8 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       DD_TEST_LICENSE_TRACE: tracePath,
     })
 
-    // Split on CRLF rather than LF: the workflow appends `.github/vendored-dependencies.csv`, which is CRLF, so this
-    // file has to match or the result carries mixed endings and editors keep re-LF-ing it on save.
+    // Split on CRLF rather than LF: the rows embedded from `.github/vendored-dependencies.csv` are CRLF, so this file
+    // has to match or the result carries mixed endings and editors keep re-LF-ing it on save.
     const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
     assert.match(generated, /\r\n$/, 'generated CSV must use CRLF line endings')
     assert.doesNotMatch(generated, /(?<!\r)\n/, 'generated CSV must not contain a bare LF')
@@ -114,6 +114,43 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       'https://registry.npmjs.org/foo/1.0.0',
       'https://registry.npmjs.org/foo/2.0.0',
     ])
+  })
+
+  it('appends copied-source attributions after the installed dependencies', async () => {
+    fs.writeFileSync(
+      path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),
+      '"aaa-copied","https://copied.example","[\'ISC\']","[\'Copied author\']"\r\n'
+    )
+
+    await runGenerator({
+      DD_TEST_LICENSE_METADATA: JSON.stringify({
+        '1.0.0': { license: 'MIT', repository: 'https://old.example/repository', author: 'Old author' },
+        '2.0.0': { license: 'MIT', repository: 'https://old.example/repository', author: 'Old author' },
+      }),
+    })
+
+    const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
+    assert.deepStrictEqual(
+      generated.trim().split('\r\n').map(line => line.slice(1, line.indexOf('","'))),
+      ['component', 'dd-fixture', 'foo', 'aaa-copied']
+    )
+  })
+
+  it('fails when a copied-source attribution names an installed dependency', async () => {
+    fs.writeFileSync(
+      path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),
+      '"foo","https://copied.example","[\'ISC\']","[\'Copied author\']"\r\n'
+    )
+
+    await assert.rejects(
+      runGenerator({
+        DD_TEST_LICENSE_METADATA: JSON.stringify({
+          '1.0.0': { license: 'MIT', repository: 'https://old.example/repository', author: 'Old author' },
+          '2.0.0': { license: 'MIT', repository: 'https://old.example/repository', author: 'Old author' },
+        }),
+      }),
+      matchesDuplicateAttribution
+    )
   })
 
   it('fails without replacing license metadata when the registry request fails', async () => {
@@ -168,6 +205,14 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
  */
 function matchesRegistryFailure (error) {
   assert.match(error.stderr, /registry unavailable/)
+  return true
+}
+
+/**
+ * @param {Error & { stderr: string }} error
+ */
+function matchesDuplicateAttribution (error) {
+  assert.match(error.stderr, /'foo' is both a resolved dependency and a vendored-source entry/)
   return true
 }
 
