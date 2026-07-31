@@ -70,6 +70,8 @@ let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isSessionCodeCoverageEnabled = false
+let isSessionSuitesSkippingEnabled = false
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
@@ -243,6 +245,8 @@ function resetSessionSuiteSkippingState () {
   areAllSuitesSkipped = false
   hasRunnableSuites = false
   hasSelectedSuites = false
+  isSessionCodeCoverageEnabled = false
+  isSessionSuitesSkippingEnabled = false
   isTestImpactAnalysisDisabled = false
 }
 
@@ -659,6 +663,8 @@ async function runMainProcessSetup (
     requestErrorTags = {}
     resetLibraryConfig()
   }
+  isSessionCodeCoverageEnabled ||= isCodeCoverageEnabled
+  isSessionSuitesSkippingEnabled ||= isSuitesSkippingEnabled
 
   resetMainProcessProvidedContext(ctx)
 
@@ -1094,8 +1100,8 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isCodeCoverageEnabled,
-      isSuitesSkippingEnabled,
+      isCodeCoverageEnabled: isSessionCodeCoverageEnabled,
+      isSuitesSkippingEnabled: isSessionSuitesSkippingEnabled,
       isSuitesSkipped: skippedSuites.length > 0,
       numSkippedSuites: skippedSuites.length,
       hasUnskippableSuites,

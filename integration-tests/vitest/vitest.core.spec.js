@@ -2528,6 +2528,10 @@ versions.forEach((version) => {
           assert.strictEqual(secondSuiteEvent.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testModule.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
         }, {
           command: 'node run-programmatic-api-tia-unsupported-rerun.mjs',
           currentWorkingDirectory: path.join(cwd, 'ci-visibility/vitest-tests-programmatic-api'),
