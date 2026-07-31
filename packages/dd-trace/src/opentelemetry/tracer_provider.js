@@ -84,7 +84,10 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    exporter.flush()
+    // The Lambda stdout exporter writes synchronously and defines no `flush`, so
+    // an unguarded call turns `forceFlush()` into a TypeError there and the active
+    // span processor never gets flushed either.
+    exporter.flush?.()
     return this.#activeProcessor.forceFlush()
   }
 
