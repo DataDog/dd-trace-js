@@ -50,10 +50,11 @@ describe('Vercel request-lifetime native OTLP flush', () => {
     delete globalThis[vercelRequestContext]
   })
 
-  it('retains native OTLP export until its callback completes', async () => {
+  it('registers before deferring native OTLP export and retains it until completion', async () => {
     process.env.VERCEL = '1'
     let done
     let requestTask
+    let requestTaskResolved = false
     let waitUntilCalled = false
     globalThis[vercelRequestContext] = {
       get: () => ({
@@ -68,9 +69,17 @@ describe('Vercel request-lifetime native OTLP flush', () => {
       assert.strictEqual(waitUntilCalled, true)
       done = callback
     })), true)
+    assert.strictEqual(waitUntilCalled, true)
+    assert.strictEqual(done, undefined)
+
+    requestTask.then(() => { requestTaskResolved = true })
+    await nextImmediate()
     assert.strictEqual(typeof done, 'function')
+    assert.strictEqual(requestTaskResolved, false)
+
     done()
     await requestTask
+    assert.strictEqual(requestTaskResolved, true)
   })
 
   it('does not schedule outside Vercel or for non-OTLP exporters', () => {
@@ -94,4 +103,8 @@ function createNativeOtlpTracer (flush) {
     _config: { OTEL_TRACES_EXPORTER: 'otlp' },
     _exporter: { flush },
   }
+}
+
+function nextImmediate () {
+  return new Promise(resolve => setImmediate(resolve))
 }

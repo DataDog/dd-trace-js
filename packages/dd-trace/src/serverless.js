@@ -89,12 +89,16 @@ function scheduleVercelFlush (tracer) {
     return false
   }
 
-  try {
-    exporter.flush(resolveFlush)
-  } catch {
-    resolveFlush()
-  }
+  setImmediate(flushExporter, exporter, resolveFlush)
   return true
+}
+
+function flushExporter (exporter, done) {
+  try {
+    exporter.flush(done)
+  } catch {
+    done()
+  }
 }
 
 module.exports = {
