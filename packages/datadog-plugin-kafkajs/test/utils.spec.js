@@ -4,9 +4,13 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
+const { getAllBaggageItems } = require('../../dd-trace/src/baggage')
 const getConfig = require('../../dd-trace/src/config')
 const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/text_map')
 const { convertToTextMap, getKafkaMessageSize } = require('../src/utils')
+
+/** @param {Record<string, string | string[]> | null} source */
+const nullPrototype = (source) => source && Object.assign(Object.create(null), source)
 
 describe('convertToTextMap', () => {
   const conversions = [
@@ -18,9 +22,9 @@ describe('convertToTextMap', () => {
       { text: 'value', binary: 'buffer' },
     ],
     [
-      'collapses repeated KafkaJS values to the last one',
+      'keeps every repeated KafkaJS value in wire order',
       { traceparent: [Buffer.from('first'), Buffer.from('second'), Buffer.from('third')] },
-      { traceparent: 'third' },
+      { traceparent: ['first', 'second', 'third'] },
     ],
     [
       'collapses one repeated KafkaJS header value to a scalar',
@@ -29,15 +33,25 @@ describe('convertToTextMap', () => {
     ],
     ['skips a repeated KafkaJS header without values', { traceparent: [] }, {}],
     [
-      'falls back to the last usable value when the repeated tail is nullish',
+      'drops the nullish members of a repeated KafkaJS header',
       { traceparent: [Buffer.from('current'), undefined, null] },
       { traceparent: 'current' },
     ],
+    [
+      'keeps both usable members around a nullish one',
+      { traceparent: [Buffer.from('first'), undefined, Buffer.from('third')] },
+      { traceparent: ['first', 'third'] },
+    ],
     ['skips nullish scalar values', { first: null, second: undefined }, {}],
     [
-      'collapses repeated native-list values to the last one',
+      'keeps every repeated native-list value in wire order',
       [{ traceparent: Buffer.from('stale') }, { traceparent: Buffer.from('current') }],
-      { traceparent: 'current' },
+      { traceparent: ['stale', 'current'] },
+    ],
+    [
+      'keeps a third repeat of a native-list field',
+      [{ tracestate: Buffer.from('a=1') }, { tracestate: Buffer.from('b=2') }, { tracestate: Buffer.from('c=3') }],
+      { tracestate: ['a=1', 'b=2', 'c=3'] },
     ],
     ['skips nullish native-list values instead of throwing on them', [{ first: null }, { second: undefined }], {}],
     [
@@ -45,11 +59,21 @@ describe('convertToTextMap', () => {
       [{ traceparent: Buffer.from('current') }, { traceparent: undefined }],
       { traceparent: 'current' },
     ],
+    [
+      'treats a prototype-shadowing key as an ordinary header',
+      { toString: Buffer.from('value'), ['__proto__']: Buffer.from('polluted') },
+      { toString: 'value', ['__proto__']: 'polluted' },
+    ],
+    [
+      'repeats a prototype-shadowing key without inheriting the prototype value',
+      [{ toString: Buffer.from('first') }, { toString: Buffer.from('second') }],
+      { toString: ['first', 'second'] },
+    ],
   ]
 
   for (const [name, bufferMap, expected] of conversions) {
     it(name, () => {
-      assert.deepStrictEqual(convertToTextMap(bufferMap), expected)
+      assert.deepStrictEqual(convertToTextMap(bufferMap), nullPrototype(expected))
     })
   }
 
@@ -63,6 +87,16 @@ describe('convertToTextMap', () => {
 
     assert.strictEqual(extracted.toTraceId(), '456')
     assert.strictEqual(extracted.toSpanId(), '789')
+  })
+
+  it('keeps every baggage item a producer sent across repeated fields', () => {
+    const carrier = convertToTextMap([
+      { baggage: Buffer.from('first=1') },
+      { baggage: Buffer.from('second=2') },
+    ])
+    new TextMapPropagator(getConfig()).extract(carrier)
+
+    assert.deepStrictEqual(getAllBaggageItems(), { first: '1', second: '2' })
   })
 })
 
