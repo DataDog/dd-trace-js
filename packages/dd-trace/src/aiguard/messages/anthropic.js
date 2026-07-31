@@ -34,10 +34,7 @@ function extractDocumentSource (source) {
   if (source.type === 'content') {
     // ContentBlockSource.content is string | Array<ContentBlockSourceContent>.
     if (typeof source.content === 'string') return source.content
-    if (Array.isArray(source.content)) {
-      const { parts, hasImages } = walkContentBlocks(source.content)
-      return partsToContent(parts, hasImages)
-    }
+    if (Array.isArray(source.content)) return convertAnthropicBlocksToContent(source.content)
   }
 }
 
@@ -79,22 +76,19 @@ function convertAnthropicDocumentBlock (block) {
 }
 
 /**
- * @param {{parts: Array<object>, hasImages: boolean}} output
+ * @param {Array<object>} items
  * @param {string|Array<object>|undefined} content
  */
-function appendContent (output, content) {
+function appendContent (items, content) {
   if (Array.isArray(content)) {
-    output.hasImages = true
-    for (const part of content) output.parts.push(part)
+    for (const part of content) items.push(part)
   } else if (content !== undefined) {
-    output.parts.push({ type: 'text', text: content })
+    items.push({ type: 'text', text: content })
   }
 }
 
 /**
- * Walks an Anthropic content-block array once and buckets each block by kind:
- * `parts` collects renderable content (text/image/document); `toolCalls` and
- * `toolResults` collect tool_use / tool_result blocks respectively.
+ * Walks Anthropic content blocks once and emits normalized content and tool events in source order.
  *
  * `search_result` blocks have their text inside `content: Array<TextBlockParam>`,
  * not a top-level `text` field; they are walked explicitly so RAG-injected text
@@ -104,57 +98,54 @@ function appendContent (output, content) {
  * purely structural blocks without a `text` field are dropped silently.
  *
  * @param {Array<AnthropicContentBlock>} blocks
- * @returns {{
- *   parts: Array<{type: string, text?: string, image_url?: {url: string}}>,
- *   toolCalls: Array<{id: string, function: {name: string, arguments: string}}>,
- *   toolResults: Array<{role: 'tool', tool_call_id: string, content: string|Array<object>}>,
- *   hasImages: boolean
- * }}
+ * @returns {Array<object>}
  */
 function walkContentBlocks (blocks) {
-  // `partsBeforeLastResult` records how many `parts` were collected before the last tool result,
-  // so a caller can tell text that precedes the results from text that follows them.
-  const out = { parts: [], toolCalls: [], toolResults: [], hasImages: false, partsBeforeLastResult: 0 }
-  if (!Array.isArray(blocks)) return out
+  const items = []
+  if (!Array.isArray(blocks)) return items
 
   for (const block of blocks) {
     if (!block || typeof block !== 'object') continue
     switch (block.type) {
       case 'text':
-        if (typeof block.text === 'string') out.parts.push({ type: 'text', text: block.text })
+        if (typeof block.text === 'string') items.push({ type: 'text', text: block.text })
         break
       case 'image': {
         const image = convertAnthropicImageBlock(block)
         if (image) {
-          out.hasImages = true
-          out.parts.push(image)
+          items.push(image)
         } else {
-          out.parts.push({ type: 'text', text: IMAGE_FALLBACK })
+          items.push({ type: 'text', text: IMAGE_FALLBACK })
         }
         break
       }
       case 'document': {
-        appendContent(out, convertAnthropicDocumentBlock(block))
+        appendContent(items, convertAnthropicDocumentBlock(block))
         break
       }
       case 'tool_use':
       case 'server_tool_use':
       case 'mcp_tool_use':
         // server_tool_use / mcp_tool_use are the built-in- and MCP-tool counterparts of tool_use.
-        out.toolCalls.push({
-          id: block.id ?? block.name,
-          function: {
-            name: block.name,
-            arguments: stringifyOrEmpty(block.input),
+        items.push({
+          kind: 'tool_call',
+          value: {
+            id: block.id ?? block.name,
+            function: {
+              name: block.name,
+              arguments: stringifyOrEmpty(block.input),
+            },
           },
         })
         break
       case 'tool_result':
-        out.partsBeforeLastResult = out.parts.length
-        out.toolResults.push({
-          role: 'tool',
-          tool_call_id: block.tool_use_id,
-          content: convertAnthropicToolResultContent(block.content),
+        items.push({
+          kind: 'tool_result',
+          value: {
+            role: 'tool',
+            tool_call_id: block.tool_use_id,
+            content: convertAnthropicToolResultContent(block.content),
+          },
         })
         break
       case 'search_result': {
@@ -163,21 +154,23 @@ function walkContentBlocks (blocks) {
         const metadata = []
         if (typeof block.title === 'string' && block.title) metadata.push(block.title)
         if (typeof block.source === 'string' && block.source) metadata.push(block.source)
-        appendContent(out, combineMetadataWithBody(metadata, convertAnthropicBlocksToContent(block.content)))
+        appendContent(items, combineMetadataWithBody(metadata, convertAnthropicBlocksToContent(block.content)))
         break
       }
       case 'web_fetch_tool_result': {
         // Emit as a tool result (like other *_tool_result blocks) so the call -> result -> final-text
         // timeline is preserved and the fetched document isn't merged into the assistant answer.
-        out.partsBeforeLastResult = out.parts.length
         const content = block.content
         const resultContent = content?.type === 'web_fetch_result' && content.content
           ? convertAnthropicDocumentBlock(content.content)
           : convertServerToolResultContent(content)
-        out.toolResults.push({
-          role: 'tool',
-          tool_call_id: block.tool_use_id,
-          content: resultContent,
+        items.push({
+          kind: 'tool_result',
+          value: {
+            role: 'tool',
+            tool_call_id: block.tool_use_id,
+            content: resultContent,
+          },
         })
         break
       }
@@ -186,19 +179,21 @@ function walkContentBlocks (blocks) {
         break
       default:
         if (typeof block.type === 'string' && block.type.endsWith('_tool_result')) {
-          out.partsBeforeLastResult = out.parts.length
-          out.toolResults.push({
-            role: 'tool',
-            tool_call_id: block.tool_use_id,
-            content: convertServerToolResultContent(block.content),
+          items.push({
+            kind: 'tool_result',
+            value: {
+              role: 'tool',
+              tool_call_id: block.tool_use_id,
+              content: convertServerToolResultContent(block.content),
+            },
           })
         } else if (typeof block.text === 'string') {
-          out.parts.push({ type: 'text', text: block.text })
+          items.push({ type: 'text', text: block.text })
         }
         break
     }
   }
-  return out
+  return items
 }
 
 /**
@@ -246,8 +241,11 @@ function convertAnthropicSystem (system) {
  */
 function convertAnthropicBlocksToContent (blocks) {
   if (typeof blocks === 'string') return blocks
-  const { parts, hasImages } = walkContentBlocks(blocks)
-  return partsToContent(parts, hasImages)
+  const parts = []
+  for (const item of walkContentBlocks(blocks)) {
+    if (!item.kind) parts.push(item)
+  }
+  return partsToContent(parts, hasImageParts(parts))
 }
 
 /**
@@ -295,55 +293,54 @@ function convertServerToolResultContent (content) {
 }
 
 /**
+ * @param {Array<object>} messages
+ * @param {string} role
+ * @param {Array<object>} parts
+ * @param {Array<object>} toolCalls
+ */
+function appendPendingMessage (messages, role, parts, toolCalls) {
+  const content = partsToContent(parts, hasImageParts(parts))
+  if (content == null && !toolCalls.length) return
+
+  const message = { role }
+  if (content != null) message.content = content
+  if (toolCalls.length) message.tool_calls = toolCalls
+  messages.push(message)
+}
+
+/**
  * Converts one turn's worth of content blocks (with no mid_conv_system among them) to normalized
  * messages under a single role.
  *
- * Assistant `tool_use` blocks become an assistant `tool_calls` message. Tool result blocks become
- * one `tool` message per block. When the segment calls a built-in server tool (call, result and
- * final text arrive together), the content-block timeline is preserved: the tool-call message and
- * any text before the last result come first, then the results, then text that follows them as a
- * separate assistant message — so the final answer stays last (`messages.at(-1)`) rather than being
- * moved ahead of the tool result. User turns carry only results, so those precede any accompanying
- * text. Text/image blocks are otherwise merged into a single message.
+ * Contiguous tool calls are grouped into one assistant message for parallel calls. Each tool result
+ * with pending calls flushes those calls first, preserving sequential server-tool cycles. Standalone
+ * user-supplied tool results remain ahead of accompanying user text.
  *
  * @param {string} role
  * @param {Array<AnthropicContentBlock>} blocks
  * @returns {Array<object>}
  */
 function convertContentSegment (role, blocks) {
-  const { parts, toolCalls, toolResults, hasImages, partsBeforeLastResult } = walkContentBlocks(blocks)
+  const messages = []
+  let parts = []
+  let toolCalls = []
 
-  // Built-in server tool turn: keep the call -> result -> final-answer timeline.
-  if (toolCalls.length && toolResults.length) {
-    const leadingParts = parts.slice(0, partsBeforeLastResult)
-    const trailingParts = parts.slice(partsBeforeLastResult)
-
-    const callMessage = { role, tool_calls: toolCalls }
-    const leadingContent = partsToContent(leadingParts, hasImageParts(leadingParts))
-    if (leadingContent != null) callMessage.content = leadingContent
-
-    const messages = [callMessage, ...toolResults]
-
-    const trailingContent = partsToContent(trailingParts, hasImageParts(trailingParts))
-    if (trailingContent != null) messages.push({ role, content: trailingContent })
-    return messages
+  for (const item of walkContentBlocks(blocks)) {
+    if (item.kind === 'tool_call') {
+      toolCalls.push(item.value)
+    } else if (item.kind === 'tool_result') {
+      if (toolCalls.length) {
+        appendPendingMessage(messages, role, parts, toolCalls)
+        parts = []
+        toolCalls = []
+      }
+      messages.push(item.value)
+    } else {
+      parts.push(item)
+    }
   }
 
-  const messageContent = partsToContent(parts, hasImages)
-
-  let assistantMessage
-  if (messageContent != null || toolCalls.length) {
-    assistantMessage = { role }
-    if (messageContent != null) assistantMessage.content = messageContent
-    if (toolCalls.length) assistantMessage.tool_calls = toolCalls
-  }
-
-  if (toolCalls.length) {
-    return [assistantMessage]
-  }
-
-  const messages = [...toolResults]
-  if (assistantMessage) messages.push(assistantMessage)
+  appendPendingMessage(messages, role, parts, toolCalls)
   return messages
 }
 

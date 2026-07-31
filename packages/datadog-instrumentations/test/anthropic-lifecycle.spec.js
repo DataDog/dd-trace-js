@@ -648,6 +648,40 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       return new Anthropic({ apiKey: 'test', fetch: () => Promise.resolve(response) })
     }
 
+    it('evaluates the request snapshot sent before caller mutation', async () => {
+      const fetchStarted = createDeferred()
+      const { calls, unsubscribe } = subscribeAutoResolve([messagesBeforeChannel, messagesAfterChannel])
+      let sentBody
+      const client = new Anthropic({
+        apiKey: 'test',
+        fetch: (url, init) => {
+          sentBody = JSON.parse(init.body)
+          fetchStarted.resolve()
+          return Promise.resolve(jsonResponse({
+            id: 'msg_1',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Hi' }],
+          }))
+        },
+      })
+      const options = createAnthropicRequest()
+      options.messages[0].content = 'original'
+      const apiPromise = client.messages.create(options)
+
+      try {
+        await fetchStarted.promise
+        options.messages[0].content = 'mutated'
+        await apiPromise.parse()
+
+        assert.strictEqual(sentBody.messages[0].content, 'original')
+        assert.strictEqual(calls.length, 2)
+        assert.strictEqual(calls[0].args[0].messages[0].content, 'original')
+        assert.strictEqual(calls[1].args[0].messages[0].content, 'original')
+      } finally {
+        unsubscribe()
+      }
+    })
+
     it('preserves the SDK response and evaluates its json() reader', async () => {
       const afterCalls = []
       const onAfter = ctx => { afterCalls.push(ctx); ctx.pending.push(Promise.resolve()) }

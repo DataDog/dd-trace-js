@@ -45,6 +45,26 @@ function waitForVerdict (promise, verdict) {
 }
 
 /**
+ * @param {Array<unknown>} args
+ * @returns {Array<unknown>}
+ */
+function snapshotLifecycleArgs (args) {
+  const options = args[0]
+  if (!options || typeof options !== 'object') return args
+
+  const input = { messages: options.messages }
+  if (options.system !== undefined) input.system = options.system
+
+  const snapshot = [...args]
+  try {
+    snapshot[0] = { ...options, ...structuredClone(input) }
+  } catch {
+    // Custom non-cloneable message content is left untouched rather than breaking the request.
+  }
+  return snapshot
+}
+
+/**
  * Runs the output verdict for a parsed response and finishes the span with it. Finishing after the
  * verdict lets a block propagate to anthropic.request and keeps the span wrapping its child.
  *
@@ -126,6 +146,7 @@ function wrapCreate (create) {
     const stream = options?.stream
 
     const hasLifecycle = !stream && (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
+    const lifecycleArgs = hasLifecycle ? snapshotLifecycleArgs(args) : args
 
     if (!anthropicTracingChannel.start.hasSubscribers && !hasLifecycle) {
       return create.apply(this, args)
@@ -154,7 +175,7 @@ function wrapCreate (create) {
         if (!hasLifecycle || beforeVerdict) return beforeVerdict
         if (!messagesBeforeChannel.hasSubscribers) return
 
-        beforeVerdict = publishLifecycle(messagesBeforeChannel, { args, parentSpan })
+        beforeVerdict = publishLifecycle(messagesBeforeChannel, { args: lifecycleArgs, parentSpan })
         return beforeVerdict
       }
 
@@ -165,7 +186,7 @@ function wrapCreate (create) {
         if (!hasLifecycle || afterVerdict) return afterVerdict
         if (!messagesAfterChannel.hasSubscribers) return
 
-        afterVerdict = publishLifecycle(messagesAfterChannel, { args, body, parentSpan })
+        afterVerdict = publishLifecycle(messagesAfterChannel, { args: lifecycleArgs, body, parentSpan })
         return afterVerdict
       }
 

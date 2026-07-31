@@ -310,6 +310,75 @@ describe('aiguard/messages/anthropic', () => {
       ])
     })
 
+    it('preserves multiple sequential server-tool cycles', () => {
+      const message = {
+        role: 'assistant',
+        content: [
+          { type: 'server_tool_use', id: 'srv_1', name: 'web_search', input: { query: 'first' } },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srv_1',
+            content: [{ type: 'web_search_result', title: 'First', url: 'https://example.com/first' }],
+          },
+          { type: 'text', text: 'I need another search.' },
+          { type: 'server_tool_use', id: 'srv_2', name: 'web_search', input: { query: 'second' } },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srv_2',
+            content: [{ type: 'web_search_result', title: 'Second', url: 'https://example.com/second' }],
+          },
+          { type: 'text', text: 'Final answer.' },
+        ],
+      }
+      assert.deepStrictEqual(convertAnthropicMessage(message), [
+        {
+          role: 'assistant',
+          tool_calls: [{ id: 'srv_1', function: { name: 'web_search', arguments: '{"query":"first"}' } }],
+        },
+        { role: 'tool', tool_call_id: 'srv_1', content: 'First\nhttps://example.com/first' },
+        {
+          role: 'assistant',
+          content: 'I need another search.',
+          tool_calls: [{ id: 'srv_2', function: { name: 'web_search', arguments: '{"query":"second"}' } }],
+        },
+        { role: 'tool', tool_call_id: 'srv_2', content: 'Second\nhttps://example.com/second' },
+        { role: 'assistant', content: 'Final answer.' },
+      ])
+    })
+
+    it('groups parallel server-tool calls before their results', () => {
+      const message = {
+        role: 'assistant',
+        content: [
+          { type: 'server_tool_use', id: 'srv_1', name: 'web_search', input: { query: 'first' } },
+          { type: 'server_tool_use', id: 'srv_2', name: 'web_search', input: { query: 'second' } },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srv_1',
+            content: [{ type: 'web_search_result', title: 'First', url: 'https://example.com/first' }],
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srv_2',
+            content: [{ type: 'web_search_result', title: 'Second', url: 'https://example.com/second' }],
+          },
+          { type: 'text', text: 'Final answer.' },
+        ],
+      }
+      assert.deepStrictEqual(convertAnthropicMessage(message), [
+        {
+          role: 'assistant',
+          tool_calls: [
+            { id: 'srv_1', function: { name: 'web_search', arguments: '{"query":"first"}' } },
+            { id: 'srv_2', function: { name: 'web_search', arguments: '{"query":"second"}' } },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'srv_1', content: 'First\nhttps://example.com/first' },
+        { role: 'tool', tool_call_id: 'srv_2', content: 'Second\nhttps://example.com/second' },
+        { role: 'assistant', content: 'Final answer.' },
+      ])
+    })
+
     it('converts server_tool_use blocks to tool_calls', () => {
       const message = {
         role: 'assistant',
