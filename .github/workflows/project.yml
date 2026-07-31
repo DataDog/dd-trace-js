@@ -66,6 +66,14 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: npm run verify:config:types
 
+  generated-rewriter-targets:
+    runs-on: ubuntu-latest
+    name: Generated rewriter targets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node/latest
+      - run: npm run verify:rewriter:targets
+
   workflow-job-names:
     runs-on: ubuntu-latest
     name: Workflow job names (unique)
