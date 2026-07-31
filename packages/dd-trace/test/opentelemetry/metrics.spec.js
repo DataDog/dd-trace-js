@@ -682,6 +682,28 @@ describe('OpenTelemetry Meter Provider', () => {
       validator()
     })
 
+    it('forceFlush waits for the exporter', async () => {
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      const provider = metrics.getMeterProvider()
+      let finishExport
+      sinon.stub(provider.reader.exporter, 'export')
+      sinon.stub(provider.reader.exporter, 'forceFlush').returns(
+        new Promise(resolve => { finishExport = resolve })
+      )
+      meter.createCounter('test').add(1)
+
+      let flushed = false
+      const flush = provider.reader.forceFlush().then(() => { flushed = true })
+      await Promise.resolve()
+      assert.strictEqual(flushed, false)
+      assert.strictEqual(provider.reader.exporter.export.callCount, 1)
+
+      finishExport()
+      await flush
+      assert.strictEqual(flushed, true)
+    })
+
     it('removes callbacks from observable instruments', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]

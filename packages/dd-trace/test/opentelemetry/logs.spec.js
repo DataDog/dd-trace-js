@@ -12,6 +12,7 @@ const { trace, context } = require('@opentelemetry/api')
 
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
+const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -141,6 +142,32 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Logs Export', () => {
+    it('forceFlush drains queued records and waits for the exporter', async () => {
+      const batches = []
+      let finishExport
+      const processor = new BatchLogRecordProcessor({
+        export: records => batches.push(records),
+        forceFlush: () => new Promise(resolve => { finishExport = resolve }),
+      }, 1000, 2)
+
+      processor.onEmit({ body: 'one' }, { name: 'test' })
+      processor.onEmit({ body: 'two' }, { name: 'test' })
+      processor.onEmit({ body: 'three' }, { name: 'test' })
+
+      let flushed = false
+      const flush = processor.forceFlush().then(() => { flushed = true })
+      await Promise.resolve()
+      assert.strictEqual(flushed, false)
+      assert.deepStrictEqual(batches.map(batch => batch.map(record => record.body)), [
+        ['one', 'two'],
+        ['three'],
+      ])
+
+      finishExport()
+      await flush
+      assert.strictEqual(flushed, true)
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]
