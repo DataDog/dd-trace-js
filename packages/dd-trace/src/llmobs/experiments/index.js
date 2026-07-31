@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { ExperimentsClient, API_BASE_PATH } = require('./client')
+const { ExperimentsClient } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
 const { Experiment } = require('./experiment')
 const NoopExperiments = require('./noop')
@@ -104,9 +104,6 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = new URLSearchParams()
-          if (cursor) query.set('page[cursor]', cursor)
-          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
@@ -126,7 +123,7 @@ class Experiments {
               ids.push(recordId)
             }
           }
-          cursor = resp?.meta?.after ?? ''
+          cursor = resp.after
           if (!cursor) break
         }
         records = recs
