@@ -297,10 +297,11 @@ describe('no yarn dev references', function () {
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
     assert.strictEqual(packageJson.devDependencies.bun, '1.3.14')
+    // The action reads the pin instead of restating it; a literal version there would go stale on the
+    // next Dependabot bump and make every job bootstrap Bun a second time.
     const nodeSetupAction = fs.readFileSync(path.join(repoRoot, '.github/actions/node/setup/action.yml'), 'utf8')
-    const setupBunVersion = /npm install -g bun@(\d+\.\d+\.\d+)/.exec(nodeSetupAction)
-    assert.ok(setupBunVersion)
-    assert.strictEqual(setupBunVersion[1], packageJson.devDependencies.bun)
+    assert.doesNotMatch(nodeSetupAction, /bun@\d+\.\d+\.\d+/)
+    assert.match(nodeSetupAction, /require\('\.\/package\.json'\)\.devDependencies\.bun/)
     const playwrightDockerfile = fs.readFileSync(path.join(repoRoot, '.github/playwright/Dockerfile'), 'utf8')
     const dockerBunVersion = /^FROM oven\/bun:(\d+\.\d+\.\d+)@/m.exec(playwrightDockerfile)
     assert.ok(dockerBunVersion)
