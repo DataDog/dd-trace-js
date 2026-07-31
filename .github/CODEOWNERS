@@ -5,6 +5,7 @@
 /.claude/ @DataDog/lang-platform-js
 /.cursor/ @DataDog/lang-platform-js
 /.gemini/ @DataDog/lang-platform-js
+/.github/ @DataDog/lang-platform-js
 /.github/actions/ @DataDog/lang-platform-js
 /.github/all-green/ @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
@@ -372,13 +373,21 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
+/.github/ @DataDog/lang-platform-js
 /.github/actions/**/action.yml @DataDog/lang-platform-js @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/**/action.yaml @DataDog/lang-platform-js @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/action.yml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/action.yml @DataDog/ci-app-libraries @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
@@ -591,7 +600,9 @@
 /yarn.lock @DataDog/lang-platform-js @dd-octo-sts
 /docs/package.json @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
 /docs/yarn.lock @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/datadog-ci/package.json @DataDog/lang-platform-js @dd-octo-sts
+/.github/ @DataDog/lang-platform-js
 /.github/actions/datadog-ci/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
 /vendor/package.json @DataDog/lang-platform-js @dd-octo-sts
 /vendor/bun.lock @DataDog/lang-platform-js @dd-octo-sts
