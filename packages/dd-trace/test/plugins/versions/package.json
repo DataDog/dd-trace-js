@@ -87,7 +87,7 @@
     "@redis/client": "6.1.0",
     "@smithy/core": "3.30.0",
     "@smithy/smithy-client": "4.14.14",
-    "@types/node": "26.1.1",
+    "@types/node": "26.1.2",
     "@vitest/coverage-istanbul": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "@vitest/runner": "4.1.10",
