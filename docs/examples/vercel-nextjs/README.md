@@ -8,9 +8,9 @@ unchanged.
 
 ## Application Setup
 
-No application source or Next.js configuration is required. The published
-Builder owns a supported `dd-trace` dependency and uses the application's
-installed version when one is available.
+No application source, Next.js configuration, or `dd-trace` dependency is
+required. The published Builder owns the supported tracer version so its
+runtime artifact is reproducible and tested as one release unit.
 
 ## Builder Setup
 
@@ -18,9 +18,9 @@ Configure the intended Datadog Builder once in `vercel.json`, as shown in
 [`vercel.json`](./vercel.json). The Datadog Vercel integration should eventually
 own this configuration so the customer only enables APM and deploys.
 
-The Builder stages the complete installed tracer dependency graph once, keeps
-its transitive dependencies isolated under `dd-trace/node_modules`, maps those
-files into each Node function, and merges
+The Builder stages the published tracer package and uses Vercel's Node File
+Trace for its declared runtime dependencies. It maps that runtime into each
+Node function and merges
 `--import=dd-trace/initialize.mjs` into that function's existing `NODE_OPTIONS`.
 It does not change the function handler, set project-global `NODE_OPTIONS`,
 alter Edge output, or depend on Trace Drain.
@@ -35,6 +35,6 @@ service tags as encrypted project settings. Do not commit API keys or enable
 `@datadog/vercel-next-builder` is not published by this repository. This
 directory is therefore a tested prototype and onboarding contract, not a
 customer-installable release. Publishing the Builder requires a package owner,
-package manifest with `@vercel/next` and `dd-trace` dependencies,
-registry/release workflow, and live Vercel acceptance before this configuration
-can be supported.
+package manifest with `@vercel/next`, `@vercel/nft`, and `dd-trace`
+dependencies, registry/release workflow, and live Vercel acceptance before this
+configuration can be supported.

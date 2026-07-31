@@ -54,17 +54,8 @@ async function findPackageRoot (packageName, searchPath) {
   throw new Error(`Unable to find the package root for ${packageName}`)
 }
 
-async function resolveTracerRoot (workPath) {
-  let tracerRoot
-
-  try {
-    tracerRoot = await findPackageRoot('dd-trace', workPath)
-  } catch (error) {
-    if (error.code !== 'MODULE_NOT_FOUND') throw error
-    tracerRoot = await findPackageRoot('dd-trace', __dirname)
-  }
-
-  return validateTracerRoot(tracerRoot)
+async function resolveTracerRoot () {
+  return validateTracerRoot(await findPackageRoot('dd-trace', __dirname))
 }
 
 async function validateTracerRoot (tracerRoot) {
@@ -87,109 +78,70 @@ async function validateTracerRoot (tracerRoot) {
   return tracerRoot
 }
 
-async function collectPackageGraph (tracerRoot) {
-  const installationRoot = path.dirname(tracerRoot)
-  const packages = new Map()
-  const pending = [{ destination: 'dd-trace', name: 'dd-trace', root: tracerRoot, required: true }]
+function findTraceBase (tracerRoot) {
+  let directory = tracerRoot
 
-  while (pending.length > 0) {
-    const current = pending.pop()
-    let manifest
+  while (directory !== path.dirname(directory)) {
+    if (path.join(directory, 'node_modules', 'dd-trace') === tracerRoot) return directory
+    directory = path.dirname(directory)
+  }
 
+  throw new Error(`dd-trace must be installed under node_modules: ${tracerRoot}`)
+}
+
+async function stageTracerFiles (tracerRoot, workPath) {
+  // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require -- Builder dependency.
+  const { nodeFileTrace } = require('@vercel/nft')
+  const traceBase = await fs.realpath(findTraceBase(tracerRoot))
+  tracerRoot = await fs.realpath(tracerRoot)
+  const manifest = JSON.parse(await fs.readFile(path.join(tracerRoot, 'package.json'), 'utf8'))
+  const packageRequire = Module.createRequire(path.join(tracerRoot, 'package.json'))
+  // The tracer loads vendored modules and features dynamically, so NFT alone
+  // cannot discover its complete runtime.
+  const packageFiles = await listPackageFiles(tracerRoot)
+  const entrypoints = [path.join(tracerRoot, 'initialize.mjs')]
+
+  for (const dependency of [
+    ...Object.keys(manifest.dependencies || {}),
+    ...Object.keys(manifest.optionalDependencies || {}),
+  ]) {
     try {
-      manifest = JSON.parse(await fs.readFile(path.join(current.root, 'package.json'), 'utf8'))
+      entrypoints.push(packageRequire.resolve(dependency))
     } catch (error) {
-      if (!current.required && error.code === 'ENOENT') continue
-      throw error
-    }
-
-    const existing = packages.get(current.destination)
-    if (existing) {
-      if (existing.root !== current.root) {
-        throw new Error(
-          `dd-trace dependency graph maps multiple packages to node_modules/${current.destination}`
-        )
-      }
-      continue
-    }
-
-    packages.set(current.destination, { manifest, root: current.root })
-
-    const dependencies = Object.keys(manifest.dependencies || {})
-    const optionalDependencies = Object.keys(manifest.optionalDependencies || {})
-
-    for (const name of dependencies) {
-      const root = await findPackageRoot(name, current.root)
-      const destination = tracerDependencyDestination(name, root, installationRoot)
-      pending.push({ destination, name, root, required: true })
-    }
-    for (const name of optionalDependencies) {
-      try {
-        const root = await findPackageRoot(name, current.root)
-        pending.push({
-          destination: tracerDependencyDestination(name, root, installationRoot),
-          name,
-          root,
-          required: false,
-        })
-      } catch (error) {
-        if (error.code !== 'MODULE_NOT_FOUND') throw error
-      }
+      if (error.code !== 'MODULE_NOT_FOUND') throw error
     }
   }
 
-  return packages
-}
+  const { fileList } = await nodeFileTrace(entrypoints, {
+    base: traceBase,
+    processCwd: workPath,
+  })
+  for (const filePath of packageFiles) fileList.add(path.relative(traceBase, filePath))
 
-function tracerDependencyDestination (name, packageRoot, installationRoot) {
-  const destination = packageDestination(name, packageRoot, installationRoot)
-  return path.join('dd-trace', 'node_modules', destination)
-}
-
-function packageDestination (name, packageRoot, installationRoot) {
-  const relativePath = path.relative(installationRoot, packageRoot)
-  if (relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath)) {
-    return relativePath
-  }
-  return name
-}
-
-async function stagePackageGraph (packages, workPath) {
-  const runtimeRoot = path.join(workPath, '.datadog', 'vercel-runtime', 'node_modules')
+  const runtimeRoot = path.join(workPath, '.datadog', 'vercel-runtime')
   const filePathMap = {}
 
   await fs.rm(runtimeRoot, { force: true, recursive: true })
 
-  for (const [destinationPath, packageInfo] of packages) {
-    const destination = path.join(runtimeRoot, destinationPath)
-    await fs.cp(packageInfo.root, destination, {
-      recursive: true,
-      dereference: true,
-      filter: source => {
-        const relativePath = path.relative(packageInfo.root, source)
-        return relativePath === '' || relativePath.split(path.sep)[0] !== 'node_modules'
-      },
-    })
-
-    for (const filePath of await listFiles(destination)) {
-      const functionPath = path.join('node_modules', destinationPath, path.relative(destination, filePath))
-      filePathMap[toPosixPath(functionPath)] = toPosixPath(path.relative(workPath, filePath))
-    }
+  for (const relativePath of fileList) {
+    const source = path.join(traceBase, relativePath)
+    const destination = path.join(runtimeRoot, relativePath)
+    await fs.mkdir(path.dirname(destination), { recursive: true })
+    await fs.copyFile(source, destination)
+    filePathMap[toPosixPath(relativePath)] = toPosixPath(path.relative(workPath, destination))
   }
 
   return filePathMap
 }
 
-async function listFiles (directory) {
+async function listPackageFiles (directory) {
   const files = []
 
   for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue
     const entryPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...await listFiles(entryPath))
-    } else if (entry.isFile()) {
-      files.push(entryPath)
-    }
+    if (entry.isDirectory()) files.push(...await listPackageFiles(entryPath))
+    if (entry.isFile()) files.push(entryPath)
   }
 
   return files
@@ -222,8 +174,7 @@ async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
 
   if (nodeFunctions.length === 0) return
 
-  const packageGraph = await collectPackageGraph(tracerRoot)
-  const tracerFilePathMap = await stagePackageGraph(packageGraph, workPath)
+  const tracerFilePathMap = await stageTracerFiles(tracerRoot, workPath)
 
   for (const { config, configPath } of nodeFunctions) {
     config.filePathMap = {
@@ -244,7 +195,7 @@ async function build (options) {
   const result = await buildNext(options)
 
   if (result.buildOutputPath) {
-    const tracerRoot = await resolveTracerRoot(options.workPath)
+    const tracerRoot = await resolveTracerRoot()
     await instrumentBuildOutput(result.buildOutputPath, tracerRoot, options.workPath)
   }
 
@@ -253,9 +204,11 @@ async function build (options) {
 
 module.exports = {
   build,
-  collectPackageGraph,
+  findTraceBase,
   instrumentBuildOutput,
+  listPackageFiles,
   mergeNodeOptions,
   resolveTracerRoot,
+  stageTracerFiles,
   validateTracerRoot,
 }
