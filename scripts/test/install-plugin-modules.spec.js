@@ -172,8 +172,15 @@ externals.express.push(
 
     const bedrockFolder = path.join(versionsDir, '@aws-sdk', 'client-bedrock-runtime@3.422.0')
     const manifest = require(path.join(bedrockFolder, 'package.json'))
-    assert.ok(semver.validRange(manifest.dependencies['@smithy/node-http-handler']))
-    require(bedrockFolder).get('@smithy/node-http-handler')
+    const injected = manifest.dependencies['@smithy/node-http-handler']
+    const bedrock = require(bedrockFolder)
+    const declared = JSON.parse(fs.readFileSync(bedrock.pkgJsonPath(), 'utf8'))
+      .dependencies['@smithy/node-http-handler']
+    // Not just a valid range: `*` is valid and is what broke this. The injected range has to stay inside the range
+    // the client itself declares, otherwise the newest handler is grafted onto this v2-era client and its own
+    // `@smithy/core` resolves independently, so `get()` below fails on whichever majors happen to collide that day.
+    assert.strictEqual(semver.subset(injected, declared), true)
+    bedrock.get('@smithy/node-http-handler')
   })
 
   it('injects a forced dependency missing from the package manifest', () => {
