@@ -21,6 +21,7 @@ const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
  * @returns {{
  *   configFile?: string,
  *   error?: string,
+ *   excludePatterns?: string[],
  *   files?: string[],
  *   includePatterns?: string[],
  *   root?: string
@@ -115,23 +116,40 @@ function getBindingFromObject ({ configFile, projectFiles, projectObject, projec
 
   const include = getLiteralStringArray(projectObject, 'include')
   if (include.dynamic) return { error: 'the selected Vitest project has dynamic include patterns' }
-  const files = projectFiles.filter(filename => {
-    const relativeToRoot = path.relative(root, filename)
-    if (!relativeToRoot || relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) return false
-    if (include.values.length === 0) return true
-    const normalized = relativeToRoot.replaceAll('\\', '/')
-    return include.values.some(pattern => matchesLiteralGlob(normalized, pattern))
-  })
-  return { configFile, files, includePatterns: include.values, root }
+  const exclude = getLiteralStringArray(projectObject, 'exclude')
+  if (exclude.dynamic) return { error: 'the selected Vitest project has dynamic exclude patterns' }
+  const project = {
+    excludePatterns: exclude.values,
+    includePatterns: include.values,
+    root,
+  }
+  const files = projectFiles.filter(filename => matchesProjectFile(project, filename))
+  return { configFile, files, ...project }
 }
 
 function supportsGeneratedFiles (project, strategy) {
-  if (project.includePatterns.length === 0) return true
   return strategy.scenarios.every(scenario => {
-    const relative = path.relative(project.root, scenario.testIdentities[0].file).replaceAll('\\', '/')
-    return relative && !relative.startsWith('../') &&
-      project.includePatterns.some(pattern => matchesLiteralGlob(relative, pattern))
+    return matchesProjectFile(project, scenario.testIdentities[0].file)
   })
+}
+
+/**
+ * Applies one statically bound Vitest project's include and exclude patterns.
+ *
+ * @param {object} project bound project
+ * @param {string[]} project.excludePatterns literal exclusion patterns
+ * @param {string[]} project.includePatterns literal inclusion patterns
+ * @param {string} project.root project root
+ * @param {string} filename candidate test file
+ * @returns {boolean} whether Vitest can collect the file
+ */
+function matchesProjectFile (project, filename) {
+  const relative = path.relative(project.root, filename)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false
+  const normalized = relative.replaceAll('\\', '/')
+  const included = project.includePatterns.length === 0 ||
+    project.includePatterns.some(pattern => matchesLiteralGlob(normalized, pattern))
+  return included && !project.excludePatterns.some(pattern => matchesLiteralGlob(normalized, pattern))
 }
 
 function getProjectObject (source, nameIndex) {

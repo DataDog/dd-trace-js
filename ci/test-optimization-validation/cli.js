@@ -223,13 +223,15 @@ async function main (argv) {
     process.exitCode = validatorExitCode
   } catch (error) {
     let reportError = error
-    await publishFailureReport({
-      approvedPlanSha256: activeApprovedPlanSha256,
-      cleanup: cleanupOutcome,
-      error: reportError,
-      manifest: activeManifest,
-      out: activeOut,
-    })
+    if (executionLock) {
+      await publishFailureReport({
+        approvedPlanSha256: activeApprovedPlanSha256,
+        cleanup: cleanupOutcome,
+        error: reportError,
+        manifest: activeManifest,
+        out: activeOut,
+      })
+    }
     if (executionLock) {
       try {
         releaseExecutionLock(executionLock)

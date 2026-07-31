@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('path')
 
 const { getArtifactId } = require('../artifact-id')
+const { BLOCKER_CATEGORIES } = require('../blocker-category')
 const { buildDatadogEnv, buildOfflineCaptureEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
@@ -194,10 +195,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
 function requireGeneratedScenario (framework, scenarioId, scenarioName) {
   const strategy = framework.generatedTestStrategy
   if (strategy?.status === 'not_possible') {
-    return skip(
+    return incomplete(
       framework,
       scenarioName,
-      `Skipped because this advanced feature is not eligible: ${strategy.reason}`,
+      `The validator cannot create a collectible test for this advanced feature: ${strategy.reason} ` +
+        'No conclusion was reached for this advanced feature.',
       getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
     )
   }
@@ -255,9 +257,9 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
     reasonCode = 'generated-test-strategy-not-verified'
   }
 
-  return {
+  const evidence = {
     featureEligibility: {
-      eligible: false,
+      ...(reasonCode === 'generated-test-strategy-not-possible' ? {} : { eligible: false }),
       blockedBy: 'generated-test-strategy',
       reason: strategy?.reason,
       reasonCode,
@@ -266,6 +268,12 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
       requiredGeneratedScenario: scenarioId,
     },
   }
+  if (reasonCode === 'generated-test-strategy-not-possible') {
+    evidence.blockerCategory = BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+    evidence.recommendation = 'Report that the selected runner configuration cannot collect validator-generated ' +
+      'tests to validator engineering. Basic Reporting remains valid; project setup changes are not required.'
+  }
+  return evidence
 }
 
 function basicEventEvidence (events) {

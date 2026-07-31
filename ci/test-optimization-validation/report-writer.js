@@ -259,7 +259,7 @@ function getAdvancedVerdict (results) {
   if (advanced.every(result => result.status === 'pass')) return 'PASS — all selected advanced checks worked'
   const failed = advanced.find(result => ['error', 'fail'].includes(result.status) && !isIncomplete(result))
   if (failed) return `ACTION REQUIRED — ${getScenarioName(failed.scenario)}`
-  if (advanced.every(result => result.status === 'skip' &&
+  if (advanced.every(result => result.status === 'skip' && !isIncomplete(result) &&
     result.evidence?.featureEligibility?.eligible === false)) return 'NOT ELIGIBLE'
   return 'INCOMPLETE — one or more selected checks were not reached'
 }

@@ -2,8 +2,9 @@
 
 const fs = require('node:fs')
 
-const { stripAnsi } = require('./test-output')
 const { BLOCKER_CATEGORIES } = require('./blocker-category')
+const { isProjectBuildArtifactPath } = require('./project-build-artifact')
+const { stripAnsi } = require('./test-output')
 
 const FILESYSTEM_PERMISSION_PATTERN = /\b(?:EACCES|EPERM|Operation not permitted|Permission denied)\b/i
 const LOCAL_SOCKET_PATTERN = /\b(?:127\.0\.0\.1|localhost|listen)\b/i
@@ -21,6 +22,7 @@ const BUILD_ARTIFACT_MISSING_PATTERN = new RegExp(
     String.raw`${BUILD_ARTIFACT_PATH_PATTERN}[^\r\n]{0,500}${MISSING_ARTIFACT_MESSAGE_PATTERN})`,
   'im'
 )
+const FILE_PATH_REFERENCE_PATTERN = /(?:^|[\s('"`])((?:\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])[^'"`\s),;]*)/g
 const CUCUMBER_CONFIG_OPTION_UNSUPPORTED_PATTERN = /unknown option ['"]--config['"]/i
 const CYPRESS_BINARY_PATTERN =
   /(?:Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress)/i
@@ -253,7 +255,7 @@ function getCommandBlocker (result, options = {}) {
     }
   }
 
-  if (result.exitCode !== 0 && BUILD_ARTIFACT_MISSING_PATTERN.test(output)) {
+  if (result.exitCode !== 0 && hasMissingProjectBuildArtifact(output)) {
     const buildScript = getBuildScript(options.packageJson)
     return {
       blockerCategory: BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED,
@@ -318,6 +320,22 @@ function getCommandBlocker (result, options = {}) {
       localRuntimeBlocked: true,
     }
   }
+}
+
+/**
+ * Returns whether command output identifies missing project-owned build output.
+ *
+ * @param {string} output command output
+ * @returns {boolean} whether a project build artifact is missing
+ */
+function hasMissingProjectBuildArtifact (output) {
+  for (const line of output.split(/\r?\n/)) {
+    if (!BUILD_ARTIFACT_MISSING_PATTERN.test(line)) continue
+    for (const match of line.matchAll(FILE_PATH_REFERENCE_PATTERN)) {
+      if (isProjectBuildArtifactPath(match[1])) return true
+    }
+  }
+  return false
 }
 
 function getBuildScript (packageJson) {

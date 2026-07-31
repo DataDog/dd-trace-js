@@ -292,6 +292,37 @@ describe('test optimization validation CLI', () => {
     }
   })
 
+  it('does not publish an approval failure without owning the execution lock', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+    const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
+    const reportPath = path.join(out, 'report.md')
+    const pendingReport = 'active validation pending\n'
+    try {
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      assert.strictEqual(runCli(fixture.root, ['--print-plan', '--scenario', 'basic-reporting']).status, 0)
+      const approvalPath = path.join(out, 'approval.json')
+      const approval = fs.readFileSync(approvalPath)
+      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
+      fs.writeFileSync(lockPath, 'active validation lock\n')
+      fs.writeFileSync(reportPath, pendingReport)
+      fs.appendFileSync(path.join(fixture.root, 'dd-test-optimization-validation-manifest.json'), '\n')
+
+      const executed = runCli(fixture.root, [
+        '--run-approved-plan', approvalPath,
+        '--sha256', digest,
+      ])
+
+      assert.strictEqual(executed.status, 3)
+      assert.match(executed.stderr, /changed after approval/)
+      assert.strictEqual(fs.readFileSync(reportPath, 'utf8'), pendingReport)
+      assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), 'active validation lock\n')
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('reports a lock-release failure instead of finalizing the earlier result', function () {
     this.timeout(20_000)
     const out = 'dd-test-optimization-validation-results'

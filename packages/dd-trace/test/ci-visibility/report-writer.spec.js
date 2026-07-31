@@ -88,6 +88,27 @@ describe('test optimization validation report', () => {
     assert.match(report, /The generated test did not receive an Early Flake Detection retry/)
   })
 
+  it('reports unavailable generated checks as incomplete instead of not eligible', () => {
+    const recommendation = 'Report the generated-test collection limitation to validator engineering.'
+    write([
+      result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.'),
+      result('efd', 'skip', 'The generated test strategy is unavailable.', {
+        blockerCategory: 'VALIDATOR_LIMITATION',
+        featureEligibility: {
+          eligible: false,
+          reasonCode: 'generated-test-strategy-not-possible',
+        },
+        manifestIncomplete: true,
+        recommendation,
+      }),
+    ])
+    const report = readReport()
+
+    assert.match(report, /INCOMPLETE — one or more selected checks were not reached/)
+    assert.doesNotMatch(report, /NOT ELIGIBLE/)
+    assert.match(report, new RegExp(recommendation.replace('.', String.raw`\.`)))
+  })
+
   it('distinguishes incomplete validation from a tracer failure', () => {
     write([
       result('basic-reporting', 'blocked', 'The browser could not launch in this sandbox.', {

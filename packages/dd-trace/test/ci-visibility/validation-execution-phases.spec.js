@@ -101,6 +101,22 @@ describe('test optimization validation execution boundary', () => {
     assert.strictEqual(blocker.blockerCategory, 'PROJECT_SETUP_REQUIRED')
   })
 
+  it('does not diagnose dependency dist paths as missing project build output', () => {
+    for (const stderr of [
+      "Error: Cannot find module '@scope/dependency/dist/index.js'",
+      `Error: Cannot find module '${path.join(fixture.root, 'node_modules', 'dependency', 'dist', 'index.js')}'`,
+    ]) {
+      const blocker = getCommandBlocker({ exitCode: 1, stderr, stdout: '' }, {
+        framework: 'mocha',
+        packageJson: path.join(fixture.root, 'package.json'),
+        testsRan: false,
+      })
+
+      assert.strictEqual(blocker.kind, 'project-command-initialization-failed', stderr)
+      assert.doesNotMatch(blocker.recommendation, /project's normal build workflow/)
+    }
+  })
+
   it('classifies a validator-owned Cucumber config rejection as a validator limitation', () => {
     const blocker = getCommandBlocker({
       exitCode: 1,

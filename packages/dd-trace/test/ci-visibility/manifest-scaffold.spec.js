@@ -384,6 +384,31 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('marks only project-owned build artifact imports as setup prerequisites', () => {
+    for (const [specifier, expected] of [
+      ['../dist/app.js', true],
+      ['@scope/dependency/dist/index.js', false],
+      ['./node_modules/dependency/dist/index.js', false],
+    ]) {
+      const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha' })
+      fs.writeFileSync(fixture.testFile, [
+        `require(${JSON.stringify(specifier)})`,
+        "describe('example', () => { it('works', () => {}) })",
+        '',
+      ].join('\n'))
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set(['mocha']),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.buildArtifactRequired, expected, specifier)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    }
+  })
+
   it('approval-binds two disclosed representative fallbacks', () => {
     const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha' })
     const first = path.join(fixture.root, 'test', 'a-first.spec.js')
@@ -1169,9 +1194,48 @@ describe('test optimization validation manifest scaffold', () => {
 
       assert.strictEqual(framework.status, 'runnable')
       assert.deepStrictEqual(framework.generatedTestStrategy, {
-        reason: 'The selected Vitest project include patterns do not collect validator-generated test files.',
+        reason: 'The selected Vitest project include or exclude patterns do not collect ' +
+          'validator-generated test files.',
         status: 'not_possible',
       })
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('applies bound Vitest project exclusions to representatives and generated tests', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project fastly',
+    })
+    const projectRoot = path.join(fixture.root, 'runtime-tests', 'shared')
+    const excluded = path.join(projectRoot, 'excluded.test.ts')
+    const selected = path.join(projectRoot, 'selected.test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(projectRoot, { recursive: true })
+    fs.writeFileSync(excluded, "test('excluded', () => {})\n")
+    fs.writeFileSync(selected, "test('selected', () => {})\n")
+    fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      '  test: {',
+      '    projects: [{',
+      "      test: { name: 'fastly', root: 'runtime-tests/shared', include: ['**/*.test.ts'],",
+      "        exclude: ['**/excluded.test.ts', 'dd-test-optimization-validation-*.test.ts'] },",
+      '    }],',
+      '  },',
+      '})',
+      '',
+    ].join('\n'))
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.strictEqual(framework.generatedTestStrategy.status, 'not_possible')
     } finally {
       removeFixture(fixture.root)
     }

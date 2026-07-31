@@ -9,6 +9,7 @@ const cucumber = require('./framework-adapters/cucumber')
 const cypress = require('./framework-adapters/cypress')
 const playwright = require('./framework-adapters/playwright')
 const vitest = require('./framework-adapters/vitest')
+const { isProjectBuildArtifactPath } = require('./project-build-artifact')
 const {
   GENERATED_SCENARIOS,
   getGeneratedRetryStatePath,
@@ -84,8 +85,7 @@ const TYPE_ONLY_TEST_PATTERN = /\.(?:test|spec)-d\.[cm]?tsx?$|\.d\.[cm]?ts$/i
 const TYPE_ONLY_DIRECTORY_PATTERN = /(?:^|\/)(?:type[-_]?tests?|typetests?|test-dts?)(?:\/|$)/i
 const LOCAL_SOCKET_PATTERN =
   /(?:\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1|supertest)\b|\bcy\.(?:visit|request)\s*\()/
-const BUILD_ARTIFACT_PATTERN =
-  /(?:from\s+|require\s*\(\s*|import\s*\(\s*)['"][^'"]*(?:^|\/)(?:build|dist)(?:\/|['"])/
+const IMPORT_SPECIFIER_PATTERN = /(?:from\s+|require\s*\(\s*|import\s*\(\s*)(['"])([^'"]+)\1/g
 const CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN =
   /(?:^|\/)(?:features?|helpers?|step_definitions|steps?|support)(?:\/|$)/i
 const CUCUMBER_BROWSER_DRIVER_PATTERN =
@@ -336,7 +336,8 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   const generatedTestStrategy = vitestProject &&
     !vitest.supportsGeneratedFiles(vitestProject, plannedGeneratedTestStrategy)
     ? {
-        reason: 'The selected Vitest project include patterns do not collect validator-generated test files.',
+        reason: 'The selected Vitest project include or exclude patterns do not collect ' +
+          'validator-generated test files.',
         status: 'not_possible',
       }
     : plannedGeneratedTestStrategy
@@ -698,7 +699,7 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName, 
       explicitFilename: TEST_FILE_PATTERN.test(path.basename(filename)),
       path: filename,
       rank: getTestRank(filename, source, projectRoot),
-      requiresBuildArtifact: BUILD_ARTIFACT_PATTERN.test(source),
+      requiresBuildArtifact: requiresProjectBuildArtifact(source),
       requiresExternalService: framework === 'cypress' && CYPRESS_LOCAL_ORIGIN_PATTERN.test(source),
       requiresLocalSocket: LOCAL_SOCKET_PATTERN.test(source),
     })
@@ -710,6 +711,19 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName, 
       left.path.localeCompare(right.path)
   })
   return candidates.slice(0, 3)
+}
+
+/**
+ * Returns whether test source statically imports project-owned build output.
+ *
+ * @param {string} source test source
+ * @returns {boolean} whether a project build artifact is required
+ */
+function requiresProjectBuildArtifact (source) {
+  for (const match of source.matchAll(IMPORT_SPECIFIER_PATTERN)) {
+    if (isProjectBuildArtifactPath(match[2])) return true
+  }
+  return false
 }
 
 /**
