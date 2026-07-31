@@ -86,7 +86,8 @@ describe('test optimization validation CLI', () => {
     this.timeout(20_000)
     const fixture = createRepositoryFixture({ framework: 'mocha' })
     const marker = path.join(fixture.root, 'should-not-run')
-    const fallback = path.join(fixture.root, 'test', 'fallback.spec.js')
+    const fallbackRelativePath = path.join('test', 'fallback.spec.js')
+    const fallback = path.join(fixture.root, fallbackRelativePath)
     fs.writeFileSync(
       fixture.runner,
       `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'runner executed')\n`
@@ -129,9 +130,9 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stdout, /CI pre-approval result: incomplete:/)
       assert.match(planned.stdout, /eligible for approved clean preflight; runtime prerequisites are unverified/)
       assert.match(planned.stdout, /Fallback tests, tried in order only if the representative does not pass cleanly/)
-      assert.match(planned.stdout, /test\/fallback\.spec\.js/)
+      assert.ok(planned.stdout.includes(fallbackRelativePath))
       assert.match(planned.stdout, /Fallback Basic Reporting command 1:[\s\S]*fallback\.spec\.js/)
-      assert.match(planned.stdout, /test\/fallback\.spec\.js` \(localhost, build output required\)/)
+      assert.ok(planned.stdout.includes(`\`${fallbackRelativePath}\` (localhost, build output required)`))
       assert.match(planned.stdout, /Advanced execution policy: each generated scenario has one clean verification/)
       assert.match(planned.stdout, /Approve executing exactly the plan above\?/)
       assert.match(
