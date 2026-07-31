@@ -27,6 +27,33 @@ const exclude = new Set([
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
+// A package can declare a license in `package.json` without publishing a license file: `crypto-randomuuid` ships
+// `"license": "MIT"` and no `LICENSE`. The plugin resolves the SPDX id from that field and only lacks the text, so
+// fill it from a canonical template keyed by the id rather than per package. The copyright holder for each package is
+// recorded separately, in `LICENSE-3rdparty.csv`.
+const spdxLicenseTexts = {
+  MIT: `MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`,
+}
+
 module.exports = {
   entry: Object.fromEntries(difference.entries()),
   target: 'node',
