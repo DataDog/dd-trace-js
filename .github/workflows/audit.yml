@@ -8,6 +8,11 @@ on:
       - "bun.lock"
       - "docs/bun.lock"
       - "vendor/bun.lock"
+      # An advisory exemption is only as good as the run that re-checks it, so changing the policy or
+      # the wrapper that enforces it has to trigger this workflow too.
+      - ".github/audit-allowlist.json"
+      - ".github/workflows/audit.yml"
+      - "scripts/audit.js"
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
