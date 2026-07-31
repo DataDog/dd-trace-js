@@ -7,6 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const featureRegistry = require('../src/feature-registry')
+const optionalFeatureRegistry = require('../src/optional-feature-registry')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -287,6 +288,16 @@ describe('TracerProxy', () => {
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
       },
+    })
+
+    optionalFeatureRegistry.registerOptionalFeature({
+      name: 'appsec',
+      factory: () => appsec,
+    })
+
+    optionalFeatureRegistry.registerOptionalFeature({
+      name: 'iast',
+      factory: () => iast,
     })
 
     proxy = new ProxyClass()
@@ -669,6 +680,19 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(iast.enable)
+      })
+
+      it('does not throw when an optional feature was never registered', () => {
+        config.iast.enabled = true
+        config.appsec.enabled = true
+
+        assert.doesNotThrow(() => proxy.init())
+      })
+
+      it('leaves _modules.rewriter undefined when the rewriter feature was never registered', () => {
+        proxy.init()
+
+        assert.strictEqual(proxy._modules.rewriter, undefined)
       })
 
       it('should not load the profiler when not configured', () => {
