@@ -127,6 +127,28 @@ externals.express.push(
     assert.match(result.stderr, /Conflicting overrides for 'axios': '1' and '2'/)
   })
 
+  // Both forms are what a reader reaches for when a single sandbox needs a different transitive, and Bun
+  // takes either into the manifest and then ignores it.
+  for (const [label, override, rejected] of [
+    ['a Yarn-style selective path', "{ 'axios@1.0.0/follow-redirects': '^1' }", 'axios@1.0.0/follow-redirects'],
+    ['an npm-style nested object', "{ axios: { 'follow-redirects': '^1' } }", 'axios'],
+  ]) {
+    it(`rejects ${label}, which Bun would silently ignore`, () => {
+      const preload = path.join(wrapperDirectory, `override-${rejected.replaceAll(/\W/g, '-')}.js`)
+      fs.writeFileSync(preload, `
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+externals.express.push({ name: 'axios', overrides: ${override} })
+`)
+
+      const result = spawnInstall('express', {
+        NODE_OPTIONS: `--require=${preload}`,
+      })
+
+      assert.strictEqual(result.status, 1)
+      assert.ok(result.stderr.includes(`Override '${rejected}' cannot be expressed as a Bun override`), result.stderr)
+    })
+  }
+
   it('supports a plugin filter that generates no workspaces', () => {
     fs.rmSync(path.join(versionsDir, 'node_modules'), { recursive: true, force: true })
     fs.rmSync(path.join(versionsDir, 'bun.lock'), { force: true })
@@ -263,9 +285,10 @@ path.join = function join (...parts) {
   it('scopes the recorded OpenAI dependency graph to langchain sandboxes', () => {
     runInstall('langchain')
 
-    assert.deepStrictEqual(readVersionsManifest().overrides, {
-      '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
-    })
+    // No override pins `@langchain/core` here. A workspace-wide one would drag langgraph's `>=1.1.16`
+    // sandboxes down to the 0.2 line, and Bun ignores a selective one, so the range is left to
+    // `@langchain/openai@0.0.34`'s own declaration — which is what the assertion below verifies.
+    assert.deepStrictEqual(readVersionsManifest().overrides, {})
     const manifest = require(path.join(versionsDir, 'langchain', 'package.json'))
     assert.strictEqual(manifest.dependencies['@langchain/openai'], '0.0.34')
     const langchain = require(path.join(versionsDir, 'langchain'))
