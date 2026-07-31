@@ -6,6 +6,11 @@ let rewriter
 
 async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
+  const format = result.format || context.format
+
+  // The asynchronous loader keeps using Module._compile for CommonJS until all
+  // supported runtimes can use synchronous hooks.
+  if (format === 'commonjs') return result
 
   return rewriteResult(result, url, context)
 }
@@ -23,19 +28,27 @@ function loadSync (url, context, nextLoad) {
  */
 function rewriteResult (result, url, context) {
   const format = result.format || context.format
+  const { source } = result
+  let hashbang
 
-  // CommonJS source is rewritten by Module._compile. Rewriting it here too
-  // double-instruments CommonJS entrypoints loaded through sync hooks.
-  if (format === 'commonjs') return result
+  if (format === 'commonjs' && typeof source === 'string' && source.startsWith('#!')) {
+    hashbang = source.split('\n', 1)[0]
+  }
 
-  if (result.source) {
+  if (source) {
     const target = getRewriteTarget(url)
     if (target) {
       if (!rewriter) {
         rewriter = require('./index.js')
       }
 
-      result.source = rewriter.rewrite(result.source, url, format, target)
+      const rewrittenSource = rewriter.rewrite(source, url, format, target)
+
+      // The CommonJS compiler used to receive Orchestrion output after Node had
+      // handled the hashbang. The synchronous load hook must restore it itself.
+      result.source = hashbang && typeof rewrittenSource === 'string' && !rewrittenSource.startsWith('#!')
+        ? `${hashbang}\n${rewrittenSource}`
+        : rewrittenSource
     }
   }
 

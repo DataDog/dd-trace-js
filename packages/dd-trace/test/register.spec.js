@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
@@ -10,15 +12,18 @@ const SUPPORTED_SYNC_HOOKS_NODE_VERSION = {
   NODE_MINOR: 11,
   NODE_PATCH: 1,
 }
+const SYNC_SOURCE_REWRITING_SYMBOL = Symbol.for('dd-trace.loader.sync-source-rewriting')
 
 describe('register.js', () => {
   let emitWarning
 
   beforeEach(() => {
+    delete globalThis[SYNC_SOURCE_REWRITING_SYMBOL]
     emitWarning = sinon.stub(process, 'emitWarning')
   })
 
   afterEach(() => {
+    delete globalThis[SYNC_SOURCE_REWRITING_SYMBOL]
     emitWarning.restore()
   })
 
@@ -42,6 +47,7 @@ describe('register.js', () => {
     sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.notCalled(emitWarning)
+    assertSyncSourceRewritingInactive()
   })
 
   it('registers sync loader hooks on supported Node.js versions', () => {
@@ -57,6 +63,7 @@ describe('register.js', () => {
     sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.notCalled(register)
     sinon.assert.notCalled(emitWarning)
+    assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
   })
 
   it('warns and falls back if sync loader registration returns false', () => {
@@ -72,6 +79,7 @@ describe('register.js', () => {
     sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.calledOnceWithMatch(emitWarning, /dd-trace could not register synchronous loader hooks/)
+    assertSyncSourceRewritingInactive()
   })
 
   it('warns and falls back if sync loader registration throws', () => {
@@ -91,6 +99,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*sync hook failure/
     )
+    assertSyncSourceRewritingInactive()
   })
 
   it('falls back to the async loader if require(esm) is disabled', () => {
@@ -109,6 +118,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*require\(esm\) is disabled/
     )
+    assertSyncSourceRewritingInactive()
   })
 
   it('warns and falls back if sync loader import fails', () => {
@@ -126,6 +136,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*loader import failure/
     )
+    assertSyncSourceRewritingInactive()
   })
 
   it('warns and falls back if sync hook support detection fails', () => {
@@ -142,8 +153,13 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*support detection failure/
     )
+    assertSyncSourceRewritingInactive()
   })
 })
+
+function assertSyncSourceRewritingInactive () {
+  assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], undefined)
+}
 
 function createThrowingLoaderHook (error) {
   return Object.defineProperty({}, 'registerSyncLoaderHooks', {
