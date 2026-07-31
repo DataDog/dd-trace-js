@@ -25,6 +25,9 @@ const requirePackageJson = require(requirePackageJsonPath)
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
 
+// A bare package name, optionally scoped, and nothing else: the only override key Bun applies.
+const BARE_PACKAGE_NAME = /^(?:@[^@/]+\/)?[^@/]+$/
+
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
@@ -206,6 +209,15 @@ function applyExternalConfiguration (moduleNames, packages) {
         trustedDependencies.add(trustedDependency)
       }
       for (const [dependency, version] of Object.entries(external.overrides ?? {})) {
+        // Bun only honours a bare package name. A Yarn-style selective path (`parent@1.0.0/child`) or an
+        // npm-style nested object is accepted into the manifest and then silently ignored, so the range
+        // reads as enforced while resolution stays untouched.
+        if (!BARE_PACKAGE_NAME.test(dependency) || typeof version !== 'string') {
+          throw new Error(
+            `Override '${dependency}' cannot be expressed as a Bun override. Bun only supports a bare package ` +
+            'name mapped to a version range, and applies it to every workspace.'
+          )
+        }
         const configuredVersion = workspaceOverrides[dependency]
         if (configuredVersion !== undefined && configuredVersion !== version) {
           throw new Error(`Conflicting overrides for '${dependency}': '${configuredVersion}' and '${version}'`)
