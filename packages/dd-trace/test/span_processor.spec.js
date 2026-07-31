@@ -625,7 +625,12 @@ describe('SpanProcessor', () => {
       registerExtraService.resetHistory()
     })
 
-    it('should register extra service when span has service.name tag', () => {
+    it('leaves extra-service registration to span_format', () => {
+      // The processor used to register `service.name` unconditionally, which put
+      // the tracer's OWN service into `client_tracer.extra_services` and burned
+      // one of Remote Configuration's 64 slots. `spanFormat` already runs for
+      // every finished span here and registers only services that differ from
+      // `tracer.serviceLower`, case-insensitively - see span_format.spec.js.
       const spanWithService = {
         ...finishedSpan,
         _duration: 100,
@@ -636,67 +641,7 @@ describe('SpanProcessor', () => {
       trace.finished = [spanWithService]
       processor.process(spanWithService)
 
-      sinon.assert.calledOnceWithExactly(registerExtraService, 'my-service')
-    })
-
-    it('should not register extra service when span has no service.name tag', () => {
-      trace.started = [finishedSpan]
-      trace.finished = [finishedSpan]
-      processor.process(finishedSpan)
-
       sinon.assert.notCalled(registerExtraService)
-    })
-
-    it('should not register extra services below the flushMinSpans threshold', () => {
-      const spanA = { ...finishedSpan, _duration: 100 }
-      const spanB = { ...finishedSpan, _duration: 100 }
-      const spanC = { ...finishedSpan, _duration: 100 }
-
-      trace.started = [spanA, spanB, spanC]
-      trace.finished = [spanA]
-      processor.process(spanA)
-
-      sinon.assert.notCalled(registerExtraService)
-    })
-
-    it('should register extra services for all finished spans in the trace during flush', () => {
-      let tagsA = {}
-      let tagsB = {}
-      const spanA = {
-        tracer: sinon.stub().returns(tracer),
-        context: sinon.stub().returns({
-          _trace: trace,
-          _sampling: {},
-          getTags: () => tagsA,
-          getTag: (key) => tagsA[key],
-          setTag: (key, value) => { tagsA[key] = value },
-          hasTag: (key) => key in tagsA,
-          clearTags: () => { tagsA = Object.create(null) },
-        }),
-        _duration: 100,
-      }
-      const spanB = {
-        tracer: sinon.stub().returns(tracer),
-        context: sinon.stub().returns({
-          _trace: trace,
-          _sampling: {},
-          getTags: () => tagsB,
-          getTag: (key) => tagsB[key],
-          setTag: (key, value) => { tagsB[key] = value },
-          hasTag: (key) => key in tagsB,
-          clearTags: () => { tagsB = Object.create(null) },
-        }),
-        _duration: 200,
-      }
-      spanA.context().setTag('service.name', 'service-a')
-      spanB.context().setTag('service.name', 'service-b')
-
-      trace.started = [spanA, spanB]
-      trace.finished = [spanA, spanB]
-      processor.process(spanA)
-
-      sinon.assert.calledWith(registerExtraService, 'service-a')
-      sinon.assert.calledWith(registerExtraService, 'service-b')
     })
   })
 

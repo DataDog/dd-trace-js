@@ -8,7 +8,6 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
 const processTags = require('./process-tags')
 const { MAX_META_VALUE_LENGTH } = require('./encode/tags-processors')
-const { registerExtraService } = require('./service-naming/extra-services')
 const {
   APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_MANUAL,
@@ -322,10 +321,6 @@ class SpanProcessor {
             // reads JS tags and writes only OTel output names.
             if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
               context.applyOtelHttpSemantics()
-            }
-            const serviceName = context.getTag('service.name')
-            if (typeof serviceName === 'string' && serviceName.length > 0) {
-              registerExtraService(serviceName)
             }
           }
           isFirstSpanInChunk = false
