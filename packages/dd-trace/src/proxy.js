@@ -2,6 +2,7 @@
 
 const NoopProxy = require('./noop/proxy')
 const { features } = require('./feature-registry')
+const { optionalFeatures } = require('./optional-feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
@@ -110,14 +111,15 @@ class Tracer extends NoopProxy {
 
     // these requires must work with esm bundler
     this._modules = {
-      appsec: new LazyModule(() => require('./appsec')),
       aiguard: new LazyModule(() => require('./aiguard')),
-      iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
     }
 
     for (const feature of Object.values(features)) {
+      this._modules[feature.name] = new LazyModule(feature.factory)
+    }
+
+    for (const feature of Object.values(optionalFeatures)) {
       this._modules[feature.name] = new LazyModule(feature.factory)
     }
   }
@@ -251,7 +253,7 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      this._modules.rewriter.enable(config)
+      this._modules.rewriter?.enable(config)
 
       if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -339,7 +341,7 @@ class Tracer extends NoopProxy {
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
       if (config.appsec.enabled) {
-        this._modules.appsec.enable(config)
+        this._modules.appsec?.enable(config)
       }
       if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
@@ -362,13 +364,13 @@ class Tracer extends NoopProxy {
         this._modules.aiguard.enable(this._tracer, config)
       }
       if (config.iast.enabled) {
-        this._modules.iast.enable(config, this._tracer)
+        this._modules.iast?.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
-      this._modules.appsec.disable()
+      this._modules.appsec?.disable()
       this._modules.aiguard.disable()
-      this._modules.iast.disable()
+      this._modules.iast?.disable()
       this._modules.llmobs.disable()
     }
 
