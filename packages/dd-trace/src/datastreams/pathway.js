@@ -5,6 +5,7 @@
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
+const { readSingleton } = require('../carrier')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
@@ -163,17 +164,18 @@ const DsmPathwayCodec = {
     let ctx
     if (CONTEXT_PROPAGATION_KEY_BASE64 in carrier) {
       // decode v2 encoding of base64
-      ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY_BASE64])
+      ctx = decodePathwayContextBase64(readSingleton(carrier, CONTEXT_PROPAGATION_KEY_BASE64))
     } else if (CONTEXT_PROPAGATION_KEY in carrier) {
+      const encoded = readSingleton(carrier, CONTEXT_PROPAGATION_KEY)
       try {
         // decode v1 encoding
-        ctx = decodePathwayContext(carrier[CONTEXT_PROPAGATION_KEY])
+        ctx = decodePathwayContext(encoded)
       } catch {
         // pass
       }
       // cover case where base64 context was received under wrong key
-      if (!ctx && CONTEXT_PROPAGATION_KEY in carrier) {
-        ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
+      if (!ctx) {
+        ctx = decodePathwayContextBase64(encoded)
       }
     }
 
