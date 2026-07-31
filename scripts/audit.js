@@ -78,6 +78,11 @@ function runAudit (directory) {
       // match, so surface it instead.
       if (!advisory?.url) throw new Error(`Advisory for ${packageName} in '${directory}' has no URL to identify it.`)
       const id = ghsaId(advisory.url)
+      // An unrecognized severity would rank below every threshold and skip the advisory silently, so a renamed or
+      // added bun severity has to fail here rather than turn the whole job green.
+      if (!SEVERITIES.includes(advisory.severity)) {
+        throw new Error(`Advisory ${id} in '${directory}' reports unknown severity '${advisory.severity}'.`)
+      }
       advisories.set(id, { id, package: packageName, severity: advisory.severity, title: advisory.title })
     }
   }

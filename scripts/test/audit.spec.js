@@ -51,6 +51,16 @@ describe('scripts/audit.js', () => {
     assert.match(result.stderr, /unaccepted high advisory GHSA-bbbb-bbbb-bbbb in some-package/)
   })
 
+  it('fails on a severity it cannot rank instead of skipping the advisory', () => {
+    const result = runAudit({
+      report: { 'some-package': [advisory('GHSA-ffff-ffff-ffff', 'medium')] },
+      allow: [],
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /GHSA-ffff-ffff-ffff .* reports unknown severity 'medium'/)
+  })
+
   it('ignores an advisory below the directory threshold', () => {
     const result = runAudit({
       report: { 'some-package': [advisory('GHSA-cccc-cccc-cccc', 'moderate')] },
