@@ -160,6 +160,8 @@
     "openfeature.js",
     "packages/*/index.js",
     "packages/*/index.electron.js",
+    "packages/*/index.ci.js",
+    "packages/*/index.serverless.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
     "packages/datadog-instrumentations/orchestrion.yml",
