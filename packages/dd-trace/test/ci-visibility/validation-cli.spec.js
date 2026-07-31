@@ -186,6 +186,7 @@ describe('test optimization validation CLI', () => {
       assert.match(report, /UNSUPPORTED VERSION/)
       assert.match(report, /\*\*Report state: FINAL\*\*/)
       assert.doesNotMatch(report, /Approved execution plan/)
+      assert.strictEqual(fs.existsSync(path.join(out, EXECUTION_LOCK_FILENAME)), false)
     } finally {
       removeFixture(fixture.root)
     }

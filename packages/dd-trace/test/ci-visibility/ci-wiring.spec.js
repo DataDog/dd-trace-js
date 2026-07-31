@@ -95,6 +95,28 @@ describe('test optimization validation CI audit', () => {
     })
   }
 
+  it('does not reinterpret npm manager options as test-script arguments', () => {
+    const npmCommand = 'npm test --workspace fixture'
+    fs.writeFileSync(workflow, workflowSource({ command: npmCommand }))
+    completeReview({ command: npmCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
+  })
+
+  it('forwards npm test-script arguments only after the explicit separator', () => {
+    const npmCommand = 'npm test -- --grep smoke'
+    fs.writeFileSync(workflow, workflowSource({ command: npmCommand }))
+    completeReview({ command: npmCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
+  })
+
   it('resolves recursive local scripts and an inert coverage launcher', () => {
     writeScripts({
       test: 'npm run test:unit',

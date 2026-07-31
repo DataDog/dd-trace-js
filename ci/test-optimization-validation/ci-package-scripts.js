@@ -140,9 +140,12 @@ function getPackageScriptInvocation (command) {
   if (manager === 'npm' && !match[2] && !['restart', 'start', 'stop', 'test'].includes(match[3])) return
   if (manager === 'bun' && match[2] !== 'run') return
   const args = match[4]?.trim()
-  if (args && !splitLiteralAndChain(args)) return
+  const npmArguments = manager === 'npm' && args ? /^--(?:\s+(.+))?$/.exec(args) : undefined
+  if (manager === 'npm' && args && !npmArguments) return
+  const scriptArguments = manager === 'npm' ? npmArguments?.[1]?.trim() : args
+  if (scriptArguments && !splitLiteralAndChain(scriptArguments)) return
   return {
-    ...(args ? { arguments: args.replace(/^--\s+/, '') } : {}),
+    ...(scriptArguments ? { arguments: scriptArguments } : {}),
     manager,
     script: match[3],
   }

@@ -490,6 +490,32 @@ describe('test optimization validation execution boundary', () => {
     assert.doesNotMatch(result.failure.diagnosis, /Every approved candidate appears to require localhost/)
   })
 
+  it('stops disclosed Cucumber fallbacks when the shared browser is missing', async () => {
+    const fallback = path.join(fixture.root, 'test', 'fallback.feature')
+    fs.writeFileSync(fallback, 'Feature: fallback\n\n  Scenario: fallback\n    Given it works\n')
+    fs.writeFileSync(fixture.runner, [
+      "console.error('Error: Could not find Chrome (ver. 127.0.0.0)')",
+      'process.exit(1)',
+    ].join('\n'))
+    framework.framework = 'cucumber'
+    framework.browserRequired = true
+    framework.validation.fallbackTests = [{
+      buildArtifactRequired: false,
+      localSocketRequired: false,
+      testFile: fallback,
+    }]
+
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.preflight.attempts.length, 1)
+    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cucumber-browser-missing')
+  })
+
   it('includes the concrete project failure when every disclosed candidate fails', async () => {
     fs.writeFileSync(fixture.runner, [
       "console.error('Error: missing generated build output')",

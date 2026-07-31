@@ -230,6 +230,13 @@ function getPropertyPositions (source, property) {
       continue
     }
     if (character === '"' || character === "'" || character === '`') {
+      const match = new RegExp(String.raw`^(["'])${property}\1\s*:\s*`).exec(source.slice(index))
+      if (match && ['{', ','].includes(previousCodeCharacter)) {
+        properties.push({ index, valueStart: index + match[0].length })
+        previousCodeCharacter = ':'
+        index += match[0].length - 1
+        continue
+      }
       quote = character
       continue
     }

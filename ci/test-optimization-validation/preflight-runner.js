@@ -192,6 +192,7 @@ function isSharedCandidateBlocker (commandFailure, framework) {
   }
   return commandFailure.kind.endsWith('-browser-launch-blocked') ||
     [
+      'cucumber-browser-missing',
       'cypress-runtime-missing',
       'playwright-browser-missing',
       'project-command-environment-missing',

@@ -478,22 +478,27 @@ function writeStaticOnlyReport (manifest, out, options) {
   const executionStatus = getExecutionStatus(annotatedResults)
   const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
   ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
-  writeReport({
-    manifest,
-    out,
-    results: annotatedResults,
-    runSummary: {
-      checkedScenarios: [...options.scenarios],
-      cleanup: { directoriesRemoved: 0, filesRemoved: 0, status: 'completed' },
-      executionStatus,
-      omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
-      requestedScenario: options.requestedScenario,
-      runCompleted: true,
-      selectedFrameworkIds: manifest.frameworks.map(framework => framework.id),
-      validationCoverage: getValidationCoverage(annotatedResults),
-      validatorExitCode,
-    },
-  })
+  const publicationLock = acquireExecutionLock({ out, approvedPlanSha256: 'static-only-report' })
+  try {
+    writeReport({
+      manifest,
+      out,
+      results: annotatedResults,
+      runSummary: {
+        checkedScenarios: [...options.scenarios],
+        cleanup: { directoriesRemoved: 0, filesRemoved: 0, status: 'completed' },
+        executionStatus,
+        omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
+        requestedScenario: options.requestedScenario,
+        runCompleted: true,
+        selectedFrameworkIds: manifest.frameworks.map(framework => framework.id),
+        validationCoverage: getValidationCoverage(annotatedResults),
+        validatorExitCode,
+      },
+    })
+  } finally {
+    releaseExecutionLock(publicationLock)
+  }
   console.log(sanitizeConsoleText(
     'No selected framework has an eligible local command. A final static-only report was written; no new approval ' +
     'artifact or live validation command was created. Present the report and stop.'

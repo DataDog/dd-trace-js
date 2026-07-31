@@ -1015,7 +1015,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('binds one literal Vitest project to its static include scope', () => {
+  it('binds quoted Vitest project properties to one static scope', () => {
     const fixture = createRepositoryFixture({
       framework: 'vitest',
       script: 'vitest --run --project fastly',
@@ -1032,7 +1032,11 @@ describe('test optimization validation manifest scaffold', () => {
       'export default defineConfig({',
       '  test: {',
       '    projects: [{',
-      "      test: { name: 'fastly', include: ['runtime-tests/shared/**/*.test.ts'] },",
+      '      test: {',
+      "        'name': 'fastly',",
+      "        'root': 'runtime-tests',",
+      "        'include': ['shared/**/*.test.ts'],",
+      '      },',
       '    }],',
       '  },',
       '})',
