@@ -163,48 +163,69 @@ describe('Plugin', () => {
         dns.resolveAny('localhost', err => err && done(err))
       })
 
-      it('should preserve the shorthand rrtype when callback options are passed', done => {
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'AAAA fakedomain.faketld',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'fakedomain.faketld',
-              'dns.rrtype': 'AAAA',
-            })
+      it('should preserve the shorthand rrtype when callback options are passed', () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'AAAA fakedomain.faketld',
           })
-          .then(done)
-          .catch(done)
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'fakedomain.faketld',
+            'dns.rrtype': 'AAAA',
+          })
+        })
 
-        dns.resolve6('fakedomain.faketld', { ttl: true }, () => {})
+        return Promise.all([
+          tracePromise,
+          assert.rejects(promisify(dns.resolve6)('fakedomain.faketld', { ttl: true })),
+        ])
       })
 
-      it('should preserve the shorthand rrtype on callback Resolver instances when options are passed', done => {
+      it('should instrument resolveCaa with options', () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'CAA fakedomain.faketld',
+          })
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'fakedomain.faketld',
+            'dns.rrtype': 'CAA',
+          })
+        })
+
+        return Promise.all([
+          tracePromise,
+          assert.rejects(promisify(dns.resolveCaa)('fakedomain.faketld', { ttl: true })),
+        ])
+      })
+
+      it('should preserve the shorthand rrtype on callback Resolver instances when options are passed', () => {
         const resolver = new dns.Resolver()
 
-        agent
-          .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'AAAA fakedomain.faketld',
-            })
-            assertObjectContains(traces[0][0].meta, {
-              component: 'dns',
-              'span.kind': 'client',
-              'dns.hostname': 'fakedomain.faketld',
-              'dns.rrtype': 'AAAA',
-            })
+        const tracePromise = agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'AAAA fakedomain.faketld',
           })
-          .then(done)
-          .catch(done)
+          assertObjectContains(traces[0][0].meta, {
+            component: 'dns',
+            'span.kind': 'client',
+            'dns.hostname': 'fakedomain.faketld',
+            'dns.rrtype': 'AAAA',
+          })
+        })
 
-        resolver.resolve6('fakedomain.faketld', { ttl: true }, () => {})
+        return Promise.all([
+          tracePromise,
+          assert.rejects(promisify(resolver.resolve6).call(resolver, 'fakedomain.faketld', { ttl: true })),
+        ])
       })
 
       it('should instrument reverse', done => {
@@ -438,7 +459,32 @@ describe('Plugin', () => {
 
           return Promise.all([
             tracePromise,
-            dns.promises.resolve6('fakedomain.faketld', { ttl: true }).catch(() => {}),
+            assert.rejects(dns.promises.resolve6('fakedomain.faketld', { ttl: true })),
+          ])
+        })
+
+        it('should instrument resolveTlsa with options when supported', function () {
+          if (typeof dns.promises.resolveTlsa !== 'function') {
+            this.skip()
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'dns.resolve',
+              service: 'test',
+              resource: 'TLSA fakedomain.faketld',
+            })
+            assertObjectContains(traces[0][0].meta, {
+              component: 'dns',
+              'span.kind': 'client',
+              'dns.hostname': 'fakedomain.faketld',
+              'dns.rrtype': 'TLSA',
+            })
+          })
+
+          return Promise.all([
+            tracePromise,
+            assert.rejects(dns.promises.resolveTlsa('fakedomain.faketld', { ttl: true })),
           ])
         })
 
@@ -461,7 +507,7 @@ describe('Plugin', () => {
 
           return Promise.all([
             tracePromise,
-            resolver.resolve6('fakedomain.faketld', { ttl: true }).catch(() => {}),
+            assert.rejects(resolver.resolve6('fakedomain.faketld', { ttl: true })),
           ])
         })
 
@@ -495,9 +541,8 @@ describe('Plugin', () => {
         })
 
         it('should rethrow synchronous errors from the underlying call', () => {
-          // dns.promises.lookup validates `hostname` synchronously and throws ERR_INVALID_ARG_TYPE
-          // rather than returning a rejected promise; the wrapper must propagate that.
           assert.throws(() => dns.promises.lookup({}), { code: 'ERR_INVALID_ARG_TYPE' })
+          assert.throws(() => dns.promises.resolve6(), { code: 'ERR_INVALID_ARG_TYPE' })
         })
 
         it('should instrument Resolver instances', () => {
