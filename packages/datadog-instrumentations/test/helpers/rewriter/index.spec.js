@@ -25,7 +25,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: name,
+      filePath: 'index.js',
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
@@ -40,7 +43,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: 'test',
+      filePath: `${name}.js`,
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
@@ -660,11 +666,21 @@ describe('check-require-cache', () => {
     assert.equal(result, 'result')
   })
 
+  it('should leave dependencies without a rewrite target untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
+    const source = readFileSync(filename, 'utf8')
+
+    assert.strictEqual(rewriter.rewrite(source, filename, 'module'), source)
+  })
+
   it('should use import when rewriting esm modules', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, 'module')
+    content = rewriter.rewrite(content, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'pregel-class.js',
+    })
 
     assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
@@ -675,7 +691,10 @@ describe('check-require-cache', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
     const source = readFileSync(filename, 'utf8')
 
-    const rewritten = rewriter.rewrite(source, filename, 'module')
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'pregel-class.js',
+    })
 
     assert.match(rewritten, /^import\s/m, 'expected an ESM import in the rewritten output')
     assert.doesNotMatch(rewritten, /\brequire\s*\(/, 'CJS require() must not appear in ESM output')
