@@ -20,7 +20,8 @@ const { sanitizeForReport, sanitizeString } = require('../redaction')
 const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
-const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+const ANSI_PATTERN =
+  new RegExp(`${String.fromCharCode(27)}${String.raw`\[[\u0030-\u003F]*[\u0020-\u002F]*[\u0040-\u007E]`}`, 'g')
 
 function frameworkOutDir (out, framework, scenario) {
   return path.join(out, 'runs', getArtifactId(framework.id), scenario)

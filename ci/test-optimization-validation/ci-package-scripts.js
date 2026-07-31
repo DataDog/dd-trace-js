@@ -3,7 +3,7 @@
 const { parseLiteralEnvironmentPrefix } = require('./literal-environment')
 
 const MAX_SCRIPT_EXPANSIONS = 16
-const DYNAMIC_VALUE_PATTERN = /[$`]|\r|\n|%[^%\s]+%|![^!\s]+!/
+const DYNAMIC_VALUE_PATTERN = /[$`\r\n]|%[^%\s]+%|![^!\s]+!/
 
 /**
  * Expands bounded local package-script references without executing them.
