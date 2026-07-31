@@ -376,6 +376,29 @@ describe('Tracer', () => {
     sinon.assert.calledOnce(NativeSpansInterface)
   })
 
+  it('keeps OTLP export when a custom DNS lookup is also configured', () => {
+    // OTLP export lives in libdatadog, so the JS pipeline cannot do it at all.
+    // Routing there for the sake of `lookup` would quietly ship every span to the
+    // agent instead of the configured collector - a worse failure than resolving
+    // the collector with the system resolver.
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector.example:4318/v1/traces'
+    config.lookup = (hostname, options, callback) => callback(null, '127.0.0.1', 4)
+    config.getOrigin = sinon.stub().withArgs('lookup').returns('code')
+    Tracer = loadTracer()
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, false)
+    sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+    // The dropped `lookup` must be announced, not silently ignored.
+    sinon.assert.calledWith(
+      log.warn,
+      'OTLP trace export cannot honour a custom `lookup`; resolving the collector with the system resolver'
+    )
+  })
+
   it('writes traces to stdout when OTLP is requested in a Lambda with no local agent', () => {
     // useLambdaJsPipeline excludes OTLP, so this path is reached through the
     // missing-libdatadog degrade branch — it must still honour the no-local-agent

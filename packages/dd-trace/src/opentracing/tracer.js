@@ -121,11 +121,22 @@ class DatadogTracer {
     //
     // CI Visibility and electron pick their own exporters below and neither goes
     // through the native transport, so they are unaffected by this.
+    //
+    // OTLP is excluded for a harder reason: OTLP export lives in libdatadog, so
+    // the JS pipeline cannot do it at all. Routing there would quietly ship every
+    // span to the agent instead of the configured collector, which is a worse
+    // failure than resolving the collector with the system resolver. OTLP keeps
+    // precedence exactly as it does for the Lambda pipeline above, and the
+    // unhonoured `lookup` is announced rather than dropped in silence.
     const lookupOrigin = typeof config.getOrigin === 'function' ? config.getOrigin('lookup') : 'default'
-    const useCustomLookup = typeof config.lookup === 'function' &&
-      lookupOrigin !== 'default' &&
+    const hasCustomLookup = typeof config.lookup === 'function' && lookupOrigin !== 'default'
+    if (hasCustomLookup && useOtlpExporter) {
+      log.warn('OTLP trace export cannot honour a custom `lookup`; resolving the collector with the system resolver')
+    }
+    const useCustomLookup = hasCustomLookup &&
       !config.isCiVisibility &&
-      !useElectronExporter
+      !useElectronExporter &&
+      !useOtlpExporter
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
       !useElectronExporter &&
