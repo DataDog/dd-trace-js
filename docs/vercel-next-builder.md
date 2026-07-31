@@ -6,21 +6,22 @@ must not attempt to load the Node tracer.
 
 The prototype in [`examples/vercel-nextjs`](./examples/vercel-nextjs/README.md)
 delegates to `@vercel/next.build()`. When the official Builder returns a public
-Build Output API directory, it visits Node `.func` outputs, writes a launcher
-that initializes `dd-trace`, and changes only the function's public
-`.vc-config.json` handler. It preserves Edge output and does not use global
-`NODE_OPTIONS`, trace drain, Vercel private file maps, source mapping, debug
-logging, or customer secrets.
+Build Output API directory, it stages the Builder's installed `dd-trace`
+dependency graph once, isolates transitive dependencies under the tracer,
+maps it into each Node `.func`, and prepends
+`--import=dd-trace/initialize.mjs` to each function's existing `NODE_OPTIONS`.
+It preserves handlers and Edge output and does not use project-global
+`NODE_OPTIONS`, trace drain, source mapping, debug logging, or customer secrets.
 
-The target package name is `@datadog/vercel-next-builder`. It cannot be
-legitimately added as a new package to this repository without release
-ownership: the current release workflow publishes only the root `dd-trace`
-package, and the existing Next plugin is source code included in that package.
-The prototype intentionally does not support older returned Lambda output,
-because this slice has evidence only for the current public Build Output API
-directory contract. A future Builder package may add that compatibility path
-after it has a versioned Vercel contract and tests.
+The target package name is `@datadog/vercel-next-builder`. It must declare
+`@vercel/next` and a supported `dd-trace` version as dependencies. It cannot be
+legitimately added as a published package to this repository without release
+ownership because the current release workflow publishes only the root
+`dd-trace` package. The prototype intentionally supports only the current public
+Build Output API directory contract.
 
-Before release, validate source-build Preview and Production deployments with
-Node routes, mixed Edge routes, concurrent requests, and trace delivery. This
-slice verifies the local public Build Output transformation only.
+Live source-build verification on Next.js 16 exercised App and Pages Router
+routes, concurrent requests, and outbound calls. Direct OTLP intake received a
+14-span distributed trace containing `web.request`, `next.request`, `fetch`,
+TCP, and DNS spans. Mixed Edge output still requires a dedicated acceptance
+deployment before release.
