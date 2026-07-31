@@ -7,13 +7,10 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 require('../../setup/core')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('AgentlessExporter', () => {
   let Exporter
@@ -29,7 +26,6 @@ describe('AgentlessExporter', () => {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
-      resetPendingBatch: sinon.stub(),
     }
 
     const Writer = function () {
@@ -305,32 +301,6 @@ describe('AgentlessExporter', () => {
       assert.strictEqual(call.args[1], 'not-a-valid-url')
       sinon.assert.notCalled(writer.setUrl)
       sinon.assert.match(exporter._url.href, originalUrl)
-    })
-  })
-
-  describe('identity refresh', () => {
-    it('drops the pending batch when the identity-refresh channel fires', () => {
-      const config = { site: 'datadoghq.com', tags: { 'runtime-id': 'initial-id' } }
-      exporter = new Exporter(config)
-
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(writer.resetPendingBatch)
-    })
-
-    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-      const config = { site: 'datadoghq.com', tags: {} }
-      // eslint-disable-next-line no-unused-vars -- constructed only to be superseded below
-      const firstExporter = new Exporter(config)
-      exporter = new Exporter(config)
-
-      identityRefreshChannel.publish(config)
-
-      // Both share the mocked writer; if the first subscription weren't replaced, this fires twice.
-      sinon.assert.calledOnce(writer.resetPendingBatch)
     })
   })
 })

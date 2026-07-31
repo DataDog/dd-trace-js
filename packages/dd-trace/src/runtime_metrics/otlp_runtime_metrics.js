@@ -63,13 +63,7 @@ module.exports = {
     this.stop()
 
     client = createMetricsClient(config)
-    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config, () => {
-      // Reset baselines so the next event-loop delay/utilization deltas don't span the snapshot pause.
-      eventLoopHistogram?.reset()
-      if (lastElu !== null) {
-        lastElu = performance.eventLoopUtilization()
-      }
-    })
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
     flushInterval = setInterval(() => {
       client.flush()
     }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)

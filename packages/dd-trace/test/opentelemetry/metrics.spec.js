@@ -1291,34 +1291,6 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.calledOnce(secondSpy)
     })
 
-    it('drops pending measurements recorded before the identity-refresh channel fires', () => {
-      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
-      const config = {
-        service: 'svc',
-        version: '1.0.0',
-        env: 'prod',
-        tags: { 'runtime-id': 'initial-id' },
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 5000,
-        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
-      }
-
-      initializeOpenTelemetryMetrics(config)
-      const provider = metrics.getMeterProvider()
-      const exportSpy = sinon.stub(provider.reader.exporter, 'export')
-      const meter = metrics.getMeter('app')
-
-      // Recorded under the pre-refresh identity; must be dropped, not exported under the new one.
-      meter.createCounter('test.pre_refresh').add(5)
-
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      provider.reader.forceFlush()
-
-      sinon.assert.notCalled(exportSpy)
-    })
-
     it('preserves the ObservableCounter delta baseline across an identity refresh', (done) => {
       const exportedValues = []
       mockOtlpExport((decoded) => {

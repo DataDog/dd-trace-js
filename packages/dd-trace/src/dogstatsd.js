@@ -256,17 +256,11 @@ class MetricsAggregationClient {
   }
 
   /**
-   * Drops pending (not-yet-flushed) counters/gauges/histograms for the same reason the wrapped
-   * client drops its buffered lines: they were recorded under the previous identity, and
-   * `_captureCounters`/`_captureGauges`/`_captureHistograms` only apply tags at flush time, so
-   * keeping them would silently reattribute pre-refresh data to the new identity instead of
-   * either shipping it correctly tagged or dropping it — matching the wrapped client's choice
-   * to drop rather than mislabel.
+   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
     this._client.updateTags(tags)
-    this.reset()
   }
 
   flush () {
@@ -422,8 +416,8 @@ class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
-    // Registers the aggregator, not the raw client, so a refresh also drops its pending
-    // counters/gauges/histograms (MetricsAggregationClient#updateTags resets those too).
+    // Registers the aggregator (not the raw client) since that's the public-facing instance,
+    // and MetricsAggregationClient#updateTags forwards the refreshed tags to the wrapped client.
     this.#registryEntry = { client: this.#client, config }
     customMetricsClients.add(new WeakRef(this.#registryEntry))
 

@@ -97,10 +97,7 @@ function initializeOpenTelemetryLogs (config) {
   loggerProvider.register()
 
   unsubscribeLogsIdentityRefresh?.()
-  const onIdentityRefresh = () => {
-    exporter.updateResourceAttributes(buildResourceAttributes(config))
-    processor.resetPendingState()
-  }
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildResourceAttributes(config))
   identityRefreshChannel.subscribe(onIdentityRefresh)
   unsubscribeLogsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
