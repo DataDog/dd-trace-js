@@ -53,7 +53,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       warn: sinon.spy(),
     }
 
-    const createFlaggingProviderClass = proxyquire('../../src/openfeature/flagging_provider', {
+    FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
@@ -61,8 +61,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
       './configuration_source': {
         create: sinon.stub(),
       },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
-    FlaggingProvider = createFlaggingProviderClass(DatadogNodeServerProvider)
   })
 
   afterEach(() => {
@@ -93,6 +93,21 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     // Verify initialization is no longer in progress
     assert.strictEqual(provider.initController.isInitializing(), false)
+  })
+
+  it('does not keep the process alive while waiting for configuration', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    const initPromise = provider.initialize()
+
+    initPromise.catch(() => {
+      // Expected to reject on timeout
+    })
+
+    assert.strictEqual(provider.initController.timeoutId.hasRef(), false)
+
+    await clock.tickAsync(30000)
+    await initPromise.catch(() => {})
   })
 
   it('should not timeout if configuration is set before 30 seconds', async () => {
