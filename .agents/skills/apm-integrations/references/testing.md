@@ -1,94 +1,37 @@
 # Testing integrations
 
-Test through the library's public API. The test must load the same package entry point and module format a user
-loads; do not export instrumentation internals or bypass the package's build to make a unit test convenient.
+Load the real plugin with the test agent and call the installed library's public entry point. Start the trace
+assertion before the operation; await both together when both are asynchronous. Let `agent.close()` own teardown.
 
-## Version fixtures
+## Versions and module formats
 
-Supported ranges come from the instrumentation declarations. Pin the latest tested release in
-`packages/dd-trace/test/plugins/versions/package.json`; `yarn services` uses both sources to generate the gitignored
-`versions/` workspaces. Use `withVersions(plugin, modules[, range], callback)` from
-`packages/dd-trace/test/setup/mocha`.
-
-The same module exports `withNamingSchema` for v0/v1 operation and service names, and `withPeerService` for peer
-service computation. Outbound, storage, and messaging specs cover both.
-
-Read the closest current plugin test before adding setup. Use the existing test agent:
-
-- `agent.load(pluginNames, pluginConfig, tracerConfig)` enables the plugin and returns the live tracer; bind that
-  return value instead of requiring `dd-trace` separately.
-- `agent.assertFirstTraceSpan(expected)` handles a single span with `assertObjectContains`.
-- `agent.assertSomeTraces(callback)` exposes the full trace payload for relationships or several spans.
-- `agent.close()` tears down the agent and resets per-test expectations.
-
-Start the assertion promise before triggering the operation, then await both sides when the operation is async.
+- Read supported ranges from instrumentation and pin only the latest tested release in
+  `packages/dd-trace/test/plugins/versions/package.json`.
+- Use `withVersions` from the current setup helper; run `yarn services` only to materialize its generated fixtures.
+- Exercise each CJS/ESM implementation that differs in upstream source.
+- For sandbox variants, read the current `varySandbox` signature. Non-empty named exports require
+  `namedExportBinding`; its supported modes are `destructure`, `direct`, and `namespace`, with `direct` limited to
+  one export.
 
 ## Cases
 
-Cover the branches the instrumentation owns:
+Cover success/error, each completion form upstream exposes, enabled/disabled tracing, parenting, version boundaries,
+and sibling operations sharing changed instrumentation. Assert observable spans, propagated values, or channel
+effects rather than plugin internals.
 
-- success and error completion;
-- sync, promise, callback, stream, or iterator forms the upstream API actually supports;
-- enabled and disabled plugin paths;
-- context propagation and parent/child relationships;
-- each CJS and ESM build that has different source;
-- version boundaries where the hook path or payload shape changes.
-
-A bug fix includes the reported case and sibling shapes that share the changed hook or completion path. Do not add
-permutations the upstream contract excludes.
-
-## ESM and sandbox tests
-
-Use `useSandbox` for native ESM or package-export tests. Load `dd-trace/init.js` before the library and exercise the
-real export. The helpers live in `integration-tests/helpers`: `FakeAgent`, whose `assertMessageReceived` method takes
-the payload assertion, plus `curlAndAssertMessage`, `sandboxCwd` for the sandbox directory,
-`spawnPluginIntegrationTestProcAndExpectExit` to run a server file against the fake agent, and `stopProc` for
-teardown.
-
-`varySandbox(filename, { packageName, bindingName, defaultExport, namedExports, namedExportBinding })` runs after
-`useSandbox` and returns a map of variant name to generated filename, one per import form the package's exports
-allow. A non-empty `namedExports` array requires `namedExportBinding`: `destructure`, `direct`, or `namespace`;
-`direct` accepts exactly one export. Describe the real exports, and copy a package-specific fixture instead when the
-runtime requires a directory layout or launcher `varySandbox` cannot model. Azure Functions is the current example.
-
-Sandbox processes are integration tests and do not contribute to nyc coverage. Keep a same-process test for changed
-production branches when coverage would otherwise be missing.
+Sandbox processes do not contribute to nyc coverage. Keep a same-process path for changed production branches when
+needed.
 
 ## Commands
 
-Instrumented shells may export OpenTelemetry exporters that bypass the test agent:
+Unset `OTEL_TRACES_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_METRICS_EXPORTER` before span assertions. Then use the
+current workflow's `PLUGINS`, `SPEC`, and `SERVICES` values with:
 
 ```bash
-unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-```
-
-Install the selected version fixtures and run the plugin:
-
-```bash
-PLUGINS="<name>" npm run test:plugins:ci
-```
-
-When fixtures are already installed:
-
-```bash
-PLUGINS="<name>" npm run test:plugins
-PLUGINS="<name>" SPEC="<substring>" npm run test:plugins
-```
-
-For services, copy `SERVICES` and setup from the plugin's current workflow job. Do not invent a Docker service name:
-
-```bash
-export SERVICES="<service>" PLUGINS="<name>"
-docker compose up -d <service>
 yarn services
 npm run test:plugins
-```
-
-Run the structural contract:
-
-```bash
 ./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
 ```
 
-For changed production files, run nyc with `--include` scoped to those files and inspect changed-line and branch
-coverage before declaring the integration complete.
+Run nyc with `--include` scoped to changed production files and inspect changed lines and branches. Copy service
+startup and readiness from the owning workflow instead of inventing a Docker service name.

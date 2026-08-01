@@ -1,80 +1,62 @@
 ---
 name: serverless-integrations
 description: |
-  Use when adding, modifying, debugging, or reviewing dd-trace-js serverless platform integrations that own a cloud
-  function invocation. Requests include "add a serverless integration", "instrument a function invocation", and
-  "run a manual serverless test". Also use for "fix Lambda tracing", "add Azure Functions tracing", and
-  "debug GCP Functions tracing". Trigger on serverless invocation spans, runtime bootstraps, DD_LAMBDA_HANDLER,
-  datadog-lambda-js, timeout flushes, and deployed checks.
+  Use when adding, modifying, debugging, or reviewing dd-trace-js serverless integrations that own cloud-function
+  invocations, including AWS Lambda bootstrap behavior, Azure Functions, GCP Functions, serverless root spans,
+  runtime handler wrapping, timeout flushing, DD_LAMBDA_HANDLER, and deployed verification.
 ---
 
 # Serverless integrations
 
-This skill owns the serverless delta: invocation boundaries, runtime lifecycle, flushing, and deployed
-verification. Follow the [APM execution sequence](../apm-integrations/SKILL.md#execution-sequence) for shared
-instrumentation, plugin, registration, and test mechanics.
+Use the APM skill for shared instrumentation/plugin mechanics. Keep only the serverless delta here: invocation
+ownership, runtime lifecycle, trigger context, and flush behavior. A library called inside a function is ordinary
+APM.
 
-Use `apm-integrations` alone for a third-party library call that happens inside a function.
+Run `npm run verify:integration-skills` before relying on stored paths or contracts.
 
-## Classify the boundary
+## Classify the owner
 
-- Third-party library call inside Lambda, Azure, or GCP: ordinary APM child span.
-- Cloud function invocation: serverless invocation span or runtime-wrapper path.
-- HTTP, queue, database, or event trigger: invocation span plus trigger-specific context, inferred proxy behavior,
-  or span links.
-- AWS Lambda handler loading, timeout, or crash flushing: the special Lambda bootstrap path.
+- Plugin-backed runtime: runtime registration/execution → trace-agnostic instrumentation → tracing channel → plugin
+  → invocation span.
+- AWS Lambda bootstrap: handler resolution, runtime patching, timeout signaling, and crash flushing under
+  `packages/dd-trace/src/lambda/`. This path does not currently create the invocation span.
 
-Do not copy the Lambda bootstrap for an npm package integration. It is a runtime compatibility path, not the plugin
-architecture.
+Do not copy the Lambda bootstrap into an npm-package integration or add an invocation span there without first
+tracing the active-span owner through the extension and runtime path.
 
-## Read the runtime source first
+## Read the runtime contract
 
-Use the [APM source-retrieval procedure](../apm-integrations/SKILL.md#read-upstream-source-first), then read the
-matching in-repo instrumentation, plugin, integration test, and workflow job. Do not infer lifecycle support from
-provider documentation. The serverless design depends on:
+For every supported runtime version, read the provider source and record handler registration/resolution, supported
+completion forms, request/event/context carriers, batch cardinality, timeout/shutdown signals, and duplicate-wrap
+possibilities. Read the nearest real launcher/emulator fixture and its current workflow job.
 
-1. How user handlers are registered, exported, or resolved.
-2. Which completion forms exist in that version range.
-3. Where the event, request, and context objects first cross into user code.
-4. Whether timeout or shutdown is observable.
-5. Which fields carry upstream trace context.
+## Plugin-backed invariants
 
-## Implemented shapes
+- Establish the invocation context before user code; child integrations must inherit it.
+- Start and finish each invocation span exactly once. Completion follows recorded runtime state, not timer ordering.
+- Extract distributed context at the runtime boundary; link every valid upstream context for a batch rather than
+  choosing one arbitrary parent.
+- Keep resources low-cardinality. Request, message, event, and object identifiers do not belong in resources.
+- Reuse `packages/dd-trace/src/plugins/util/web.js` for HTTP tags, inferred proxies, status, and AppSec behavior.
+- Preserve diagnostic-channel events needed by non-tracing subscribers when tracing is disabled.
+- Catch and log instrumentation failures without blocking the user handler.
 
-The repository has plugin-backed invocation spans and the separate AWS Lambda bootstrap. Read
-[Architecture](references/architecture.md) before choosing a shape; do not combine their responsibilities.
-Use the [implementation guide](references/implementation-guide.md) for the file-by-file sequence and
-[reference integrations](references/reference-integrations.md) for the nearest complete runtime path.
+Register plugin-backed invocation ids in both serverless naming schemas and update the runtime hook, plugin getter,
+types/docs, CODEOWNERS, workflow, version manifest, and real runtime fixture as applicable. Discover the current
+shape from adjacent entries rather than copying a stored scaffold.
 
-## Invariants
+## Lambda bootstrap invariants
 
-- For plugin-backed invocations, start the invocation span before user code and run child instrumentation under its
-  context. The Lambda bootstrap does not create that span.
-- Finish each started span exactly once on every completion path the runtime actually supports. Decide completion
-  from recorded state, such as a result or error present on the context or a flag set once, never from the ordering
-  of a timer against the handler.
-- Keep instrumentation failures from escaping into the user handler.
-- Extract distributed context at the runtime boundary. Use links when one invocation has several upstream contexts.
-- Keep resource names low-cardinality; request ids, message ids, object keys, and payload values are tags or omitted,
-  not resource-name components.
-- Preserve diagnostic-channel events needed by AppSec, IAST, telemetry, or other subscribers when tracing is
-  disabled.
-- When the runtime can freeze or terminate the process, verify the writer and flush path against that real lifecycle.
+Read `packages/dd-trace/src/lambda/index.js`, `packages/dd-trace/src/lambda/runtime/patch.js`,
+`packages/dd-trace/src/lambda/handler.js`, and their tests as one path. Preserve the disabled-instrumentation gate
+and handler loading on hook failures. Use fake timers for timeout deadlines and pin the last safe point plus the
+first timeout point.
 
-Do not prescribe callbacks, streams, or shutdown hooks unless the target runtime exposes them. The upstream source
-and supported version range define the matrix.
+Verify writer/flush behavior against lifecycle the local runtime can reproduce. Use deployed verification only for
+provider-owned behavior such as freeze timing or injected metadata.
 
-## Apply shared mechanics
+## Proof
 
-For plugin-backed integrations, follow the
-[APM execution sequence](../apm-integrations/SKILL.md#execution-sequence) and
-[testing reference](../apm-integrations/references/testing.md). The serverless additions are both serverless
-naming-schema files, the serverless workflow job, and a runtime-facing fixture.
-
-Apply the shared hook decision to the runtime source. Runtime-created handler registration is the common
-serverless reason shimmer wins.
-
-## Verification
-
-Read [Architecture](references/architecture.md) for ownership and source paths. Read
-[Testing serverless integrations](references/testing-guide.md) for the runtime and deployed verification contract.
+Read [Testing serverless integrations](references/testing-guide.md). Exercise the provider runtime or emulator, not
+a direct call to an exported helper. Cover supported success/error/completion paths, disabled instrumentation,
+parenting, carriers/links, HTTP behavior where applicable, duplicate wrapping, and exactly-once finish.
