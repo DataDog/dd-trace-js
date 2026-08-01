@@ -12,7 +12,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
-> the locked version (currently 0.18.0). The repository vendors its bundled
+> the locked version (currently 0.18.1). The repository vendors its bundled
 > `index.js`; for readable source, use the [source retrieval recipe](../SKILL.md#read-upstream-source-first) to unpack
 > that exact package version, then inspect `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`, `#visit`) and
 > `lib/transforms.js`.
@@ -22,7 +22,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 The [hook decision](../SKILL.md#choose-the-hook) and
 [registration sequence](../SKILL.md#execution-sequence) are canonical in the parent skill.
 
-Inactive-path cost is **not zero** in the vendored 0.18.0 templates. The wrapper
+Inactive-path cost is **not zero** in the vendored 0.18.1 templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
 operator checks `hasSubscribers`. The check skips channel work and the wrapped
 call's tracing body, not the wrapper's array/object/closure setup. For very hot
@@ -113,8 +113,8 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 | kind | operator | behavior |
 | --- | --- | --- |
 | `Sync` (default) | `traceSync` | sync return/throw; `ctx.result` on success |
-| `Async` | `tracePromise` | sync **or** promise return; chains `asyncStart`/`asyncEnd`; side-chains Promise subclasses/thenables so subclass methods survive |
-| `Callback` | `traceCallback` | wraps the arg at `callbackIndex`; publishes `asyncStart`/`asyncEnd`/`error` from the callback |
+| `Async` | `tracePromise` | Sync/promise return; preserves Promise subclass and thenable identity |
+| `Callback` | `traceCallback` | Wraps `callbackIndex`; publishes async completion and error events |
 | `Auto` | `traceAuto` | runtime branch: if the `callbackIndex` arg is a function → callback path, else promise path |
 
 ## Result Mutation
@@ -181,10 +181,10 @@ class MyPlugin extends TracingPlugin {
 }
 ```
 
-`ctx` fields: `ctx.arguments` (same array reference later applied to the wrapped
-function), `ctx.self`, `ctx.result`, `ctx.error`, and `ctx.currentStore` (set by
-`startSpan`). For multi-method integrations, use one plugin per method combined
-in a `CompositePlugin` (see langchain).
+`ctx` fields: `ctx.arguments` (same array reference later applied to the wrapped function), `ctx.result`,
+`ctx.error`, and `ctx.currentStore` (set by `startSpan`). Non-arrow targets also have `ctx.self` during `start`;
+arrow targets populate it only before `end` publishes. For multi-method integrations, use one plugin per method
+combined in a `CompositePlugin` (see langchain).
 
 Multiple module prefixes are manual today. `TracingPlugin.addTraceSub()` and
 `addTraceBind()` read only `this.constructor.prefix`; a `static extraPrefixes`
