@@ -58,7 +58,7 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-skip-external.js', { timeout })
     })
 
-    it('bundles the electron entry point without appsec/iast/rewriter externals', () => {
+    it('does not bundle the appsec/iast/rewriter native dependencies into the electron entry point', () => {
       execSync('node ./build-and-test-electron.js', { timeout })
     })
 
