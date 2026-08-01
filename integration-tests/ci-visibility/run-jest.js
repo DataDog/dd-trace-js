@@ -118,6 +118,10 @@ if (process.env.JEST_RANDOMIZE) {
   options.seed = Number(process.env.JEST_SEED ?? 1)
 }
 
+if (process.env.JEST_TEST_NAME_PATTERN) {
+  options.testNamePattern = process.env.JEST_TEST_NAME_PATTERN
+}
+
 if (process.env.USE_JEST_RUN) {
   jest.run(getJestRunArgs(options)).catch((error) => {
     // eslint-disable-next-line no-console

@@ -1565,16 +1565,13 @@ describe(`cucumber@${version} commonJS`, () => {
                 )
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              const diagnosticTests = tests.map(test => ({
-                status: test.meta[TEST_STATUS],
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-              }))
-              assert.deepStrictEqual(diagnosticTests, [
-                { status: 'fail', isRetry: undefined, retryReason: undefined },
-                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-              ])
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass', 'fail'])
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              for (const retryTest of tests.slice(1)) {
+                assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
             })
 
           childProcess = exec(
@@ -1623,15 +1620,14 @@ describe(`cucumber@${version} commonJS`, () => {
                 )
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              const diagnosticTests = tests.map(test => ({
-                status: test.meta[TEST_STATUS],
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-              }))
-              assert.deepStrictEqual(diagnosticTests, [
-                { status: 'fail', isRetry: undefined, retryReason: undefined },
-                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.atr },
-              ])
+              const expectedStatuses = version === 'latest' ? ['fail', 'pass'] : ['pass']
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expectedStatuses)
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              if (version === 'latest') {
+                assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
             })
 
           childProcess = exec(

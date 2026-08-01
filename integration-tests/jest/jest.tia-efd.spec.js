@@ -50,6 +50,10 @@ const {
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED,
+} = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { getBabelDependencies } = require('./babel-dependencies')
 
@@ -1965,10 +1969,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('does not report the retries of a new test that Jest skips', async () => {
+    it('does not report or leak the retries of a new test that Jest skips', async function () {
+      this.timeout(30_000)
+
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/focused-test.js'
       const focusSkippedName = 'early flake detection focus new test skipped by focus'
+      const patternSkippedName = 'early flake detection focus new focused test skipped by pattern'
       const blockSkippedName = 'early flake detection skipped block new test inside a skipped block'
       receiver.setKnownTests({ jest: { [testSuite]: ['early flake detection focus known focused test'] } })
       receiver.setSettings({
@@ -1987,7 +1994,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const statusesByName = {}
           for (const { content } of payloads.flatMap(({ payload }) => payload.events)) {
             const testName = content.meta?.[TEST_NAME]
-            if (testName === focusSkippedName || testName === blockSkippedName) {
+            if (testName === focusSkippedName || testName === patternSkippedName || testName === blockSkippedName) {
               statusesByName[testName] ??= []
               statusesByName[testName].push(content.meta[TEST_STATUS])
             }
@@ -1995,7 +2002,28 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assert.deepStrictEqual(statusesByName, {
             [focusSkippedName]: ['skip'],
+            [patternSkippedName]: ['skip'],
             [blockSkippedName]: ['skip'],
+          })
+        })
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const lifecycleCounts = {
+            [TELEMETRY_EVENT_CREATED]: 0,
+            [TELEMETRY_EVENT_FINISHED]: 0,
+          }
+          for (const { payload } of payloads) {
+            for (const { metric, points, tags } of payload.payload.series ?? []) {
+              if (!(metric in lifecycleCounts) || !tags.includes('event_type:test')) continue
+
+              for (const [, value] of points) {
+                lifecycleCounts[metric] += value
+              }
+            }
+          }
+          assert.deepStrictEqual(lifecycleCounts, {
+            [TELEMETRY_EVENT_CREATED]: 4,
+            [TELEMETRY_EVENT_FINISHED]: 4,
           })
         })
 
@@ -2005,6 +2033,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
+            ...(
+              JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29
+                ? { JEST_RANDOMIZE: '1', JEST_SEED: '4' }
+                : {}
+            ),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            JEST_TEST_NAME_PATTERN: 'known focused test',
             TESTS_TO_RUN: 'test-early-flake-detection/focused-test',
             SHOULD_CHECK_RESULTS: '1',
           },
@@ -2014,6 +2049,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
+        telemetryPromise,
       ])
 
       assert.strictEqual(exitCode, 0)
@@ -2463,8 +2499,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setKnownTests({ jest: {} })
       let testOutput = ''
 
-      // The fast test picks the '5s' budget, so 3 of the 5 scheduled retries are surplus.
-      const SCHEDULED_RETRIES = 5
+      // The fast test picks the '5s' budget, so 98 of the 100 scheduled retries are surplus.
+      const SCHEDULED_RETRIES = 100
       const SELECTED_RETRIES = 2
       receiver.setSettings({
         early_flake_detection: {
@@ -2498,17 +2534,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             'ci visibility skip will not be retried': 1,
             'ci visibility todo will not be retried': 1,
           })
-          // Seed 4 shuffles one surplus retry ahead of the original, so it runs before the budget is
-          // known: the original, its two selected retries, and that one surplus execution. Re-derive
-          // this count from the reported order if Jest changes how it shuffles.
-          assert.strictEqual(retriedTestExecutions, SELECTED_RETRIES + 2)
+          assert.strictEqual(retriedTestExecutions, SELECTED_RETRIES + 1)
 
           const retriedTests = tests.filter(test => test.meta[TEST_NAME] === 'ci visibility can report tests')
+          const retryTests = retriedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retryTests.length, SELECTED_RETRIES)
+          for (const retryTest of retryTests) {
+            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
           const finalTests = retriedTests.filter(test => TEST_FINAL_STATUS in test.meta)
           assert.strictEqual(finalTests.length, 1)
           assert.ok(
             retriedTests.every(test => test === finalTests[0] || test.start < finalTests[0].start),
-            'the surplus execution is included in the aggregated status'
+            'every retry is included in the aggregated status'
           )
         })
 

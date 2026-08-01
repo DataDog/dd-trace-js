@@ -1,7 +1,5 @@
 'use strict'
 
-// `ci/vitest-no-worker-init-setup.mjs` imports this module into test processes that never
-// initialize dd-trace, so it has to stay free of imports.
 const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
   { limitMs: 5000, key: '5s' },
   { limitMs: 10_000, key: '10s' },

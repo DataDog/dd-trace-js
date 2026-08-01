@@ -6,6 +6,11 @@ describe('early flake detection focus', () => {
     expect(1 + 2).toBe(3)
   })
 
+  // eslint-disable-next-line mocha/no-exclusive-tests
+  test.only('new focused test skipped by pattern', () => {
+    expect(2 + 1).toBe(3)
+  })
+
   // Jest skips this test because the suite has a focused one, so none of the
   // retries pre-registered for it may be reported.
   test('new test skipped by focus', () => {
