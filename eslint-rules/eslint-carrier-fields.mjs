@@ -1,18 +1,10 @@
 import { readFileSync } from 'node:fs'
 
-// Read the runtime declarations so adding or renaming a field cannot make the verifier's header list drift.
-const carrierSource = readFileSync(new URL('../packages/dd-trace/src/carrier.js', import.meta.url), 'utf8')
-const propagationHeaders = new Set(
-  [...carrierSource.matchAll(/\bdefineField\('([^']+)'/g)].map(([, name]) => name)
-)
-const fieldNames = new Set(
-  [...carrierSource.matchAll(/\bconst (\w+) = defineField\(/g)].map(([, name]) => name)
-)
-const legacyBaggagePrefix = /\bconst legacyBaggagePrefix = '([^']+)'/.exec(carrierSource)?.[1]
+import { parseCarrierModel } from './carrier-model.mjs'
 
-if (propagationHeaders.size === 0 || legacyBaggagePrefix === undefined) {
-  throw new Error('Unable to discover the propagation fields declared by packages/dd-trace/src/carrier.js')
-}
+const carrierSource = readFileSync(new URL('../packages/dd-trace/src/carrier.js', import.meta.url), 'utf8')
+
+const { legacyBaggagePrefix, propagationHeaders } = parseCarrierModel(carrierSource)
 
 /**
  * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} node
@@ -48,6 +40,18 @@ function isPropagationHeader (name) {
 }
 
 /**
+ * Short standard names are meaningful outside propagation, so only treat them
+ * as carrier fields when the receiver establishes that context.
+ *
+ * @param {string} name
+ * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} target
+ * @returns {boolean}
+ */
+function isManagedHeaderAccess (name, target) {
+  return isPropagationHeader(name) && (name.includes('-') || isHeaderContainer(target))
+}
+
+/**
  * @param {import('estree').MemberExpression} node
  * @returns {string | undefined}
  */
@@ -63,18 +67,6 @@ function getMemberName (node, resolveString) {
 function getPropertyName (node, resolveString) {
   if (!node.computed && node.key.type === 'Identifier') return node.key.name
   return resolveString(node.key)
-}
-
-/**
- * @param {import('estree').CallExpression['callee']} node
- * @param {Set<string>} carrierFieldIdentifiers
- * @returns {boolean}
- */
-function isAttachedFieldCall (node, carrierFieldIdentifiers) {
-  if (node.type !== 'MemberExpression') return false
-  if (node.object.type === 'Identifier') return carrierFieldIdentifiers.has(node.object.name)
-  return node.object.type === 'MemberExpression' && node.object.property.type === 'Identifier' &&
-    (fieldNames.has(node.object.property.name) || node.object.property.name === 'legacyBaggage')
 }
 
 /**
@@ -119,7 +111,6 @@ export default {
   create (context) {
     const sourceCode = context.sourceCode
     const carrierFunctions = new Set()
-    const carrierFieldIdentifiers = new Set()
     const carrierModuleIdentifiers = new Set()
     const requireDirectOperations = context.options[0]?.requireDirectOperations === true
     const strictCarrierIdentifiers = context.options[0]?.strictCarrierIdentifiers === true
@@ -158,28 +149,11 @@ export default {
      * @returns {void}
      */
     function recordCarrierFunctions (node) {
-      if (node.id.type !== 'ObjectPattern' || !node.init) return
-
-      const fromFields = isCarrierModuleReference(node.init)
-      const fromField = (node.init.type === 'Identifier' && carrierFieldIdentifiers.has(node.init.name)) ||
-        (node.init.type === 'MemberExpression' && node.init.property.type === 'Identifier' &&
-          (fieldNames.has(node.init.property.name) || node.init.property.name === 'legacyBaggage'))
-      if (!fromFields && !fromField) return
+      if (node.id.type !== 'ObjectPattern' || !node.init || !isCarrierModuleReference(node.init)) return
 
       for (const property of node.id.properties) {
         if (property.type !== 'Property' || property.key.type !== 'Identifier') continue
-        if (fromFields && (fieldNames.has(property.key.name) || property.key.name === 'legacyBaggage')) {
-          if (property.value.type === 'Identifier') carrierFieldIdentifiers.add(property.value.name)
-          if (property.value.type === 'ObjectPattern') {
-            for (const method of property.value.properties) {
-              if (method.type === 'Property' && method.value.type === 'Identifier') {
-                carrierFunctions.add(method.value.name)
-              }
-            }
-          }
-        } else if (property.value.type === 'Identifier') {
-          carrierFunctions.add(property.value.name)
-        }
+        if (property.value.type === 'Identifier') carrierFunctions.add(property.value.name)
       }
     }
 
@@ -198,7 +172,64 @@ export default {
       }
       if (parent.type !== 'CallExpression' || parent.callee.type !== 'MemberExpression') return false
       const name = getMemberName(parent.callee, resolveString)
-      return (name === 'inject' || name === 'extract') && parent.arguments.includes(node)
+      if ((name === 'inject' || name === 'extract') && parent.arguments.includes(node)) return true
+      return (name === 'assign' || name === 'defineProperties') && parent.callee.object.type === 'Identifier' &&
+        parent.callee.object.name === 'Object' && parent.arguments[0] !== node &&
+        parent.arguments[0]?.type !== 'SpreadElement' && isHeaderContainer(parent.arguments[0])
+    }
+
+    /**
+     * @param {import('estree').CallExpression} node
+     * @returns {{ target: import('estree').Expression, key: import('estree').Expression } | undefined}
+     */
+    function getReflectiveAccess (node) {
+      if (node.callee.type !== 'MemberExpression' || node.callee.object.type === 'Super') return
+      const method = getMemberName(node.callee, resolveString)
+      if (method === 'hasOwnProperty') {
+        const [key] = node.arguments
+        if (!key || key.type === 'SpreadElement') return
+        return { target: node.callee.object, key }
+      }
+      if (node.callee.object.type !== 'Identifier') return
+
+      const owner = node.callee.object.name
+      const isObjectAccess = owner === 'Object' && (method === 'hasOwn' || method === 'defineProperty' ||
+        method === 'getOwnPropertyDescriptor')
+      const isReflectAccess = owner === 'Reflect' && (method === 'has' || method === 'get' || method === 'set' ||
+        method === 'deleteProperty' || method === 'defineProperty' || method === 'getOwnPropertyDescriptor')
+      if (!isObjectAccess && !isReflectAccess) return
+
+      const [target, key] = node.arguments
+      if (!target || target.type === 'SpreadElement' || !key || key.type === 'SpreadElement') return
+      return { target, key }
+    }
+
+    /**
+     * @param {import('estree').ObjectPattern} pattern
+     * @param {import('estree').Expression} target
+     * @returns {boolean}
+     */
+    function checkObjectPattern (pattern, target) {
+      let reported = false
+      for (const property of pattern.properties) {
+        if (property.type === 'RestElement') {
+          if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
+            report(property, 'noDirectCarrierAccess')
+            reported = true
+          }
+          continue
+        }
+
+        const name = getPropertyName(property, resolveString)
+        if (name && isManagedHeaderAccess(name, target)) {
+          report(property, 'useCarrierField')
+          reported = true
+        } else if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
+          report(property, 'noDirectCarrierAccess')
+          reported = true
+        }
+      }
+      return reported
     }
 
     /**
@@ -219,7 +250,7 @@ export default {
         const name = getMemberName(node, resolveString)
         const carrierObject = isCarrierIdentifier(node.object)
 
-        if (name && isPropagationHeader(name) && (node.computed || isHeaderContainer(node.object))) {
+        if (name && isManagedHeaderAccess(name, node.object)) {
           report(node, 'useCarrierField')
         } else if (strictCarrierIdentifiers && carrierObject) {
           report(node, 'noDirectCarrierAccess')
@@ -242,13 +273,13 @@ export default {
        * @returns {void}
        */
       BinaryExpression (node) {
-        if (node.operator === 'in') {
-          if (node.left.type === 'Literal' && typeof node.left.value === 'string' &&
-              isPropagationHeader(node.left.value)) {
-            report(node, 'useCarrierField')
-          } else if (strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
-            report(node, 'noDirectCarrierAccess')
-          }
+        if (node.operator !== 'in') return
+
+        const name = resolveString(node.left)
+        if (name && isManagedHeaderAccess(name, node.right)) {
+          report(node, 'useCarrierField')
+        } else if (strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
+          report(node, 'noDirectCarrierAccess')
         }
       },
 
@@ -259,11 +290,22 @@ export default {
       CallExpression (node) {
         const callsCarrierModuleMember = node.callee.type === 'MemberExpression' &&
           isCarrierModuleReference(node.callee.object)
-        if (requireDirectOperations &&
-            (callsCarrierModuleMember || isAttachedFieldCall(node.callee, carrierFieldIdentifiers))) {
+        if (requireDirectOperations && callsCarrierModuleMember) {
           report(node, 'useDirectCarrierOperation')
           return
         }
+
+        const reflectiveAccess = getReflectiveAccess(node)
+        if (reflectiveAccess) {
+          const name = resolveString(reflectiveAccess.key)
+          if (name && isManagedHeaderAccess(name, reflectiveAccess.target)) {
+            report(node, 'useCarrierField')
+          } else if (strictCarrierIdentifiers && isCarrierIdentifier(reflectiveAccess.target)) {
+            report(node, 'noDirectCarrierAccess')
+          }
+          return
+        }
+
         if (!strictCarrierIdentifiers || node.callee.type === 'Super') return
         if (node.callee.type === 'MemberExpression' && node.callee.object.type === 'ThisExpression') return
         if (node.callee.type === 'Identifier' && carrierFunctions.has(node.callee.name)) return
@@ -281,6 +323,18 @@ export default {
        */
       SpreadElement (node) {
         if (strictCarrierIdentifiers && isCarrierIdentifier(node.argument)) {
+          report(node, 'noDirectCarrierAccess')
+        }
+      },
+
+      /**
+       * @param {import('estree').AssignmentExpression} node
+       * @returns {void}
+       */
+      AssignmentExpression (node) {
+        if (node.left.type !== 'ObjectPattern') return
+        const reported = checkObjectPattern(node.left, node.right)
+        if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
           report(node, 'noDirectCarrierAccess')
         }
       },
@@ -305,15 +359,12 @@ export default {
             isCarrierModuleReference(node.init.object)) {
           context.report({ node, messageId: 'aliasCarrierOperation' })
         }
-        if (node.id.type === 'Identifier' && node.init?.type === 'MemberExpression' &&
-            node.init.property.type === 'Identifier' &&
-            (fieldNames.has(node.init.property.name) || node.init.property.name === 'legacyBaggage')) {
-          carrierFieldIdentifiers.add(node.id.name)
-        }
         recordCarrierFunctions(node)
-        if (strictCarrierIdentifiers && node.id.type === 'ObjectPattern' && node.init &&
-            isCarrierIdentifier(node.init)) {
-          report(node, 'noDirectCarrierAccess')
+        if (node.id.type === 'ObjectPattern' && node.init) {
+          const reported = checkObjectPattern(node.id, node.init)
+          if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.init)) {
+            report(node, 'noDirectCarrierAccess')
+          }
         }
       },
     }

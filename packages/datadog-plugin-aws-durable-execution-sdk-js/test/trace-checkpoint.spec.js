@@ -9,6 +9,28 @@ const { getConfigFresh } = require('../../dd-trace/test/helpers/config')
 const { saveTraceContextCheckpointIfUpdated } = require('../src/trace-checkpoint')
 
 describe('trace-checkpoint', () => {
+  it('does not save a checkpoint without a trace context', async () => {
+    let checkpointed = false
+    const checkpointManager = {
+      checkpoint () {
+        checkpointed = true
+      },
+    }
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => undefined },
+      { checkpoint: checkpointManager },
+      undefined,
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: { Operations: [] },
+      },
+    )
+
+    assert.strictEqual(checkpointed, false)
+  })
+
   it('queues START and SUCCEED before termination flips the manager state', async () => {
     const recordedUpdates = []
     const checkpointManager = {
