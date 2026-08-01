@@ -117,10 +117,16 @@ for (const [product, scopes] of PRODUCTS) {
 }
 
 /**
+ * @typedef {object} Contributor
+ * @property {string} name
+ * @property {string} [login]
+ */
+
+/**
  * @typedef {object} CommitEntry
  * @property {string} sha
  * @property {string} subject
- * @property {string} [author] Display string for the release contributor, e.g. `@handle`.
+ * @property {Contributor[]} [contributors]
  */
 
 /**
@@ -137,6 +143,7 @@ for (const [product, scopes] of PRODUCTS) {
  * @property {string} subject
  * @property {string} pr Bare pull request number, e.g. `8012`, or `''` when absent.
  * @property {boolean} revert
+ * @property {Contributor[]} contributors
  * @property {boolean} [drop] Set when the entry is intentionally omitted from the changelog.
  * @property {string} [warning]
  */
@@ -150,7 +157,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
   const sections = new Map()
   const breakingChanges = []
   const breakingPullRequests = new Set()
-  const contributors = new Set()
+  const contributors = new Map()
   const warnings = []
   let isMinor = false
 
@@ -158,7 +165,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
     const change = parseChange(entry, { dropOtherDependencies: false })
 
     if (change.warning) warnings.push(change.warning)
-    if (entry.author) contributors.add(entry.author)
+    addContributors(contributors, change.contributors)
     if (change.pr) breakingPullRequests.add(change.pr)
     breakingChanges.push(change)
   }
@@ -170,7 +177,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
     if (change.pr && breakingPullRequests.has(change.pr)) continue
     if (change.warning) warnings.push(change.warning)
     if (change.category === 'Features' && !change.revert) isMinor = true
-    if (entry.author) contributors.add(entry.author)
+    addContributors(contributors, change.contributors)
 
     const section = sections.get(change.category)
     if (section) {
@@ -203,6 +210,7 @@ function parseChange (entry, options = {}) {
       subject: subjectWithPullRequest.subject,
       pr: subjectWithPullRequest.pr,
       revert: false,
+      contributors: entry.contributors ?? [],
       warning: `Non-conventional release-note subject for ${entry.sha}: ${entry.subject}`,
     }
   }
@@ -218,6 +226,19 @@ function parseChange (entry, options = {}) {
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
     revert: parsed.isRevert,
+    contributors: entry.contributors ?? [],
+  }
+}
+
+/**
+ * @param {Map<string, Contributor>} contributors
+ * @param {Contributor[]} additions
+ * @returns {void}
+ */
+function addContributors (contributors, additions) {
+  for (const contributor of additions) {
+    const identity = contributor.login?.toLowerCase() ?? contributor.name.toLowerCase()
+    if (!contributors.has(identity)) contributors.set(identity, contributor)
   }
 }
 
@@ -334,7 +355,7 @@ function sentenceCase (subject) {
 
 /**
  * @param {Map<string, Change[]>} sections
- * @param {Set<string>} contributors
+ * @param {Map<string, Contributor>} contributors
  * @param {Change[]} breakingChanges
  */
 function renderMarkdown (sections, contributors, breakingChanges) {
@@ -360,7 +381,7 @@ function renderMarkdown (sections, contributors, breakingChanges) {
   }
 
   if (contributors.size > 0) {
-    const badges = [...contributors].sort(compareContributors).map(renderContributor)
+    const badges = [...contributors.values()].sort(compareContributors).map(renderContributor)
     lines.push('### Contributors', '', badges.join(' '), '')
   }
 
@@ -392,26 +413,22 @@ function compareChanges (a, b) {
 }
 
 /**
- * @param {string} a
- * @param {string} b
+ * @param {Contributor} a
+ * @param {Contributor} b
  */
 function compareContributors (a, b) {
-  return a.toLowerCase().localeCompare(b.toLowerCase())
+  return a.name.toLowerCase().localeCompare(b.name.toLowerCase())
 }
 
 /**
- * Renders a GitHub avatar that links to the contributor's profile. Display
- * strings that are not a `@handle` (a plain git author name) have no profile to
- * link, so they render verbatim.
- *
- * @param {string} contributor
+ * @param {Contributor} contributor
  */
 function renderContributor (contributor) {
-  if (!contributor.startsWith('@')) return contributor
+  if (!contributor.login) return contributor.name
 
-  const login = contributor.slice(1)
+  const { login, name } = contributor
   return `[<img src="${GITHUB_URL}/${login}.png?size=48" width="24" height="24" ` +
-    `alt="${contributor}" title="${contributor}" />](${GITHUB_URL}/${login})`
+    `alt="${name}" title="${name}" />](${GITHUB_URL}/${login})`
 }
 
 /**
@@ -419,12 +436,25 @@ function renderContributor (contributor) {
  */
 function renderChange (change) {
   const subject = linkifyReferences(change.subject)
-  const suffix = change.pr ? ` ${renderPullRequest(change.pr)}` : ''
+  let suffix = change.pr ? ` ${renderPullRequest(change.pr)}` : ''
+  if (change.contributors.length > 0) {
+    suffix += ` — by ${change.contributors.map(renderContributorLink).join(', ')}`
+  }
   if (change.product === UNCATEGORIZED_PRODUCT) {
     return `- ${subject}${suffix}`
   }
 
   return `- **${change.product}:** ${subject}${suffix}`
+}
+
+/**
+ * @param {Contributor} contributor
+ * @returns {string}
+ */
+function renderContributorLink (contributor) {
+  if (!contributor.login) return contributor.name
+
+  return `[${contributor.name}](${GITHUB_URL}/${contributor.login})`
 }
 
 /**

@@ -4,7 +4,22 @@ const assert = require('node:assert/strict')
 
 const { createReleaseChangelog } = require('./changelog')
 
+/**
+ * @param {number} number
+ * @returns {string}
+ */
 const prLink = (number) => `[#${number}](https://github.com/DataDog/dd-trace-js/pull/${number})`
+
+/**
+ * @param {string} login
+ * @returns {string}
+ */
+const contributorLink = (login) => `[@${login}](https://github.com/${login})`
+
+/**
+ * @param {string} login
+ * @returns {string}
+ */
 const avatar = (login) => `[<img src="https://github.com/${login}.png?size=48" width="24" height="24" ` +
   `alt="@${login}" title="@${login}" />](https://github.com/${login})`
 
@@ -149,13 +164,13 @@ describe('release changelog', () => {
       {
         sha: 'abc001',
         subject: 'fix(core): keep existing behavior stable (#9001)',
-        author: '@alice',
+        contributors: [{ name: '@alice', login: 'alice' }],
       },
     ], [
       {
         sha: 'abc002',
         subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
-        author: '@bob',
+        contributors: [{ name: '@bob', login: 'bob' }],
       },
       {
         sha: 'abc003',
@@ -166,10 +181,10 @@ describe('release changelog', () => {
     assert.strictEqual(changelog.markdown, [
       '### Breaking Changes',
       `- **Dependencies:** Bump eslint from 9.0.0 to 10.0.0 ${prLink(9003)}`,
-      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)}`,
+      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)} — by ${contributorLink('bob')}`,
       '',
       '### Fixes',
-      `- **General:** Keep existing behavior stable ${prLink(9001)}`,
+      `- **General:** Keep existing behavior stable ${prLink(9001)} — by ${contributorLink('alice')}`,
       '',
       '### Contributors',
       '',
@@ -372,35 +387,59 @@ describe('release changelog', () => {
     ))
   })
 
-  it('renders contributor avatars on a single line and leaves non-handle names as text', () => {
+  it('credits authors and co-authors on each change and in the contributor footer', () => {
     const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'feat(appsec): add thing (#1)', author: '@Zoe' },
-      { sha: 'abc002', subject: 'fix(profiling): fix thing (#2)', author: '@alice' },
-      { sha: 'abc003', subject: 'ci(release): tweak the workflow (#3)', author: '@Zoe' },
-      { sha: 'abc004', subject: 'fix(core): another thing (#4)', author: 'Jane Doe' },
+      {
+        sha: 'abc001',
+        subject: 'feat(appsec): add thing (#1)',
+        contributors: [{ name: '@Zoe', login: 'Zoe' }],
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(profiling): fix thing (#2)',
+        contributors: [
+          { name: '@alice', login: 'alice' },
+          { name: '@bob', login: 'bob' },
+        ],
+      },
+      {
+        sha: 'abc003',
+        subject: 'ci(release): tweak the workflow (#3)',
+        contributors: [{ name: '@Zoe', login: 'Zoe' }],
+      },
+      {
+        sha: 'abc004',
+        subject: 'fix(core): another thing (#4)',
+        contributors: [{ name: 'Jane Doe' }],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
       '### Features',
-      `- **AppSec:** Add thing ${prLink(1)}`,
+      `- **AppSec:** Add thing ${prLink(1)} — by ${contributorLink('Zoe')}`,
       '',
       '### Fixes',
-      `- **General:** Another thing ${prLink(4)}`,
-      `- **Profiling:** Fix thing ${prLink(2)}`,
+      `- **General:** Another thing ${prLink(4)} — by Jane Doe`,
+      `- **Profiling:** Fix thing ${prLink(2)} — by ${contributorLink('alice')}, ${contributorLink('bob')}`,
       '',
       '### Internal (CI, Testing, Benchmarking)',
-      `- **release:** Tweak the workflow ${prLink(3)}`,
+      `- **release:** Tweak the workflow ${prLink(3)} — by ${contributorLink('Zoe')}`,
       '',
       '### Contributors',
       '',
-      `${avatar('alice')} ${avatar('Zoe')} Jane Doe`,
+      `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')} Jane Doe`,
       '',
     ].join('\n'))
   })
 
-  it('omits the Contributors section when no entry carries an author', () => {
+  it('omits contributors attached only to dropped entries', () => {
     const changelog = createReleaseChangelog([
       { sha: 'abc001', subject: 'fix(appsec): handle thing (#1)' },
+      {
+        sha: 'abc002',
+        subject: 'chore(deps-dev): bump test dependency (#2)',
+        contributors: [{ name: '@dependabot', login: 'dependabot' }],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
