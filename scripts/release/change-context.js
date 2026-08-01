@@ -1,5 +1,7 @@
 'use strict'
 
+const PUBLIC_RELEASE_TYPES = new Set(['feat', 'fix', 'perf', 'docs'])
+
 const INTERNAL_PATH_PATTERNS = [
   /^\.agents\//,
   /^\.github\//,
@@ -37,6 +39,19 @@ function isInternalPath (file) {
   return false
 }
 
+/**
+ * @param {string|undefined} type
+ * @param {string[]} files
+ * @returns {string|undefined}
+ */
+function getReleaseNoteContextError (type, files) {
+  if (type && PUBLIC_RELEASE_TYPES.has(type) && isInternalOnly(files)) {
+    return `PR title type "${type}" is public, but every changed file is internal. ` +
+      'Use test, bench, ci, or chore.'
+  }
+}
+
 module.exports = {
+  getReleaseNoteContextError,
   isInternalOnly,
 }

@@ -2,7 +2,7 @@ name: Pull Request Title
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened]
+    types: [opened, edited, reopened, synchronize]
     branches:
       - "master"
 
@@ -14,6 +14,7 @@ jobs:
   conventional-commit:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: write
     env:
       # Shared between both steps. Must stay portable across bash ERE and JS
@@ -21,6 +22,12 @@ jobs:
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
+      - name: Checkout base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
       - name: Auto-rename GitHub revert title to Conventional Commit
         id: rename
         if: startsWith(github.event.pull_request.title, 'Revert "')
@@ -55,6 +62,25 @@ jobs:
             exit 1
           fi
           echo "PR title OK: $PR_TITLE"
+
+      - name: Validate release-note context
+        if: steps.rename.outputs.renamed != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { getReleaseNoteContextError } = require('./scripts/release/change-context')
+            const pullRequest = context.payload.pull_request
+            const match = (pullRequest.title || '').match(new RegExp(process.env.PR_TITLE_PATTERN))
+            const type = match?.[3]
+            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pullRequest.number,
+              per_page: 100,
+            })
+            const files = []
+            for (const file of changedFiles) files.push(file.filename)
+            const error = getReleaseNoteContextError(type, files)
+            if (error) core.setFailed(error)
 
       - name: Sync labels with PR title
         if: steps.rename.outputs.renamed != 'true'
