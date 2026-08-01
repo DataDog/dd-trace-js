@@ -1081,6 +1081,17 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(spanContext, null)
     })
 
+    it('should not read the parent id without a trace id', () => {
+      delete textMap['x-datadog-trace-id']
+      Object.defineProperty(textMap, 'x-datadog-parent-id', {
+        get () {
+          throw new Error('parent id should not be read')
+        },
+      })
+
+      assert.strictEqual(propagator.extract(textMap), null)
+    })
+
     it('should return null for an all-zero trace id', () => {
       textMap['x-datadog-trace-id'] = '0000'
 

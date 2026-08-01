@@ -532,11 +532,9 @@ class TextMapPropagator {
 
   _extractDatadogContext (carrier) {
     if (!carrier) return
-    const spanContext = this._extractGenericContext(
-      readDatadogTraceId(carrier),
-      readDatadogParentId(carrier),
-      10
-    )
+    const traceId = readDatadogTraceId(carrier)
+    if (!traceId) return
+    const spanContext = this._extractGenericContext(traceId, readDatadogParentId(carrier), 10)
 
     if (!spanContext) return spanContext
 
