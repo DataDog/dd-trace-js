@@ -38,7 +38,7 @@ const COVERAGE_REPORT_PATTERNS = [
 /**
  * Discovers code coverage report files in the given root directory
  * @param {string} rootDir - The root directory to search for coverage reports
- * @returns {Array<{filePath: string, format: string}>} Array of discovered coverage reports
+ * @returns {Array<{filePath: string, fileDevice: number, fileInode: number, format: string}>}
  */
 function discoverCoverageReports (rootDir) {
   if (!rootDir) {
@@ -48,10 +48,16 @@ function discoverCoverageReports (rootDir) {
 
   let resolvedRoot
   try {
-    resolvedRoot = path.resolve(rootDir)
-    const rootStats = fs.lstatSync(resolvedRoot, { throwIfNoEntry: false })
+    const unresolvedRoot = path.resolve(rootDir)
+    const rootStats = fs.lstatSync(unresolvedRoot, { throwIfNoEntry: false })
     if (rootStats?.isSymbolicLink() || !rootStats?.isDirectory()) {
-      log.debug('Coverage report root is not a regular directory: %s', resolvedRoot)
+      log.debug('Coverage report root is not a regular directory: %s', unresolvedRoot)
+      return []
+    }
+    resolvedRoot = fs.realpathSync(unresolvedRoot)
+    const resolvedRootStats = fs.lstatSync(resolvedRoot)
+    if (resolvedRootStats.dev !== rootStats.dev || resolvedRootStats.ino !== rootStats.ino) {
+      log.debug('Coverage report root changed while resolving it: %s', unresolvedRoot)
       return []
     }
   } catch (error) {
@@ -62,10 +68,9 @@ function discoverCoverageReports (rootDir) {
   const discoveredReports = []
 
   for (const pattern of COVERAGE_REPORT_PATTERNS) {
-    const fullPath = path.join(rootDir, pattern.path)
+    let currentPath = resolvedRoot
 
     try {
-      let currentPath = resolvedRoot
       let stats
       for (const pathSegment of pattern.path.split('/')) {
         currentPath = path.join(currentPath, pathSegment)
@@ -76,14 +81,16 @@ function discoverCoverageReports (rootDir) {
       // Only include regular files, not directories or symlinks
       if (stats?.isFile()) {
         discoveredReports.push({
-          filePath: fullPath,
+          filePath: currentPath,
+          fileDevice: stats.dev,
+          fileInode: stats.ino,
           format: pattern.format,
         })
-        log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
+        log.debug('Found coverage report: %s (format: %s)', currentPath, pattern.format)
       }
-    } catch (err) {
+    } catch (error) {
       // Log but don't fail if we can't access a file
-      log.debug('Error checking coverage report path %s: %s', fullPath, err.message)
+      log.debug('Error checking coverage report path %s: %s', currentPath, error.message)
     }
   }
 

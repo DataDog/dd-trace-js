@@ -521,17 +521,21 @@ class CiVisibilityExporter extends BufferingExporter {
    * Uploads a single coverage report to the CI intake.
    * @param {object} options - Upload options
    * @param {string} options.filePath - Path to the coverage report file
+   * @param {number} options.fileDevice - Device containing the discovered report
+   * @param {number} options.fileInode - Inode of the discovered report
    * @param {string} options.format - Format of the coverage report
    * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
    * @param {(error: Error|null) => void} callback - Callback function
    */
-  uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
+  uploadCoverageReport ({ filePath, fileDevice, fileInode, format, testEnvironmentMetadata }, callback) {
     if (!this._codeCoverageReportUrl) {
       return callback(new Error('Coverage report upload URL not configured'))
     }
 
     uploadCoverageReportRequest({
       filePath,
+      fileDevice,
+      fileInode,
       format,
       flags: this._coverageReportFlags,
       testEnvironmentMetadata,
