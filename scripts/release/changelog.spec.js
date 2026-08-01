@@ -330,31 +330,124 @@ describe('release changelog', () => {
     assert.deepStrictEqual(changelog.warnings, [])
   })
 
+  it('uses pull request product labels before conventional commit scopes', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'fix(openai): block unsafe prompts (#9001)',
+        labels: ['ai-guard', 'appsec'],
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(google-pubsub): preserve pathway context (#9002)',
+        labels: ['datastreams'],
+      },
+      {
+        sha: 'abc003',
+        subject: 'feat(ci): add impacted test detection (#9003)',
+        labels: ['test-optimization'],
+      },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Features',
+      `- **Test Optimization:** Add impacted test detection ${prLink(9003)}`,
+      '',
+      '### Fixes',
+      `- **AppSec / AI Guard:** Block unsafe prompts ${prLink(9001)}`,
+      `- **Data Streams Monitoring:** Preserve pathway context ${prLink(9002)}`,
+      '',
+    ].join('\n'))
+  })
+
+  it('classifies public release-note types from changed paths', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'feat(test-optimization): cover a browser fixture (#9001)',
+        files: ['integration-tests/vitest/vitest.browser.spec.js'],
+      },
+      {
+        sha: 'abc002',
+        subject: 'docs(release): document the proposal script (#9002)',
+        files: ['scripts/release/README.md'],
+      },
+      {
+        sha: 'abc003',
+        subject: 'fix(core): preserve runtime context (#9003)',
+        files: [
+          'packages/dd-trace/src/index.js',
+          'packages/dd-trace/test/index.spec.js',
+        ],
+      },
+      {
+        sha: 'abc004',
+        subject: 'docs(types): document the public tracer API (#9004)',
+        files: ['docs/API.md'],
+      },
+    ])
+
+    assert.strictEqual(changelog.isMinor, false)
+    assert.strictEqual(changelog.markdown, [
+      '### Fixes',
+      `- **General:** Preserve runtime context ${prLink(9003)}`,
+      '',
+      '### Documentation',
+      `- **General:** Document the public tracer API ${prLink(9004)}`,
+      '',
+      '### Internal (CI, Testing, Benchmarking)',
+      `- **release:** Document the proposal script ${prLink(9002)}`,
+      `- **Test Optimization:** Cover a browser fixture ${prLink(9001)}`,
+      '',
+    ].join('\n'))
+  })
+
   it('keeps production dependency bumps and drops development and instrumented ones', () => {
     const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)' },
+      {
+        sha: 'abc001',
+        subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)',
+        files: ['package.json', 'yarn.lock'],
+      },
       {
         sha: 'abc002',
         subject: 'chore(deps): bump protobufjs from 8.4.2 to 8.6.0 in /vendor in the ' +
           'vendor-minor-and-patch-dependencies group across 1 directory (#8851)',
+        files: ['vendor/package.json', 'vendor/package-lock.json'],
       },
       {
         sha: 'abc003',
         subject: 'chore(deps): bump the runtime-minor-and-patch-dependencies group across 1 directory ' +
           'with 3 updates (#8920)',
+        files: ['package.json', 'yarn.lock'],
       },
       {
         sha: 'abc004',
         subject: 'chore(deps-dev): bump the dev-minor-and-patch-dependencies group across 1 directory ' +
           'with 4 updates (#8854)',
+        files: ['package.json', 'yarn.lock'],
       },
       {
         sha: 'abc005',
         subject: 'chore(deps): bump @anthropic-ai/sdk from 0.101.0 to 0.102.0 in ' +
           '/packages/dd-trace/test/plugins/versions in the ai-and-llm group across 1 directory (#8852)',
+        files: ['packages/dd-trace/test/plugins/versions/package.json', 'yarn.lock'],
       },
-      { sha: 'abc006', subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)' },
-      { sha: 'abc007', subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)' },
+      {
+        sha: 'abc006',
+        subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)',
+        files: ['integration-tests/serverless/package.json', 'yarn.lock'],
+      },
+      {
+        sha: 'abc007',
+        subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)',
+        files: ['docs/package.json', 'yarn.lock'],
+      },
+      {
+        sha: 'abc008',
+        subject: 'chore(deps): refresh transitive dependencies (#8933)',
+        files: ['yarn.lock'],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [

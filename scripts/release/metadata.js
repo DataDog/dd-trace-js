@@ -23,6 +23,8 @@ const NON_HUMAN_EMAILS = new Set([
  * @property {string} sha
  * @property {string} subject
  * @property {Contributor[]} [contributors]
+ * @property {string[]} [labels]
+ * @property {string[]} [files]
  */
 
 /**
@@ -34,9 +36,23 @@ const NON_HUMAN_EMAILS = new Set([
  */
 
 /**
+ * @typedef {object} GitHubPullRequest
+ * @property {number} number
+ * @property {string} title
+ * @property {GitHubContributor} [author]
+ * @property {{ nodes: Array<{ name: string }>, pageInfo: { hasNextPage: boolean } }} labels
+ * @property {{ nodes: Array<{ path: string }>, pageInfo: { hasNextPage: boolean } }} files
+ */
+
+/**
  * @typedef {object} GitHubCommit
  * @property {{ nodes: GitHubContributor[], pageInfo: { hasNextPage: boolean } }} authors
- * @property {{ nodes: Array<{ number: number, author?: GitHubContributor }> }} associatedPullRequests
+ */
+
+/**
+ * @typedef {object} GitHubMetadata
+ * @property {GitHubCommit} commit
+ * @property {GitHubPullRequest} [pullRequest]
  */
 
 /**
@@ -57,19 +73,44 @@ function hydrateReleaseEntries (entries) {
     throw new Error(`Resolved ${fullShas.length} release SHAs for ${entries.length} entries.`)
   }
 
-  const commits = readGitHubCommits(fullShas)
+  const pullRequestNumbers = []
+  for (const entry of entries) {
+    pullRequestNumbers.push(readPullRequestNumber(entry.subject))
+  }
+
+  const metadataBySha = readGitHubMetadata(fullShas, pullRequestNumbers)
   const hydrated = []
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]
     const sha = fullShas[i]
-    const commit = commits.get(sha)
-    if (!commit) throw new Error(`GitHub did not return metadata for ${sha}.`)
+    const metadata = metadataBySha.get(sha)
+    if (!metadata) throw new Error(`GitHub did not return metadata for ${sha}.`)
 
-    hydrated.push({
-      ...entry,
-      sha,
-      contributors: readContributors(commit, entry.subject),
-    })
+    const { commit, pullRequest } = metadata
+    const contributors = readContributors(commit, pullRequest)
+    if (pullRequest) {
+      if (pullRequest.labels.pageInfo.hasNextPage) {
+        throw new Error(`Pull request #${pullRequest.number} has more than 100 labels.`)
+      }
+      const labels = []
+      for (const label of pullRequest.labels.nodes) {
+        labels.push(label.name)
+      }
+      hydrated.push({
+        ...entry,
+        sha,
+        subject: `${pullRequest.title} (#${pullRequest.number})`,
+        contributors,
+        labels,
+        files: readFiles(pullRequest),
+      })
+    } else {
+      hydrated.push({
+        ...entry,
+        sha,
+        contributors,
+      })
+    }
   }
 
   return hydrated
@@ -77,10 +118,11 @@ function hydrateReleaseEntries (entries) {
 
 /**
  * @param {string[]} shas
- * @returns {Map<string, GitHubCommit>}
+ * @param {Array<number|undefined>} pullRequestNumbers
+ * @returns {Map<string, GitHubMetadata>}
  */
-function readGitHubCommits (shas) {
-  const commits = new Map()
+function readGitHubMetadata (shas, pullRequestNumbers) {
+  const metadataBySha = new Map()
 
   for (let start = 0; start < shas.length; start += QUERY_CHUNK_SIZE) {
     const end = Math.min(start + QUERY_CHUNK_SIZE, shas.length)
@@ -88,8 +130,13 @@ function readGitHubCommits (shas) {
     for (let i = start; i < end; i++) {
       fields += `commit${i}: object(oid: "${shas[i]}") { ... on Commit { ` +
         'authors(first: 100) { nodes { name email user { login } } pageInfo { hasNextPage } } ' +
-        'associatedPullRequests(first: 10) { nodes { number author { login } } } ' +
         '} } '
+      const pullRequestNumber = pullRequestNumbers[i]
+      if (pullRequestNumber !== undefined) {
+        fields += `pullRequest${i}: pullRequest(number: ${pullRequestNumber}) { number title author { login } ` +
+          'labels(first: 100) { nodes { name } pageInfo { hasNextPage } } ' +
+          'files(first: 100) { nodes { path } pageInfo { hasNextPage } } } '
+      }
     }
 
     const query = `query { repository(owner: "DataDog", name: "dd-trace-js") { ${fields}} }`
@@ -99,42 +146,74 @@ function readGitHubCommits (shas) {
     }
 
     for (let i = start; i < end; i++) {
-      const commit = response.data?.repository?.[`commit${i}`]
+      const repository = response.data?.repository
+      const commit = repository?.[`commit${i}`]
       if (!commit) continue
       if (commit.authors.pageInfo.hasNextPage) {
         throw new Error(`Commit ${shas[i]} has more than 100 authors.`)
       }
-      commits.set(shas[i], commit)
+      const pullRequestNumber = pullRequestNumbers[i]
+      const pullRequest = pullRequestNumber === undefined ? undefined : repository[`pullRequest${i}`]
+      if (pullRequestNumber !== undefined && !pullRequest) {
+        throw new Error(`GitHub did not return pull request #${pullRequestNumber}.`)
+      }
+      metadataBySha.set(shas[i], { commit, pullRequest })
     }
   }
 
-  return commits
+  return metadataBySha
+}
+
+/**
+ * @param {string} subject
+ * @returns {number|undefined}
+ */
+function readPullRequestNumber (subject) {
+  const pullRequestMatch = subject.match(PULL_REQUEST_PATTERN)
+  if (!pullRequestMatch) return
+
+  return Number.parseInt(pullRequestMatch[1], 10)
 }
 
 /**
  * @param {GitHubCommit} commit
- * @param {string} subject
+ * @param {GitHubPullRequest|undefined} pullRequest
  * @returns {Contributor[]}
  */
-function readContributors (commit, subject) {
+function readContributors (commit, pullRequest) {
   const contributors = new Map()
 
   for (const author of commit.authors.nodes) {
     addContributor(contributors, author)
   }
-
-  const pullRequestMatch = subject.match(PULL_REQUEST_PATTERN)
-  if (pullRequestMatch) {
-    const pullRequestNumber = Number.parseInt(pullRequestMatch[1], 10)
-    for (const pullRequest of commit.associatedPullRequests.nodes) {
-      if (pullRequest.number === pullRequestNumber && pullRequest.author) {
-        addContributor(contributors, pullRequest.author)
-        break
-      }
-    }
-  }
+  if (pullRequest?.author) addContributor(contributors, pullRequest.author)
 
   return [...contributors.values()]
+}
+
+/**
+ * @param {GitHubPullRequest} pullRequest
+ * @returns {string[]}
+ */
+function readFiles (pullRequest) {
+  if (!pullRequest.files.pageInfo.hasNextPage) {
+    const files = []
+    for (const file of pullRequest.files.nodes) {
+      files.push(file.path)
+    }
+    return files
+  }
+
+  const pages = JSON.parse(capture(
+    `gh api "repos/DataDog/dd-trace-js/pulls/${pullRequest.number}/files?per_page=100" --paginate --slurp`
+  ))
+  const files = []
+  for (const page of pages) {
+    for (const file of page) {
+      files.push(file.filename)
+    }
+  }
+  return files
 }
 
 /**

@@ -1,5 +1,7 @@
 'use strict'
 
+const { isInternalOnly } = require('./change-context')
+
 const INTERNAL_CATEGORY = 'Internal'
 const CATEGORY_ORDER = [
   'Features',
@@ -37,9 +39,9 @@ const CATEGORY_BY_TYPE = {
   perf: 'Performance',
 }
 const PRODUCTS = [
-  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap']],
-  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard']],
-  ['Profiling', ['profiling', 'profiler']],
+  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap'], ['appsec']],
+  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard'], ['ai-guard']],
+  ['Profiling', ['profiling', 'profiler'], ['profiling']],
   ['Test Optimization', [
     'ci-visibility',
     'test-optimization',
@@ -54,9 +56,9 @@ const PRODUCTS = [
     'playwright',
     'vitest',
     'selenium',
-  ]],
+  ], ['test-optimization']],
   ['Crash Tracking', ['crashtracking', 'crash-tracking']],
-  ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation']],
+  ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation'], ['debugger']],
   ['LLM Observability', [
     'llmobs',
     'ai',
@@ -67,11 +69,12 @@ const PRODUCTS = [
     'genai',
     'vertexai',
     'bedrockruntime',
-  ]],
-  ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy']],
+  ], ['llm-observability']],
+  ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy'], ['serverless']],
   ['OpenTelemetry', ['otel', 'opentelemetry']],
-  ['Data Streams Monitoring', ['dsm', 'data-streams']],
-  ['Database Monitoring', ['dbm']],
+  ['Data Streams Monitoring', ['dsm', 'data-streams'], ['datastreams']],
+  ['Database', [], ['database']],
+  ['Database Monitoring', ['dbm'], ['dbm']],
   ['Feature Flags', ['openfeature', 'feature-flags', 'flagging', 'ffe']],
   ['General', [
     'core',
@@ -127,6 +130,8 @@ for (const [product, scopes] of PRODUCTS) {
  * @property {string} sha
  * @property {string} subject
  * @property {Contributor[]} [contributors]
+ * @property {string[]} [labels]
+ * @property {string[]} [files]
  */
 
 /**
@@ -215,14 +220,19 @@ function parseChange (entry, options = {}) {
     }
   }
 
-  const dependency = classifyDependencyBump(parsed.scopes, parsed.subject)
+  const dependency = classifyDependencyBump(parsed.scopes, parsed.subject, entry.files)
   if (dependency === 'other' && options.dropOtherDependencies !== false) {
     return { drop: true }
   }
 
+  const category = entry.files && isInternalOnly(entry.files)
+    ? INTERNAL_CATEGORY
+    : CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY
   return {
-    category: CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY,
-    product: dependency ? DEPENDENCY_PRODUCT : selectProduct(parsed.scopes),
+    category,
+    product: dependency
+      ? DEPENDENCY_PRODUCT
+      : selectLabeledProduct(entry.labels ?? []) ?? selectProduct(parsed.scopes),
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
     revert: parsed.isRevert,
@@ -250,11 +260,19 @@ function addContributors (contributors, additions) {
  *
  * @param {string[]} scopes
  * @param {string} subject
+ * @param {string[]|undefined} files
  * @returns {'production'|'other'|undefined}
  */
-function classifyDependencyBump (scopes, subject) {
+function classifyDependencyBump (scopes, subject, files) {
   if (!scopes.includes('deps') && !scopes.includes('deps-dev')) return
   if (scopes.includes('deps-dev')) return 'other'
+
+  if (files) {
+    for (const file of files) {
+      if (file === 'package.json' || file === 'vendor/package.json') return 'production'
+    }
+    return 'other'
+  }
 
   const directory = subject.match(/\bin (\/\S+)/)
   if (directory && directory[1] !== '/vendor') return 'other'
@@ -334,6 +352,25 @@ function selectProduct (scopes) {
   if (allGeneral) return 'General'
 
   return scopes.join(', ')
+}
+
+/**
+ * @param {string[]} labels
+ * @returns {string|undefined}
+ */
+function selectLabeledProduct (labels) {
+  const labelSet = new Set(labels)
+  const selected = []
+  for (const [product, , productLabels = []] of PRODUCTS) {
+    for (const label of productLabels) {
+      if (labelSet.has(label)) {
+        selected.push(product)
+        break
+      }
+    }
+  }
+
+  return selected.length > 0 ? selected.join(' / ') : undefined
 }
 
 /**
