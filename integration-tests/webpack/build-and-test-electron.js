@@ -12,6 +12,22 @@ const experiments = require('./webpack-experiments')
 
 const OUTFILE = path.join(__dirname, 'electron-out.js')
 
+// Modules that must never become reachable from the electron entry point. Webpack rewrites
+// `require('@datadog/x')` calls into `__webpack_require__(...)` for any bundled module, so a
+// substring search over the emitted source (matching a literal `require("@datadog/x")`) would
+// pass even when the module IS bundled - it only proves the string is absent, not that the
+// module graph excludes it. Asserting against the module graph itself is the only check that
+// actually discriminates a fixed entry point from a broken one.
+const FORBIDDEN_MODULES = [
+  'node_modules/@datadog/native-iast-taint-tracking',
+  'node_modules/@datadog/wasm-js-rewriter',
+]
+
+// @datadog/native-appsec is intentionally not forbidden here: it remains reachable through
+// the always-on `tracer.appsec` SDK's coupling to the WAF (appsec/sdk -> appsec/waf), which
+// is a documented, out-of-scope follow-up for this change.
+const EXPECTED_MODULE = 'node_modules/@datadog/native-appsec'
+
 const compiler = webpack({
   mode: 'development',
   entry: path.join(__dirname, '..', '..', 'packages', 'dd-trace', 'index.electron.js'),
@@ -36,6 +52,24 @@ const compiler = webpack({
   ],
 })
 
+// Webpack nests modules recursively (e.g. inside ConcatenatedModule instances produced by
+// scope hoisting), so the top-level `modules` list alone can miss a match buried in a
+// submodule. Walk `module.modules` wherever webpack exposes it to catch those too.
+function * walkModules (modules) {
+  for (const module of modules ?? []) {
+    yield module
+    yield * walkModules(module.modules)
+  }
+}
+
+function includesModule (modules, needle) {
+  for (const module of walkModules(modules)) {
+    const identifier = module.name ?? module.nameForCondition
+    if (identifier?.includes(needle)) return true
+  }
+  return false
+}
+
 compiler.run((err, stats) => {
   try {
     if (err) {
@@ -49,22 +83,21 @@ compiler.run((err, stats) => {
       return
     }
 
-    const output = fs.readFileSync(OUTFILE).toString()
+    // Ensure the output file was actually produced before asserting on the module graph.
+    fs.readFileSync(OUTFILE)
 
-    // Package names also appear as inert text inside the bundled package.json metadata
-    // (e.g. optionalDependencies, read by startup-log.js/span_stats.js), so assert on an actual
-    // require() call rather than a bare substring match, matching build-and-test-skip-external.js.
-    //
-    // @datadog/native-appsec is intentionally not asserted here: it remains reachable through
-    // the always-on `tracer.appsec` SDK's coupling to the WAF (appsec/sdk -> appsec/waf), which
-    // is a documented, out-of-scope follow-up for this change.
+    const { modules } = stats.toJson({ modules: true })
+
+    for (const forbidden of FORBIDDEN_MODULES) {
+      assert(
+        !includesModule(modules, forbidden),
+        `bundle should not contain a module from ${forbidden}`
+      )
+    }
+
     assert(
-      !output.includes('require("@datadog/native-iast-taint-tracking")'),
-      'bundle should not contain a require call to @datadog/native-iast-taint-tracking'
-    )
-    assert(
-      !output.includes('require("@datadog/wasm-js-rewriter")'),
-      'bundle should not contain a require call to @datadog/wasm-js-rewriter'
+      includesModule(modules, EXPECTED_MODULE),
+      `expected the documented exception ${EXPECTED_MODULE} to remain reachable`
     )
 
     console.log('ok')
