@@ -1384,8 +1384,8 @@ describe('CI Visibility Exporter', () => {
     function upload (exporter, callback = () => {}) {
       exporter.uploadCoverageReport({
         filePath: '/tmp/coverage.xml',
-        fileDevice: 1,
-        fileInode: 2,
+        fileDevice: 1n,
+        fileInode: 9_007_199_254_740_993n,
         format: 'cobertura',
         testEnvironmentMetadata: { 'git.commit.sha': 'abc123' },
       }, callback)
@@ -1396,8 +1396,8 @@ describe('CI Visibility Exporter', () => {
 
       upload(exporter)
 
-      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileDevice, 1)
-      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileInode, 2)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileDevice, 1n)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileInode, 9_007_199_254_740_993n)
     })
 
     it('reuses exactly 32 coverage report flags for every upload', () => {

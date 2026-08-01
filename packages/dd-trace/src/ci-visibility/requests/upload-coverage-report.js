@@ -18,16 +18,17 @@ const {
 
 const UPLOAD_TIMEOUT_MS = 30_000
 const COVERAGE_FILE_OPEN_FLAGS = constants.O_RDONLY |
-  constants.O_NOFOLLOW |
+  (constants.O_NOFOLLOW || 0) |
   constants.O_NONBLOCK
+const BIGINT_STAT_OPTIONS = { bigint: true }
 
 /**
  * Uploads a single coverage report to the Datadog CI intake.
  * One file per request with field names 'coverage' and 'event'.
  * @param {object} options - Upload options
  * @param {string} options.filePath - Path to the coverage report file
- * @param {number} options.fileDevice - Device containing the discovered report
- * @param {number} options.fileInode - Inode of the discovered report
+ * @param {bigint} options.fileDevice - Device containing the discovered report
+ * @param {bigint} options.fileInode - Inode of the discovered report
  * @param {string} options.format - Format of the coverage report (e.g., 'lcov', 'cobertura')
  * @param {string[]} [options.flags] - Optional coverage report grouping flags
  * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
@@ -51,7 +52,7 @@ function uploadCoverageReport (
     const fileDescriptor = openSync(filePath, COVERAGE_FILE_OPEN_FLAGS)
     let coverageContent
     try {
-      const fileStats = fstatSync(fileDescriptor)
+      const fileStats = fstatSync(fileDescriptor, BIGINT_STAT_OPTIONS)
       if (!fileStats.isFile() || fileStats.dev !== fileDevice || fileStats.ino !== fileInode) {
         throw new Error('Coverage report changed after discovery')
       }
