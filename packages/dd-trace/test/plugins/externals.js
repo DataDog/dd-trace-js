@@ -297,6 +297,19 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: [
+        '>=0.7.0 <0.8.1',
+        '>=0.8.1 <0.8.5',
+      ],
+    },
+  ],
+  'graphql-jit': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
   ],
   'apollo-server-core': [
     {
@@ -470,6 +483,7 @@ module.exports = {
       // mercurius peers graphql; pin the only supported major (16) so the
       // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
       name: 'graphql',
+      dep: true,
       versions: ['^16.0.0'],
     },
     {

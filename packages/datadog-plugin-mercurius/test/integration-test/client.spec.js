@@ -17,6 +17,8 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
+/** @typedef {{ name: string, resource: string, meta: Record<string, string> }} GraphQLRequestSpan */
+
 describe('esm', () => {
   let agent
   let proc
@@ -63,6 +65,73 @@ describe('esm', () => {
 
         await res
       }).timeout(50000)
+
+      it(`keeps warm operation metadata without graphql-jit instrumentation ${variant}`, async () => {
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          variants[variant],
+          agent.port,
+          {
+            DD_TRACE_DISABLED_INSTRUMENTATIONS: 'graphql-jit',
+            MERCURIUS_JIT: '1',
+          }
+        )
+
+        const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
+        await axios.post(`${proc.url}/graphql`, { query: source, operationName: 'First' })
+        await axios.post(`${proc.url}/graphql`, { query: source, operationName: 'Second' })
+
+        const assertion = agent.assertMessageReceived(({ payload }) => {
+          const request = payload.flat().find(span =>
+            span.name === 'graphql.request' && span.meta['graphql.operation.name'] === 'Second')
+
+          assert.ok(request, 'expected the warm Second request span')
+          assert.match(request.resource, /query Second/)
+          assert.strictEqual(request.meta['graphql.operation.type'], 'query')
+        })
+
+        await Promise.all([
+          assertion,
+          axios.post(`${proc.url}/graphql`, { query: source, operationName: 'Second' }),
+        ])
+      }).timeout(50000)
+
+      if (semver.satisfies(resolvedVersion, '>=15')) {
+        it(`keeps warm pre-parsed operation metadata without graphql-jit instrumentation ${variant}`, async () => {
+          proc = await spawnPluginIntegrationTestProc(
+            sandboxCwd(),
+            variants[variant],
+            agent.port,
+            {
+              DD_TRACE_DISABLED_INSTRUMENTATIONS: 'graphql-jit',
+              MERCURIUS_JIT: '1',
+            }
+          )
+
+          async function requestParsedAndAssert () {
+            /**
+             * @param {{ payload: GraphQLRequestSpan[][] }} message
+             */
+            const assertion = agent.assertMessageReceived(({ payload }) => {
+              const request = payload.flat().find(span => span.name === 'graphql.request')
+
+              assert.ok(request, 'expected the pre-parsed request span')
+              assert.strictEqual(request.meta['graphql.operation.name'], 'ParsedAstWarmDisabled')
+              assert.match(request.resource, /query ParsedAstWarmDisabled/)
+              assert.strictEqual(request.meta['graphql.operation.type'], 'query')
+            })
+
+            await Promise.all([
+              assertion,
+              axios.get(`${proc.url}/parsed`),
+            ])
+          }
+
+          await requestParsedAndAssert()
+          await requestParsedAndAssert()
+          await requestParsedAndAssert()
+        }).timeout(50000)
+      }
     }
   })
 })
