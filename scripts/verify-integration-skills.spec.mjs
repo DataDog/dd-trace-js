@@ -68,8 +68,10 @@ module.exports = CachePlugin
   ['fixture-package-' + 'alias']: { esmFirst: true, fn: () => require('../fixture') },
   'outside-package': () => require('../../../../../outside'),
   'shared-package': () => require('../shared'),
+  'alpha-no-index-package': () => require('../alpha-no-index'),
 }
 `,
+  'packages/datadog-instrumentations/src/alpha-no-index.js': 'module.exports = {}\n',
   'packages/datadog-instrumentations/src/fixture.js': 'module.exports = {}\n',
   'packages/datadog-instrumentations/src/shared.js': 'module.exports = {}\n',
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js': `module.exports = [{
@@ -83,7 +85,13 @@ module.exports = CachePlugin
 }]
 `,
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fallback.js': 'module.exports = []\n',
-  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js': 'module.exports = {}\n',
+  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js':
+    "module.exports = [...require('./alpha-no-index'), ...require('./fixture'), ...require('./shared')]\n",
+  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/alpha-no-index.js': `module.exports = [{
+  module: { name: 'alpha-no-index-package' },
+  functionQuery: { kind: 'Async' },
+}]
+`,
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/shared.js': `module.exports = [{
   module: { name: 'shared-package' },
   functionQuery: { kind: 'Callback' },
@@ -108,6 +116,8 @@ module.exports = DerivedPlugin
   'packages/datadog-plugin-link/src/index.js': `const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 module.exports = ProducerPlugin
 `,
+  'packages/datadog-plugin-alpha-no-index/src/plugin.js':
+    "module.exports = require('../../dd-trace/src/plugins/producer')\n",
   'packages/dd-trace/src/plugins/database.js': `const StoragePlugin = require('./storage')
 class DatabasePlugin extends StoragePlugin {}
 module.exports = DatabasePlugin
@@ -127,6 +137,7 @@ module.exports = StoragePlugin
   get ['fixture-package-' + 'alias'] () { return require('../../../datadog-plugin-fixture/src') },
   serverless: false,
   get 'shared-package' () { return require('../../../datadog-plugin-link/src') },
+  get 'alpha-no-index-package' () { return require('../../../datadog-plugin-alpha-no-index/src/plugin') },
 }
 `,
   'packages/dd-trace/test/plugins/versions/package.json': JSON.stringify({
@@ -170,7 +181,10 @@ function writeFixtureFile (root, filename, source) {
  * @returns {void}
  */
 function writeControlRegistry (root) {
-  const source = "module.exports = { '\\u001B[31m\\u009Bfixture': () => require('../fixture') }\n"
+  const source = String.raw`module.exports = {
+  '\u001B[31m\u009B\u202E\u2028\u2029\u{E0001}fixture': () => require('../fixture'),
+}
+`
   writeFixtureFile(
     root,
     'packages/datadog-instrumentations/src/helpers/hooks.js',
@@ -411,6 +425,9 @@ describe('verify-integration-skills', () => {
       'packages/datadog-plugin-fixture/src/index.js:4',
     ])
     assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
+    assert.deepStrictEqual(packet.registrations.rewriter, [
+      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js:1',
+    ])
     assert.deepStrictEqual(packet.registrations.types, ['index.d.ts:1'])
     assert.deepStrictEqual(packet.registrations.v5Types, ['index.d.v5.ts:1'])
     assert.deepStrictEqual(packet.registrations.docs, ['docs/API.md:1'])
@@ -481,10 +498,36 @@ module.exports = plugins
     assert.strictEqual(status, 0, stderr)
     assert.strictEqual(stdout.includes('\u001B'), false)
     assert.strictEqual(stdout.includes('\u009B'), false)
-    assert.match(stdout, /\\u001B\[31m\\u009Bfixture/)
+    assert.strictEqual(stdout.includes('\u202E'), false)
+    assert.strictEqual(stdout.includes('\u2028'), false)
+    assert.strictEqual(stdout.includes('\u2029'), false)
+    assert.strictEqual(stdout.includes('\u{E0001}'), false)
+    assert.match(stdout, /\\u001B\[31m\\u009B\\u202E\\u2028\\u2029\\uDB40\\uDC01fixture/)
     assert.strictEqual(jsonResult.status, 0, jsonResult.stderr)
     assert.strictEqual(jsonResult.stdout.includes('\u009B'), false)
+    assert.strictEqual(jsonResult.stdout.includes('\u202E'), false)
+    assert.strictEqual(jsonResult.stdout.includes('\u2028'), false)
+    assert.strictEqual(jsonResult.stdout.includes('\u2029'), false)
+    assert.strictEqual(jsonResult.stdout.includes('\u{E0001}'), false)
     assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u009B')), true)
+    assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u202E')), true)
+    assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u2028')), true)
+    assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u2029')), true)
+    assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u{E0001}')), true)
+  })
+
+  it('escapes terminal controls in verification failures', () => {
+    const filename = '.agents/skills/apm-integrations/SKILL.md'
+    const { status, stderr } = runTool([], (root) => {
+      writeFixtureFile(root, filename, `${skillFiles[filename]}\n[Broken](\u001B[31m\u202E\u2028\u2029missing)\n`)
+    })
+
+    assert.strictEqual(status, 1)
+    assert.strictEqual(stderr.includes('\u001B'), false)
+    assert.strictEqual(stderr.includes('\u202E'), false)
+    assert.strictEqual(stderr.includes('\u2028'), false)
+    assert.strictEqual(stderr.includes('\u2029'), false)
+    assert.match(stderr, /\\u001B\[31m\\u202E\\u2028\\u2029missing/)
   })
 
   it('resolves alternate source and rewriter extensions', () => {
@@ -504,6 +547,7 @@ module.exports = plugins
       packet.targets.rewriter,
       'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/alternate.mjs'
     )
+    assert.deepStrictEqual(packet.registrations.rewriter, [])
   })
 
   it('routes a closest reference through its linked plugin directory', () => {
@@ -520,6 +564,35 @@ module.exports = plugins
     assert.strictEqual(packet.reference.integration, 'shared')
     assert.strictEqual(
       packet.reference.files.includes('packages/datadog-plugin-link/src/index.js'),
+      true
+    )
+  })
+
+  it('ignores unregistered rewriters as closest references', () => {
+    const { status, stdout, stderr } = runTool([
+      '--inspect', 'new-plugin', '--traits', 'orchestrion', '--json',
+    ], (root) => {
+      writeFixtureFile(
+        root,
+        'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js',
+        "module.exports = [...require('./fixture')]\n"
+      )
+    })
+
+    assert.strictEqual(status, 0, stderr)
+    assert.strictEqual(JSON.parse(stdout).reference.integration, 'fixture')
+  })
+
+  it('uses a registered non-index plugin source as a closest reference', () => {
+    const { status, stdout, stderr } = runTool([
+      '--inspect', 'new-plugin', '--traits', 'async', '--json',
+    ])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(packet.reference.integration, 'alpha-no-index')
+    assert.strictEqual(
+      packet.reference.files.includes('packages/datadog-plugin-alpha-no-index/src/plugin.js'),
       true
     )
   })

@@ -31,7 +31,7 @@ const PLUGIN_BASE_TRAITS = new Set([
 ])
 const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
 const TEST_SUFFIXES = ['.spec.js', '.spec.cjs', '.spec.mjs']
-const CONTROL_CHARACTER_PATTERN = /\p{Cc}/gu
+const TERMINAL_CONTROL_PATTERN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
 const CHANNEL_ANCHOR_PATTERNS = [
   /\b(?:channel|tracingChannel)\s*\(/,
   /\bchannelName\s*:/,
@@ -117,6 +117,7 @@ const failures = []
 
 /**
  * @typedef {object} InspectionRegistrations
+ * @property {string[]} rewriter
  * @property {string[]} types
  * @property {string[]} v5Types
  * @property {string[]} docs
@@ -130,6 +131,12 @@ const failures = []
  * @typedef {object} RegistryRegistration
  * @property {string[]} requests
  * @property {string} source
+ */
+
+/**
+ * @typedef {object} StaticRequire
+ * @property {string} request
+ * @property {number} line
  */
 
 /** @typedef {import('estree').TemplateElement & { value: { cooked: string } }} StaticTemplateElement */
@@ -217,7 +224,7 @@ try {
   options = parseArguments(process.argv.slice(2))
 } catch (error) {
   // eslint-disable-next-line no-console
-  console.error(error.message)
+  console.error(escapeControlCharacters(error.message))
   process.exit(1)
 }
 const root = options.root
@@ -601,10 +608,10 @@ function findObjectProperty (object, name) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {string[]}
+ * @returns {StaticRequire[]}
  */
-function findNodeRequireRequests (node) {
-  const requests = []
+function findNodeRequires (node) {
+  const requires = []
   const queue = [node]
   const visited = new WeakSet(queue)
 
@@ -613,7 +620,10 @@ function findNodeRequireRequests (node) {
     if (current.type === 'CallExpression' && current.callee.type === 'Identifier' &&
         current.callee.name === 'require' && current.arguments[0]?.type !== 'SpreadElement') {
       const request = current.arguments[0] && findStaticString(current.arguments[0])
-      if (request !== undefined) requests.push(request)
+      if (request !== undefined) {
+        const location = /** @type {import('estree').SourceLocation} */ (current.loc)
+        requires.push({ request, line: location.start.line })
+      }
     }
 
     for (const [key, value] of Object.entries(current)) {
@@ -632,7 +642,7 @@ function findNodeRequireRequests (node) {
       }
     }
   }
-  return requests
+  return requires
 }
 
 /**
@@ -699,7 +709,7 @@ function findHookRegistrations () {
     if (!packageName || (loader?.type !== 'ArrowFunctionExpression' && loader?.type !== 'FunctionExpression')) continue
 
     hookRegistrations.set(packageName, {
-      requests: findNodeRequireRequests(loader),
+      requests: findNodeRequires(loader).map(({ request }) => request),
       source: findPropertyLocation(filename, property),
     })
   }
@@ -725,7 +735,7 @@ function findPluginRegistrations () {
     if (!packageName) continue
 
     pluginRegistrations.set(packageName, {
-      requests: findNodeRequireRequests(property.value),
+      requests: findNodeRequires(property.value).map(({ request }) => request),
       source: findPropertyLocation(filename, property),
     })
   }
@@ -787,6 +797,25 @@ function findIntegrationRegistrations (integration) {
     plugins,
     pluginDirectories: [...pluginDirectories].sort(),
   }
+}
+
+/**
+ * @param {string} integration
+ * @returns {string[]}
+ */
+function findRewriterRegistrations (integration) {
+  const filename = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js'
+  const target = resolveLocalSource(filename, `./${integration}`)
+  const program = parseJavaScript(filename)
+  if (!target || !program) return []
+
+  const registrations = []
+  for (const entry of findNodeRequires(program)) {
+    if (resolveLocalSource(filename, entry.request) === target) {
+      registrations.push(`${filename}:${entry.line}`)
+    }
+  }
+  return registrations
 }
 
 /**
@@ -1008,6 +1037,7 @@ function findClosestReference (integration, traits) {
   for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
     const candidate = path.basename(filename, path.extname(filename))
     if (candidate === 'index' || candidate === integration) continue
+    if (findRewriterRegistrations(candidate).length === 0) continue
 
     const source = read(filename)
     const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
@@ -1106,6 +1136,7 @@ function inspectIntegration (integration, packageName, mode, traits) {
       channelAnchors: findChannelAnchors(channelSources),
     },
     registrations: {
+      rewriter: findRewriterRegistrations(integration),
       types: findLines('index.d.ts', [`"${integration}"`]),
       v5Types: findLines('index.d.v5.ts', [`"${integration}"`]),
       docs: findLines('docs/API.md', [`id="${integration}"`, `[${integration}]`]),
@@ -1123,14 +1154,23 @@ function inspectIntegration (integration, packageName, mode, traits) {
 }
 
 /**
+ * @param {string} character
+ * @returns {string}
+ */
+function escapeControlCharacter (character) {
+  let escaped = ''
+  for (let i = 0; i < character.length; i++) {
+    escaped += String.raw`\u${character.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`
+  }
+  return escaped
+}
+
+/**
  * @param {string} value
  * @returns {string}
  */
 function escapeControlCharacters (value) {
-  return value.replaceAll(CONTROL_CHARACTER_PATTERN, character => {
-    const code = character.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')
-    return String.raw`\u${code}`
-  })
+  return value.replaceAll(TERMINAL_CONTROL_PATTERN, escapeControlCharacter)
 }
 
 /**
@@ -1138,8 +1178,8 @@ function escapeControlCharacters (value) {
  * @returns {string}
  */
 function escapeJsonControlCharacters (value) {
-  return value.replaceAll(CONTROL_CHARACTER_PATTERN, character => {
-    return character.charCodeAt(0) <= 0x1F ? character : escapeControlCharacters(character)
+  return value.replaceAll(TERMINAL_CONTROL_PATTERN, character => {
+    return character.charCodeAt(0) <= 0x1F ? character : escapeControlCharacter(character)
   })
 }
 
@@ -1359,8 +1399,9 @@ if (options.inspect) {
   const transformerVersion = verifySourceContracts()
 
   if (failures.length) {
+    const messages = failures.map(failure => `- ${escapeControlCharacters(failure)}`).join('\n')
     // eslint-disable-next-line no-console
-    console.error(`Integration skill verification failed:\n\n${failures.map(failure => `- ${failure}`).join('\n')}`)
+    console.error(`Integration skill verification failed:\n\n${messages}`)
     process.exitCode = 1
   } else {
     const total = results.reduce((sum, result) => sum + result.tokens, 0)
@@ -1368,9 +1409,12 @@ if (options.inspect) {
     console.log(`Integration skills: ${total} / ${TOTAL_TOKEN_BUDGET} tokens (o200k_base)`)
     for (const { filename, tokens, budget } of results) {
       // eslint-disable-next-line no-console
-      console.log(`  ${tokens} / ${budget}  ${filename}`)
+      console.log(`  ${tokens} / ${budget}  ${escapeControlCharacters(filename)}`)
     }
     // eslint-disable-next-line no-console
-    console.log(`Vendored code transformer: ${transformerVersion} (derived from vendor/package-lock.json)`)
+    console.log(
+      `Vendored code transformer: ${escapeControlCharacters(transformerVersion)} ` +
+      '(derived from vendor/package-lock.json)'
+    )
   }
 }
