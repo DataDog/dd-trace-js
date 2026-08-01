@@ -23,13 +23,16 @@ cloud-function invocation to `serverless-integrations`.
 
 Run `npm run verify:integration-skills` after checkout, rebase, or skill edits; derive a fresh task map with
 `npm run inspect:integration -- <id> --mode <add|review|debug> [--package <npm-name>] [--traits <list>]`. Name the
-plugin base (`database`, `cache`, etc.) among traits, plus mechanisms such as `orchestrion`, `callback`, or `cjs-esm`.
-Treat its paths, base signature, channels, registrations, and selected references as a map, not proof.
+expected base (`database`, `router`, etc.) and mechanisms (`orchestrion`, `callback`, `cjs-esm`) as traits. Traits
+select reading references; they never prove the implementation's base or behavior. Treat the packet as navigation,
+not a semantic summary: package names come from the hook/plugin registries, while missing entries are candidates.
 
 Read the exact upstream source and public call first; record arguments, receiver, return identity, errors, and
-completion. Compare CJS/ESM builds and version boundaries when they differ. Next read the reported contract and one
-closest reference. Expand only for a named unresolved question; search all channel subscribers only when changing
-that channel or its cardinality.
+completion. Compare CJS/ESM builds and version boundaries when they differ. Read every `targets.plugins` file and
+`evidence.contractSources`; direct plugin overrides outrank inherited defaults. Read `targets.dependents` before
+changing cross-plugin ownership. `channelAnchors` locate declared and manual subscriptions but are not a complete
+subscriber inventory; search every subscriber when changing a channel or its cardinality. Then read one closest
+reference and expand only for a named unresolved question.
 
 For a review, return correctness findings only. For a design, return decisions, touched ledgers, tests, and
 unresolved evidence. Omit workflow recaps and consulted-file inventories unless requested.

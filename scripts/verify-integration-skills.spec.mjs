@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -60,12 +60,18 @@ module.exports = CachePlugin
 `,
   'packages/dd-trace/src/plugins/producer.js': 'startSpan (options, enterOrCtx) {}\n',
   'packages/dd-trace/src/plugins/consumer.js': 'startSpan (options, enterOrCtx) {}\n',
-  'packages/datadog-instrumentations/src/helpers/hooks.js': `esmFirst: true
-serverless: false
-'fixture-package-extra': () => require('../fixture-extra')
-'fixture-package': () => require('../fixture')
+  'packages/datadog-instrumentations/src/helpers/hooks.js': `module.exports = {
+  esmFirst: true,
+  serverless: false,
+  'fixture-package-extra': () => require('../fixture-extra'),
+  'fixture-package': () => require('../fixture'),
+  ['fixture-package-' + 'alias']: { esmFirst: true, fn: () => require('../fixture') },
+  'outside-package': () => require('../../../../../outside'),
+  'shared-package': () => require('../shared'),
+}
 `,
   'packages/datadog-instrumentations/src/fixture.js': 'module.exports = {}\n',
+  'packages/datadog-instrumentations/src/shared.js': 'module.exports = {}\n',
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js': `module.exports = [{
   module: { name: 'fixture-package', versionRange: '>=1', filePath: 'dist/cjs/client.js' },
   functionQuery: { methodName: 'run', className: 'Client', kind: "Auto" },
@@ -78,17 +84,29 @@ serverless: false
 `,
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fallback.js': 'module.exports = []\n',
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js': 'module.exports = {}\n',
+  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/shared.js': `module.exports = [{
+  module: { name: 'shared-package' },
+  functionQuery: { kind: 'Callback' },
+}]
+`,
   'packages/datadog-plugin-fixture/src/helper.js': 'module.exports = {}\n',
   'packages/datadog-plugin-fixture/src/README.md': '# Fixture\n',
   'packages/datadog-plugin-fixture/src/index.js': `const CachePlugin = require('../../dd-trace/src/plugins/cache')
-class FixturePlugin extends CachePlugin {}
+class FixturePlugin extends CachePlugin {
+  // static prefix = 'ignored-comment'
+  static get prefix () { return 'fixture-prefix' }
+}
 module.exports = FixturePlugin
 `,
   'packages/datadog-plugin-fixture/test/index.spec.js': 'describe(\'fixture\', () => {})\n',
+  'packages/datadog-plugin-fixture/test/nested/cjs.spec.cjs': 'describe(\'fixture cjs\', () => {})\n',
   'packages/datadog-plugin-fixture/test/nested/esm.spec.mjs': 'describe(\'fixture esm\', () => {})\n',
   'packages/datadog-plugin-derived/src/index.js': `const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class DerivedPlugin extends DatabasePlugin {}
 module.exports = DerivedPlugin
+`,
+  'packages/datadog-plugin-link/src/index.js': `const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+module.exports = ProducerPlugin
 `,
   'packages/dd-trace/src/plugins/database.js': `const StoragePlugin = require('./storage')
 class DatabasePlugin extends StoragePlugin {}
@@ -105,7 +123,10 @@ module.exports = StoragePlugin
   'packages/dd-trace/src/service-naming/schemas/v1/storage.js': 'module.exports = {}\n',
   'packages/dd-trace/src/plugins/index.js': `module.exports = {
   get 'fixture-package-extra' () { return require('../../../datadog-plugin-fixture-extra/src') },
-  get fixture () { return require('../../../datadog-plugin-fixture/src') },
+  get 'fixture-package' () { return require('../../../datadog-plugin-fixture/src') },
+  get ['fixture-package-' + 'alias'] () { return require('../../../datadog-plugin-fixture/src') },
+  serverless: false,
+  get 'shared-package' () { return require('../../../datadog-plugin-link/src') },
 }
 `,
   'packages/dd-trace/test/plugins/versions/package.json': JSON.stringify({
@@ -145,6 +166,20 @@ function writeFixtureFile (root, filename, source) {
 }
 
 /**
+ * @param {string} root
+ * @returns {void}
+ */
+function writeControlRegistry (root) {
+  const source = "module.exports = { '\\u001B[31m\\u009Bfixture': () => require('../fixture') }\n"
+  writeFixtureFile(
+    root,
+    'packages/datadog-instrumentations/src/helpers/hooks.js',
+    source
+  )
+}
+
+/**
+ * @param {string[]} [args]
  * @param {(root: string) => void} [mutate]
  * @returns {{ status: number | null, stdout: string, stderr: string }}
  */
@@ -168,6 +203,14 @@ function runTool (args = [], mutate) {
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+}
+
+/**
+ * @param {string[]} args
+ * @returns {{ status: number | null, stdout: string, stderr: string }}
+ */
+function runRepositoryTool (args) {
+  return spawnSync(process.execPath, [verifierPath, ...args], { encoding: 'utf8' })
 }
 
 describe('verify-integration-skills', () => {
@@ -312,7 +355,7 @@ describe('verify-integration-skills', () => {
   })
 
   it('reports a compact source-derived integration packet', () => {
-    const { status, stdout } = runTool([
+    const { status, stdout, stderr } = runTool([
       '--inspect',
       'fixture',
       '--package',
@@ -324,10 +367,9 @@ describe('verify-integration-skills', () => {
       '--json',
     ])
 
-    assert.strictEqual(status, 0)
+    assert.strictEqual(status, 0, stderr)
     const packet = JSON.parse(stdout)
     assert.strictEqual(packet.integration, 'fixture')
-    assert.strictEqual(packet.package, 'fixture-package')
     assert.strictEqual(packet.mode, 'review')
     assert.deepStrictEqual(packet.traits, ['auto', 'cjs-esm', 'cache'])
     assert.strictEqual(packet.targets.instrumentation, 'packages/datadog-instrumentations/src/fixture.js')
@@ -335,30 +377,46 @@ describe('verify-integration-skills', () => {
       packet.targets.rewriter,
       'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js'
     )
-    assert.strictEqual(packet.contract.pluginBase, 'cache')
-    assert.strictEqual(packet.contract.requestedBase, 'cache')
-    assert.strictEqual(packet.contract.startSpan, 'startSpan(options, ctx)')
-    assert.strictEqual(packet.contract.type, 'storage')
-    assert.strictEqual(packet.contract.kind, 'client')
-    assert.strictEqual(packet.contract.operation, 'command')
-    assert.deepStrictEqual(packet.contract.schemas, [
-      'packages/dd-trace/src/service-naming/schemas/v0/storage.js',
-      'packages/dd-trace/src/service-naming/schemas/v1/storage.js',
+    assert.deepStrictEqual(packet.targets.plugins, [
+      'packages/datadog-plugin-fixture/src/helper.js',
+      'packages/datadog-plugin-fixture/src/index.js',
     ])
-    assert.deepStrictEqual(packet.contract.channels, ['Client_run'])
-    assert.deepStrictEqual(packet.registrations, {
-      hook: true,
-      plugin: true,
-      latestVersion: '1.0.0',
-      types: true,
-      v5Types: true,
-      docs: true,
-      docsTest: true,
-      codeowners: '/packages/datadog-plugin-fixture/',
-      workflow: true,
-    })
-    assert.strictEqual(packet.targets.tests.length, 2)
-    assert.match(packet.registrations.codeowners, /datadog-plugin-fixture/)
+    assert.deepStrictEqual(packet.targets.dependents, [])
+    assert.strictEqual(packet.targets.tests.length, 3)
+    assert.deepStrictEqual(packet.packages, [
+      {
+        name: 'fixture-package',
+        requested: true,
+        hook: 'packages/datadog-instrumentations/src/helpers/hooks.js:5',
+        plugin: 'packages/dd-trace/src/plugins/index.js:3',
+        version: {
+          value: '1.0.0',
+          source: 'packages/dd-trace/test/plugins/versions/package.json:1',
+        },
+      },
+      {
+        name: 'fixture-package-alias',
+        requested: false,
+        hook: 'packages/datadog-instrumentations/src/helpers/hooks.js:6',
+        plugin: 'packages/dd-trace/src/plugins/index.js:4',
+      },
+    ])
+    assert.deepStrictEqual(packet.evidence.contractSources, [
+      'packages/dd-trace/src/plugins/cache.js',
+      'packages/dd-trace/src/plugins/storage.js',
+    ])
+    assert.deepStrictEqual(packet.evidence.channelAnchors, [
+      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js:4',
+      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js:8',
+      'packages/datadog-plugin-fixture/src/index.js:4',
+    ])
+    assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
+    assert.deepStrictEqual(packet.registrations.types, ['index.d.ts:1'])
+    assert.deepStrictEqual(packet.registrations.v5Types, ['index.d.v5.ts:1'])
+    assert.deepStrictEqual(packet.registrations.docs, ['docs/API.md:1'])
+    assert.deepStrictEqual(packet.registrations.docsTest, ['docs/test.ts:1'])
+    assert.deepStrictEqual(packet.registrations.codeowners, ['.github/CODEOWNERS:4'])
+    assert.deepStrictEqual(packet.registrations.workflows, ['.github/workflows/apm-integrations.yml:2'])
     assert.strictEqual(packet.reference, undefined)
     assert.deepStrictEqual(packet.references, [
       '.agents/skills/apm-integrations/references/orchestrion.md',
@@ -367,8 +425,107 @@ describe('verify-integration-skills', () => {
     ])
   })
 
+  it('does not execute registries from the inspected checkout', () => {
+    const { status, stdout, stderr } = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      const hooks = 'packages/datadog-instrumentations/src/helpers/hooks.js'
+      const plugins = 'packages/dd-trace/src/plugins/index.js'
+      writeFixtureFile(root, hooks, `throw new Error('hooks registry executed')\n${sourceFiles[hooks]}`)
+      writeFixtureFile(root, plugins, `throw new Error('plugin registry executed')\n${sourceFiles[plugins]}`)
+    })
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(packet.packages[0].hook, 'packages/datadog-instrumentations/src/helpers/hooks.js:6')
+    assert.strictEqual(packet.packages[0].plugin, 'packages/dd-trace/src/plugins/index.js:4')
+  })
+
+  it('uses only statically resolvable registry entries', () => {
+    const { status, stdout, stderr } = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      writeFixtureFile(root, 'packages/datadog-instrumentations/src/helpers/hooks.js', `
+const dynamicName = 'fixture-dynamic'
+module.exports = {
+  [\`fixture-template\`]: () => require(\`../fixture\`),
+  'dynamic-loader': () => require(dynamicName),
+  [1]: () => require('../fixture'),
+  [dynamicName]: () => require('../fixture'),
+  ['fixture-' + dynamicName]: () => require('../fixture'),
+  [\`fixture-\${dynamicName}\`]: () => require('../fixture'),
+  ...{},
+}
+globalThis.registryWasParsed = true
+`)
+      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', `
+const dynamicName = 'fixture-dynamic'
+const plugins = {
+  get [\`fixture-template\`] () { return require(\`../../../datadog-plugin-fixture/src\`) },
+  get [1] () { return require('../../../datadog-plugin-fixture/src') },
+  get [dynamicName] () { return require('../../../datadog-plugin-fixture/src') },
+  get ['fixture-' + dynamicName] () { return require('../../../datadog-plugin-fixture/src') },
+  get [\`fixture-\${dynamicName}\`] () { return require('../../../datadog-plugin-fixture/src') },
+}
+module.exports = plugins
+`)
+    })
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.deepStrictEqual(packet.packages.map(({ name }) => name), ['fixture-template'])
+    assert.match(packet.packages[0].hook, /packages\/datadog-instrumentations\/src\/helpers\/hooks\.js:/)
+    assert.match(packet.packages[0].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+  })
+
+  it('escapes control characters in human-readable evidence', () => {
+    const { status, stdout, stderr } = runTool(['--inspect', 'fixture'], writeControlRegistry)
+    const jsonResult = runTool(['--inspect', 'fixture', '--json'], writeControlRegistry)
+
+    assert.strictEqual(status, 0, stderr)
+    assert.strictEqual(stdout.includes('\u001B'), false)
+    assert.strictEqual(stdout.includes('\u009B'), false)
+    assert.match(stdout, /\\u001B\[31m\\u009Bfixture/)
+    assert.strictEqual(jsonResult.status, 0, jsonResult.stderr)
+    assert.strictEqual(jsonResult.stdout.includes('\u009B'), false)
+    assert.strictEqual(JSON.parse(jsonResult.stdout).packages.some(({ name }) => name.includes('\u009B')), true)
+  })
+
+  it('resolves alternate source and rewriter extensions', () => {
+    const { status, stdout, stderr } = runTool(['--inspect', 'alternate', '--json'], (root) => {
+      writeFixtureFile(root, 'packages/datadog-instrumentations/src/alternate.cjs', 'module.exports = {}\n')
+      writeFixtureFile(
+        root,
+        'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/alternate.mjs',
+        'export default []\n'
+      )
+    })
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(packet.targets.instrumentation, 'packages/datadog-instrumentations/src/alternate.cjs')
+    assert.strictEqual(
+      packet.targets.rewriter,
+      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/alternate.mjs'
+    )
+  })
+
+  it('routes a closest reference through its linked plugin directory', () => {
+    const { status, stdout, stderr } = runTool([
+      '--inspect',
+      'new-plugin',
+      '--traits',
+      'callback',
+      '--json',
+    ])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(packet.reference.integration, 'shared')
+    assert.strictEqual(
+      packet.reference.files.includes('packages/datadog-plugin-link/src/index.js'),
+      true
+    )
+  })
+
   it('keeps an absent integration actionable for add mode', () => {
-    const { status, stdout } = runTool([
+    const { status, stdout, stderr } = runTool([
       '--inspect',
       'new-plugin',
       '--mode',
@@ -378,11 +535,19 @@ describe('verify-integration-skills', () => {
       '--json',
     ])
 
-    assert.strictEqual(status, 0)
+    assert.strictEqual(status, 0, stderr)
     const packet = JSON.parse(stdout)
-    assert.strictEqual(packet.targets.plugin, undefined)
-    assert.strictEqual(packet.registrations.hook, false)
-    assert.strictEqual(packet.registrations.plugin, false)
+    assert.deepStrictEqual(packet.targets.plugins, [])
+    assert.deepStrictEqual(packet.packages, [{ name: 'new-plugin', requested: false }])
+
+    const explicitPackageResult = runTool([
+      '--inspect', 'new-plugin', '--package', '@scope/new-plugin', '--json',
+    ])
+
+    assert.strictEqual(explicitPackageResult.status, 0, explicitPackageResult.stderr)
+    assert.deepStrictEqual(JSON.parse(explicitPackageResult.stdout).packages, [
+      { name: '@scope/new-plugin', requested: true },
+    ])
     assert.deepStrictEqual(packet.reference, {
       integration: 'fixture',
       files: [
@@ -392,7 +557,7 @@ describe('verify-integration-skills', () => {
         'packages/datadog-plugin-fixture/test/index.spec.js',
       ],
       registrations: [
-        'packages/datadog-instrumentations/src/helpers/hooks.js:4',
+        'packages/datadog-instrumentations/src/helpers/hooks.js:5',
         'packages/dd-trace/src/plugins/index.js:3',
         'packages/dd-trace/test/plugins/versions/package.json:1',
         'index.d.ts:1',
@@ -411,6 +576,20 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 1)
     assert.match(stderr, /mode must be add, review, debug, or serverless/)
+  })
+
+  it('normalizes duplicate inspection traits', () => {
+    const { status, stdout, stderr } = runTool([
+      '--inspect', 'fixture', '--traits', 'cache,cache', '--json',
+    ])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.deepStrictEqual(packet.traits, ['cache'])
+    assert.strictEqual(
+      packet.references.filter(reference => reference === 'packages/dd-trace/src/plugins/cache.js').length,
+      1
+    )
   })
 
   it('rejects missing and invalid CLI values', () => {
@@ -439,9 +618,9 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 0)
     const packet = JSON.parse(stdout)
-    assert.strictEqual(packet.registrations.plugin, false)
-    assert.strictEqual(packet.registrations.codeowners, undefined)
-    assert.strictEqual(packet.registrations.workflow, false)
+    assert.deepStrictEqual(packet.packages, [{ name: 'fix', requested: false }])
+    assert.deepStrictEqual(packet.registrations.codeowners, [])
+    assert.deepStrictEqual(packet.registrations.workflows, [])
   })
 
   it('renders the bounded review and debug routes', () => {
@@ -457,24 +636,23 @@ describe('verify-integration-skills', () => {
     const noTraits = runTool(['--inspect', 'new-plugin'])
 
     assert.strictEqual(status, 0)
-    assert.match(stdout, /^Integration: fixture \(fixture\)$/m)
-    assert.match(stdout, /^ {2}base: cache$/m)
+    assert.match(stdout, /^Integration: fixture$/m)
+    assert.match(stdout, /^Packages:$/m)
+    assert.match(stdout, /^ {2}fixture-package$/m)
+    assert.match(stdout, /^Contract sources:$/m)
     assert.match(stdout, /references\/shimmer\.md/)
     assert.strictEqual(missing.status, 0)
     assert.match(missing.stdout, /^Mode: review; traits: cache, auto$/m)
     assert.match(missing.stdout, /^ {2}instrumentation: missing$/m)
     assert.match(missing.stdout, /^ {2}rewriter: missing$/m)
-    assert.match(missing.stdout, /^ {2}plugin: missing$/m)
-    assert.match(missing.stdout, /^ {2}base: cache \(requested\)$/m)
-    assert.match(missing.stdout, /^ {2}startSpan: startSpan\(options, ctx\)$/m)
-    assert.match(missing.stdout, /^ {2}role: storage\/client\/command$/m)
-    assert.match(missing.stdout, /^ {2}schemas: packages\/dd-trace\/src\/service-naming\/schemas\/v0\/storage\.js, /m)
-    assert.match(missing.stdout, /^ {2}channels: unresolved$/m)
+    assert.match(missing.stdout, /^ {2}plugin sources: 0$/m)
+    assert.match(missing.stdout, /^ {2}new-plugin \(candidate\)$/m)
+    assert.match(missing.stdout, /^Contract sources:\n {2}none$/m)
+    assert.match(missing.stdout, /^ {2}packages\/dd-trace\/src\/plugins\/cache\.js$/m)
     assert.match(missing.stdout, /^Closest current reference: fixture$/m)
     assert.strictEqual(noTraits.status, 0)
     assert.match(noTraits.stdout, /^Mode: review$/m)
-    assert.match(noTraits.stdout, /^ {2}base: unresolved$/m)
-    assert.match(noTraits.stdout, /^ {2}startSpan: unresolved$/m)
+    assert.match(noTraits.stdout, /^Contract sources:\n {2}none$/m)
   })
 
   it('routes serverless proof without APM reference noise', () => {
@@ -491,14 +669,14 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 0)
     const packet = JSON.parse(stdout)
-    assert.strictEqual(packet.registrations.workflow, true)
+    assert.deepStrictEqual(packet.registrations.workflows, ['.github/workflows/serverless.yml:1'])
     assert.deepStrictEqual(packet.references, [
       '.agents/skills/apm-integrations/references/orchestrion.md',
       '.agents/skills/serverless-integrations/references/testing-guide.md',
     ])
   })
 
-  it('resolves inherited plugin base contracts', () => {
+  it('lists inherited plugin contract sources', () => {
     const { status, stdout } = runTool(['--inspect', 'derived', '--json'])
     const missingBase = runTool(['--inspect', 'derived', '--json'], (root) => {
       rmSync(join(root, 'packages/dd-trace/src/plugins/database.js'))
@@ -506,12 +684,12 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 0)
     const packet = JSON.parse(stdout)
-    assert.strictEqual(packet.contract.pluginBase, 'database')
-    assert.strictEqual(packet.contract.startSpan, 'startSpan(name, options, ctx)')
-    assert.strictEqual(packet.contract.type, 'storage')
-    assert.strictEqual(packet.contract.kind, 'client')
+    assert.deepStrictEqual(packet.evidence.contractSources, [
+      'packages/dd-trace/src/plugins/database.js',
+      'packages/dd-trace/src/plugins/storage.js',
+    ])
     assert.strictEqual(missingBase.status, 0)
-    assert.strictEqual(JSON.parse(missingBase.stdout).contract.startSpan, undefined)
+    assert.deepStrictEqual(JSON.parse(missingBase.stdout).evidence.contractSources, [])
   })
 
   it('reports unavailable optional evidence without failing', () => {
@@ -537,16 +715,248 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 0)
     const packet = JSON.parse(stdout)
-    assert.strictEqual(packet.registrations.latestVersion, undefined)
-    assert.strictEqual(packet.registrations.docsTest, false)
-    assert.strictEqual(packet.registrations.codeowners, undefined)
+    assert.strictEqual(packet.packages[0].version, undefined)
+    assert.deepStrictEqual(packet.registrations.docsTest, [])
+    assert.deepStrictEqual(packet.registrations.codeowners, [])
     assert.strictEqual(noDependencies.status, 0)
-    assert.strictEqual(JSON.parse(noDependencies.stdout).registrations.latestVersion, undefined)
+    assert.strictEqual(JSON.parse(noDependencies.stdout).packages[0].version, undefined)
     assert.strictEqual(fallbackTest.status, 0)
     assert.strictEqual(
       JSON.parse(fallbackTest.stdout).reference.files.at(-1),
-      'packages/datadog-plugin-fixture/test/nested/esm.spec.mjs'
+      'packages/datadog-plugin-fixture/test/nested/cjs.spec.cjs'
     )
+  })
+
+  it('treats unavailable or invalid registry evidence as absent', () => {
+    const missingHookRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      rmSync(join(root, 'packages/datadog-instrumentations/src/helpers/hooks.js'))
+    })
+    const missingRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      rmSync(join(root, 'packages/dd-trace/src/plugins/index.js'))
+    })
+    const invalidRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = false\n')
+    })
+    const nullRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = null\n')
+    })
+    const malformedRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = {\n')
+    })
+    const replacedRegistry = runTool(['--inspect', 'fixture', '--json'], (root) => {
+      const filename = 'packages/dd-trace/src/plugins/index.js'
+      writeFixtureFile(root, filename, `${sourceFiles[filename]}module.exports = false\n`)
+    })
+
+    assert.strictEqual(missingHookRegistry.status, 0)
+    assert.strictEqual(JSON.parse(missingHookRegistry.stdout).packages[0].hook, undefined)
+    assert.strictEqual(missingRegistry.status, 0)
+    assert.strictEqual(JSON.parse(missingRegistry.stdout).packages[0].plugin, undefined)
+    assert.strictEqual(invalidRegistry.status, 0)
+    assert.strictEqual(JSON.parse(invalidRegistry.stdout).packages[0].plugin, undefined)
+    assert.strictEqual(nullRegistry.status, 0)
+    assert.strictEqual(JSON.parse(nullRegistry.stdout).packages[0].plugin, undefined)
+    assert.strictEqual(malformedRegistry.status, 0)
+    assert.strictEqual(JSON.parse(malformedRegistry.stdout).packages[0].plugin, undefined)
+    assert.strictEqual(replacedRegistry.status, 0)
+    assert.strictEqual(JSON.parse(replacedRegistry.stdout).packages[0].plugin, undefined)
+  })
+
+  it('maps every component of a composite integration', () => {
+    const { status, stdout } = runRepositoryTool([
+      '--inspect',
+      'amqplib',
+      '--traits',
+      'producer',
+      '--json',
+    ])
+
+    assert.strictEqual(status, 0)
+    const packet = JSON.parse(stdout)
+    assert.deepStrictEqual(packet.targets.plugins, [
+      'packages/datadog-plugin-amqplib/src/client.js',
+      'packages/datadog-plugin-amqplib/src/consumer.js',
+      'packages/datadog-plugin-amqplib/src/index.js',
+      'packages/datadog-plugin-amqplib/src/producer.js',
+      'packages/datadog-plugin-amqplib/src/util.js',
+    ])
+    assert.strictEqual(packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/client.js'), true)
+    assert.strictEqual(packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/consumer.js'), true)
+    assert.strictEqual(packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/producer.js'), true)
+    assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
+  })
+
+  it('derives scoped package registrations from their canonical registries', () => {
+    const { status, stdout } = runRepositoryTool(['--inspect', 'google-cloud-pubsub', '--json'])
+
+    assert.strictEqual(status, 0)
+    const packet = JSON.parse(stdout)
+    const packageRegistration = packet.packages.find(({ name }) => name === '@google-cloud/pubsub')
+    assert.notStrictEqual(packageRegistration, undefined)
+    assert.match(packageRegistration.hook, /packages\/datadog-instrumentations\/src\/helpers\/hooks\.js:/)
+    assert.match(packageRegistration.plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+    const versions = JSON.parse(readFileSync(
+      join(repositoryDirectory, 'packages/dd-trace/test/plugins/versions/package.json'),
+      'utf8'
+    ))
+    assert.strictEqual(packageRegistration.version.value, versions.dependencies['@google-cloud/pubsub'])
+  })
+
+  it('follows package registration into a differently named plugin', () => {
+    const { status, stdout, stderr } = runRepositoryTool(['--inspect', 'mongodb', '--json'])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    const packageRegistration = packet.packages.find(({ name }) => name === 'mongodb')
+    assert.match(packageRegistration.plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+    assert.strictEqual(
+      packet.targets.plugins.includes('packages/datadog-plugin-mongodb-core/src/index.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-plugin-mongodb-core/test/mongodb.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/database.js'),
+      true
+    )
+  })
+
+  it('keeps package linkage narrow when an instrumentation uses a shared plugin', () => {
+    const { status, stdout, stderr } = runRepositoryTool(['--inspect', 'webdriverio', '--json'])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.deepStrictEqual(packet.packages.map(({ name }) => name), ['@wdio/cli', '@wdio/local-runner'])
+    assert.strictEqual(packet.packages[0].plugin, undefined)
+    assert.match(packet.packages[1].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+    assert.deepStrictEqual(packet.targets.plugins, ['packages/datadog-plugin-mocha/src/index.js'])
+    assert.strictEqual(
+      packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/ci_plugin.js'),
+      true
+    )
+    const instrumentation = 'packages/datadog-instrumentations/src/webdriverio.js'
+    const source = readFileSync(join(repositoryDirectory, instrumentation), 'utf8')
+    const lines = source.split('\n')
+    let subscriptionCount = 0
+    for (let i = 0; i < lines.length; i++) {
+      if (/\.subscribe\s*\(/.test(lines[i])) {
+        subscriptionCount++
+        assert.strictEqual(packet.evidence.channelAnchors.includes(`${instrumentation}:${i + 1}`), true)
+      }
+    }
+    assert.notStrictEqual(subscriptionCount, 0)
+  })
+
+  it('keeps integration-specific tests when production uses a shared plugin', () => {
+    const { status, stdout, stderr } = runRepositoryTool(['--inspect', 'mercurius', '--json'])
+
+    assert.strictEqual(status, 0, stderr)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(
+      packet.targets.plugins.includes('packages/datadog-plugin-graphql/src/index.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-plugin-graphql/test/index.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-plugin-mercurius/test/index.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.dependents.includes('packages/datadog-plugin-apollo/src/gateway/request.js'),
+      true
+    )
+    const execute = 'packages/datadog-plugin-graphql/src/execute.js'
+    const source = readFileSync(join(repositoryDirectory, execute), 'utf8')
+    const line = source.split('\n').findIndex(line => /\.addTraceSubs\s*\(/.test(line)) + 1
+    assert.notStrictEqual(line, 0)
+    assert.strictEqual(packet.evidence.channelAnchors.includes(`${execute}:${line}`), true)
+  })
+
+  it('maps manual subscriptions and cross-plugin dependents', () => {
+    const { status, stdout } = runRepositoryTool([
+      '--inspect',
+      'google-cloud-pubsub',
+      '--mode',
+      'serverless',
+      '--json',
+    ])
+
+    assert.strictEqual(status, 0)
+    const packet = JSON.parse(stdout)
+    const pushSubscription = 'packages/datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription.js'
+    const source = readFileSync(join(repositoryDirectory, pushSubscription), 'utf8')
+    const subscriptionCount = source.split('\n').filter(line => /\.addSub\s*\(/.test(line)).length
+    const anchors = packet.evidence.channelAnchors.filter(anchor => anchor.startsWith(`${pushSubscription}:`))
+    assert.strictEqual(
+      packet.targets.dependents.includes('packages/datadog-plugin-http/src/index.js'),
+      true
+    )
+    assert.notStrictEqual(subscriptionCount, 0)
+    assert.strictEqual(anchors.length, subscriptionCount)
+
+    const rendered = runRepositoryTool(['--inspect', 'google-cloud-pubsub', '--mode', 'serverless'])
+    assert.strictEqual(rendered.status, 0)
+    assert.match(rendered.stdout, /^ {2}packages\/datadog-plugin-http\/src\/index\.js$/m)
+  })
+
+  it('routes router integrations through their actual contract sources', () => {
+    const { status, stdout } = runRepositoryTool([
+      '--inspect',
+      'express',
+      '--traits',
+      'router',
+      '--json',
+    ])
+
+    assert.strictEqual(status, 0)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(
+      packet.evidence.contractSources.includes('packages/datadog-plugin-router/src/index.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.evidence.contractSources.includes('packages/datadog-plugin-web/src/index.js'),
+      true
+    )
+    const router = 'packages/datadog-plugin-router/src/index.js'
+    const source = readFileSync(join(repositoryDirectory, router), 'utf8')
+    const subscriptionCount = source.split('\n').filter(line => /\.addSub\s*\(/.test(line)).length
+    const anchors = packet.evidence.channelAnchors.filter(anchor => anchor.startsWith(`${router}:`))
+    assert.notStrictEqual(subscriptionCount, 0)
+    assert.strictEqual(anchors.length, subscriptionCount)
+
+    const plugin = 'packages/dd-trace/src/plugins/plugin.js'
+    const pluginLines = readFileSync(join(repositoryDirectory, plugin), 'utf8').split('\n')
+    let lifecycleCount = 0
+    for (let i = 0; i < pluginLines.length; i++) {
+      if (!pluginLines[i].trimStart().startsWith('//') &&
+          /\.(?:bindStore|subscribe|unbindStore|unsubscribe)\s*\(/.test(pluginLines[i])) {
+        lifecycleCount++
+        assert.strictEqual(packet.evidence.channelAnchors.includes(`${plugin}:${i + 1}`), true)
+      }
+    }
+    assert.notStrictEqual(lifecycleCount, 0)
+  })
+
+  it('does not replace plugin overrides with inherited defaults', () => {
+    const { status, stdout } = runRepositoryTool(['--inspect', 'aerospike', '--json'])
+
+    assert.strictEqual(status, 0)
+    const packet = JSON.parse(stdout)
+    assert.strictEqual(
+      packet.targets.plugins.includes('packages/datadog-plugin-aerospike/src/index.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/database.js'),
+      true
+    )
+    assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
   })
 
   it('rejects stale discovery metadata', () => {
