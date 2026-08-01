@@ -96,7 +96,7 @@ function createWrapDispatch (dispatch) {
   function wrappedDispatch (options, handler) {
     if (!dispatchChannel.start.hasSubscribers) return dispatch.call(this, options, handler)
 
-    return dispatchChannel.traceSync(dispatch, { options, self: this }, this, options, handler)
+    return dispatchChannel.traceSync(dispatch, { opaque: true, self: this }, this, options, handler)
   }
   return /** @type {WrappedFunction} */ (wrappedDispatch)
 }

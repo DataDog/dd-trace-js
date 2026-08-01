@@ -79,9 +79,12 @@ if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') {
 }
 if (process.env.FOREIGN_GLOBAL_DISPATCHER === 'true') {
   const dispatcher = undici.getGlobalDispatcher()
-  const foreignDispatcher = Object.create(dispatcher)
-  foreignDispatcher.close = dispatcher.close.bind(dispatcher)
-  foreignDispatcher.dispatch = dispatcher.dispatch.bind(dispatcher)
+  const foreignDispatcher = {
+    close: dispatcher.close.bind(dispatcher),
+    dispatch (options, handler) {
+      return dispatcher.dispatch({ ...options }, handler)
+    },
+  }
   undici.setGlobalDispatcher(foreignDispatcher)
 }
 const server = http.createServer((_request, response) => response.end('ok'))
@@ -132,10 +135,24 @@ async function assertRetainedSpanLimit () {
 async function main () {
   if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') return
 
+  if (process.env.CONNECT_GLOBAL_DISPATCHER === 'true') {
+    server.on('connect', (_request, socket) => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+    })
+  }
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const port = (/** @type {import('node:net').AddressInfo} */ (server.address())).port
   const url = `http://127.0.0.1:${port}/`
+
+  if (process.env.CONNECT_GLOBAL_DISPATCHER === 'true') {
+    const { socket } = await undici.connect(url, { path: '/example.com:443' })
+    assert.strictEqual(undiciSpanCount, 1)
+    socket.destroy()
+    await undici.getGlobalDispatcher().close()
+    await promisify(server.close.bind(server))()
+    return
+  }
 
   if (process.env.FROZEN_GLOBAL_DISPATCHER === 'true') {
     const parent = tracer.startSpan('parent')
