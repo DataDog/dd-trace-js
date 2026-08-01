@@ -191,6 +191,7 @@ describe('TracerProxy', () => {
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy(),
+      enableRemoteConfig: sinon.spy(),
     }
 
     aiguard = {

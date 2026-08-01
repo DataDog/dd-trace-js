@@ -59,6 +59,17 @@ class LazyModule {
   disable () {
     this.module?.disable()
   }
+
+  /**
+   * @param {object} rc - RemoteConfig instance
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  enableRemoteConfig (rc, config) {
+    // pass `this` through so remote-config-triggered enable/disable still go through this
+    // wrapper's own enable/disable (and their `this.module` caching), matching the behavior
+    // of the direct `appsecRemoteConfig.enable(rc, config, this._modules.appsec)` call this replaces
+    this.provider().enableRemoteConfig(rc, config, this)
+  }
 }
 
 function lazyProxy (...args) {
@@ -205,10 +216,7 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
-        if (this._modules.appsec) {
-          const appsecRemoteConfig = require('./appsec/remote_config')
-          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
-        }
+        this._modules.appsec?.enableRemoteConfig(rc, config)
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)

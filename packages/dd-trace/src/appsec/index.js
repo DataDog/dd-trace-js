@@ -120,6 +120,15 @@ function enable (_config) {
   }
 }
 
+/**
+ * @param {object} rc - RemoteConfig instance
+ * @param {import('../config/config-base')} config - Tracer configuration
+ * @param {{ enable: Function, disable: Function }} [appsecModule] - defaults to this module's own enable/disable
+ */
+function enableRemoteConfig (rc, config, appsecModule) {
+  appsecRemoteConfig.enable(rc, config, appsecModule ?? { enable, disable })
+}
+
 const analyzedBodies = new WeakSet()
 
 function onRequestBodyParsed ({ req, res, body, abortController }) {
@@ -573,6 +582,7 @@ function copyHeadersOmitting (src, omit) {
 module.exports = {
   enable,
   disable,
+  enableRemoteConfig,
   incomingHttpStartTranslator,
   incomingHttpEndTranslator,
 }
