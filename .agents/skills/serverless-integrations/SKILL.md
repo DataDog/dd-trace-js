@@ -43,10 +43,13 @@ provider documentation. The serverless design depends on:
 
 The repository has plugin-backed invocation spans and the separate AWS Lambda bootstrap. Read
 [Architecture](references/architecture.md) before choosing a shape; do not combine their responsibilities.
+Use the [implementation guide](references/implementation-guide.md) for the file-by-file sequence and
+[reference integrations](references/reference-integrations.md) for the nearest complete runtime path.
 
 ## Invariants
 
-- Start the invocation span before user code and run child instrumentation under its context.
+- For plugin-backed invocations, start the invocation span before user code and run child instrumentation under its
+  context. The Lambda bootstrap does not create that span.
 - Finish each started span exactly once on every completion path the runtime actually supports. Decide completion
   from recorded state, such as a result or error present on the context or a flag set once, never from the ordering
   of a timer against the handler.
