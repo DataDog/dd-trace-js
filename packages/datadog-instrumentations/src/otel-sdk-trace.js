@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const tracer = require('../../dd-trace')
+const tracer = require('../../dd-trace/src/bootstrap')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook } = require('./helpers/instrument')
 

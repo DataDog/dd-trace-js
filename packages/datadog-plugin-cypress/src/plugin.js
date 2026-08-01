@@ -21,7 +21,7 @@ const noopTask = {
 }
 
 module.exports = function CypressPlugin (on, config) {
-  const tracer = require('../../dd-trace')
+  const tracer = require('../../dd-trace/src/bootstrap')
 
   if (DD_MAJOR >= 6 && satisfies(config.version, '<12.0.0')) {
     // eslint-disable-next-line no-console

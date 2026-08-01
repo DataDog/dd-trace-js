@@ -7,7 +7,7 @@ const { timeOrigin } = performance
 
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
-const tracer = require('../../')
+const tracer = require('../bootstrap')
 const DatadogSpan = require('../opentracing/span')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')

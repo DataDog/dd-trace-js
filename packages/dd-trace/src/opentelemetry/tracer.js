@@ -3,7 +3,7 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
-const tracer = require('../../')
+const tracer = require('../bootstrap')
 
 const id = require('../id')
 const log = require('../log')

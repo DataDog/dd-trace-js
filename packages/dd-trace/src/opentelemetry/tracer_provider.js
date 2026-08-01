@@ -3,7 +3,7 @@
 const { trace, context, propagation } = require('@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
-const tracer = require('../../')
+const tracer = require('../bootstrap')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')

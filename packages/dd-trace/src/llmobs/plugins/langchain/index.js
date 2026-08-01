@@ -3,7 +3,7 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const pluginManager = require('../../../../../..')._pluginManager
+const pluginManager = require('../../../bootstrap')._pluginManager
 
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
