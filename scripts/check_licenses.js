@@ -188,7 +188,9 @@ function addNpmProductionDependencies (dependencies, packageLockPath) {
   if (!packages) throw new Error('package-lock.json does not contain package metadata')
 
   for (const [packagePath, dependency] of Object.entries(packages)) {
-    if (!packagePath || dependency.link || (dependency.dev && !dependency.devOptional)) continue
+    // A `peer` entry is only present to record an unresolved peer dependency range; npm
+    // never actually installs it, so it isn't part of what gets shipped or bundled.
+    if (!packagePath || dependency.link || dependency.peer || (dependency.dev && !dependency.devOptional)) continue
 
     dependencies.add(dependency.name ?? getNameFromPackagePath(packagePath))
   }
