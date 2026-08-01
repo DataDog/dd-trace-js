@@ -66,7 +66,7 @@ class LazyModule {
    * (`this.provider()` runs only later, from this wrapper's own `enable`/`disable`, once
    * remote config actually toggles the feature on).
    *
-   * @param {object} rc - RemoteConfig instance
+   * @param {import('./remote_config')} rc - RemoteConfig instance
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   enableRemoteConfig (rc, config) {
