@@ -2480,12 +2480,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+
           const executionsByName = {}
-          for (const { type, content } of payloads.flatMap(({ payload }) => payload.events)) {
-            if (type === 'test') {
-              executionsByName[content.meta[TEST_NAME]] ??= 0
-              executionsByName[content.meta[TEST_NAME]]++
-            }
+          for (const test of tests) {
+            executionsByName[test.meta[TEST_NAME]] ??= 0
+            executionsByName[test.meta[TEST_NAME]]++
           }
 
           const { 'ci visibility can report tests': retriedTestExecutions, ...otherExecutions } = executionsByName
@@ -2499,6 +2502,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // known: the original, its two selected retries, and that one surplus execution. Re-derive
           // this count from the reported order if Jest changes how it shuffles.
           assert.strictEqual(retriedTestExecutions, SELECTED_RETRIES + 2)
+
+          const retriedTests = tests.filter(test => test.meta[TEST_NAME] === 'ci visibility can report tests')
+          const finalTests = retriedTests.filter(test => TEST_FINAL_STATUS in test.meta)
+          assert.strictEqual(finalTests.length, 1)
+          assert.ok(
+            retriedTests.every(test => test === finalTests[0] || test.start < finalTests[0].start),
+            'the surplus execution is included in the aggregated status'
+          )
         })
 
       childProcess = exec(

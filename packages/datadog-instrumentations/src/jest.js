@@ -159,6 +159,8 @@ const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
 const efdDeterminedRetries = new Map()
+// Per-test: total executions to report, including retries Jest ran before the test they belong to.
+const efdExpectedExecutions = new Map()
 // Tests whose first run exceeded the 5-min threshold — tagged "slow".
 const efdSlowAbortedTests = new Set()
 // Tests whose first execution determines the duration-based EFD retry count.
@@ -1476,31 +1478,41 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {string} testName
      * @param {object} originalTest The Jest test node the retries belong to.
      * @param {number} [retryCount] Retries to keep. Every retry is dropped when omitted.
-     * @returns {void}
+     * @returns {number} Retries left to run.
      */
     discardEfdRetries (testName, originalTest, retryCount = 0) {
       const retryTests = this.#efdRetryTestsByName?.get(testName)
-      if (!retryTests) return
+      if (!retryTests) return 0
 
       const siblings = originalTest.parent?.children
       const originalTestIndex = siblings ? siblings.indexOf(originalTest) : -1
-      if (originalTestIndex === -1) return
+      if (originalTestIndex === -1) return 0
 
+      const retryIndexesByTest = new Map()
       for (const retryTest of retryTests) {
-        const retryIndex = efdRetryMetadataByTest.get(retryTest)?.retryIndex
-        if (!shouldSkipEfdRetry(retryIndex, retryCount)) continue
-
-        // Circus iterates children live, so a retry after the original can still be removed.
-        // `randomize` can shuffle one before it, where splicing would skip the next test.
-        const retryTestIndex = siblings.indexOf(retryTest)
-        if (retryTestIndex === -1 || retryTestIndex <= originalTestIndex) continue
-
-        siblings.splice(retryTestIndex, 1)
-        const discardedCtx = this.concurrentTestStates.get(retryTest.fn)?.ctx
-        if (discardedCtx) {
-          this.removeConcurrentTestContext(testName, discardedCtx)
-        }
+        retryIndexesByTest.set(retryTest, efdRetryMetadataByTest.get(retryTest)?.retryIndex)
       }
+
+      // Circus iterates children live, so only the entries after the original may move.
+      // `randomize` can shuffle a retry before it, which therefore stays runnable.
+      let runnableRetryCount = 0
+      let writeIndex = originalTestIndex + 1
+      for (let readIndex = writeIndex; readIndex < siblings.length; readIndex++) {
+        const sibling = siblings[readIndex]
+        if (retryIndexesByTest.has(sibling)) {
+          if (shouldSkipEfdRetry(retryIndexesByTest.get(sibling), retryCount)) {
+            const discardedCtx = this.concurrentTestStates.get(sibling.fn)?.ctx
+            if (discardedCtx) {
+              this.removeConcurrentTestContext(testName, discardedCtx)
+            }
+            continue
+          }
+          runnableRetryCount++
+        }
+        siblings[writeIndex++] = sibling
+      }
+      siblings.length = writeIndex
+      return runnableRetryCount
     }
 
     /**
@@ -1588,6 +1600,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const retryCount = getEfdRetryCountForDuration(durationMs, this.#earlyFlakeDetectionRetryPolicy)
       efdDeterminedRetries.set(testName, retryCount)
+      efdExpectedExecutions.set(testName, retryCount + 1)
       const retryGates = this.#efdRetryGatesByName?.get(testName)
       if (retryGates) {
         for (let retryIndex = 0; retryIndex < retryGates.length; retryIndex++) {
@@ -2007,7 +2020,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ) {
           this.determineEfdRetries(testName, event.test.duration ?? 0)
           if (!this.#efdRetryGatesByName?.has(testName)) {
-            this.discardEfdRetries(testName, event.test, efdDeterminedRetries.get(testName))
+            const runnableRetryCount = this.discardEfdRetries(
+              testName,
+              event.test,
+              efdDeterminedRetries.get(testName)
+            )
+            // `randomize` can run a retry first, and the test it belongs to then still has to run.
+            const pendingOriginalCount = efdRetryMetadataByTest.has(event.test) ? 1 : 0
+            efdExpectedExecutions.set(testName, 1 + pendingOriginalCount + runnableRetryCount)
           }
         }
 
@@ -2022,7 +2042,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             efdTestStatuses.set(testName, testStatuses)
           }
           const efdRetryCount = efdDeterminedRetries.get(testName) ?? 0
-          if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
+          if (efdRetryCount > 0 && testStatuses.length === efdExpectedExecutions.get(testName) &&
             testStatuses.every(status => status === 'fail')) {
             failedAllTests = true
           }
@@ -2148,6 +2168,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         efdDeterminedRetries.clear()
+        efdExpectedExecutions.clear()
         efdSlowAbortedTests.clear()
         efdCandidates.clear()
         newTests.clear()
@@ -2193,10 +2214,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const isEfdActive = isEfdEnabled &&
         hasEfdRetries(this.#earlyFlakeDetectionRetryPolicy) &&
         (isNewTest || isModifiedTest)
-      const retryCount = efdDeterminedRetries.get(testName) ?? 0
       const testStatuses = efdTestStatuses.get(testName)
       const isFinalEfdTestExecution = isEfdActive &&
-        (efdSlowAbortedTests.has(testName) || testStatuses?.length === retryCount + 1)
+        (efdSlowAbortedTests.has(testName) || testStatuses?.length === (efdExpectedExecutions.get(testName) ?? 0))
 
       let finalStatus
       if (isEfdActive && isFinalEfdTestExecution) {
