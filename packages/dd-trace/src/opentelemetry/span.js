@@ -7,6 +7,8 @@ const { timeOrigin } = performance
 
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
+// require the bootstrap module directly rather than the package root to avoid transitively
+// pulling in register-features.js before the Electron entry point's guard can apply.
 const tracer = require('../bootstrap')
 const DatadogSpan = require('../opentracing/span')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')

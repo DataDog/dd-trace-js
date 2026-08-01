@@ -3,6 +3,8 @@
 const { trace, context, propagation } = require('@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
+// require the bootstrap module directly rather than the package root to avoid transitively
+// pulling in register-features.js before the Electron entry point's guard can apply.
 const tracer = require('../bootstrap')
 
 const ContextManager = require('./context_manager')
