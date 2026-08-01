@@ -262,9 +262,6 @@ function isEarlyFlakeDetectionTest (test, config) {
 function retryTest (test, numRetries, tags, retryPolicy) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
-  if (isEfdRetry && !hasEfdRetries(retryPolicy)) {
-    return
-  }
   disableMochaRetries(test)
   if (isEfdRetry) {
     wrapOriginalEfdTest(test, retryPolicy)
@@ -1037,12 +1034,7 @@ function getRunTestsWrapper (runTests, config) {
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
-              if (
-                !test.isPending() &&
-                !test._ddIsDisabled &&
-                !test._ddIsAttemptToFix &&
-                config.isEarlyFlakeDetectionEnabled
-              ) {
+              if (!test.isPending() && isEarlyFlakeDetectionTest(test, config)) {
                 retryTest(
                   test,
                   config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
@@ -1061,12 +1053,7 @@ function getRunTestsWrapper (runTests, config) {
       suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (
-            config.isEarlyFlakeDetectionEnabled &&
-            !test._ddIsDisabled &&
-            !test._ddIsAttemptToFix &&
-            !test._ddIsModified
-          ) {
+          if (!test._ddIsModified && isEarlyFlakeDetectionTest(test, config)) {
             retryTest(
               test,
               config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
