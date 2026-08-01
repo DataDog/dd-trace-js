@@ -12,12 +12,12 @@ ruleTester.run('eslint-carrier-fields', rule, {
   valid: [
     {
       code: 'const { writeDatadogTraceId } = require("../carrier"); writeDatadogTraceId(carrier, value)',
-      options: [{ requireDirectOperations: true, strictCarrierIdentifiers: true }],
+      options: [{ strictCarrierIdentifiers: true }],
     },
     {
       code: 'const carrierOperations = require("../carrier"); ' +
         'const { readDatadogTraceId } = carrierOperations; readDatadogTraceId(carrier)',
-      options: [{ requireDirectOperations: true, strictCarrierIdentifiers: true }],
+      options: [{ strictCarrierIdentifiers: true }],
     },
     {
       code: 'const { pickTextMap } = require("../carrier"); pickTextMap(carrier)',
@@ -251,19 +251,16 @@ ruleTester.run('eslint-carrier-fields', rule, {
     },
     {
       code: 'const { writeDatadogTraceId: writeTraceId } = require("../carrier")',
-      options: [{ requireDirectOperations: true }],
       errors: [{ messageId: 'aliasCarrierOperation' }],
     },
     {
       code: 'const carrierOperations = require("../carrier"); ' +
         'carrierOperations.writeDatadogTraceId(carrier, value)',
-      options: [{ requireDirectOperations: true }],
       errors: [{ messageId: 'useDirectCarrierOperation' }],
     },
     {
       code: 'const carrierOperations = require("../carrier"); ' +
         'const writeTraceId = carrierOperations.writeDatadogTraceId',
-      options: [{ requireDirectOperations: true }],
       errors: [{ messageId: 'aliasCarrierOperation' }],
     },
   ],

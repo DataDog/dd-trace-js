@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url'
 
 import { ESLint } from 'eslint'
 
-import { carrierFieldsFilePatterns, createCarrierFieldsConfig } from '../eslint-rules/carrier-fields-policy.mjs'
+import { carrierFieldsConfig, carrierFieldsFilePatterns } from '../eslint-rules/carrier-fields-policy.mjs'
 import carrierFieldsRule from '../eslint-rules/eslint-carrier-fields.mjs'
 
 /**
@@ -17,28 +17,19 @@ export function createCarrierFieldsEslint (cwd = process.cwd()) {
     overrideConfig: [
       {
         plugins: {
-          'carrier-fields-verifier': {
-            rules: {
-              'carrier-fields': carrierFieldsRule,
-            },
+          'eslint-rules': {
+            rules: { 'eslint-carrier-fields': carrierFieldsRule },
           },
         },
       },
       {
-        files: ['packages/*/src/**/*.{js,cjs}'],
+        files: ['packages/*/src/**/*.js'],
         languageOptions: {
           ecmaVersion: 2022,
           sourceType: 'commonjs',
         },
       },
-      {
-        files: ['packages/*/src/**/*.mjs'],
-        languageOptions: {
-          ecmaVersion: 2022,
-          sourceType: 'module',
-        },
-      },
-      ...createCarrierFieldsConfig('carrier-fields-verifier/carrier-fields'),
+      ...carrierFieldsConfig,
     ],
   })
 }
