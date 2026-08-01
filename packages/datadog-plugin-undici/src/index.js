@@ -24,26 +24,27 @@ const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
  * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
  * @typedef {Record<string, unknown> & { span?: DatadogSpan }} Store
  * @typedef {Store & { span: DatadogSpan }} SpanStore
- * @typedef {object} DispatchOptions
- * @property {string} [method]
- * @property {string | URL} [origin]
- * @property {string} [path]
  * @typedef {object} DispatchContext
- * @property {[DispatchOptions | undefined, (object | undefined)?]} [arguments]
- * @property {SpanStore} currentStore
+ * @property {Store} currentStore
  * @property {Store} [parentStore]
  * @property {unknown} [error]
- * @property {boolean} [finished]
- * @property {DispatchOptions} [options]
+ * @property {boolean} [opaque]
  * @property {string | URL} [origin]
- * @property {boolean} [requestCreated]
- * @property {DatadogSpan} [span]
+ * @property {DispatchContext} dispatchContext
+ * @property {boolean} [hasUpgradeHook]
+ * @property {RequestContext} [requestContext]
  * @typedef {object} NativeRequest
  * @property {string | URL} [origin]
  * @property {string} path
  * @property {string} method
+ * @property {string} [upgrade]
  * @property {unknown} [headers]
  * @property {(name: string, value: unknown) => void} [addHeader]
+ * @typedef {object} RequestContext
+ * @property {boolean} finished
+ * @property {boolean} hasUpgradeHook
+ * @property {NativeRequest} request
+ * @property {DatadogSpan} span
  * @typedef {object} NativeResponseMessage
  * @property {NativeRequest} request
  * @property {{ headers: unknown, statusCode: number }} response
@@ -66,7 +67,7 @@ const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
  * }} ServiceNameOptions
  */
 
-/** @type {WeakMap<NativeRequest, { dispatchContext?: DispatchContext, span: DatadogSpan }>} */
+/** @type {WeakMap<NativeRequest, RequestContext>} */
 const requestContexts = new WeakMap()
 /** @type {WeakMap<Store, DispatchContext>} */
 const dispatchContexts = new WeakMap()
@@ -87,6 +88,7 @@ class UndiciPlugin extends HttpClientPlugin {
     super(tracer, tracerConfig)
 
     this.addSub('undici:request:create', this.#onNativeRequestCreate.bind(this))
+    this.addSub('undici:request:bodySent', this.#onNativeRequestBodySent.bind(this))
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
@@ -103,6 +105,7 @@ class UndiciPlugin extends HttpClientPlugin {
    * @param {DispatchContext} ctx
    */
   bindStart (ctx) {
+    ctx.dispatchContext = ctx
     const parentStore = getStore()
     if (parentStore && (legacyFetchStores.has(parentStore) || nodeFetchStores.has(parentStore))) {
       ctx.parentStore = parentStore
@@ -110,24 +113,19 @@ class UndiciPlugin extends HttpClientPlugin {
       return parentStore
     }
 
-    const options = /** @type {DispatchOptions | undefined} */ (
-      ctx.arguments?.[0] || ctx.options
-    )
     const activeContext = parentStore && dispatchContexts.get(parentStore)
-    if (activeContext && activeContext.options === options && !activeContext.requestCreated) {
+    if (activeContext?.opaque && !activeContext.hasUpgradeHook && !activeContext.requestContext) {
       ctx.parentStore = parentStore
-      ctx.currentStore = /** @type {SpanStore} */ (parentStore)
+      ctx.currentStore = parentStore
+      ctx.dispatchContext = activeContext
+      if (!ctx.opaque) activeContext.hasUpgradeHook = true
+      if (ctx.origin !== undefined) activeContext.origin = ctx.origin
       return parentStore
     }
 
-    if (typeof options?.method !== 'string') return parentStore
-
-    const method = options.method.toUpperCase()
-    const span = this.#startRequestSpan(method, undefined, ctx)
-
-    ctx.span = span
-    ctx.options = options
-    ctx.origin = options.origin ?? ctx.origin
+    ctx.parentStore = parentStore
+    ctx.currentStore = { ...parentStore }
+    ctx.hasUpgradeHook = !ctx.opaque
     dispatchContexts.set(ctx.currentStore, ctx)
 
     return ctx.currentStore
@@ -136,9 +134,8 @@ class UndiciPlugin extends HttpClientPlugin {
   /**
    * @param {string} method
    * @param {DatadogSpan | null | undefined} childOf
-   * @param {DispatchContext | false} enterOrContext
    */
-  #startRequestSpan (method, childOf, enterOrContext) {
+  #startRequestSpan (method, childOf) {
     return this.startSpan(this.operationName(), {
       childOf,
       meta: {
@@ -147,7 +144,7 @@ class UndiciPlugin extends HttpClientPlugin {
       },
       resource: method,
       type: 'http',
-    }, enterOrContext)
+    }, false)
   }
 
   /**
@@ -165,40 +162,15 @@ class UndiciPlugin extends HttpClientPlugin {
    */
   #onDispatchError (message) {
     const ctx = /** @type {DispatchContext} */ (message)
-    this.#finishDispatchSpan(ctx)
-  }
+    const dispatchContext = ctx.dispatchContext
 
-  /**
-   * @param {DispatchContext} ctx
-   */
-  end (ctx) {
-    if (ctx.span) {
-      dispatchContexts.delete(ctx.currentStore)
-    }
-    if (!ctx.requestCreated) {
-      this.#finishDispatchSpan(ctx)
-    }
-  }
+    dispatchContexts.delete(dispatchContext.currentStore)
+    const requestContext = dispatchContext.requestContext
+    if (!requestContext) return
 
-  /**
-   * @param {DispatchContext} ctx
-   */
-  #finishDispatchSpan (ctx) {
-    if (ctx.finished || !ctx.span) return
-
-    const span = ctx.span
-    if (!ctx.requestCreated) {
-      /** @type {ServiceNameOptions} */
-      const serviceNameOptions = { pluginConfig: this.config, sessionDetails: {} }
-      const service = this.serviceName(serviceNameOptions)
-      this.setServiceName(span, service.name)
-      if (service.source !== undefined) {
-        span.setTag(SVC_SRC_KEY, service.source)
-      }
-    }
-    this.config.hooks.request(span, null, null)
-    span.finish()
-    ctx.finished = true
+    dispatchContext.requestContext = undefined
+    requestContexts.delete(requestContext.request)
+    this.#finishRequest(requestContext, ctx.error)
   }
 
   /**
@@ -231,9 +203,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
-    const span = dispatchContext
-      ? dispatchContext.currentStore.span
-      : this.#startRequestSpan(method, store && allowed ? store.span : null, false)
+    const span = this.#startRequestSpan(method, store && allowed ? store.span : null)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     /** @type {ServiceNameOptions} */
     const serviceNameOptions = { pluginConfig: this.config, sessionDetails: { host: hostname, port } }
@@ -266,13 +236,30 @@ class UndiciPlugin extends HttpClientPlugin {
       }
     }
 
-    requestContexts.set(request, {
-      dispatchContext,
+    const requestContext = {
+      finished: false,
+      hasUpgradeHook: dispatchContext?.hasUpgradeHook === true,
+      request,
       span,
-    })
-    if (dispatchContext) {
-      dispatchContext.requestCreated = true
     }
+    requestContexts.set(request, requestContext)
+    if (dispatchContext) {
+      dispatchContext.requestContext = requestContext
+      dispatchContexts.delete(dispatchContext.currentStore)
+      // The enclosing dispatch store restores the pending context when Request construction returns.
+      legacyStorage.enterWith({ ...store, span })
+    }
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestBodySent (message) {
+    const { request } = /** @type {{ request: NativeRequest }} */ (message)
+    const ctx = requestContexts.get(request)
+    if (!ctx || ctx.hasUpgradeHook || (request.method !== 'CONNECT' && !request.upgrade)) return
+
+    this.#finishNativeRequest(request)
   }
 
   /**
@@ -330,13 +317,22 @@ class UndiciPlugin extends HttpClientPlugin {
     const ctx = requestContexts.get(request)
     if (!ctx) return
 
-    const { dispatchContext, span } = ctx
     requestContexts.delete(request)
-    if (dispatchContext) {
-      dispatchContext.finished = true
-    }
+    this.#finishRequest(ctx, error)
+  }
 
-    if (error && error.name !== 'AbortError') {
+  /**
+   * @param {RequestContext} ctx
+   * @param {unknown} [error]
+   */
+  #finishRequest (ctx, error) {
+    if (ctx.finished) return
+    ctx.finished = true
+
+    const { span } = ctx
+    const errorName = /** @type {{ name?: string } | undefined} */ (error)?.name
+
+    if (error && errorName !== 'AbortError') {
       span.setTag('error', error)
     }
 

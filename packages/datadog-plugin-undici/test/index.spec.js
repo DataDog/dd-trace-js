@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
+const { channel } = require('node:diagnostics_channel')
 const { once } = require('node:events')
 const { finished } = require('node:stream/promises')
 const { promisify } = require('node:util')
@@ -46,6 +47,26 @@ function findErrorInCauseChain (error, targetErrorType) {
 }
 
 /**
+ * @param {(value?: unknown) => void} resolve
+ * @param {(reason?: unknown) => void} reject
+ * @returns {object}
+ */
+function createDispatchHandler (resolve, reject) {
+  return {
+    onConnect: () => {},
+    onError: reject,
+    onHeaders: () => true,
+    onData: () => {},
+    onComplete: resolve,
+    onRequestStart: () => {},
+    onResponseError: (_controller, error) => reject(error),
+    onResponseStart: controller => controller.resume(),
+    onResponseData: () => {},
+    onResponseEnd: () => resolve(),
+  }
+}
+
+/**
  * @param {NodeJS.ProcessEnv} [overrides]
  */
 async function runDefaultDispatcherRetentionFixture (overrides = {}) {
@@ -67,7 +88,7 @@ describe('Plugin', () => {
   let appListener
   let tracer
 
-  it('traces the preexisting default dispatcher without retaining finished spans', async function () {
+  it('traces the preexisting default dispatcher with bounded finished-span retention', async function () {
     this.timeout(30000)
     await runDefaultDispatcherRetentionFixture()
   })
@@ -80,6 +101,11 @@ describe('Plugin', () => {
   it('wraps a foreign dispatcher installed after npm Undici loads', async function () {
     this.timeout(30000)
     await runDefaultDispatcherRetentionFixture({ FOREIGN_GLOBAL_DISPATCHER: 'true' })
+  })
+
+  it('finishes CONNECT through the preexisting global dispatcher', async function () {
+    this.timeout(30000)
+    await runDefaultDispatcherRetentionFixture({ CONNECT_GLOBAL_DISPATCHER: 'true' })
   })
 
   it('keeps foreign dispatcher instrumentation disabled without subscribers', async function () {
@@ -666,12 +692,68 @@ describe('Plugin', () => {
             assert.strictEqual(scope.active(), null)
           })
 
-          it('finishes the request span when dispatch fails before request creation', async () => {
+          it('does not read dispatch options before Undici creates the request', async () => {
+            const app = express()
+            app.get('/user', respondOk)
+            const port = await listen(app)
+            const client = new fetch.Client(`http://localhost:${port}`)
+            let methodReads = 0
+            const requestPromise = new Promise((resolve, reject) => {
+              client.dispatch({
+                path: '/user',
+                get method () {
+                  methodReads++
+                  if (methodReads > 1) throw new Error('method was read more than once')
+                  return 'GET'
+                },
+              }, createDispatchHandler(resolve, reject))
+            })
+
+            await Promise.all([
+              agent.assertSomeTraces(assertSingleUndiciSpan),
+              requestPromise,
+            ])
+            assert.strictEqual(methodReads, 1)
+            await client.close()
+          })
+
+          it('does not read the request origin before Undici uses it', async () => {
+            const app = express()
+            app.get('/user', respondOk)
+            const port = await listen(app)
+            const origin = `http://localhost:${port}`
+            const client = new fetch.Client(origin)
+            let originReads = 0
+            const requestPromise = new Promise((resolve, reject) => {
+              client.dispatch({
+                path: '/user',
+                method: 'GET',
+                get origin () {
+                  originReads++
+                  return origin
+                },
+              }, createDispatchHandler(resolve, reject))
+            })
+
+            await Promise.all([
+              agent.assertSomeTraces(assertSingleUndiciSpan),
+              requestPromise,
+            ])
+            const expectedOriginReads = satisfies(resolvedVersion, '>4.7.0 <7.0.0') ? 1 : 0
+            assert.strictEqual(originReads, expectedOriginReads)
+            await client.close()
+          })
+
+          it('traces invalid methods only when Undici creates a request', async () => {
             const client = new fetch.Client('http://localhost')
-            const tracesPromise = agent.assertSomeTraces(traces => {
-              assertSingleUndiciSpan(traces)
-              assert.strictEqual(traces[0][0].error, 1)
-            }, { timeoutMs: 3000 })
+            const tracesPromise = satisfies(resolvedVersion, '<5.1.0')
+              ? agent.assertSomeTraces(traces => {
+                assertSingleUndiciSpan(traces)
+                assert.strictEqual(traces[0][0].error, 1)
+              })
+              : agent.assertNoTraces(() => {
+                throw new Error('A dispatch without a request should not be traced.')
+              }, { timeoutMs: 100 })
             let handledError
             let resolveHandledError
             const handledErrorPromise = new Promise(resolve => {
@@ -703,18 +785,16 @@ describe('Plugin', () => {
             await Promise.all([tracesPromise, client.close()])
           })
 
-          it('tags synchronous dispatch failures before request creation', async function () {
+          it('does not trace synchronous failures before request creation', async function () {
             if (!satisfies(resolvedVersion, '<5.0.0')) {
               this.skip()
               return
             }
 
             const client = new fetch.Client('http://localhost')
-            const tracesPromise = agent.assertSomeTraces(traces => {
-              assertSingleUndiciSpan(traces)
-              assert.strictEqual(traces[0][0].error, 1)
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'InvalidArgumentError')
-            })
+            const noTracesPromise = agent.assertNoTraces(() => {
+              throw new Error('A dispatch without a request should not be traced.')
+            }, { timeoutMs: 100 })
 
             assert.throws(
               () => client.dispatch({ path: '/', method: 'GET' }),
@@ -722,7 +802,7 @@ describe('Plugin', () => {
             )
             assert.strictEqual(tracer.scope().active(), null)
 
-            await Promise.all([tracesPromise, client.close()])
+            await Promise.all([noTracesPromise, client.close()])
           })
 
           for (const { description, options, message } of [
@@ -1045,6 +1125,65 @@ describe('Plugin', () => {
             parent.finish()
             await tracesPromise
           })
+
+          it('keeps reentrant requests separate before the outer request is created', async () => {
+            const app = express()
+            app.get('/user', respondOk)
+            const port = await listen(app)
+            const origin = `http://localhost:${port}`
+            const outerClient = new fetch.Client(origin)
+            const nestedClient = new fetch.Client(origin)
+            const parent = tracer.startSpan('parent')
+            const scope = tracer.scope()
+            let nestedRequestPromise = Promise.resolve()
+            let nestedRequestStarted = false
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces.length, 1)
+              assert.strictEqual(traces[0].length, 5)
+
+              const parentSpan = traces[0].find(span => span.name === 'parent')
+              const requestSpans = traces[0].filter(span => span.meta.component === 'undici')
+              const connectSpans = traces[0].filter(span => span.name === 'tcp.connect')
+              assert.ok(parentSpan)
+              assert.strictEqual(requestSpans.length, 2)
+              assert.strictEqual(connectSpans.length, 2)
+
+              const requestSpanIds = new Set()
+              for (const requestSpan of requestSpans) {
+                assert.strictEqual(requestSpan.parent_id.toString(), parentSpan.span_id.toString())
+                requestSpanIds.add(requestSpan.span_id.toString())
+              }
+              for (const connectSpan of connectSpans) {
+                assert.ok(requestSpanIds.has(connectSpan.parent_id.toString()))
+              }
+            })
+
+            await scope.activate(parent, async () => {
+              const outerRequestPromise = new Promise((resolve, reject) => {
+                outerClient.dispatch({
+                  path: '/user',
+                  get method () {
+                    if (!nestedRequestStarted) {
+                      nestedRequestStarted = true
+                      nestedRequestPromise = new Promise((resolve, reject) => {
+                        nestedClient.dispatch(
+                          { path: '/user', method: 'GET' },
+                          createDispatchHandler(resolve, reject)
+                        )
+                      })
+                    }
+                    return 'GET'
+                  },
+                }, createDispatchHandler(resolve, reject))
+              })
+
+              await Promise.all([outerRequestPromise, nestedRequestPromise])
+              assert.strictEqual(scope.active(), parent)
+            })
+
+            parent.finish()
+            await Promise.all([tracesPromise, outerClient.close(), nestedClient.close()])
+          })
         })
       }
 
@@ -1231,11 +1370,42 @@ describe('Plugin', () => {
             fetch.fetch(`http://localhost:${port}/users`).catch(() => {})
           })
         })
+
+        it('keeps the parent trace recording for a blocklisted request', async () => {
+          const app = express()
+          app.get('/user', respondOk)
+          const port = await listen(app)
+          const parent = tracer.startSpan('parent')
+          const tracesPromise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces.length, 1)
+            assert.strictEqual(traces[0].length, 2)
+            assert.ok(traces[0].some(span => span.name === 'parent'))
+            assert.ok(traces[0].some(span => span.name === 'sibling'))
+            assert.ok(!traces[0].some(span => span.meta.component === 'undici'))
+          })
+
+          await tracer.scope().activate(parent, async () => {
+            await requestAndDrain(`http://localhost:${port}/user`)
+            const sibling = tracer.startSpan('sibling', { childOf: parent })
+            sibling.finish()
+          })
+          parent.finish()
+
+          await tracesPromise
+        })
       })
 
       describe('with custom dispatcher', () => {
+        let requestHookCalls
+
         beforeEach(() => {
+          requestHookCalls = 0
           return agent.load('undici', {
+            hooks: {
+              request: () => {
+                requestHookCalls++
+              },
+            },
             service: 'test',
           })
             .then(() => {
@@ -1288,6 +1458,78 @@ describe('Plugin', () => {
               assert.strictEqual(body, 'OK')
             }).catch(done)
           })
+        })
+
+        it('finishes when a foreign dispatcher throws after creating the request', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+            this.skip()
+            return
+          }
+
+          const app = express()
+          app.get('/user', respondOk)
+          const port = await listen(app)
+          const dispatcher = fetch.getGlobalDispatcher()
+          fetch.setGlobalDispatcher({
+            dispatch (options, handler) {
+              dispatcher.dispatch({ ...options }, handler)
+              throw new Error('dispatch failed after creating the request')
+            },
+          })
+          const tracesPromise = agent.assertSomeTraces(traces => {
+            assertSingleUndiciSpan(traces)
+            assert.strictEqual(traces[0][0].error, 1)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'dispatch failed after creating the request')
+          })
+
+          await assert.rejects(
+            fetch.request(`http://localhost:${port}/user`),
+            { message: 'dispatch failed after creating the request' }
+          )
+          await tracesPromise
+        })
+
+        it('finishes once when a native request error precedes a foreign dispatch error', async function () {
+          if (!satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')) {
+            this.skip()
+            return
+          }
+
+          const app = express()
+          app.get('/user', respondOk)
+          const port = await listen(app)
+          const dispatcher = fetch.getGlobalDispatcher()
+          const requestCreateChannel = channel('undici:request:create')
+          let nativeRequest
+          const onRequestCreate = message => {
+            nativeRequest = message.request
+          }
+          requestCreateChannel.subscribe(onRequestCreate)
+          fetch.setGlobalDispatcher({
+            dispatch (options, handler) {
+              dispatcher.dispatch({ ...options }, handler)
+              assert.ok(nativeRequest)
+              const error = new Error('native request failed before dispatch')
+              const failRequest = nativeRequest.onError || nativeRequest.onResponseError
+              failRequest.call(nativeRequest, error)
+              throw error
+            },
+          })
+          const tracesPromise = agent.assertSomeTraces(assertSingleUndiciSpan)
+
+          try {
+            await Promise.all([
+              assert.rejects(
+                fetch.request(`http://localhost:${port}/user`),
+                { message: 'native request failed before dispatch' }
+              ),
+              tracesPromise,
+            ])
+          } finally {
+            requestCreateChannel.unsubscribe(onRequestCreate)
+          }
+
+          assert.strictEqual(requestHookCalls, 1)
         })
       })
 
