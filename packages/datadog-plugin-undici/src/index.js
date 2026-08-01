@@ -24,13 +24,17 @@ const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
  * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
  * @typedef {Record<string, unknown> & { span?: DatadogSpan }} Store
  * @typedef {Store & { span: DatadogSpan }} SpanStore
+ * @typedef {object} DispatchOptions
+ * @property {string} [method]
+ * @property {string | URL} [origin]
+ * @property {string} [path]
  * @typedef {object} DispatchContext
- * @property {Array<{ method: string, origin?: string | URL, path?: string }>} [arguments]
+ * @property {[DispatchOptions | undefined, (object | undefined)?]} [arguments]
  * @property {SpanStore} currentStore
  * @property {Store} [parentStore]
  * @property {unknown} [error]
  * @property {boolean} [finished]
- * @property {{ method: string, origin?: string | URL, path?: string }} [options]
+ * @property {DispatchOptions} [options]
  * @property {string | URL} [origin]
  * @property {boolean} [requestCreated]
  * @property {DatadogSpan} [span]
@@ -106,7 +110,7 @@ class UndiciPlugin extends HttpClientPlugin {
       return parentStore
     }
 
-    const options = /** @type {{ method: string, origin?: string | URL, path?: string }} */ (
+    const options = /** @type {DispatchOptions | undefined} */ (
       ctx.arguments?.[0] || ctx.options
     )
     const activeContext = parentStore && dispatchContexts.get(parentStore)
@@ -116,12 +120,14 @@ class UndiciPlugin extends HttpClientPlugin {
       return parentStore
     }
 
+    if (typeof options?.method !== 'string') return parentStore
+
     const method = options.method.toUpperCase()
     const span = this.#startRequestSpan(method, undefined, ctx)
 
     ctx.span = span
     ctx.options = options
-    ctx.origin = options.origin
+    ctx.origin = options.origin ?? ctx.origin
     dispatchContexts.set(ctx.currentStore, ctx)
 
     return ctx.currentStore
@@ -204,7 +210,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const dispatchContext = store && dispatchContexts.get(store)
     if (!dispatchContext && store && (legacyFetchStores.has(store) || nodeFetchStores.has(store))) return
 
-    const origin = request.origin || dispatchContext?.origin || ''
+    const origin = request.origin ?? dispatchContext?.origin
     const path = request.path
     const method = request.method.toUpperCase()
 

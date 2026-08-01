@@ -6,6 +6,7 @@ const http = require('node:http')
 const { promisify } = require('node:util')
 
 const { channel } = require('dc-polyfill')
+const semver = require('semver')
 
 const gc = global.gc
 if (typeof gc !== 'function') {
@@ -71,7 +72,7 @@ if (process.env.FROZEN_GLOBAL_DISPATCHER === 'true') {
   })
 }
 
-const undici = require('../../../../versions/undici').get()
+const undici = loadCompatibleUndici()
 if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') {
   assert.strictEqual(throwingDispatchReads, 1)
   globalThis[dispatcherSymbol] = originalGlobalDispatcher
@@ -91,6 +92,41 @@ const server = http.createServer((_request, response) => response.end('ok'))
 async function requestAndConsume (url) {
   const { body } = await undici.request(url)
   await body.text()
+}
+
+/**
+ * @returns {import('undici')}
+ */
+function loadCompatibleUndici () {
+  if (semver.satisfies(process.versions.node, '>=22.19.0')) {
+    return require('../../../../versions/undici@8').get()
+  }
+  if (semver.satisfies(process.versions.node, '>=20.18.1')) {
+    return require('../../../../versions/undici@7').get()
+  }
+  if (semver.satisfies(process.versions.node, '>=18.17.0')) {
+    return require('../../../../versions/undici@6').get()
+  }
+  return require('../../../../versions/undici@5').get()
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function assertRetainedSpanLimit () {
+  for (let cycle = 0; cycle < 10; cycle++) {
+    gc?.()
+    await new Promise(resolve => setImmediate(resolve))
+  }
+
+  let retainedSpanCount = 0
+  for (const spanReference of finishedSpans) {
+    if (spanReference.deref()) retainedSpanCount++
+  }
+  assert.ok(
+    retainedSpanCount <= RETAINED_SPAN_LIMIT,
+    `${retainedSpanCount} of ${finishedSpans.length} finished Undici spans remain reachable`
+  )
 }
 
 async function main () {
@@ -117,6 +153,8 @@ async function main () {
     assert.strictEqual(tracer.scope().active(), null)
   }
 
+  await assertRetainedSpanLimit()
+
   await Promise.all([
     undici.getGlobalDispatcher().close(),
     promisify(server.close.bind(server))(),
@@ -129,19 +167,7 @@ async function main () {
     assert.ok(tcpParentIds.some(parentId => requestSpanIds.has(parentId)))
   }
 
-  for (let cycle = 0; cycle < 10; cycle++) {
-    gc?.()
-    await new Promise(resolve => setImmediate(resolve))
-  }
-
-  let retainedSpanCount = 0
-  for (const spanReference of finishedSpans) {
-    if (spanReference.deref()) retainedSpanCount++
-  }
-  assert.ok(
-    retainedSpanCount <= RETAINED_SPAN_LIMIT,
-    `${retainedSpanCount} of ${finishedSpans.length} finished Undici spans remain reachable`
-  )
+  await assertRetainedSpanLimit()
 }
 
 main().catch(error => {

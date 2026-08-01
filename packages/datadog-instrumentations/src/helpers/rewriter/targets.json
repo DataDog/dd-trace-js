@@ -58,5 +58,8 @@
   "mercurius/index.js": "mercurius",
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
-  "playwright/lib/runner/index.js": "playwright"
+  "playwright/lib/runner/index.js": "playwright",
+  "undici/lib/client.js": "undici",
+  "undici/lib/core/request.js": "undici",
+  "undici/lib/dispatcher/client.js": "undici"
 }

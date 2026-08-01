@@ -17,7 +17,7 @@ const { parse, query } = require('./compiler')
 const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
 const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
-module.exports = { awaitContextCallback, syncNoSubscriberFastPath, waitForAsyncEnd }
+module.exports = { awaitContextCallback, syncNoSubscriberFastPath, undiciClientOrigin, waitForAsyncEnd }
 
 /**
  * Awaits an optional context callback before continuing through a matched conditional branch.
@@ -163,6 +163,27 @@ function findVariableDeclaration (statements, name) {
     }
   }
   return declaration
+}
+
+/**
+ * Preserves the Client origin in the generated context for Undici 4, whose
+ * diagnostic Request object does not expose it.
+ *
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @returns {void}
+ */
+function undiciClientOrigin (_state, node) {
+  const contextDeclaration = findVariableDeclaration(node.body.body, '__apm$ctx')
+  const context = contextDeclaration?.declarations[0].init
+  assert(context?.type === 'ObjectExpression', 'undici origin: context not found')
+
+  const originProperty = query(
+    parse('const context = { origin: this[kUrl].origin }'),
+    'Property[key.name="origin"]'
+  )[0]
+  assert(originProperty?.type === 'Property', 'undici origin: property not found')
+  context.properties.push(originProperty)
 }
 
 /**

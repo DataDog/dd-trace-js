@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
-const { EventEmitter, once } = require('node:events')
+const { once } = require('node:events')
 const { finished } = require('node:stream/promises')
 const { promisify } = require('node:util')
 
@@ -634,6 +634,38 @@ describe('Plugin', () => {
             }
           })
 
+          it('uses the configured origin for direct Client requests', async () => {
+            const app = express()
+            app.get('/user', respondOk)
+            const port = await listen(app)
+            const origin = `http://localhost:${port}`
+            const client = new fetch.Client(origin)
+            const parent = tracer.startSpan('parent')
+            const scope = tracer.scope()
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces.length, 1)
+              assert.strictEqual(traces[0].length, 2)
+
+              const parentSpan = traces[0].find(span => span.name === 'parent')
+              const requestSpan = traces[0].find(span => span.meta.component === 'undici')
+              assert.ok(parentSpan)
+              assert.ok(requestSpan)
+              assert.strictEqual(requestSpan.parent_id.toString(), parentSpan.span_id.toString())
+              assert.strictEqual(requestSpan.meta['http.url'], `${origin}/user`)
+            })
+
+            await scope.activate(parent, async () => {
+              const { body } = await client.request({ method: 'GET', path: '/user' })
+              body.resume()
+              await finished(body)
+              assert.strictEqual(scope.active(), parent)
+            })
+
+            parent.finish()
+            await Promise.all([tracesPromise, client.close()])
+            assert.strictEqual(scope.active(), null)
+          })
+
           it('finishes the request span when dispatch fails before request creation', async () => {
             const client = new fetch.Client('http://localhost')
             const tracesPromise = agent.assertSomeTraces(traces => {
@@ -670,6 +702,74 @@ describe('Plugin', () => {
 
             await Promise.all([tracesPromise, client.close()])
           })
+
+          it('tags synchronous dispatch failures before request creation', async function () {
+            if (!satisfies(resolvedVersion, '<5.0.0')) {
+              this.skip()
+              return
+            }
+
+            const client = new fetch.Client('http://localhost')
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              assertSingleUndiciSpan(traces)
+              assert.strictEqual(traces[0][0].error, 1)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'InvalidArgumentError')
+            })
+
+            assert.throws(
+              () => client.dispatch({ path: '/', method: 'GET' }),
+              { name: 'InvalidArgumentError', message: /handler must be an object/ }
+            )
+            assert.strictEqual(tracer.scope().active(), null)
+
+            await Promise.all([tracesPromise, client.close()])
+          })
+
+          for (const { description, options, message } of [
+            {
+              description: 'missing options',
+              options: undefined,
+              message: /opts must be an object/,
+            },
+            {
+              description: 'missing method',
+              options: { path: '/' },
+              message: /method must be a string/,
+            },
+          ]) {
+            it(`preserves invalid dispatch errors for ${description}`, async () => {
+              const client = new fetch.Client('http://localhost')
+              const noTracesPromise = agent.assertNoTraces(() => {
+                throw new Error('An invalid dispatch should not be traced.')
+              }, { timeoutMs: 100 })
+              let resolveHandledError
+              const handledErrorPromise = new Promise(resolve => {
+                resolveHandledError = resolve
+              })
+              const handler = {
+                onConnect: () => {},
+                onError: resolveHandledError,
+                onHeaders: () => true,
+                onData: () => {},
+                onComplete: () => {},
+              }
+
+              let thrownError
+
+              try {
+                client.dispatch(options, handler)
+              } catch (error) {
+                thrownError = error
+              }
+              const error = thrownError || await handledErrorPromise
+
+              assert.strictEqual(error.name, 'InvalidArgumentError')
+              assert.match(error.message, message)
+              assert.strictEqual(tracer.scope().active(), null)
+
+              await Promise.all([noTracesPromise, client.close()])
+            })
+          }
 
           it('finishes the request span when the server upgrades the connection', async () => {
             appListener = require('node:http').createServer()
@@ -888,12 +988,10 @@ describe('Plugin', () => {
 
       if (semver.satisfies(resolvedVersion, '>=4.7.0')) {
         describe('with Node fetch instrumentation', () => {
-          beforeEach(() => {
-            return agent.load(['undici', 'fetch'])
-              .then(() => {
-                express = require('express')
-                fetch = loadUndici()
-              })
+          beforeEach(async () => {
+            await agent.load(['undici', 'fetch'])
+            express = require('express')
+            fetch = loadUndici()
           })
 
           it('keeps npm Undici and Node global fetch ownership separate', async () => {
@@ -918,12 +1016,10 @@ describe('Plugin', () => {
         })
 
         describe('with net instrumentation', () => {
-          beforeEach(() => {
-            return agent.load(['undici', 'net'])
-              .then(() => {
-                express = require('express')
-                fetch = loadUndici()
-              })
+          beforeEach(async () => {
+            await agent.load(['undici', 'net'])
+            express = require('express')
+            fetch = loadUndici()
           })
 
           it('parents tcp.connect to the request span under the manual parent', async () => {
@@ -1234,29 +1330,11 @@ describe('Plugin', () => {
           app.get('/data', (req, res) => res.status(200).send('OK'))
 
           const downstreamPort = await listen(app)
-          const proxyEvents = new EventEmitter()
-          const tunnelConnected = once(proxyEvents, 'connect')
-          const proxyResponseReleased = once(proxyEvents, 'response')
           const proxy = http.createServer((_request, response) => {
             response.writeHead(405)
             response.end()
           })
-          proxy.once('connect', (request, clientSocket, head) => {
-            assert.ok(request.url)
-            const [hostname, portString] = request.url.split(':')
-            const upstream = net.connect(Number.parseInt(portString, 10) || 80, hostname)
-            upstream.once('connect', async () => {
-              proxyEvents.emit('connect')
-              await proxyResponseReleased
-              clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-              upstream.write(head)
-              upstream.pipe(clientSocket)
-              clientSocket.pipe(upstream)
-            })
-            upstream.once('error', () => clientSocket.end())
-            clientSocket.once('error', () => upstream.end())
-          })
-
+          const proxyConnection = once(proxy, 'connect')
           proxy.listen(0, 'localhost')
           await once(proxy, 'listening')
           proxyListener = proxy
@@ -1294,9 +1372,19 @@ describe('Plugin', () => {
             }
           })()
 
-          await tunnelConnected
+          const [request, clientSocket, head] = await proxyConnection
+          assert.ok(request.url)
+          const [hostname, portString] = request.url.split(':')
+          const upstream = net.connect(Number.parseInt(portString, 10) || 80, hostname)
+          await once(upstream, 'connect')
           assert.strictEqual(requestHookCalls, 0)
-          proxyEvents.emit('response')
+
+          upstream.once('error', () => clientSocket.end())
+          clientSocket.once('error', () => upstream.end())
+          clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+          upstream.write(head)
+          upstream.pipe(clientSocket)
+          clientSocket.pipe(upstream)
 
           await Promise.all([tracesPromise, requestPromise])
           assert.strictEqual(requestHookCalls, 2)
