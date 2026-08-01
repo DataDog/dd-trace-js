@@ -218,7 +218,9 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
-        this._modules.appsec?.enableRemoteConfig(rc, config)
+        for (const feature of Object.values(optionalFeatures)) {
+          this._modules[feature.name].enableRemoteConfig(rc, config)
+        }
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
