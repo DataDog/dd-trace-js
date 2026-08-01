@@ -12,7 +12,8 @@ Use the APM skill for shared instrumentation/plugin mechanics. Keep only the ser
 ownership, runtime lifecycle, trigger context, and flush behavior. A library called inside a function is ordinary
 APM.
 
-Run `npm run verify:integration-skills` before relying on stored paths or contracts.
+Run `npm run verify:integration-skills` after checkout, rebase, or skill edits. For a plugin-backed runtime, derive a
+fresh map with `npm run inspect:integration -- <id> --mode serverless [--package <npm-name>] [--traits <list>]`.
 
 ## Classify the owner
 
@@ -60,3 +61,6 @@ provider-owned behavior such as freeze timing or injected metadata.
 Read [Testing serverless integrations](references/testing-guide.md). Exercise the provider runtime or emulator, not
 a direct call to an exported helper. Cover supported success/error/completion paths, disabled instrumentation,
 parenting, carriers/links, HTTP behavior where applicable, duplicate wrapping, and exactly-once finish.
+
+For a review, return ownership and lifecycle findings only. For a design, return the owner, boundary, real test
+path, and unresolved provider evidence; omit a workflow recap.

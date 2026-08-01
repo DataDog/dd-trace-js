@@ -15,21 +15,24 @@ diagnostic-channel context. Keep span naming, tags, parenting, errors, and compl
 Use `serverless-integrations` for a cloud-function invocation and the LLMObs skills for LLMObs spans. Reuse this
 skill only for their shared instrumentation and plugin mechanics.
 
-## Work from current source
+## Route and bound evidence
 
-Treat every remembered path, signature, version, and reference plugin as a hypothesis. Before editing:
+Choose one mode before reading: **add** follows source → hook → plugin → full registration ledger → proof; **review**
+reads the diff and only contracts it invokes; **debug/fix** reproduces → finds the owner → covers siblings; hand a
+cloud-function invocation to `serverless-integrations`.
 
-1. Read the exact source function and call path in the version under test; compare range boundaries when their hook
-    path or payload differs.
-2. Trace the public call to the source function in every distinct CJS and ESM build.
-3. Record its arguments, receiver, return identity, errors, and actual completion forms.
-4. Search every subscriber to any channel being changed; tracing, AppSec, IAST, and telemetry can require different
-    cardinality or payload identity.
-5. Read the current hook helper, selected plugin base, closest instrumentation/plugin pair, its tests, and its CI
-    job. Copy structure only after verifying the same contract.
+Run `npm run verify:integration-skills` after checkout, rebase, or skill edits; derive a fresh task map with
+`npm run inspect:integration -- <id> --mode <add|review|debug> [--package <npm-name>] [--traits <list>]`. Name the
+plugin base (`database`, `cache`, etc.) among traits, plus mechanisms such as `orchestrion`, `callback`, or `cjs-esm`.
+Treat its paths, base signature, channels, registrations, and selected references as a map, not proof.
 
-Run `npm run verify:integration-skills` before relying on this skill. It checks its source contracts and prints
-derived facts such as the vendored transformer version instead of storing them here.
+Read the exact upstream source and public call first; record arguments, receiver, return identity, errors, and
+completion. Compare CJS/ESM builds and version boundaries when they differ. Next read the reported contract and one
+closest reference. Expand only for a named unresolved question; search all channel subscribers only when changing
+that channel or its cardinality.
+
+For a review, return correctness findings only. For a design, return decisions, touched ledgers, tests, and
+unresolved evidence. Omit workflow recaps and consulted-file inventories unless requested.
 
 ## Choose the hook
 
