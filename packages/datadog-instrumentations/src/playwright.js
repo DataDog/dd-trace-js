@@ -66,7 +66,6 @@ const artifactsRecorderScreenshotPathCh =
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
-const efdRetryPolicyByTest = new WeakMap()
 const testToCtx = new WeakMap()
 const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
@@ -213,7 +212,6 @@ function getTestEfdKey (test) {
 
 function markEfdManagedTest (test) {
   test._ddIsEfdManagedTest = true
-  efdRetryPolicyByTest.set(test, earlyFlakeDetectionRetryPolicy)
   efdManagedTestKeys.add(getTestEfdKey(test))
 }
 
@@ -234,14 +232,6 @@ function registerEfdRetryTest (test) {
     retryIndex: test._ddEfdRetryIndex,
     testEfdKey: getTestEfdKey(test),
   })
-}
-
-/**
- * @param {object} test
- * @returns {import('../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy}
- */
-function getTestEfdRetryPolicy (test) {
-  return efdRetryPolicyByTest.get(test) || earlyFlakeDetectionRetryPolicy
 }
 
 /**
@@ -864,7 +854,7 @@ function testEndHandler ({
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
-    const retryCount = getEfdRetryCountForDuration(duration, getTestEfdRetryPolicy(test))
+    const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
     setEfdRetryCountForTest(test, retryCount)
     if (retryCount === 0) {
       efdSlowAbortedTests.add(testEfdKey)
@@ -2131,10 +2121,7 @@ function instrumentWorkerMainMethods (workerMain) {
       const duration = test.results?.at(-1)?.duration > 0
         ? test.results.at(-1).duration
         : performance.now() - test._ddStartTime
-      const retryCount = getEfdRetryCountForDuration(
-        duration,
-        getTestEfdRetryPolicy(test)
-      )
+      const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
       setEfdRetryCountForTest(test, retryCount)
       if (retryCount === 0) {
         efdSlowAbortedTests.add(testEfdKey)
