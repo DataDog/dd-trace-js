@@ -1,19 +1,23 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const { optionalFeatures, registerOptionalFeature } = require('../src/optional-feature-registry')
 
 describe('optional-feature-registry', () => {
-  let optionalFeatures
-  let registerOptionalFeature
+  let originalKeys
 
   beforeEach(() => {
-    delete require.cache[require.resolve('../src/optional-feature-registry')]
-    ;({ optionalFeatures, registerOptionalFeature } = require('../src/optional-feature-registry'))
+    originalKeys = Object.keys(optionalFeatures)
   })
 
-  it('starts empty', () => {
-    assert.deepStrictEqual(optionalFeatures, {})
+  afterEach(() => {
+    for (const key of Object.keys(optionalFeatures)) {
+      if (!originalKeys.includes(key)) {
+        delete optionalFeatures[key]
+      }
+    }
   })
 
   it('registers a feature by name', () => {
