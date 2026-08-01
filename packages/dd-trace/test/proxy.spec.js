@@ -50,6 +50,22 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let originalOptionalFeatureKeys
+
+  // `optionalFeatures` is a process-wide singleton (see optional-feature-registry.js), so the
+  // stub 'appsec'/'iast' features registered below must be removed afterwards or they leak into
+  // any other spec file that runs a real Tracer in the same process.
+  beforeEach(() => {
+    originalOptionalFeatureKeys = Object.keys(optionalFeatureRegistry.optionalFeatures)
+  })
+
+  afterEach(() => {
+    for (const key of Object.keys(optionalFeatureRegistry.optionalFeatures)) {
+      if (!originalOptionalFeatureKeys.includes(key)) {
+        delete optionalFeatureRegistry.optionalFeatures[key]
+      }
+    }
+  })
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
