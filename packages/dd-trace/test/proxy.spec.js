@@ -34,6 +34,7 @@ describe('TracerProxy', () => {
   let log
   let profiler
   let appsec
+  let appsecRemoteConfig
   let aiguard
   let telemetry
   let iast
@@ -191,7 +192,10 @@ describe('TracerProxy', () => {
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy(),
-      enableRemoteConfig: sinon.spy(),
+    }
+
+    appsecRemoteConfig = {
+      enable: sinon.spy(),
     }
 
     aiguard = {
@@ -294,6 +298,7 @@ describe('TracerProxy', () => {
     optionalFeatureRegistry.registerOptionalFeature({
       name: 'appsec',
       factory: () => appsec,
+      remoteConfigFactory: () => appsecRemoteConfig,
     })
 
     optionalFeatureRegistry.registerOptionalFeature({
@@ -687,13 +692,21 @@ describe('TracerProxy', () => {
         config.iast.enabled = true
         config.appsec.enabled = true
 
-        assert.doesNotThrow(() => proxy.init())
+        proxy.init()
       })
 
       it('leaves _modules.rewriter undefined when the rewriter feature was never registered', () => {
         proxy.init()
 
         assert.strictEqual(proxy._modules.rewriter, undefined)
+      })
+
+      it('registers appsec remote config through the optional feature\'s remoteConfigFactory ' +
+        'without requiring its factory', () => {
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(appsecRemoteConfig.enable, rc, config, proxy._modules.appsec)
+        sinon.assert.notCalled(appsec.enable)
       })
 
       it('should not load the profiler when not configured', () => {

@@ -44,8 +44,9 @@ const FEATURE_STATE_LAZY = 1
 const FEATURE_STATE_ACTIVE = 2
 
 class LazyModule {
-  constructor (provider) {
+  constructor (provider, remoteConfigProvider) {
     this.provider = provider
+    this.remoteConfigProvider = remoteConfigProvider
   }
 
   /**
@@ -61,14 +62,15 @@ class LazyModule {
   }
 
   /**
+   * Registers this module's remote-config handler without eagerly loading the module itself
+   * (`this.provider()` runs only later, from this wrapper's own `enable`/`disable`, once
+   * remote config actually toggles the feature on).
+   *
    * @param {object} rc - RemoteConfig instance
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   enableRemoteConfig (rc, config) {
-    // pass `this` through so remote-config-triggered enable/disable still go through this
-    // wrapper's own enable/disable (and their `this.module` caching), matching the behavior
-    // of the direct `appsecRemoteConfig.enable(rc, config, this._modules.appsec)` call this replaces
-    this.provider().enableRemoteConfig(rc, config, this)
+    this.remoteConfigProvider?.().enable(rc, config, this)
   }
 }
 
@@ -131,7 +133,7 @@ class Tracer extends NoopProxy {
     }
 
     for (const feature of Object.values(optionalFeatures)) {
-      this._modules[feature.name] = new LazyModule(feature.factory)
+      this._modules[feature.name] = new LazyModule(feature.factory, feature.remoteConfigFactory)
     }
   }
 
