@@ -5,6 +5,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const assert = require('assert')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
 const experiments = require('./webpack-experiments')
@@ -47,6 +48,25 @@ compiler.run((err, stats) => {
       process.exitCode = 1
       return
     }
+
+    const output = fs.readFileSync(OUTFILE).toString()
+
+    // Package names also appear as inert text inside the bundled package.json metadata
+    // (e.g. optionalDependencies, read by startup-log.js/span_stats.js), so assert on an actual
+    // require() call rather than a bare substring match, matching build-and-test-skip-external.js.
+    //
+    // @datadog/native-appsec is intentionally not asserted here: it remains reachable through
+    // the always-on `tracer.appsec` SDK's coupling to the WAF (appsec/sdk -> appsec/waf), which
+    // is a documented, out-of-scope follow-up for this change.
+    assert(
+      !output.includes('require("@datadog/native-iast-taint-tracking")'),
+      'bundle should not contain a require call to @datadog/native-iast-taint-tracking'
+    )
+    assert(
+      !output.includes('require("@datadog/wasm-js-rewriter")'),
+      'bundle should not contain a require call to @datadog/wasm-js-rewriter'
+    )
+
     console.log('ok')
   } finally {
     fs.rmSync(OUTFILE, { force: true })
