@@ -2,6 +2,7 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 
 const {
   TEST_STATUS,
@@ -404,12 +405,13 @@ class VitestPlugin extends CiPlugin {
       this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = testSessionId && testModuleId
-        ? this.tracer.extract('text_map', {
-          'x-datadog-trace-id': testSessionId,
-          'x-datadog-parent-id': testModuleId,
-        })
-        : undefined
+      let testSessionSpanContext
+      if (testSessionId && testModuleId) {
+        const carrier = /** @type {Record<string, unknown>} */ ({})
+        writeDatadogTraceId(carrier, testSessionId)
+        writeDatadogParentId(carrier, testModuleId)
+        testSessionSpanContext = this.tracer.extract('text_map', carrier)
+      }
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary

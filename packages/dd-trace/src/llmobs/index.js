@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const { readDatadogTags, writeDatadogTags } = require('../carrier')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
@@ -149,7 +150,7 @@ function handleLLMObsInjection ({ carrier }) {
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
-  const existing = carrier['x-datadog-tags']
+  const existing = readDatadogTags(carrier)
   let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
@@ -157,7 +158,7 @@ function handleLLMObsInjection ({ carrier }) {
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
   if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
-  if (tags !== existing) carrier['x-datadog-tags'] = tags
+  if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 
 function handleFlush () {

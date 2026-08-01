@@ -230,4 +230,8 @@ describe('encoding', () => {
     assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
     assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
   })
+
+  it('returns undefined when the carrier has no pathway field', () => {
+    assert.strictEqual(DsmPathwayCodec.decode({}), undefined)
+  })
 })

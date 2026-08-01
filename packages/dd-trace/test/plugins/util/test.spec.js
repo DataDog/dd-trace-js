@@ -158,6 +158,16 @@ describe('RUM test correlation', () => {
       'x-datadog-parent-id': '0000000000000000',
     })
   })
+
+  it('generates a test execution ID when none is preallocated', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }), parentSpan)
+    sinon.assert.calledOnce(extract)
+    assert.match(extract.firstCall.args[1]['x-datadog-trace-id'], /^\d+$/)
+    assert.strictEqual(extract.firstCall.args[1]['x-datadog-parent-id'], '0000000000000000')
+  })
 })
 
 describe('getTestOptimizationRequestResults', () => {

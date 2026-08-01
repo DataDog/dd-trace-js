@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
@@ -230,10 +231,10 @@ class JestPlugin extends CiPlugin {
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': testSessionId,
-        'x-datadog-parent-id': testModuleId,
-      })
+      const carrier = /** @type {Record<string, unknown>} */ ({})
+      writeDatadogTraceId(carrier, testSessionId)
+      writeDatadogParentId(carrier, testModuleId)
+      const testSessionSpanContext = this.tracer.extract('text_map', carrier)
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
