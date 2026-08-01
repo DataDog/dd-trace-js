@@ -1919,16 +1919,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    onlyLatestIt('runs concurrent done-callback retries concurrently', async () => {
+    onlyLatestIt('runs selected concurrent done-callback retries and discards the rest', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-callback-test.js'
       receiver.setKnownTests({ jest: {} })
-      const RETRY_COUNT = 3
+      const SCHEDULED_RETRIES = 3
+      const SELECTED_RETRIES = 2
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': RETRY_COUNT,
+            '5s': SELECTED_RETRIES,
+            '10s': SCHEDULED_RETRIES,
           },
           faulty_session_threshold: 100,
         },
@@ -1943,9 +1945,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .map(event => event.content)
             .filter(test => test.meta[TEST_SUITE] === testSuite)
 
-          assert.strictEqual(tests.length, RETRY_COUNT + 1)
+          assert.strictEqual(tests.length, SELECTED_RETRIES + 1)
           assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
-          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, RETRY_COUNT)
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, SELECTED_RETRIES)
         })
 
       childProcess = exec(
@@ -1954,7 +1956,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            EFD_RETRY_COUNT: String(RETRY_COUNT),
+            EFD_RETRY_COUNT: String(SELECTED_RETRIES),
             TESTS_TO_RUN: 'test-early-flake-detection/concurrent-callback-test',
             SHOULD_CHECK_RESULTS: '1',
           },
@@ -1977,7 +1979,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const focusSkippedName = 'early flake detection focus new test skipped by focus'
       const patternSkippedName = 'early flake detection focus new focused test skipped by pattern'
       const blockSkippedName = 'early flake detection skipped block new test inside a skipped block'
-      receiver.setKnownTests({ jest: { [testSuite]: ['early flake detection focus known focused test'] } })
+      const focusedBlockTestName = 'early flake detection focused block known focused test selected by focused block'
+      receiver.setKnownTests({
+        jest: {
+          [testSuite]: [
+            'early flake detection focus known focused test',
+            focusedBlockTestName,
+          ],
+        },
+      })
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
@@ -1994,7 +2004,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const statusesByName = {}
           for (const { content } of payloads.flatMap(({ payload }) => payload.events)) {
             const testName = content.meta?.[TEST_NAME]
-            if (testName === focusSkippedName || testName === patternSkippedName || testName === blockSkippedName) {
+            if (
+              testName === focusSkippedName ||
+              testName === patternSkippedName ||
+              testName === blockSkippedName ||
+              testName === focusedBlockTestName
+            ) {
               statusesByName[testName] ??= []
               statusesByName[testName].push(content.meta[TEST_STATUS])
             }
@@ -2004,6 +2019,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             [focusSkippedName]: ['skip'],
             [patternSkippedName]: ['skip'],
             [blockSkippedName]: ['skip'],
+            [focusedBlockTestName]: ['pass'],
           })
         })
       const telemetryPromise = receiver
@@ -2022,8 +2038,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           }
           assert.deepStrictEqual(lifecycleCounts, {
-            [TELEMETRY_EVENT_CREATED]: 4,
-            [TELEMETRY_EVENT_FINISHED]: 4,
+            [TELEMETRY_EVENT_CREATED]: 5,
+            [TELEMETRY_EVENT_FINISHED]: 5,
           })
         })
 

@@ -18,6 +18,13 @@ describe('early flake detection focus', () => {
   })
 })
 
+// eslint-disable-next-line mocha/no-exclusive-tests
+describe.only('early flake detection focused block', () => {
+  test('known focused test selected by focused block', () => {
+    expect(3 + 1).toBe(4)
+  })
+})
+
 describe.skip('early flake detection skipped block', () => {
   test('new test inside a skipped block', () => {
     expect(3 + 3).toBe(6)
