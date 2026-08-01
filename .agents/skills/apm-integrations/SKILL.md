@@ -26,22 +26,23 @@ span naming, tags, parenting, errors, and completion. Keep tracer imports out of
 ## Execution sequence
 
 Follow the full sequence for a new APM or plugin-backed integration. Specialized skills use only the shared steps
-their integration needs.
+their integration needs. Use the [new integration guide](references/new-integration-guide.md) for file-by-file
+scaffolds and the final registration checklist.
 
 1. Read the upstream source and trace the public call through every supported build and completion form.
 2. Choose the hook and plugin base, then read their implementations and one or two current integrations of that
-   shape.
+    shape.
 3. Add the instrumentation file and one `helpers/hooks.js` entry per npm package name. The plain form is
-   `() => require('../<name>')`; `{ esmFirst: true, fn }` also hooks files below an ESM package entry point, and
-   `{ serverless: false, fn }` skips hooks that must not load in serverless environments.
+    `() => require('../<name>')`; `{ esmFirst: true, fn }` also hooks files below an ESM package entry point, and
+    `{ serverless: false, fn }` skips hooks that must not load in serverless environments.
 4. For Orchestrion, add its config and register it in `rewriter/instrumentations/index.js`.
 5. Add the plugin package and the runtime getter in `packages/dd-trace/src/plugins/index.js`.
 6. Register operation and service names in `service-naming/schemas/v0/<type>.js` and `v1/<type>.js` when the plugin
-   or its base calls `operationName()` or `serviceName()`.
+    or its base calls `operationName()` or `serviceName()`.
 7. Configure versions and tests through [Testing integrations](references/testing.md).
 8. Add the plugin to `index.d.ts` and `index.d.v5.ts` unless it is v6-only; `docs/API.md` needs both the
-   `Available Plugins` entry and an `<h5 id="<name>"></h5>` anchor, and `docs/test.ts` needs a `tracer.use` call.
-   Add the package to `.github/CODEOWNERS` and the matching CI workflow.
+    `Available Plugins` entry and an `<h5 id="<name>"></h5>` anchor, and `docs/test.ts` needs a `tracer.use` call.
+    Add the package to `.github/CODEOWNERS` and the matching CI workflow.
 9. Run the plugin tests, structural contract, and changed-file coverage commands from the testing reference.
 
 ## Read upstream source first
@@ -97,8 +98,8 @@ Instrumentation determines which events actually fire:
 `bindStart(ctx)` creates the span and returns `ctx.currentStore`. `startSpan(name, options, ctx)` writes both
 `ctx.currentStore` and `ctx.parentStore`, and takes `service`, `resource`, `type`, `kind`, `meta`, `metrics`,
 `component`, `startTime`, and `childOf`, where `childOf: null` forces a root span. Orchestrion supplies
-`ctx.arguments` and `ctx.self`; shimmer instrumentation usually adds named fields. Completion supplies `ctx.result`
-or `ctx.error`.
+`ctx.arguments`; `ctx.self` exists at start for non-arrow targets and is populated only by `end` for arrow targets.
+Shimmer instrumentation usually adds named fields. Completion supplies `ctx.result` or `ctx.error`.
 
 `CachePlugin`, `ProducerPlugin`, and `ConsumerPlugin` override that signature as `startSpan(options, ctx)` and take
 the name from `operationName()` instead, so passing a name to them shifts every argument by one. Read the base
@@ -107,8 +108,8 @@ class before the first call. `operationName()` and `serviceName()` resolve throu
 schema entries before it can start a span.
 
 Finish on the event that carries actual completion. Orchestrion never emits `finish`; promise and callback hooks
-normally complete through `asyncEnd`. `end` fires when the wrapped call returns, so for an async operation it runs
-before the result exists: a handler that finishes spans on `end` keeps the presence check
+normally complete through `asyncEnd`. `end` fires when the wrapped call returns, so for a still-pending async
+operation it runs before the result exists: a handler that finishes spans on `end` keeps the presence check
 (`if (!Object.hasOwn(ctx, 'result') && !Object.hasOwn(ctx, 'error')) return`) or it closes the span early. Never
 drop that guard from an existing plugin.
 
@@ -159,6 +160,8 @@ Plugin
 | No more specific contract | `TracingPlugin` (`dd-trace/src/plugins/tracing`) | `datadog-plugin-child_process` |
 
 The base class is behavior, not taxonomy. Read its implementation and a current subclass before choosing it.
+Use [reference plugins](references/reference-plugins.md) to choose the closest complete instrumentation, plugin,
+and test pair.
 
 ## Minimal plugin shape
 
@@ -195,6 +198,9 @@ Replace `TracingPlugin` with the role-specific base when one applies, and check 
 the span name and `startSpan` signature. Use `asyncEnd` instead of `end` when the instrumentation reports promise or
 callback completion, and add lifecycle overrides only for behavior the base class does not provide.
 
+See [plugin patterns](references/plugin-patterns.md) for the base-specific `startSpan` signatures, lifecycle mapping,
+and `CompositePlugin` shape.
+
 ## Subscriber cardinality
 
 A publish site may serve tracing, AppSec, IAST, telemetry, or other subscribers. A tracing plugin may need one event
@@ -219,3 +225,12 @@ Before moving a publish behind deduplication, caching, depth filtering, or an ea
   whether the hook needs `esmFirst`; do not assume one build path covers both.
 - Premature spans: verify the selected sync/promise/callback operator and the plugin's completion method.
 - Missing AppSec or IAST behavior: inspect all channel subscribers and restore the required per-call publication.
+
+## Detailed references
+
+- [New integration guide](references/new-integration-guide.md): file-by-file implementation and registration.
+- [Plugin patterns](references/plugin-patterns.md): base-class signatures, context ownership, and completion.
+- [Reference plugins](references/reference-plugins.md): current implementations grouped by the behavior to copy.
+- [Testing integrations](references/testing.md): versions, real-path tests, ESM sandboxes, and commands.
+- [Orchestrion](references/orchestrion.md): exact transformer configuration and generated lifecycle.
+- [Shimmer](references/shimmer.md): tracing-channel and event-driven wrapper patterns.

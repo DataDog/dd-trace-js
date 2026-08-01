@@ -18,11 +18,12 @@ link the upstream message contexts the runtime exposes.
 
 ## Current references
 
-| Shape | Instrumentation | dd-trace-js responsibility | Tests |
-| --- | --- | --- | --- |
-| Azure Functions | `datadog-instrumentations/src/azure-functions.js` | invocation spans in `datadog-plugin-azure-functions` | plugin integration tests with Azure Functions Core Tools |
-| Azure Durable Functions | `datadog-instrumentations/src/azure-durable-functions.js` | invocation spans in `datadog-plugin-azure-durable-functions` | plugin integration tests with Core Tools and Azurite |
-| AWS Lambda bootstrap | `dd-trace/src/lambda/index.js` | handler loading and timeout flush | `dd-trace/test/lambda/` |
+- Azure Functions: `datadog-instrumentations/src/azure-functions.js` publishes to
+  `datadog-plugin-azure-functions`; integration tests launch Azure Functions Core Tools.
+- Azure Durable Functions: `datadog-instrumentations/src/azure-durable-functions.js` publishes to
+  `datadog-plugin-azure-durable-functions`; integration tests launch Core Tools with Azurite.
+- AWS Lambda bootstrap: `dd-trace/src/lambda/index.js` owns handler loading and timeout flush behavior;
+  `dd-trace/test/lambda/` owns its tests.
 
 AWS Lambda is the exception. Its loader resolves `DD_LAMBDA_HANDLER` or hooks `datadog-lambda-js`, then installs the
 runtime patch. `lambda/handler.js` schedules the impending-timeout channel and flushes unfinished spans before the

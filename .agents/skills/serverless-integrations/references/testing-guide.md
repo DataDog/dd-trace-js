@@ -27,9 +27,10 @@ Cover only lifecycle forms and trigger shapes the supported runtime exposes:
 - HTTP tags, inferred proxy spans, status, and AppSec behavior where applicable;
 - exactly one finish for each started span.
 
-Assert on the invocation span itself: the operation name the naming schema produces (`azure.functions.invoke` for
-both Azure plugins today), `type: 'serverless'`, the serverless service name, the platform tags the plugin sets
-(`aas.function.name`, `aas.function.trigger`), a low-cardinality resource, and one link per upstream context.
+For plugin-backed paths, assert on the invocation span itself: the operation name the naming schema produces
+(`azure.functions.invoke` for both Azure plugins today), `type: 'serverless'`, the serverless service name, the
+platform tags the plugin sets (`aas.function.name`, `aas.function.trigger`), a low-cardinality resource, and one
+link per upstream context.
 
 Use fake timers for timeout scheduling. Assert the last safe point and first timeout point when changing a deadline.
 A bug fix covers the reported lifecycle path and sibling paths that share its completion code; include the disabled
