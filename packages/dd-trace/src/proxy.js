@@ -219,7 +219,7 @@ class Tracer extends NoopProxy {
         })
 
         for (const feature of Object.values(optionalFeatures)) {
-          this._modules[feature.name].enableRemoteConfig(rc, config)
+          this._modules[feature.name]?.enableRemoteConfig(rc, config)
         }
 
         if (config.dynamicInstrumentation.enabled) {
