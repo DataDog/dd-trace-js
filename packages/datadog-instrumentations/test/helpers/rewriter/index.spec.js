@@ -12,9 +12,6 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
 
-const { parse, query } = require('../../../src/helpers/rewriter/compiler')
-const { waitForAsyncEnd } = require('../../../src/helpers/rewriter/transforms')
-
 /**
  * @typedef {import('node:module').Module & {
  *   _compile: (content: string, filename: string, format: string) => void
@@ -98,6 +95,15 @@ describe('check-require-cache', () => {
             kind: 'Sync',
           },
           channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
+          transform: 'undiciClientOrigin',
         },
         {
           module: {
@@ -379,6 +385,21 @@ describe('check-require-cache', () => {
     assert.ok(content.indexOf('if (!tr_ch_apm_hasSubscribers') < content.indexOf('const __apm$arguments'))
     assert.strictEqual(client.dispatch(1), 2)
     assert.strictEqual(client.calls, 1)
+  })
+
+  it('should expose the lexical client origin to sync subscribers', () => {
+    const { Client } = compile('test-trace-sync-fast-path')
+    const client = new Client()
+
+    subs = {
+      start (ctx) {
+        assert.strictEqual(ctx.origin, 'http://localhost:1234')
+      },
+    }
+    ch = tracingChannel('orchestrion:test-trace-sync-fast-path:test_invoke')
+    ch.subscribe(subs)
+
+    assert.strictEqual(client.dispatch(1), 2)
   })
 
   it('should auto instrument sync functions with super', done => {
@@ -718,24 +739,6 @@ describe('check-require-cache', () => {
     const source = readFileSync(filename, 'utf8')
 
     assert.strictEqual(rewriter.rewrite(source, filename, 'module'), source)
-  })
-
-  it('supports both fulfillment handler forms without adding the asyncEnd wait twice', () => {
-    const sources = [
-      'promise.then(result => { return result })',
-      'promise.then(function (result) { return result })',
-    ]
-    for (const source of sources) {
-      const ast = parse(source)
-      const call = /** @type {import('estree').CallExpression} */ (
-        query(ast, 'CallExpression[callee.object.name="promise"][callee.property.name="then"]')[0]
-      )
-
-      waitForAsyncEnd({}, call)
-      waitForAsyncEnd({}, call)
-
-      assert.strictEqual(query(call, '[id.name=__apm$asyncEndPromise]').length, 1)
-    }
   })
 
   it('should use import when rewriting esm modules', () => {

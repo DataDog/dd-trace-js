@@ -21,6 +21,15 @@ module.exports = [
       filePath: 'lib/client.js',
     },
     astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
+    transform: 'undiciClientOrigin',
+  },
+  {
+    module: {
+      name: 'undici',
+      versionRange: '>=4.7.0 <5.0.0',
+      filePath: 'lib/client.js',
+    },
+    astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
     transform: 'syncNoSubscriberFastPath',
   },
   {
