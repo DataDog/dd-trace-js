@@ -1,78 +1,24 @@
 # Testing serverless integrations
 
-Exercise the runtime-facing entry point. A direct call to an exported helper does not prove handler registration,
-loader behavior, context binding, or process-lifecycle handling.
+Use the real local entry point:
 
-## Choose the real local path
+- Azure Functions: launch Core Tools and assert through `FakeAgent`.
+- Azure triggers and Durable Functions: copy emulator, readiness, and fixture setup from the current serverless
+  workflow.
+- AWS Lambda bootstrap: exercise handler registration and wrapping through `packages/dd-trace/test/lambda/`.
 
-- Azure Functions: launch `azure-functions-core-tools`, invoke the fixture endpoint, and assert traces through
-  `FakeAgent`.
-- Azure queue, event, database, and durable triggers: use the emulator and service setup from
-  `.github/workflows/serverless.yml`.
-- AWS Lambda: exercise `DD_LAMBDA_HANDLER` registration and the wrapped handler under `packages/dd-trace/test/lambda/`.
+Cover only lifecycle forms the supported runtime exposes: success, thrown/rejected errors, supported sync/callback
+forms, disabled instrumentation, child parenting, carrier extraction, batch-link cardinality, HTTP/AppSec behavior,
+and one finish per started span. Use fake timers for timeout boundaries.
 
-Copy the nearest fixture and workflow job. The provider runtime decides the directory layout, launcher, environment,
-and completion forms; do not replace them with a hand-built fake unless the real launcher cannot reach the branch.
+For plugin-backed paths, assert the naming-schema result, `serverless` span type, service, low-cardinality resource,
+platform tags, parentage, and links. Do not assume the invocation span is the trace root when inferred proxies exist.
 
-## Cases
-
-Cover only lifecycle forms and trigger shapes the supported runtime exposes:
-
-- success, thrown error, and rejected promise;
-- callback or synchronous completion when that runtime version supports it;
-- timeout or crash-flush behavior when the runtime exposes a testable signal;
-- disabled instrumentation and unrelated plugin loading;
-- child-span parenting under the invocation span;
-- each distributed-context carrier and batch-link cardinality;
-- HTTP tags, inferred proxy spans, status, and AppSec behavior where applicable;
-- exactly one finish for each started span.
-
-For plugin-backed paths, assert on the invocation span itself: the operation name the naming schema produces
-(`azure.functions.invoke` for both Azure plugins today), `type: 'serverless'`, the serverless service name, the
-platform tags the plugin sets (`aas.function.name`, `aas.function.trigger`), a low-cardinality resource, and one
-link per upstream context.
-
-Use fake timers for timeout scheduling. Assert the last safe point and first timeout point when changing a deadline.
-A bug fix covers the reported lifecycle path and sibling paths that share its completion code; include the disabled
-path when registration or event publication changed.
-
-## Commands
-
-Use the shared environment, plugin, service, and coverage commands from
-[Testing integrations](../../apm-integrations/references/testing.md).
-
-For a single already-installed spec:
+Run the focused fixture command from `.github/workflows/serverless.yml`; run Lambda specs with:
 
 ```bash
-./node_modules/.bin/mocha --timeout 60000 packages/datadog-plugin-<name>/test/<path>.spec.js
+npm run test:lambda
 ```
 
-Service-backed plugins need the `SERVICES`, containers, readiness checks, and setup steps from their
-`.github/workflows/serverless.yml` job. Running only `docker compose up` may omit emulator configuration copied by
-the workflow.
-
-Run Lambda specs directly:
-
-```bash
-./node_modules/.bin/mocha packages/dd-trace/test/lambda/*.spec.js
-```
-
-## Coverage and deployed checks
-
-Use deployed verification only for a provider-owned behavior the real local runtime or emulator cannot reproduce,
-such as freeze timing or platform-injected metadata. Record the runtime version, region, invocation identifier,
-trace query, expected parentage, and cleanup command. Confirm the trace reached Datadog; provider logs alone do not
-prove writer or flush behavior.
-
-Tag a deterministic child span with a unique temporary probe id. Poll trace search for that id with a bounded
-timeout, then verify one invocation root, the expected parentage, errors or links, and no duplicate root span.
-
-## Localize a failure
-
-The trace shape names the layer, so read it before rerunning:
-
-- no invocation span but the handler ran: registration or hook resolution;
-- invocation span without children: async context binding;
-- children without an invocation span: span start or parent extraction;
-- more than one invocation span: handler wrapped twice, or a second completion path finishing again;
-- spans in the process but no trace in Datadog: writer or flush against the runtime lifecycle.
+Use deployed verification only when a provider behavior cannot be reproduced locally. Record runtime/version,
+region, probe id, trace query, expected parentage, timeout, and cleanup; confirm the trace reaches Datadog.
