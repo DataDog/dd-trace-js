@@ -11,18 +11,34 @@ const {
 } = require('node:fs')
 const path = require('node:path')
 
+const { Linter } = require('eslint')
 const { get_encoding: getEncoding } = require('tiktoken')
 const { parse: parseYaml } = require('yaml')
 
 const INTEGRATION_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
 const MODES = new Set(['add', 'review', 'debug', 'serverless'])
 const ORCHESTRION_TRAITS = new Set(['async', 'auto', 'callback', 'cjs-esm', 'orchestrion'])
-const PLUGIN_CONTRACT_PATTERNS = new Map([
-  ['type', /static type = ['"]([^'"]+)['"]/],
-  ['kind', /static kind = ['"]([^'"]+)['"]/],
-  ['operation', /static operation = ['"]([^'"]+)['"]/],
+const PLUGIN_BASE_DIRECTORY = 'packages/dd-trace/src/plugins/'
+const PLUGIN_BASE_TRAITS = new Set([
+  'cache',
+  'client',
+  'consumer',
+  'database',
+  'producer',
+  'router',
+  'server',
+  'tracing',
 ])
-const PLUGIN_BASE_TRAITS = new Set(['cache', 'client', 'consumer', 'database', 'producer', 'server', 'tracing'])
+const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
+const TEST_SUFFIXES = ['.spec.js', '.spec.cjs', '.spec.mjs']
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/gu
+const CHANNEL_ANCHOR_PATTERNS = [
+  /\b(?:channel|tracingChannel)\s*\(/,
+  /\bchannelName\s*:/,
+  /\bstatic (?:get )?prefix\b/,
+  /\.add(?:Trace)?(?:Bind|Subs?)\s*\(/,
+  /\.(?:bindStore|publish|runStores|subscribe|unbindStore|unsubscribe)\s*\(/,
+]
 const TRAIT_KINDS = new Map([
   ['async', 'Async'],
   ['auto', 'Auto'],
@@ -39,6 +55,7 @@ const TRAITS = new Set([
   'database',
   'orchestrion',
   'producer',
+  'router',
   'server',
   'shimmer',
   'tracing',
@@ -81,15 +98,58 @@ const failures = []
  */
 
 /**
+ * @typedef {object} PackageRegistration
+ * @property {string} name
+ * @property {boolean} requested
+ * @property {string} [hook]
+ * @property {string} [plugin]
+ * @property {{ value: string, source: string }} [version]
+ */
+
+/**
+ * @typedef {object} InspectionTargets
+ * @property {string} [instrumentation]
+ * @property {string} [rewriter]
+ * @property {string[]} plugins
+ * @property {string[]} dependents
+ * @property {string[]} tests
+ */
+
+/**
+ * @typedef {object} InspectionRegistrations
+ * @property {string[]} types
+ * @property {string[]} v5Types
+ * @property {string[]} docs
+ * @property {string[]} docsTest
+ * @property {string[]} codeowners
+ * @property {string[]} workflows
+ * @property {string[]} schemas
+ */
+
+/**
+ * @typedef {object} RegistryRegistration
+ * @property {string[]} requests
+ * @property {string} source
+ */
+
+/** @typedef {import('estree').TemplateElement & { value: { cooked: string } }} StaticTemplateElement */
+
+/**
+ * @typedef {object} IntegrationRegistrations
+ * @property {Map<string, string>} hooks
+ * @property {Map<string, string>} plugins
+ * @property {string[]} pluginDirectories
+ */
+
+/**
  * @typedef {object} InspectionPacket
  * @property {string} integration
- * @property {string} package
  * @property {string} mode
  * @property {string[]} traits
- * @property {{ instrumentation?: string, rewriter?: string, plugin?: string, tests: string[] }} targets
- * @property {{ pluginBase?: string, requestedBase?: string, startSpan?: string, type?: string, kind?: string,
- *   operation?: string, schemas: string[], channels: string[] }} contract
- * @property {Record<string, boolean | number | string | undefined>} registrations
+ * @property {InspectionTargets} targets
+ * @property {PackageRegistration[]} packages
+ * @property {{ contractSources: string[], channelAnchors: string[] }} evidence
+ * @property {InspectionRegistrations} registrations
  * @property {{ integration: string, files: string[], registrations: string[] } | undefined} reference
  * @property {string[]} references
  */
@@ -123,10 +183,11 @@ function parseArguments (arguments_) {
     } else if (argument === '--traits') {
       const value = arguments_[++i]
       if (!value) throw new Error('--traits requires a comma-separated value')
-      traits = value.split(',')
-      for (const trait of traits) {
+      const parsedTraits = value.split(',')
+      for (const trait of parsedTraits) {
         if (!TRAITS.has(trait)) throw new Error(`unknown integration trait: ${trait}`)
       }
+      traits = [...new Set(parsedTraits)]
     } else if (argument === '--json') {
       json = true
     } else if (argument === '--root') {
@@ -160,6 +221,12 @@ try {
   process.exit(1)
 }
 const root = options.root
+
+/** @type {Map<string, RegistryRegistration> | undefined} */
+let hookRegistrations
+
+/** @type {Map<string, RegistryRegistration> | undefined} */
+let pluginRegistrations
 
 /**
  * @param {string} filename
@@ -378,16 +445,32 @@ function existingPath (filename) {
 }
 
 /**
+ * @param {(string | undefined)[]} filenames
+ * @returns {string[]}
+ */
+function compactPaths (filenames) {
+  const paths = []
+  for (const filename of filenames) {
+    if (filename !== undefined) paths.push(filename)
+  }
+  return paths
+}
+
+/**
  * @param {string} filename
  * @param {string[]} values
- * @returns {boolean}
+ * @returns {string[]}
  */
-function containsAny (filename, values) {
+function findLines (filename, values) {
   const absoluteFilename = path.join(root, filename)
-  if (!existsSync(absoluteFilename)) return false
+  if (!existsSync(absoluteFilename)) return []
 
-  const source = readFileSync(absoluteFilename, 'utf8')
-  return values.some(value => source.includes(value))
+  const lines = readFileSync(absoluteFilename, 'utf8').split('\n')
+  const matches = []
+  for (let i = 0; i < lines.length; i++) {
+    if (values.some(value => lines[i].includes(value))) matches.push(`${filename}:${i + 1}`)
+  }
+  return matches
 }
 
 /**
@@ -396,12 +479,7 @@ function containsAny (filename, values) {
  * @returns {string | undefined}
  */
 function findLine (filename, values) {
-  const absoluteFilename = path.join(root, filename)
-  if (!existsSync(absoluteFilename)) return
-
-  const lines = readFileSync(absoluteFilename, 'utf8').split('\n')
-  const index = lines.findIndex(line => values.some(value => line.includes(value)))
-  if (index !== -1) return `${filename}:${index + 1}`
+  return findLines(filename, values)[0]
 }
 
 /**
@@ -421,95 +499,470 @@ function findWorkflowLine (filename, integration) {
 }
 
 /**
- * @param {string} pluginDirectory
+ * @param {string} filename
+ * @returns {boolean}
+ */
+function isFile (filename) {
+  const absoluteFilename = path.join(root, filename)
+  return existsSync(absoluteFilename) && lstatSync(absoluteFilename).isFile()
+}
+
+/**
+ * @param {string} filename
+ * @returns {import('estree').Program | undefined}
+ */
+function parseJavaScript (filename) {
+  if (!isFile(filename)) return
+
+  const linter = new Linter()
+  linter.verify(read(filename), {
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+    },
+  }, filename)
+  return linter.getSourceCode()?.ast
+}
+
+/**
+ * @param {import('estree').Node} node
  * @returns {string | undefined}
  */
-function findPluginBase (pluginDirectory) {
-  for (const filename of listRelativeFiles(pluginDirectory, ['.js'])) {
-    const match = read(filename).match(/require\(['"]\.\.\/\.\.\/dd-trace\/src\/plugins\/([a-z0-9-]+)['"]\)/)
+function findStaticString (node) {
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : undefined
+
+  if (node.type === 'BinaryExpression' && node.operator === '+') {
+    const left = findStaticString(node.left)
+    const right = findStaticString(node.right)
+    if (left !== undefined && right !== undefined) return left + right
+  }
+
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    const quasi = /** @type {StaticTemplateElement} */ (node.quasis[0])
+    return quasi.value.cooked
+  }
+}
+
+/**
+ * @param {import('estree').Property} property
+ * @returns {string | undefined}
+ */
+function findPropertyName (property) {
+  if (!property.computed && property.key.type === 'Identifier') return property.key.name
+  return findStaticString(property.key)
+}
+
+/**
+ * @param {import('estree').Program} program
+ * @returns {import('estree').ObjectExpression | undefined}
+ */
+function findExportedObject (program) {
+  const objects = new Map()
+  let exported
+  for (const statement of program.body) {
+    if (statement.type !== 'VariableDeclaration') continue
+
+    for (const declaration of statement.declarations) {
+      if (declaration.id.type === 'Identifier' && declaration.init?.type === 'ObjectExpression') {
+        objects.set(declaration.id.name, declaration.init)
+      }
+    }
+  }
+
+  for (const statement of program.body) {
+    if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression') continue
+
+    const { left, right } = statement.expression
+    if (left.type !== 'MemberExpression' || left.computed || left.object.type !== 'Identifier' ||
+        left.object.name !== 'module' || left.property.type !== 'Identifier' || left.property.name !== 'exports') {
+      continue
+    }
+    if (right.type === 'ObjectExpression') {
+      exported = right
+    } else if (right.type === 'Identifier') {
+      exported = objects.get(right.name)
+    } else {
+      exported = undefined
+    }
+  }
+  return exported
+}
+
+/**
+ * @param {import('estree').ObjectExpression} object
+ * @param {string} name
+ * @returns {import('estree').Property | undefined}
+ */
+function findObjectProperty (object, name) {
+  for (const property of object.properties) {
+    if (property.type === 'Property' && findPropertyName(property) === name) return property
+  }
+}
+
+/**
+ * @param {import('estree').Node} node
+ * @returns {string[]}
+ */
+function findNodeRequireRequests (node) {
+  const requests = []
+  const queue = [node]
+  const visited = new WeakSet(queue)
+
+  for (let i = 0; i < queue.length; i++) {
+    const current = queue[i]
+    if (current.type === 'CallExpression' && current.callee.type === 'Identifier' &&
+        current.callee.name === 'require' && current.arguments[0]?.type !== 'SpreadElement') {
+      const request = current.arguments[0] && findStaticString(current.arguments[0])
+      if (request !== undefined) requests.push(request)
+    }
+
+    for (const [key, value] of Object.entries(current)) {
+      if (key === 'parent') continue
+
+      if (Array.isArray(value)) {
+        for (const child of value) {
+          if (child !== null && typeof child === 'object' && typeof child.type === 'string' && !visited.has(child)) {
+            visited.add(child)
+            queue.push(child)
+          }
+        }
+      } else if (value !== null && typeof value === 'object' && typeof value.type === 'string' && !visited.has(value)) {
+        visited.add(value)
+        queue.push(value)
+      }
+    }
+  }
+  return requests
+}
+
+/**
+ * @param {string} filename
+ * @param {import('estree').Property} property
+ * @returns {string}
+ */
+function findPropertyLocation (filename, property) {
+  const location = /** @type {import('estree').SourceLocation} */ (property.loc)
+  return `${filename}:${location.start.line}`
+}
+
+/**
+ * @param {string} source
+ * @returns {string[]}
+ */
+function findRequireRequests (source) {
+  const requests = []
+  for (const match of source.matchAll(/\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g)) {
+    requests.push(match[2])
+  }
+  return requests
+}
+
+/**
+ * @param {string} filename
+ * @param {string} request
+ * @returns {string | undefined}
+ */
+function resolveLocalSource (filename, request) {
+  if (!request.startsWith('.')) return
+
+  const target = path.posix.normalize(path.posix.join(path.posix.dirname(filename), request))
+  if (target === '..' || target.startsWith('../')) return
+
+  const candidates = [target]
+  if (!path.posix.extname(target)) {
+    for (const suffix of SOURCE_SUFFIXES) candidates.push(`${target}${suffix}`)
+    for (const suffix of SOURCE_SUFFIXES) candidates.push(path.posix.join(target, `index${suffix}`))
+  }
+
+  return candidates.find(isFile)
+}
+
+/**
+ * @returns {Map<string, RegistryRegistration>}
+ */
+function findHookRegistrations () {
+  if (hookRegistrations) return hookRegistrations
+
+  const filename = 'packages/datadog-instrumentations/src/helpers/hooks.js'
+  const registry = parseJavaScript(filename)
+  const object = registry && findExportedObject(registry)
+  hookRegistrations = new Map()
+  if (!object) return hookRegistrations
+
+  for (const property of object.properties) {
+    if (property.type !== 'Property') continue
+
+    const packageName = findPropertyName(property)
+    const loader = property.value.type === 'ObjectExpression'
+      ? findObjectProperty(property.value, 'fn')?.value
+      : property.value
+    if (!packageName || (loader?.type !== 'ArrowFunctionExpression' && loader?.type !== 'FunctionExpression')) continue
+
+    hookRegistrations.set(packageName, {
+      requests: findNodeRequireRequests(loader),
+      source: findPropertyLocation(filename, property),
+    })
+  }
+  return hookRegistrations
+}
+
+/**
+ * @returns {Map<string, RegistryRegistration>}
+ */
+function findPluginRegistrations () {
+  if (pluginRegistrations) return pluginRegistrations
+
+  const filename = 'packages/dd-trace/src/plugins/index.js'
+  const registry = parseJavaScript(filename)
+  const object = registry && findExportedObject(registry)
+  pluginRegistrations = new Map()
+  if (!object) return pluginRegistrations
+
+  for (const property of object.properties) {
+    if (property.type !== 'Property' || property.kind !== 'get') continue
+
+    const packageName = findPropertyName(property)
+    if (!packageName) continue
+
+    pluginRegistrations.set(packageName, {
+      requests: findNodeRequireRequests(property.value),
+      source: findPropertyLocation(filename, property),
+    })
+  }
+  return pluginRegistrations
+}
+
+/**
+ * @param {string} integration
+ * @returns {Map<string, string>}
+ */
+function findHookPackages (integration) {
+  const filename = 'packages/datadog-instrumentations/src/helpers/hooks.js'
+  const target = resolveLocalSource(filename, `../${integration}`)
+  const packages = new Map()
+  if (!target) return packages
+
+  for (const [packageName, registration] of findHookRegistrations()) {
+    if (registration.requests.some(request => resolveLocalSource(filename, request) === target)) {
+      packages.set(packageName, registration.source)
+    }
+  }
+  return packages
+}
+
+/**
+ * @param {RegistryRegistration} registration
+ * @returns {string | undefined}
+ */
+function findPluginDirectory (registration) {
+  const filename = 'packages/dd-trace/src/plugins/index.js'
+  for (const request of registration.requests) {
+    const source = resolveLocalSource(filename, request)
+    const match = source?.match(/^(packages\/datadog-plugin-[^/]+)\/src\//)
     if (match) return match[1]
   }
 }
 
 /**
- * @param {string | undefined} pluginBase
- * @returns {{ startSpan?: string, type?: string, kind?: string, operation?: string }}
+ * @param {string} integration
+ * @returns {IntegrationRegistrations}
  */
-function findPluginContract (pluginBase) {
-  const contract = {}
-  const visited = new Set()
-  let current = pluginBase
+function findIntegrationRegistrations (integration) {
+  const hooks = findHookPackages(integration)
+  const plugins = new Map()
+  const pluginDirectories = new Set()
+  const defaultDirectory = `packages/datadog-plugin-${integration}`
+  if (existsSync(path.join(root, defaultDirectory))) pluginDirectories.add(defaultDirectory)
 
-  while (current && !visited.has(current)) {
-    visited.add(current)
-    const filename = `packages/dd-trace/src/plugins/${current}.js`
-    if (!existsSync(path.join(root, filename))) break
+  for (const [name, registration] of findPluginRegistrations()) {
+    const directory = findPluginDirectory(registration)
+    if (!directory || (directory !== defaultDirectory && !hooks.has(name))) continue
 
-    const source = read(filename)
-    if (!contract.startSpan) {
-      const signature = source.match(/startSpan \(([^)]*)\)/)
-      if (signature) contract.startSpan = `startSpan(${signature[1].replaceAll(/\s*,\s*/g, ', ')})`
-    }
-    for (const [property, pattern] of PLUGIN_CONTRACT_PATTERNS) {
-      if (contract[property]) continue
-      contract[property] = source.match(pattern)?.[1]
-    }
-
-    current = source.match(/require\(['"]\.\/([a-z0-9-]+)['"]\)/)?.[1]
+    plugins.set(name, registration.source)
+    pluginDirectories.add(directory)
   }
 
-  return contract
+  return {
+    hooks,
+    plugins,
+    pluginDirectories: [...pluginDirectories].sort(),
+  }
+}
+
+/**
+ * @param {string} packageName
+ * @returns {{ value: string, source: string } | undefined}
+ */
+function findLatestVersion (packageName) {
+  const filename = 'packages/dd-trace/test/plugins/versions/package.json'
+  if (!isFile(filename)) return
+
+  const dependencies = JSON.parse(read(filename)).dependencies ?? {}
+  const value = dependencies[packageName]
+  const source = findLine(filename, [`"${packageName}"`])
+  if (typeof value === 'string' && source) return { value, source }
+}
+
+/**
+ * @param {string} integration
+ * @param {IntegrationRegistrations} registrations
+ * @param {string | undefined} packageName
+ * @returns {PackageRegistration[]}
+ */
+function findPackages (integration, registrations, packageName) {
+  const { hooks, plugins } = registrations
+  const names = new Set(hooks.keys())
+  for (const name of plugins.keys()) names.add(name)
+  if (packageName) names.add(packageName)
+  if (names.size === 0) names.add(integration)
+
+  const packages = []
+  for (const name of [...names].sort()) {
+    packages.push({
+      name,
+      requested: name === packageName,
+      hook: hooks.get(name),
+      plugin: plugins.get(name),
+      version: findLatestVersion(name),
+    })
+  }
+  return packages
+}
+
+/**
+ * @param {string[]} sources
+ * @param {string[]} pluginDirectories
+ * @returns {string[]}
+ */
+function findContractSources (sources, pluginDirectories) {
+  const queue = [...sources]
+  const visited = new Set(sources)
+  const contracts = new Set()
+
+  for (let i = 0; i < queue.length; i++) {
+    const source = queue[i]
+    for (const request of findRequireRequests(read(source))) {
+      const dependency = resolveLocalSource(source, request)
+      if (!dependency || visited.has(dependency)) continue
+
+      const isBase = dependency.startsWith(PLUGIN_BASE_DIRECTORY) &&
+        !dependency.slice(PLUGIN_BASE_DIRECTORY.length).includes('/')
+      const isCrossPlugin = dependency.startsWith('packages/datadog-plugin-') &&
+        !pluginDirectories.some(directory => dependency.startsWith(`${directory}/`))
+      if (!isBase && !isCrossPlugin) continue
+
+      visited.add(dependency)
+      contracts.add(dependency)
+      queue.push(dependency)
+    }
+  }
+  return [...contracts].sort()
+}
+
+/**
+ * @param {string} trait
+ * @returns {string | undefined}
+ */
+function findTraitSource (trait) {
+  const filename = trait === 'router'
+    ? 'packages/datadog-plugin-router/src/index.js'
+    : `packages/dd-trace/src/plugins/${trait}.js`
+  return PLUGIN_BASE_TRAITS.has(trait) ? existingPath(filename) : undefined
+}
+
+/**
+ * @param {string[]} pluginDirectories
+ * @returns {string[]}
+ */
+function findPluginDependents (pluginDirectories) {
+  if (pluginDirectories.length === 0) return []
+
+  const dependents = []
+  const selectedDirectories = new Set(pluginDirectories)
+
+  for (const entry of readdirSync(path.join(root, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('datadog-plugin-')) continue
+
+    const directory = `packages/${entry.name}`
+    if (selectedDirectories.has(directory)) continue
+
+    for (const filename of listRelativeFiles(`${directory}/src`, SOURCE_SUFFIXES)) {
+      const requests = findRequireRequests(read(filename))
+      if (requests.some(request => {
+        const source = resolveLocalSource(filename, request)
+        return source && pluginDirectories.some(selected => source.startsWith(`${selected}/src/`))
+      })) {
+        dependents.push(filename)
+      }
+    }
+  }
+  return dependents.sort()
+}
+
+/**
+ * @param {string[]} pluginDirectories
+ * @param {'src' | 'test'} subdirectory
+ * @param {string[]} suffixes
+ * @returns {string[]}
+ */
+function listPluginFiles (pluginDirectories, subdirectory, suffixes) {
+  const files = []
+  for (const directory of pluginDirectories) {
+    files.push(...listRelativeFiles(`${directory}/${subdirectory}`, suffixes))
+  }
+  return files.sort()
 }
 
 /**
  * @param {string[]} filenames
  * @returns {string[]}
  */
-function findChannels (filenames) {
-  const channels = new Set()
-  const patterns = [
-    /(?:channel|tracingChannel)\(\s*['"]([^'"]+)['"]/g,
-    /channelName:\s*['"]([^'"]+)['"]/g,
-    /static prefix = ['"]([^'"]+)['"]/g,
-  ]
+function findChannelAnchors (filenames) {
+  const anchors = []
+  for (const filename of new Set(filenames)) {
+    const lines = read(filename).split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trimStart()
+      if (line.startsWith('//') || line.startsWith('/*') || line.startsWith('*')) continue
 
-  for (const filename of filenames) {
-    const source = read(filename)
-    for (const pattern of patterns) {
-      for (const match of source.matchAll(pattern)) channels.add(match[1])
+      if (CHANNEL_ANCHOR_PATTERNS.some(pattern => pattern.test(line))) {
+        anchors.push(`${filename}:${i + 1}`)
+      }
     }
   }
-
-  return [...channels].sort()
-}
-
-/**
- * @param {string} packageName
- * @param {string} integration
- * @returns {string | undefined}
- */
-function findLatestVersion (packageName, integration) {
-  const filename = 'packages/dd-trace/test/plugins/versions/package.json'
-  if (!existsSync(path.join(root, filename))) return
-
-  const dependencies = JSON.parse(read(filename)).dependencies ?? {}
-  return dependencies[packageName] ?? dependencies[integration]
+  return anchors
 }
 
 /**
  * @param {string} integration
- * @returns {string | undefined}
+ * @returns {string[]}
  */
 function findCodeownersCoverage (integration) {
   const filename = '.github/CODEOWNERS'
-  if (!existsSync(path.join(root, filename))) return
+  if (!isFile(filename)) return []
 
-  for (const line of read(filename).split('\n')) {
-    const pattern = line.trim().split(/\s+/, 1)[0]
+  const locations = []
+  const lines = read(filename).split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const pattern = lines[i].trim().split(/\s+/, 1)[0]
     if (pattern.includes(`datadog-plugin-${integration}/`) || pattern === '/packages/datadog-plugin-*/') {
-      return pattern
+      locations.push(`${filename}:${i + 1}`)
     }
   }
+  return locations
+}
+
+/**
+ * @param {string} directory
+ * @param {string[]} values
+ * @returns {string[]}
+ */
+function findDirectoryLines (directory, values) {
+  const locations = []
+  for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
+    locations.push(...findLines(filename, values))
+  }
+  return locations
 }
 
 /**
@@ -528,8 +981,8 @@ function findReferences (mode, traits, hasRewriter) {
     references.push('.agents/skills/apm-integrations/references/shimmer.md')
   }
   for (const trait of traits) {
-    const filename = `packages/dd-trace/src/plugins/${trait}.js`
-    if (PLUGIN_BASE_TRAITS.has(trait) && existsSync(path.join(root, filename))) references.push(filename)
+    const filename = findTraitSource(trait)
+    if (filename) references.push(filename)
   }
   references.push(mode === 'serverless'
     ? '.agents/skills/serverless-integrations/references/testing-guide.md'
@@ -544,21 +997,25 @@ function findReferences (mode, traits, hasRewriter) {
  * @returns {{ integration: string, files: string[], registrations: string[] } | undefined}
  */
 function findClosestReference (integration, traits) {
+  if (traits.length === 0) return
+
   const directory = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
   const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
+  const requestedSource = requestedBase ? findTraitSource(requestedBase) : undefined
   let closest
   let closestScore = 0
 
-  for (const filename of listRelativeFiles(directory, ['.js'])) {
-    const candidate = path.basename(filename, '.js')
+  for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
+    const candidate = path.basename(filename, path.extname(filename))
     if (candidate === 'index' || candidate === integration) continue
 
     const source = read(filename)
     const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
-    const pluginDirectory = `packages/datadog-plugin-${candidate}`
-    const pluginBase = findPluginBase(`${pluginDirectory}/src`)
+    const registrations = findIntegrationRegistrations(candidate)
+    const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
+    const contractSources = findContractSources(pluginSources, registrations.pluginDirectories)
     let score = traits.includes('orchestrion') ? 1 : 0
-    if (requestedBase && pluginBase === requestedBase) score += 8
+    if (requestedSource && contractSources.includes(requestedSource)) score += 8
     if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
@@ -568,35 +1025,31 @@ function findClosestReference (integration, traits) {
     if (score <= closestScore) continue
 
     closestScore = score
-    const tests = listRelativeFiles(`${pluginDirectory}/test`, ['.spec.js', '.spec.mjs'])
+    const tests = listPluginFiles(registrations.pluginDirectories, 'test', TEST_SUFFIXES)
+    const pluginIndex = existingPath(`packages/datadog-plugin-${candidate}/src/index.js`) ??
+      pluginSources.find(filename => path.basename(filename) === 'index.js')
+    const integrationTest = existingPath(`packages/datadog-plugin-${candidate}/test/index.spec.js`) ??
+      tests.find(filename => path.basename(filename) === 'index.spec.js')
     closest = {
       integration: candidate,
-      files: [
+      files: compactPaths([
         filename,
-        existingPath(`packages/datadog-instrumentations/src/${candidate}.js`),
-        existingPath(`${pluginDirectory}/src/index.js`),
-        tests.find(filename => path.basename(filename) === 'index.spec.js') ?? tests[0],
-      ].filter(Boolean),
-      registrations: [
-        findLine('packages/datadog-instrumentations/src/helpers/hooks.js', [
-          `'${moduleName}':`,
-          `"${moduleName}":`,
-          `${moduleName}:`,
-        ]),
-        findLine('packages/dd-trace/src/plugins/index.js', [
-          `get '${moduleName}'`,
-          `get "${moduleName}"`,
-          `datadog-plugin-${candidate}/src`,
-        ]),
-        findLine('packages/dd-trace/test/plugins/versions/package.json', [`"${moduleName}"`, `"${candidate}"`]),
+        resolveLocalSource('packages/datadog-instrumentations/src/helpers/hooks.js', `../${candidate}`),
+        pluginIndex ?? pluginSources[0],
+        integrationTest ?? tests[0],
+      ]),
+      registrations: compactPaths([
+        registrations.hooks.get(moduleName),
+        registrations.plugins.get(moduleName),
+        findLatestVersion(moduleName)?.source,
         findLine('index.d.ts', [`"${candidate}"`]),
         findLine('index.d.v5.ts', [`"${candidate}"`]),
         findLine('docs/API.md', [`id="${candidate}"`, `[${candidate}]`]),
         findLine('docs/test.ts', [`use('${candidate}'`, `use("${candidate}"`]),
-        findLine('.github/CODEOWNERS', [`datadog-plugin-${candidate}/`, '/packages/datadog-plugin-*/']),
+        findCodeownersCoverage(candidate)[0],
         findWorkflowLine('.github/workflows/apm-integrations.yml', candidate),
         findWorkflowLine('.github/workflows/serverless.yml', candidate),
-      ].filter(Boolean),
+      ]),
     }
   }
 
@@ -605,64 +1058,64 @@ function findClosestReference (integration, traits) {
 
 /**
  * @param {string} integration
- * @param {string} packageName
+ * @param {string | undefined} packageName
  * @param {string} mode
  * @param {string[]} traits
  * @returns {InspectionPacket}
  */
 function inspectIntegration (integration, packageName, mode, traits) {
-  const instrumentation = existingPath(`packages/datadog-instrumentations/src/${integration}.js`)
-  const rewriter = existingPath(
-    `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/${integration}.js`
+  const instrumentation = resolveLocalSource(
+    'packages/datadog-instrumentations/src/helpers/hooks.js',
+    `../${integration}`
   )
-  const pluginDirectory = `packages/datadog-plugin-${integration}`
-  const plugin = existingPath(`${pluginDirectory}/src/index.js`)
-  const tests = listRelativeFiles(`${pluginDirectory}/test`, ['.spec.js', '.spec.mjs'])
-  const pluginBase = findPluginBase(`${pluginDirectory}/src`)
-  const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
-  const contract = findPluginContract(pluginBase ?? requestedBase)
-  const sourceFiles = [instrumentation, rewriter, ...listRelativeFiles(`${pluginDirectory}/src`, ['.js'])]
-    .filter(Boolean)
-  const names = [integration]
-  if (packageName !== integration) names.push(packageName)
+  const rewriter = resolveLocalSource(
+    'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js',
+    `./${integration}`
+  )
+  const packageRegistrations = findIntegrationRegistrations(integration)
+  const plugins = listPluginFiles(packageRegistrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
+  const dependents = findPluginDependents(packageRegistrations.pluginDirectories)
+  const tests = listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES)
+  const contractSources = findContractSources(plugins, packageRegistrations.pluginDirectories)
+  const channelSources = compactPaths([
+    instrumentation,
+    rewriter,
+    ...plugins,
+    ...dependents,
+    ...contractSources,
+  ])
+  const workflows = compactPaths([
+    findWorkflowLine('.github/workflows/apm-integrations.yml', integration),
+    findWorkflowLine('.github/workflows/serverless.yml', integration),
+  ])
 
   return {
     integration,
-    package: packageName,
     mode,
     traits,
     targets: {
       instrumentation,
       rewriter,
-      plugin,
+      plugins,
+      dependents,
       tests,
     },
-    contract: {
-      pluginBase,
-      requestedBase,
-      ...contract,
-      schemas: contract.type
-        ? [
-            existingPath(`packages/dd-trace/src/service-naming/schemas/v0/${contract.type}.js`),
-            existingPath(`packages/dd-trace/src/service-naming/schemas/v1/${contract.type}.js`),
-          ].filter(Boolean)
-        : [],
-      channels: findChannels(sourceFiles),
+    packages: findPackages(integration, packageRegistrations, packageName),
+    evidence: {
+      contractSources,
+      channelAnchors: findChannelAnchors(channelSources),
     },
     registrations: {
-      hook: containsAny(
-        'packages/datadog-instrumentations/src/helpers/hooks.js',
-        names.flatMap(name => [`${name}:`, `'${name}':`, `"${name}":`])
-      ),
-      plugin: containsAny('packages/dd-trace/src/plugins/index.js', [`datadog-plugin-${integration}/src`]),
-      latestVersion: findLatestVersion(packageName, integration),
-      types: containsAny('index.d.ts', [`"${integration}"`]),
-      v5Types: containsAny('index.d.v5.ts', [`"${integration}"`]),
-      docs: containsAny('docs/API.md', [`id="${integration}"`, `[${integration}]`]),
-      docsTest: containsAny('docs/test.ts', [`use('${integration}'`, `use("${integration}"`]),
+      types: findLines('index.d.ts', [`"${integration}"`]),
+      v5Types: findLines('index.d.v5.ts', [`"${integration}"`]),
+      docs: findLines('docs/API.md', [`id="${integration}"`, `[${integration}]`]),
+      docsTest: findLines('docs/test.ts', [`use('${integration}'`, `use("${integration}"`]),
       codeowners: findCodeownersCoverage(integration),
-      workflow: findWorkflowLine('.github/workflows/apm-integrations.yml', integration) !== undefined ||
-        findWorkflowLine('.github/workflows/serverless.yml', integration) !== undefined,
+      workflows,
+      schemas: findDirectoryLines('packages/dd-trace/src/service-naming/schemas', [
+        `'${integration}'`,
+        `"${integration}"`,
+      ]),
     },
     reference: findClosestReference(integration, traits),
     references: findReferences(mode, traits, rewriter !== undefined),
@@ -670,44 +1123,88 @@ function inspectIntegration (integration, packageName, mode, traits) {
 }
 
 /**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeControlCharacters (value) {
+  return value.replaceAll(CONTROL_CHARACTER_PATTERN, character => {
+    const code = character.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')
+    return String.raw`\u${code}`
+  })
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeJsonControlCharacters (value) {
+  return value.replaceAll(CONTROL_CHARACTER_PATTERN, character => {
+    return character.charCodeAt(0) <= 0x1F ? character : escapeControlCharacters(character)
+  })
+}
+
+/**
  * @param {InspectionPacket} packet
  * @returns {string}
  */
 function renderInspection (packet) {
-  const requestedBase = !packet.contract.pluginBase && packet.contract.requestedBase ? ' (requested)' : ''
   const lines = [
-    `Integration: ${packet.integration} (${packet.package})`,
+    `Integration: ${escapeControlCharacters(packet.integration)}`,
     `Mode: ${packet.mode}${packet.traits.length ? `; traits: ${packet.traits.join(', ')}` : ''}`,
     'Targets:',
-    `  instrumentation: ${packet.targets.instrumentation ?? 'missing'}`,
-    `  rewriter: ${packet.targets.rewriter ?? 'missing'}`,
-    `  plugin: ${packet.targets.plugin ?? 'missing'}`,
+    `  instrumentation: ${packet.targets.instrumentation
+      ? escapeControlCharacters(packet.targets.instrumentation)
+      : 'missing'}`,
+    `  rewriter: ${packet.targets.rewriter ? escapeControlCharacters(packet.targets.rewriter) : 'missing'}`,
+    `  plugin sources: ${packet.targets.plugins.length}`,
+    `  dependent sources: ${packet.targets.dependents.length}`,
     `  tests: ${packet.targets.tests.length}`,
-    'Contract:',
-    `  base: ${packet.contract.pluginBase ?? packet.contract.requestedBase ?? 'unresolved'}${requestedBase}`,
-    `  startSpan: ${packet.contract.startSpan ?? 'unresolved'}`,
-    `  role: ${[packet.contract.type, packet.contract.kind, packet.contract.operation].filter(Boolean).join('/') ||
-      'unresolved'}`,
-    `  schemas: ${packet.contract.schemas.join(', ') || 'unresolved'}`,
-    `  channels: ${packet.contract.channels.join(', ') || 'unresolved'}`,
-    'Registrations:',
+    'Plugin sources:',
+    ...(packet.targets.plugins.length ? packet.targets.plugins : ['none'])
+      .map(filename => `  ${escapeControlCharacters(filename)}`),
+    'Dependent sources:',
+    ...(packet.targets.dependents.length ? packet.targets.dependents : ['none'])
+      .map(filename => `  ${escapeControlCharacters(filename)}`),
+    'Packages:',
   ]
 
+  for (const registration of packet.packages) {
+    const candidate = registration.hook || registration.plugin || registration.version ? '' : ' (candidate)'
+    lines.push(`  ${escapeControlCharacters(registration.name)}${candidate}`)
+    if (registration.hook) lines.push(`    hook: ${escapeControlCharacters(registration.hook)}`)
+    if (registration.plugin) lines.push(`    plugin: ${escapeControlCharacters(registration.plugin)}`)
+    if (registration.version) {
+      lines.push(
+        `    latest tested: ${escapeControlCharacters(registration.version.value)} ` +
+        `(${escapeControlCharacters(registration.version.source)})`
+      )
+    }
+  }
+  lines.push(
+    'Contract sources:',
+    ...(packet.evidence.contractSources.length ? packet.evidence.contractSources : ['none'])
+      .map(filename => `  ${escapeControlCharacters(filename)}`),
+    'Channel anchors:',
+    ...(packet.evidence.channelAnchors.length ? packet.evidence.channelAnchors : ['none'])
+      .map(filename => `  ${escapeControlCharacters(filename)}`),
+    'Registrations:',
+  )
+
   for (const [name, value] of Object.entries(packet.registrations)) {
-    lines.push(`  ${name}: ${value ?? 'missing'}`)
+    lines.push(`  ${name}: ${value.map(escapeControlCharacters).join(', ') || 'missing'}`)
   }
   if (packet.reference) {
     lines.push(
-      `Closest current reference: ${packet.reference.integration}`,
+      `Closest current reference: ${escapeControlCharacters(packet.reference.integration)}`,
       '  files:',
-      ...packet.reference.files.map(filename => `    ${filename}`),
+      ...packet.reference.files.map(filename => `    ${escapeControlCharacters(filename)}`),
       '  registrations:',
-      ...packet.reference.registrations.map(filename => `    ${filename}`)
+      ...packet.reference.registrations.map(filename => `    ${escapeControlCharacters(filename)}`)
     )
   }
   lines.push(
     'Read next:',
-    ...packet.references.map(filename => `  ${filename}`)
+    ...packet.references.map(filename => `  ${escapeControlCharacters(filename)}`)
   )
   return lines.join('\n')
 }
@@ -846,12 +1343,15 @@ function verifySkillDocuments () {
 if (options.inspect) {
   const packet = inspectIntegration(
     options.inspect,
-    options.packageName ?? options.inspect,
+    options.packageName,
     options.mode,
     options.traits
   )
+  const output = options.json
+    ? escapeJsonControlCharacters(JSON.stringify(packet, undefined, 2))
+    : renderInspection(packet)
   // eslint-disable-next-line no-console
-  console.log(options.json ? JSON.stringify(packet, undefined, 2) : renderInspection(packet))
+  console.log(output)
 } else {
   verifyInventory()
   verifyDiscoveryMetadata()
