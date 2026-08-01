@@ -1,6 +1,8 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+
+const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
@@ -8,64 +10,70 @@ const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 
 /**
- * Builds the OpenFeature provider that integrates with Datadog's feature flagging system.
- * Takes the base provider class as a parameter so callers can supply it either through the
- * bundler-opaque `require-provider` wrapper (legacy `tracer.openfeature`) or a plain `require`
- * (the `dd-trace/openfeature` entrypoint), without duplicating this class.
- *
- * @param {typeof import('@datadog/openfeature-node-server').DatadogNodeServerProvider} DatadogNodeServerProvider
- * @returns {typeof FlaggingProvider}
+ * OpenFeature provider that integrates with Datadog's feature flagging system.
+ * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
-module.exports = function createFlaggingProviderClass (DatadogNodeServerProvider) {
+class FlaggingProvider extends DatadogNodeServerProvider {
+  /** @type {SpanEnrichmentHook | undefined} */
+  #spanEnrichmentHook
+
+  /** @type {{ start: Function, stop: Function } | undefined} */
+  #configurationSource
+
   /**
-   * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
+   * @param {import('../tracer')} tracer - Datadog tracer instance
+   * @param {import('../config/config-base')} config - Tracer configuration object
    */
-  class FlaggingProvider extends DatadogNodeServerProvider {
-    /** @type {SpanEnrichmentHook | undefined} */
-    #spanEnrichmentHook
+  constructor (tracer, config) {
+    super({
+      exposureChannel: channel(EXPOSURE_CHANNEL),
+      initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
+    })
 
-    /** @type {{ start: Function, stop: Function } | undefined} */
-    #configurationSource
+    this.hooks.push(new EvalMetricsHook(config))
 
-    /**
-     * @param {import('../tracer')} tracer - Datadog tracer instance
-     * @param {import('../config/config-base')} config - Tracer configuration object
-     */
-    constructor (tracer, config) {
-      super({
-        exposureChannel: channel(EXPOSURE_CHANNEL),
-        initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
-      })
-
-      this.hooks.push(new EvalMetricsHook(config))
-
-      if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
-        this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
-        // @ts-expect-error The upstream constructor always initializes its optional hooks property.
-        this.hooks.push(this.#spanEnrichmentHook)
-        log.info('%s span enrichment enabled', this.constructor.name)
-      } else {
-        log.info('%s span enrichment disabled', this.constructor.name)
-      }
-
-      log.debug('%s created with timeout: %dms', this.constructor.name,
-        config.experimental.flaggingProvider.initializationTimeoutMs)
-
-      this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
-      this.#configurationSource?.start()
+    if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
+      this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
+      // @ts-expect-error The upstream constructor always initializes its optional hooks property.
+      this.hooks.push(this.#spanEnrichmentHook)
+      log.info('%s span enrichment enabled', this.constructor.name)
+    } else {
+      log.info('%s span enrichment disabled', this.constructor.name)
     }
 
-    /**
-     * Called when the provider is shut down.
-     * Cleans up resources including channel subscriptions.
-     */
-    onClose () {
-      this.#configurationSource?.stop()
-      this.#configurationSource = undefined
-      this.#spanEnrichmentHook?.destroy()
-      this.#spanEnrichmentHook = undefined
-    }
+    log.debug('%s created with timeout: %dms', this.constructor.name,
+      config.experimental.flaggingProvider.initializationTimeoutMs)
+
+    this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+    this.#configurationSource?.start()
   }
 
-  return FlaggingProvider
+  /**
+   * @param {import('@openfeature/core').EvaluationContext} [context]
+   * @returns {Promise<void>}
+   */
+  initialize (context) {
+    const promise = super.initialize(context)
+
+    // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
+    // otherwise keep an idle process (a short script, a serverless handler) alive for up to
+    // `initializationTimeoutMs` while waiting for configuration to arrive.
+    // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
+    this.initController?.timeoutId?.unref?.()
+
+    return promise
+  }
+
+  /**
+   * Called when the provider is shut down.
+   * Cleans up resources including channel subscriptions.
+   */
+  onClose () {
+    this.#configurationSource?.stop()
+    this.#configurationSource = undefined
+    this.#spanEnrichmentHook?.destroy()
+    this.#spanEnrichmentHook = undefined
+  }
 }
+
+module.exports = FlaggingProvider

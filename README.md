@@ -93,24 +93,6 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 
 If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
 
-When using the experimental OpenFeature provider in a bundled application, require it through the
-`dd-trace/openfeature` subpath. This subpath uses a plain `require`/`import` for its dependencies, so
-bundlers can resolve and include them at build time. It must be loaded after `tracer.init()`:
-
-CommonJS:
-
-```js
-const tracer = require('dd-trace').init()
-const openfeatureProvider = require('dd-trace/openfeature')
-```
-
-ES modules: initialize the tracer with the `--import` flag (see the [ESM support](#ecmascript-modules-esm-support)
-section above) so it's ready before your application code runs, then import the provider normally:
-
-```js
-import openfeatureProvider from 'dd-trace/openfeature.js'
-```
-
 
 ## Security Vulnerabilities
 

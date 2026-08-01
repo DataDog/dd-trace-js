@@ -68,7 +68,7 @@ describe('FlaggingProvider', () => {
     }
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
 
-    const createFlaggingProviderClass = proxyquire('../../src/openfeature/flagging_provider', {
+    FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
@@ -76,8 +76,8 @@ describe('FlaggingProvider', () => {
       './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
+      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
-    FlaggingProvider = createFlaggingProviderClass(DatadogNodeServerProvider)
   })
 
   describe('constructor', () => {
@@ -212,17 +212,6 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider instanceof DatadogNodeServerProvider)
-    })
-  })
-
-  describe('factory', () => {
-    it('builds a distinct class per call, extending the given base class', () => {
-      const createFlaggingProviderClass = require('../../src/openfeature/flagging_provider')
-
-      const OtherFlaggingProvider = createFlaggingProviderClass(DatadogNodeServerProvider)
-
-      assert.notStrictEqual(OtherFlaggingProvider, FlaggingProvider)
-      assert.strictEqual(OtherFlaggingProvider.name, 'FlaggingProvider')
     })
   })
 })
