@@ -97,7 +97,6 @@ export default {
     schema: [{
       type: 'object',
       properties: {
-        requireDirectOperations: { type: 'boolean' },
         strictCarrierIdentifiers: { type: 'boolean' },
       },
       additionalProperties: false,
@@ -112,7 +111,6 @@ export default {
     const sourceCode = context.sourceCode
     const carrierFunctions = new Set()
     const carrierModuleIdentifiers = new Set()
-    const requireDirectOperations = context.options[0]?.requireDirectOperations === true
     const strictCarrierIdentifiers = context.options[0]?.strictCarrierIdentifiers === true
 
     /**
@@ -290,7 +288,7 @@ export default {
       CallExpression (node) {
         const callsCarrierModuleMember = node.callee.type === 'MemberExpression' &&
           isCarrierModuleReference(node.callee.object)
-        if (requireDirectOperations && callsCarrierModuleMember) {
+        if (callsCarrierModuleMember) {
           report(node, 'useDirectCarrierOperation')
           return
         }

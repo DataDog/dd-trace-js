@@ -12,38 +12,39 @@ describe('verify-carrier-fields', () => {
   it('does not allow inline comments to suppress managed-header access', async () => {
     const eslint = createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
-      // eslint-disable-next-line carrier-fields-verifier/carrier-fields
-      carrier['x-datadog-trace-id'] = value
+      // eslint-disable-next-line eslint-rules/eslint-carrier-fields
+      return carrier['x-datadog-trace-id'] = value
     `, { filePath: 'packages/dd-trace/src/example.js' })
 
-    assert.ok(result.messages.some(message => message.ruleId === 'carrier-fields-verifier/carrier-fields'))
+    assert.ok(result.messages.some(message => message.ruleId === 'eslint-rules/eslint-carrier-fields'))
   })
 
   it('enforces managed-header access in every production package', async () => {
     const eslint = createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
+      import 'node:fs'
       const traceIdHeader = 'x-datadog-trace-id'
       attributes[traceIdHeader] = value
-    `, { filePath: 'packages/datadog-plugin-example/src/index.js' })
+    `, { filePath: 'packages/datadog-plugin-example/src/index.mjs' })
 
-    assert.ok(result.messages.some(message => message.ruleId === 'carrier-fields-verifier/carrier-fields'))
+    assert.ok(result.messages.some(message => message.ruleId === 'eslint-rules/eslint-carrier-fields'))
   })
 
   it('does not allow inline comments to suppress direct carrier access in the propagation core', async () => {
     const eslint = createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
-      // eslint-disable-next-line carrier-fields-verifier/carrier-fields
+      // eslint-disable-next-line eslint-rules/eslint-carrier-fields
       carrier[key] = value
     `, { filePath: 'packages/dd-trace/src/datastreams/pathway.js' })
 
-    assert.ok(result.messages.some(message => message.ruleId === 'carrier-fields-verifier/carrier-fields'))
+    assert.ok(result.messages.some(message => message.ruleId === 'eslint-rules/eslint-carrier-fields'))
   })
 
   it('returns a failure and formats violations', async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), 'dd-trace-carrier-fields-'))
     const sourceDirectory = path.join(cwd, 'packages/example/src')
     await mkdir(sourceDirectory, { recursive: true })
-    await writeFile(path.join(sourceDirectory, 'index.js'), 'carrier["x-datadog-trace-id"] = value\n')
+    await writeFile(path.join(sourceDirectory, 'index.cjs'), 'carrier["x-datadog-trace-id"] = value\n')
     const consoleError = sinon.stub(console, 'error')
 
     try {

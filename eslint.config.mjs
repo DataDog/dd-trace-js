@@ -15,7 +15,7 @@ import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
-import { createCarrierFieldsConfig } from './eslint-rules/carrier-fields-policy.mjs'
+import { carrierFieldsConfig } from './eslint-rules/carrier-fields-policy.mjs'
 import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
@@ -974,7 +974,7 @@ export default [
       'n/no-extraneous-require': 'off',
     },
   },
-  ...createCarrierFieldsConfig('eslint-rules/eslint-carrier-fields'),
+  ...carrierFieldsConfig,
   {
     // The Next.js fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`). The package is supplied to the app at runtime via a
