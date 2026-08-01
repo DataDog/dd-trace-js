@@ -15,6 +15,7 @@ import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
@@ -405,6 +406,7 @@ export default [
       '@stylistic': eslintPluginStylistic,
       'eslint-rules': {
         rules: {
+          'eslint-carrier-fields': eslintCarrierFields,
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
@@ -1061,6 +1063,26 @@ export default [
       // The OpenFeature hook API defines `finally(hookContext, evalDetails)`, which the rule
       // reads as `Promise.prototype.finally`.
       'promise/valid-params': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/propagation/managed-header-fields',
+    files: ['packages/*/src/**/*.{js,mjs,cjs}'],
+    rules: {
+      'eslint-rules/eslint-carrier-fields': ['error', { requireDirectOperations: true }],
+    },
+  },
+  {
+    name: 'dd-trace/propagation/carrier-fields',
+    files: [
+      'packages/dd-trace/src/datastreams/pathway.js',
+      'packages/dd-trace/src/opentracing/propagation/text_map.js',
+    ],
+    rules: {
+      'eslint-rules/eslint-carrier-fields': ['error', {
+        requireDirectOperations: true,
+        strictCarrierIdentifiers: true,
+      }],
     },
   },
   {
