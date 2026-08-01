@@ -16,18 +16,25 @@ import * as Module from 'module'
 import { types } from 'util'
 import { isMainThread } from 'worker_threads'
 
-// This file must support Node.js 12.0.0 syntax
+// This file must support Node.js 14.13.1 syntax
 
-import {
-  iitmExclusionRegExp,
-  initialize as hookInitialize,
-  load as hookLoad,
-  resolve as hookResolve,
-} from './loader-hook.mjs?initialize'
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
+
+const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
+const isNode20LoaderWorker = !isMainThread && NODE_MAJOR === 20 && NODE_MINOR === 0
+const useDefaultLoader = brokenLoaders || isNode20LoaderWorker
+// Avoid CommonJS in the loader worker on Node 20.0: https://github.com/nodejs/node/issues/47566
+const loaderHook = useDefaultLoader ? undefined : await import('./loader-hook.mjs?initialize')
 
 let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href
 // `--loader` only reliably influences ESM entrypoints; for CJS apps use `--import`/`--require`.
+
+export const globalPreload = isNode20LoaderWorker
+  ? () => `if (getBuiltin('module').createRequire(${JSON.stringify(import.meta.url)})('./init.js')) {
+  process.emitWarning('dd-trace cannot instrument ES modules on Node.js 20.0.0. Upgrade to Node.js 20.1.0 or newer.')
+}`
+  : undefined
 
 /**
  * @param {{ source?: string|Buffer|Uint8Array, format?: string }} result
@@ -63,26 +70,23 @@ function insertInit (result, _url_, context) {
   return result
 }
 
-const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
-
-const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
-
 // Node calls `initialize` only through `module.register`, never for `--loader`; without it
 // import-in-the-middle keeps its default matcher and proxies every application module. Loaders
 // before Node 18.19 share the application thread, where `loader-hook.mjs` builds no matcher.
-let needsHookInitialize = !isMainThread && !brokenLoaders
+let needsHookInitialize = !isMainThread && !useDefaultLoader
 
-export async function load (url, context, nextLoad) {
+async function loadWithInit (url, context, nextLoad) {
   if (needsHookInitialize) {
     needsHookInitialize = false
-    hookInitialize()
+    loaderHook.initialize()
   }
 
-  const loadHook = (brokenLoaders || iitmExclusionRegExp.test(url)) ? nextLoad : hookLoad
-  return insertInit(await loadHook(url, context, nextLoad), url, context)
+  const load = (useDefaultLoader || loaderHook.iitmExclusionRegExp.test(url)) ? nextLoad : loaderHook.load
+  return insertInit(await load(url, context, nextLoad), url, context)
 }
 
-export const resolve = brokenLoaders ? undefined : hookResolve
+export const load = isNode20LoaderWorker ? undefined : loadWithInit
+export const resolve = useDefaultLoader ? undefined : loaderHook.resolve
 
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)

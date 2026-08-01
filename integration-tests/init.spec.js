@@ -32,11 +32,8 @@ delete process.env.DD_INJECT_FORCE
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
 
-  // For `--loader`, we generally want ESM fixtures to ensure the loader hook actually applies.
-  // However, Node 18.0.0 is a known outlier where ESM via custom loaders is not supportable.
-  const isNode1800 = process.versions.node === '18.0.0'
-  const tracerFile = arg === 'loader' && !isNode1800 ? 'init/trace.mjs' : 'init/trace.js'
-  const instrFile = arg === 'loader' && !isNode1800 ? 'init/instrument.mjs' : 'init/instrument.js'
+  const tracerFile = arg === 'loader' && esmWorks ? 'init/trace.mjs' : 'init/trace.js'
+  const instrFile = arg === 'loader' && esmWorks ? 'init/instrument.mjs' : 'init/instrument.js'
 
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
@@ -329,15 +326,15 @@ describe('init.js', () => {
 // or on 18.0.0 in particular.
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
-    // Node 20.0.0 can leave short-lived loader-based children alive after they
-    // print the expected output, so terminate them after a short grace period.
-    setShouldKill(process.versions.node === '20.0.0')
+    setShouldKill(false)
     useSandbox()
     stubTracerIfNeeded()
 
     context('as --loader', () => {
+      const esmWorks = process.versions.node !== '18.0.0' && process.versions.node !== '20.0.0'
+
       testInjectionScenarios('loader', 'initialize.mjs',
-        process.versions.node !== '18.0.0')
+        esmWorks)
       testRuntimeVersionChecks('loader', 'initialize.mjs')
 
       // Only off-thread loaders install the matcher; see initialize.mjs.
@@ -353,6 +350,22 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
 
           it('wraps instrumented and PM2 security control modules and nothing else', () =>
             testFile('init/loader-matcher.mjs', 'true\n', [], ''))
+        })
+      }
+
+      if (process.versions.node === '20.0.0') {
+        context('with the Node.js 20.0.0 loader', () => {
+          const NODE_OPTIONS = '--no-warnings --loader dd-trace/initialize.mjs'
+
+          context('with force', () => {
+            useEnv({ DD_INJECT_FORCE, NODE_OPTIONS })
+
+            it('initializes before a CommonJS entrypoint', () =>
+              testFile('init/trace.js', 'true\n', [], ''))
+
+            it('initializes inside inherited Workers', () =>
+              testFile('init/loader-worker.mjs', 'true\n', [], ''))
+          })
         })
       }
     })
