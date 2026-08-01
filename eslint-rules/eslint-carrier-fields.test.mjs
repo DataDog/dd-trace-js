@@ -37,6 +37,18 @@ ruleTester.run('eslint-carrier-fields', rule, {
     { code: 'carrier[key] = value' },
     { code: 'carrier.foo = value' },
     { code: 'const context = { traceparent: value }' },
+    { code: 'function create () { return { traceparent: value } }' },
+    { code: 'consume({ traceparent: value })' },
+    { code: 'config["baggage"]' },
+    { code: 'settings["nested"]["baggage"]' },
+    { code: '"b3" in codecs' },
+    { code: 'Object.hasOwn(config, "traceparent")' },
+    { code: 'const { baggage } = config' },
+    { code: 'Reflect.get(...args)' },
+    { code: 'headers.hasOwnProperty()' },
+    { code: 'headers.hasOwnProperty(...keys)' },
+    { code: 'const key = `not-a-header`; config[key]' },
+    { code: 'const { ...operations } = require("../carrier")' },
     { code: 'const value = request.headers["x-datadog-endpoint-scan"]' },
     { code: 'headers["access-control-allow-headers"]' },
   ],
@@ -47,7 +59,21 @@ ruleTester.run('eslint-carrier-fields', rule, {
       errors: [{ messageId: 'useCarrierField' }],
     },
     {
+      code: 'carrier[TRACE_HEADER] = value',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const key = key; carrier[key] = value',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
       code: 'const traceIdHeader = "x-datadog-trace-id"; carrier[traceIdHeader] = value',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'const header = `traceparent`; headers[header] = value',
       errors: [{ messageId: 'useCarrierField' }],
     },
     {
@@ -87,11 +113,71 @@ ruleTester.run('eslint-carrier-fields', rule, {
       errors: [{ messageId: 'useCarrierField' }],
     },
     {
+      code: 'const input = { headers: { traceparent: value } }',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
       code: 'carrier["ot-baggage-foo"] = value',
       errors: [{ messageId: 'useCarrierField' }],
     },
     {
       code: 'carrier.baggage',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.hasOwn(headers, "traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.has(attributes, "baggage")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.defineProperty(headers, "traceparent", descriptor)',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.getOwnPropertyDescriptor(headers, "traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.get(headers, "traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.set(headers, "traceparent", value)',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.deleteProperty(headers, "traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.defineProperty(headers, "traceparent", descriptor)',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Reflect.getOwnPropertyDescriptor(headers, "traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.assign(carrier, { traceparent: value })',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.defineProperties(headers, { traceparent: descriptor })',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'headers.hasOwnProperty("traceparent")',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'const { traceparent } = headers',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: '({ traceparent } = headers)',
       errors: [{ messageId: 'useCarrierField' }],
     },
     {
@@ -115,25 +201,53 @@ ruleTester.run('eslint-carrier-fields', rule, {
       errors: [{ messageId: 'noDirectCarrierAccess' }],
     },
     {
-      code: 'injectedCarrier.foo = value',
+      code: '"traceparent" in headers',
+      errors: [{ messageId: 'useCarrierField' }],
+    },
+    {
+      code: 'Object.hasOwn(carrier, key)',
       options: [{ strictCarrierIdentifiers: true }],
       errors: [{ messageId: 'noDirectCarrierAccess' }],
     },
     {
-      code: 'fields.datadogTraceId.write(carrier, value)',
-      options: [{ requireDirectOperations: true }],
-      errors: [{ messageId: 'useDirectCarrierOperation' }],
+      code: 'consume(...carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
     },
     {
-      code: 'const carrierFields = require("../carrier"); carrierFields.datadogTraceId.write(carrier, value)',
-      options: [{ requireDirectOperations: true }],
-      errors: [{ messageId: 'useDirectCarrierOperation' }],
+      code: 'const { key } = carrier',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
     },
     {
-      code: 'const fields = require("../carrier"); ' +
-        'const { datadogTraceId } = fields; datadogTraceId.write(carrier, value)',
-      options: [{ requireDirectOperations: true }],
-      errors: [{ messageId: 'useDirectCarrierOperation' }],
+      code: 'const { traceparent, ...rest } = carrier',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'useCarrierField' }, { messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const { traceparent, key } = carrier',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'useCarrierField' }, { messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: '({ key } = carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'const {} = carrier',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: '({} = carrier)',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
+    },
+    {
+      code: 'injectedCarrier.foo = value',
+      options: [{ strictCarrierIdentifiers: true }],
+      errors: [{ messageId: 'noDirectCarrierAccess' }],
     },
     {
       code: 'const { writeDatadogTraceId: writeTraceId } = require("../carrier")',
