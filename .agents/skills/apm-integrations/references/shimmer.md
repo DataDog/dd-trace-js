@@ -22,7 +22,7 @@ When completion belongs to events on a returned stream or request object:
 1. Return directly when the start channel has no subscribers.
 2. Create one context and call the original operation inside `start.runStores()`.
 3. Wrap the returned object's event boundary before the `runStores()` callback returns; do not replace an
-   identity-sensitive result.
+    identity-sensitive result.
 4. Publish `error` with `ctx.error`, and publish `asyncEnd` on the actual terminal event.
 5. Publish `end` in a `finally` block around the original call.
 6. Prevent duplicate terminal publication when the upstream contract permits several terminal events.
