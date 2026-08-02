@@ -3,18 +3,18 @@
 const assert = require('node:assert/strict')
 const { performance } = require('node:perf_hooks')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const {
   dispatchesAcquireSynchronously,
+  isPoolQueryAcquire,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,
   wrapPoolClusterMethod,
   wrapPoolClusterQueryMethod,
   wrapPoolGetConnection,
-  wrapPoolQueryCarrier,
   wrapPoolQueryMethod,
 } = require('../../src/helpers/pool-acquire')
 
@@ -27,81 +27,46 @@ const inactiveChannels = {
 }
 
 describe('helpers/pool-acquire', () => {
+  afterEach(() => sinon.restore())
+
   describe('acquire dispatch detection', () => {
-    it('detects an acquire dispatched before the method returns', () => {
-      const receiver = {}
-
-      const synchronous = dispatchesAcquireSynchronously(function () {
+    it('distinguishes synchronous, deferred, async, and unprobeable methods', async () => {
+      assert.strictEqual(dispatchesAcquireSynchronously(function () {
         this.getConnection()
-      }, receiver, 'getConnection', [])
+      }, {}, 'getConnection', []), true)
 
-      assert.strictEqual(synchronous, true)
-    })
-
-    it('detects an acquire deferred beyond the method return', async () => {
-      const receiver = {}
-
-      const synchronous = dispatchesAcquireSynchronously(function () {
+      assert.strictEqual(dispatchesAcquireSynchronously(function () {
         setImmediate(() => this.getConnection())
-      }, receiver, 'getConnection', [])
+      }, {}, 'getConnection', []), false)
 
-      assert.strictEqual(synchronous, false)
-      await new Promise(resolve => setImmediate(resolve))
-    })
-
-    it('uses the deferred path without executing an async method', async () => {
       let advanced = false
-
-      const synchronous = dispatchesAcquireSynchronously(async function () {
+      assert.strictEqual(dispatchesAcquireSynchronously(async function () {
         await this.getConnection()
         advanced = true
-      }, {}, 'getConnection', [])
-
-      assert.strictEqual(synchronous, false)
-      await new Promise(resolve => setImmediate(resolve))
-      assert.strictEqual(advanced, false)
-    })
-
-    it('uses the deferred path when the probe cannot execute the method', () => {
-      const synchronous = dispatchesAcquireSynchronously(() => {
+      }, {}, 'getConnection', []), false)
+      assert.strictEqual(dispatchesAcquireSynchronously(() => {
         throw new Error('unsupported receiver')
-      }, {}, 'getConnection', [])
+      }, {}, 'getConnection', []), false)
 
-      assert.strictEqual(synchronous, false)
+      await waitImmediates(2)
+      assert.strictEqual(advanced, false)
     })
   })
 
   describe('subscriber-off fast paths', () => {
-    it('forwards an ordinary pool method unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolQueryMethod(method, inactiveChannel))
-    })
+    it('forwards every wrapper without changing the call', () => {
+      const wrappers = [
+        method => wrapPoolQueryMethod(method, inactiveChannel),
+        method => wrapPoolQueryMethod(method, inactiveChannel, true),
+        method => wrapPoolAcquireCarrier(noop, method, inactiveChannel, true),
+        method => wrapPoolClusterQueryMethod(method, inactiveChannel),
+        method => wrapPoolClusterMethod(method, inactiveChannel),
+        method => wrapPoolClusterGetConnection(method, inactiveChannel),
+        method => wrapPoolGetConnection(method, inactiveChannels),
+        method => wrapPoolGetConnection(method, inactiveChannels, true),
+      ]
 
-    it('forwards a deferred pool query carrier unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolQueryCarrier(method, inactiveChannel, true))
-    })
-
-    it('forwards a deferred pool acquire carrier unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolAcquireCarrier(noop, method, inactiveChannel, true, noop))
-    })
-
-    it('forwards a mysql cluster query unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolClusterQueryMethod(method, inactiveChannel))
-    })
-
-    it('forwards a mysql2 cluster method unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolClusterMethod(method, inactiveChannel))
-    })
-
-    it('forwards a mysql2 cluster acquire unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolClusterGetConnection(method, inactiveChannel))
-    })
-
-    it('forwards a pool acquire unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolGetConnection(method, inactiveChannels))
-    })
-
-    it('forwards a deferred pool acquire unchanged', () => {
-      assertInactiveFastPath(method => wrapPoolGetConnection(method, inactiveChannels, true))
+      for (const wrap of wrappers) assertInactiveFastPath(wrap)
     })
   })
 
@@ -111,18 +76,24 @@ describe('helpers/pool-acquire', () => {
     const error = new Error('acquire failed')
     const thirdArgument = {}
 
-    for (const expectedArguments of [[error], [undefined, connection, thirdArgument]]) {
+    for (const [expectedArguments, internal] of [
+      [[error], false],
+      [[undefined, connection, thirdArgument], false],
+      [[], true],
+    ]) {
       const expectedReturn = {}
+      const connectionStartCh = { hasSubscribers: true, publish: noop }
       const wrapped = wrapPoolGetConnection(function (callback) {
         return callback.apply(callbackReceiver, expectedArguments)
       }, {
-        connectionStartCh: { hasSubscribers: true, publish: noop },
+        connectionStartCh,
         connectionFinishCh: { runStores },
         acquireStartCh: inactiveChannel,
         acquireFinishCh: inactiveChannel,
       })
 
-      const actualReturn = wrapped.call({ config: { connectionConfig: {} } }, function () {
+      const pool = { config: { connectionConfig: {} } }
+      const invoke = () => wrapped.call(pool, function () {
         assert.strictEqual(this, callbackReceiver)
         assert.strictEqual(arguments.length, expectedArguments.length)
         for (let i = 0; i < arguments.length; i++) {
@@ -130,6 +101,7 @@ describe('helpers/pool-acquire', () => {
         }
         return expectedReturn
       })
+      const actualReturn = internal ? wrapPoolQueryMethod(invoke, connectionStartCh)() : invoke()
 
       assert.strictEqual(actualReturn, expectedReturn)
     }
@@ -176,85 +148,6 @@ describe('helpers/pool-acquire', () => {
     assert.strictEqual(acquireStarts, 1)
   })
 
-  it('retains a mysql cluster query acquire across a deferred retry', async () => {
-    const now = sinon.stub(performance, 'now')
-    now.onFirstCall().returns(100)
-    now.onSecondCall().returns(600)
-
-    try {
-      const connection = {}
-      const error = new Error('acquire failed')
-      const channels = activeChannels()
-      const pool = { config: { connectionConfig: {} } }
-      let attempts = 0
-      const getConnection = wrapPoolGetConnection(function (callback) {
-        if (++attempts === 1) return setImmediate(callback, error)
-        return callback(undefined, connection)
-      }, channels)
-      const rawQuery = queryObject => {
-        getConnection.call(pool, acquireError => {
-          if (acquireError) return setImmediate(query, queryObject)
-          queryObject.resolve(takePoolWaitTime(connection))
-        })
-        return queryObject
-      }
-      const query = wrapPoolClusterQueryMethod(rawQuery, channels.connectionStartCh)
-
-      const waitTime = await new Promise(resolve => query({ resolve }))
-
-      assert.strictEqual(attempts, 2)
-      assert.strictEqual(waitTime, 500)
-    } finally {
-      now.restore()
-    }
-  })
-
-  it('retains a mysql2 cluster query acquire across a deferred retry', async () => {
-    const now = sinon.stub(performance, 'now')
-    now.onFirstCall().returns(100)
-    now.onSecondCall().returns(600)
-
-    try {
-      const connection = {}
-      const error = new Error('acquire failed')
-      const channels = activeChannels()
-      const pool = { config: { connectionConfig: {} } }
-      let attempts = 0
-      const poolGetConnection = wrapPoolGetConnection(function (callback) {
-        if (++attempts === 1) return callback(error)
-        return callback(undefined, connection)
-      }, channels)
-
-      /**
-       * @param {Function} callback
-       * @returns {unknown}
-       */
-      function getConnection (callback) {
-        return poolGetConnection.call(pool, function (error) {
-          if (error) return setImmediate(namespaceGetConnection, callback)
-          return callback(undefined, connection)
-        })
-      }
-      const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels.connectionStartCh)
-      const query = wrapPoolClusterMethod(
-        callback => namespaceGetConnection(callback),
-        channels.connectionStartCh
-      )
-
-      const waitTime = await new Promise((resolve, reject) => {
-        query((error, connection) => {
-          if (error) return reject(error)
-          resolve(takePoolWaitTime(connection))
-        })
-      })
-
-      assert.strictEqual(attempts, 2)
-      assert.strictEqual(waitTime, 500)
-    } finally {
-      now.restore()
-    }
-  })
-
   it('keeps concurrent mysql2 cluster query acquires isolated', async () => {
     const now = sinon.stub(performance, 'now')
     now.onCall(0).returns(100)
@@ -262,148 +155,52 @@ describe('helpers/pool-acquire', () => {
     now.onCall(2).returns(250)
     now.onCall(3).returns(700)
 
-    try {
-      const firstConnection = {}
-      const secondConnection = {}
-      const channels = activeChannels()
-      const pool = { config: { connectionConfig: {} } }
-      const physicalCallbacks = []
-      const poolGetConnection = wrapPoolGetConnection(function (callback) {
-        physicalCallbacks.push(callback)
-      }, channels)
-
-      /**
-       * @param {Function} callback
-       */
-      function getConnection (callback) {
-        poolGetConnection.call(pool, function (error, connection) {
-          if (error) return setImmediate(namespaceGetConnection, callback)
-          callback(undefined, connection)
-        })
-      }
-      const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels.connectionStartCh)
-      const query = wrapPoolClusterMethod(
-        callback => namespaceGetConnection(callback),
-        channels.connectionStartCh
-      )
-      const waits = []
-      const first = new Promise(resolve => {
-        query((error, connection) => {
-          assert.strictEqual(error, undefined)
-          waits[0] = takePoolWaitTime(connection)
-          resolve()
-        })
-      })
-      const second = new Promise(resolve => {
-        query((error, connection) => {
-          assert.strictEqual(error, undefined)
-          waits[1] = takePoolWaitTime(connection)
-          resolve()
-        })
-      })
-
-      physicalCallbacks[1](undefined, secondConnection)
-      physicalCallbacks[0](new Error('acquire failed'))
-      await new Promise(resolve => setImmediate(resolve))
-      physicalCallbacks[2](undefined, firstConnection)
-      await Promise.all([first, second])
-
-      assert.deepStrictEqual(waits, [600, 50])
-    } finally {
-      now.restore()
-    }
-  })
-
-  it('clears an unconsumed pool wait when the connection is acquired again', async () => {
-    const connection = {}
-    const connectionStartCh = { hasSubscribers: true, publish: noop }
+    const firstConnection = {}
+    const secondConnection = {}
+    const channels = activeChannels()
     const pool = { config: { connectionConfig: {} } }
-    const getConnection = wrapPoolGetConnection(function (callback) {
-      return callback(undefined, connection)
-    }, {
-      connectionStartCh,
-      connectionFinishCh: { runStores },
-      acquireStartCh: inactiveChannel,
-      acquireFinishCh: inactiveChannel,
-    })
-    const query = wrapPoolQueryMethod(() => getConnection.call(pool, noop), connectionStartCh)
-
-    query()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    getConnection.call(pool, noop)
-
-    assert.strictEqual(takePoolWaitTime(connection), undefined)
-  })
-
-  it('switches a pool implementation to deferred wait transfers after detecting one', async () => {
-    const connection = {}
-    const connectionStartCh = { hasSubscribers: true, publish: noop }
-    const pool = { config: { connectionConfig: {} } }
-    const waitTimes = []
-    const getConnection = wrapPoolGetConnection(function (callback) {
-      return callback(undefined, connection)
-    }, {
-      connectionStartCh,
-      connectionFinishCh: { runStores },
-      acquireStartCh: inactiveChannel,
-      acquireFinishCh: inactiveChannel,
-    })
+    const physicalCallbacks = []
+    const poolGetConnection = wrapPoolGetConnection(function (callback) {
+      physicalCallbacks.push(callback)
+    }, channels)
 
     /**
-     * @param {unknown} error
-     * @param {object} connection
+     * @param {Function} callback
      */
-    const onConnection = (error, connection) => {
-      assert.strictEqual(error, undefined)
-      setImmediate(() => {
-        setImmediate(() => {
-          setImmediate(() => waitTimes.push(takePoolWaitTime(connection)))
-        })
+    function getConnection (callback) {
+      poolGetConnection.call(pool, function (error, connection) {
+        if (error) return setImmediate(namespaceGetConnection, callback)
+        callback(undefined, connection)
       })
     }
-    const query = wrapPoolQueryMethod(() => getConnection.call(pool, onConnection), connectionStartCh)
-
-    query()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    query()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-
-    assert.strictEqual(waitTimes.length, 2)
-    assert.strictEqual(typeof waitTimes[0], 'number')
-    assert.strictEqual(typeof waitTimes[1], 'number')
-  })
-
-  it('classifies a synchronous reentrant acquire as explicit', () => {
-    const connectionStartCh = { hasSubscribers: true, publish: noop }
-    let acquireStarts = 0
-    let reentered = false
-    const pool = { config: { connectionConfig: {} } }
-
-    const getConnection = wrapPoolGetConnection(function (callback) {
-      if (!reentered) {
-        reentered = true
-        getConnection.call(pool, noop)
-      }
-      return callback(new Error('acquire failed'))
-    }, {
-      connectionStartCh,
-      connectionFinishCh: { runStores },
-      acquireStartCh: {
-        hasSubscribers: true,
-        publish: () => { acquireStarts++ },
-      },
-      acquireFinishCh: { publish: noop },
+    const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels.connectionStartCh)
+    const query = wrapPoolClusterMethod(
+      callback => namespaceGetConnection(callback),
+      channels.connectionStartCh
+    )
+    const waits = []
+    const first = new Promise(resolve => {
+      query((error, connection) => {
+        assert.strictEqual(error, undefined)
+        waits[0] = takePoolWaitTime(connection)
+        resolve()
+      })
     })
-    const query = wrapPoolQueryMethod(() => getConnection.call(pool, noop), connectionStartCh)
+    const second = new Promise(resolve => {
+      query((error, connection) => {
+        assert.strictEqual(error, undefined)
+        waits[1] = takePoolWaitTime(connection)
+        resolve()
+      })
+    })
 
-    query()
+    physicalCallbacks[1](undefined, secondConnection)
+    physicalCallbacks[0](new Error('acquire failed'))
+    await waitImmediates(1)
+    physicalCallbacks[2](undefined, firstConnection)
+    await Promise.all([first, second])
 
-    assert.strictEqual(acquireStarts, 1)
+    assert.deepStrictEqual(waits, [600, 50])
   })
 
   it('classifies only the deferred pool query acquire as internal', async () => {
@@ -433,8 +230,7 @@ describe('helpers/pool-acquire', () => {
     }, connectionStartCh, true)
 
     query.call(pool)
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
+    await waitImmediates(2)
 
     assert.strictEqual(acquireStarts, 1)
     assert.strictEqual(typeof waitTime, 'number')
@@ -445,16 +241,14 @@ describe('helpers/pool-acquire', () => {
     const pool = {}
     let internalAcquires = 0
     const acquire = wrapPoolAcquireCarrier(
-      noop,
-      noop,
+      () => {
+        if (isPoolQueryAcquire()) internalAcquires++
+      },
+      () => {},
       channel,
-      true,
-      (method, receiver, args) => {
-        internalAcquires++
-        return method.apply(receiver, args)
-      }
+      true
     )
-    const query = wrapPoolQueryCarrier(function () {
+    const query = wrapPoolQueryMethod(function () {
       setImmediate(() => {
         acquire.call(this, noop)
         acquire.call(this, noop)
@@ -462,14 +256,9 @@ describe('helpers/pool-acquire', () => {
     }, channel, true)
 
     query.call(pool)
-    await new Promise(resolve => setImmediate(resolve))
+    await waitImmediates(1)
 
     assert.strictEqual(internalAcquires, 1)
-  })
-
-  it('keeps synchronous methods unchanged when deferred carriers are not needed', () => {
-    assert.strictEqual(wrapPoolQueryCarrier(noop, inactiveChannel, false), noop)
-    assert.strictEqual(wrapPoolAcquireCarrier(noop, noop, inactiveChannel, false, noop), noop)
   })
 })
 
@@ -519,4 +308,12 @@ function activeChannels () {
     acquireStartCh: inactiveChannel,
     acquireFinishCh: inactiveChannel,
   }
+}
+
+/**
+ * @param {number} count
+ * @returns {Promise<void>}
+ */
+async function waitImmediates (count) {
+  while (count-- > 0) await new Promise(resolve => setImmediate(resolve))
 }

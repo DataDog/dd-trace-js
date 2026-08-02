@@ -9,7 +9,6 @@ const { performance } = require('node:perf_hooks')
  * @typedef {{ deferred: boolean }} PoolWaitTransfer
  * @typedef {{ transfer: PoolWaitTransfer, waitTime: number }} DeferredPoolWait
  * @typedef {{ pending: boolean, pool: object }} DeferredPoolQueryAcquire
- * @typedef {(method: Function, pool: object, args: IArguments) => unknown} PoolAcquireRunner
  * @typedef {{
  *   connectionStartCh: Channel,
  *   connectionFinishCh: Channel,
@@ -30,57 +29,33 @@ let deferredPoolQueryAcquireStorage
 /** @type {WeakMap<object, ClusterAcquire>} */
 const deferredClusterAcquires = new WeakMap()
 
+// Keep synchronous wait handoff allocation-free; a delayed consumer promotes only its pool wrapper.
 const poolWaitConnections = []
 const poolWaitTimes = []
 
-// Keep synchronous dispatch on the array fast path. An unconsumed candidate remains associated with
-// the connection until its first query or its next acquisition, so delayed dispatch has no timing
-// assumption and an aborted dispatch cannot poison the next borrower. Consuming one after the
-// acquire callback returns switches only that wrapped pool implementation to the WeakMap path.
 /** @type {WeakMap<object, DeferredPoolWait>} */
 const deferredPoolWaitTimes = new WeakMap()
 let deferredPoolWaitCount = 0
 
-// Ordinary pool methods identify their synchronous acquire with the sentinel. Cluster retries carry
-// a keyed state so a future upstream version can defer the retry without changing its classification.
 /**
- * Bracket a pool `query` / `execute` so the connection it acquires internally is treated as a
- * pooled-query acquire rather than an explicit one.
- *
  * @param {Function} method
  * @param {Channel} connectionStartCh
  * @param {boolean} [deferred]
  * @returns {Function}
  */
 function wrapPoolQueryMethod (method, connectionStartCh, deferred) {
-  if (deferred) return wrapPoolQueryCarrier(method, connectionStartCh, true)
+  if (deferred) {
+    return function () {
+      if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
 
-  return function () {
-    if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
-
-    const previous = currentPoolQueryAcquire
-    currentPoolQueryAcquire = poolQueryAcquire
-    try {
-      return method.apply(this, arguments)
-    } finally {
-      currentPoolQueryAcquire = previous
+      const storage = getDeferredPoolQueryAcquireStorage()
+      return storage.run({ pending: true, pool: this }, () => method.apply(this, arguments))
     }
   }
-}
-
-/**
- * @param {Function} method
- * @param {Channel} connectionStartCh
- * @param {boolean} deferred
- * @returns {Function}
- */
-function wrapPoolQueryCarrier (method, connectionStartCh, deferred) {
-  if (!deferred) return method
 
   return function () {
     if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
-
-    return runDeferredPoolQueryAcquire(this, method, arguments)
+    return runWithPoolQueryAcquire(poolQueryAcquire, method, this, arguments)
   }
 }
 
@@ -89,10 +64,9 @@ function wrapPoolQueryCarrier (method, connectionStartCh, deferred) {
  * @param {Function} inactiveMethod
  * @param {Channel} connectionStartCh
  * @param {boolean} deferred
- * @param {PoolAcquireRunner} run
  * @returns {Function}
  */
-function wrapPoolAcquireCarrier (method, inactiveMethod, connectionStartCh, deferred, run) {
+function wrapPoolAcquireCarrier (method, inactiveMethod, connectionStartCh, deferred) {
   if (!deferred) return method
 
   return function (callback) {
@@ -101,7 +75,7 @@ function wrapPoolAcquireCarrier (method, inactiveMethod, connectionStartCh, defe
       return method.apply(this, arguments)
     }
 
-    return run(method, this, arguments)
+    return runWithPoolQueryAcquire(poolQueryAcquire, method, this, arguments)
   }
 }
 
@@ -114,20 +88,15 @@ function wrapPoolClusterQueryMethod (method, connectionStartCh) {
   return function () {
     if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
 
-    const previous = currentPoolQueryAcquire
     const key = arguments[0]
-    const acquire = previous && previous !== poolQueryAcquire && previous.key === key
+    const previous = currentPoolQueryAcquire
+    const acquire = isClusterAcquire(previous) && previous.key === key
       ? previous
       : takeClusterAcquire(key) ?? {}
+    const result = runWithPoolQueryAcquire(acquire, method, this, arguments)
 
-    currentPoolQueryAcquire = acquire
-    try {
-      const result = method.apply(this, arguments)
-      if (isWeakKey(result)) acquire.key = result
-      return result
-    } finally {
-      currentPoolQueryAcquire = previous
-    }
+    if (isWeakKey(result)) acquire.key = result
+    return result
   }
 }
 
@@ -139,16 +108,7 @@ function wrapPoolClusterQueryMethod (method, connectionStartCh) {
 function wrapPoolClusterMethod (method, connectionStartCh) {
   return function () {
     if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
-
-    const previous = currentPoolQueryAcquire
-    const acquire = {}
-
-    currentPoolQueryAcquire = acquire
-    try {
-      return method.apply(this, arguments)
-    } finally {
-      currentPoolQueryAcquire = previous
-    }
+    return runWithPoolQueryAcquire({}, method, this, arguments)
   }
 }
 
@@ -162,29 +122,15 @@ function wrapPoolClusterGetConnection (method, connectionStartCh) {
     if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
 
     const previous = currentPoolQueryAcquire
-    const acquire = previous && previous !== poolQueryAcquire &&
+    const acquire = isClusterAcquire(previous) &&
       (previous.key === undefined || previous.key === callback)
       ? previous
       : takeClusterAcquire(callback)
 
-    if (acquire === undefined) {
-      if (previous === undefined) return method.apply(this, arguments)
+    if (acquire !== undefined) acquire.key = callback
+    if (acquire === undefined && previous === undefined) return method.apply(this, arguments)
 
-      currentPoolQueryAcquire = undefined
-      try {
-        return method.apply(this, arguments)
-      } finally {
-        currentPoolQueryAcquire = previous
-      }
-    }
-
-    acquire.key = callback
-    currentPoolQueryAcquire = acquire
-    try {
-      return method.apply(this, arguments)
-    } finally {
-      currentPoolQueryAcquire = previous
-    }
+    return runWithPoolQueryAcquire(acquire, method, this, arguments)
   }
 }
 
@@ -195,8 +141,16 @@ function wrapPoolClusterGetConnection (method, connectionStartCh) {
  * @returns {Function}
  */
 function wrapPoolGetConnection (getConnection, channels, deferred) {
-  if (deferred) return wrapDeferredPoolGetConnection(getConnection, channels)
+  const wrapped = wrapSynchronousPoolGetConnection(getConnection, channels)
+  return wrapPoolAcquireCarrier(wrapped, getConnection, channels.connectionStartCh, deferred === true)
+}
 
+/**
+ * @param {Function} getConnection
+ * @param {AcquireChannels} channels
+ * @returns {Function}
+ */
+function wrapSynchronousPoolGetConnection (getConnection, channels) {
   const {
     connectionStartCh,
     connectionFinishCh,
@@ -207,8 +161,9 @@ function wrapPoolGetConnection (getConnection, channels, deferred) {
   const queuedCallbacks = channels.reentersQueuedCallbacks ? new WeakSet() : undefined
 
   return function (callback) {
-    if (!connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
-    if (queuedCallbacks?.has(callback)) return getConnection.apply(this, arguments)
+    if (!connectionStartCh.hasSubscribers || queuedCallbacks?.has(callback)) {
+      return getConnection.apply(this, arguments)
+    }
 
     const ctx = {}
     const acquire = currentPoolQueryAcquire
@@ -225,13 +180,17 @@ function wrapPoolGetConnection (getConnection, channels, deferred) {
      * @returns {unknown}
      */
     const wrappedCallback = function (error, connection) {
-      if (acquireCtx !== undefined) {
-        acquireCtx.error = error
-        acquireCtx.poolWaitTime = acquireWait(start)
-        acquireFinishCh.publish(acquireCtx)
+      if (acquire === undefined) {
+        if (!error && connection !== undefined) clearPoolWaitTime(connection)
+        if (acquireCtx !== undefined) {
+          acquireCtx.error = error
+          acquireCtx.poolWaitTime = acquireWait(start)
+          acquireFinishCh.publish(acquireCtx)
+        }
+        return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
       }
 
-      return runConnectionCallback(
+      return runPoolQueryConnectionCallback(
         poolWaitTransfer,
         acquire,
         start,
@@ -248,50 +207,44 @@ function wrapPoolGetConnection (getConnection, channels, deferred) {
     arguments[0] = wrappedCallback
 
     connectionStartCh.publish(ctx)
-    if (acquire === undefined) return getConnection.apply(this, arguments)
-
-    const previous = currentPoolQueryAcquire
-    currentPoolQueryAcquire = undefined
-    try {
-      return getConnection.apply(this, arguments)
-    } finally {
-      currentPoolQueryAcquire = previous
-    }
+    return acquire === undefined
+      ? getConnection.apply(this, arguments)
+      : runWithPoolQueryAcquire(undefined, getConnection, this, arguments)
   }
 }
 
 /**
- * @param {Function} getConnection
- * @param {AcquireChannels} channels
- * @returns {Function}
+ * @returns {boolean}
  */
-function wrapDeferredPoolGetConnection (getConnection, channels) {
-  const wrapped = wrapPoolGetConnection(getConnection, channels)
-
-  return function () {
-    if (!channels.connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
-
-    if (!takeDeferredPoolQueryAcquire(this)) return wrapped.apply(this, arguments)
-
-    const previous = currentPoolQueryAcquire
-    currentPoolQueryAcquire = poolQueryAcquire
-    try {
-      return wrapped.apply(this, arguments)
-    } finally {
-      currentPoolQueryAcquire = previous
-    }
-  }
+function isPoolQueryAcquire () {
+  return currentPoolQueryAcquire !== undefined
 }
 
 /**
- * @param {object} pool
  * @param {Function} method
+ * @param {object} receiver
  * @param {IArguments|unknown[]} args
  * @returns {unknown}
  */
-function runDeferredPoolQueryAcquire (pool, method, args) {
-  const storage = getDeferredPoolQueryAcquireStorage()
-  return storage.run({ pending: true, pool }, () => method.apply(pool, args))
+function runOutsidePoolQueryAcquire (method, receiver, args) {
+  return runWithPoolQueryAcquire(undefined, method, receiver, args)
+}
+
+/**
+ * @param {ClusterAcquire | typeof poolQueryAcquire | undefined} acquire
+ * @param {Function} method
+ * @param {unknown} receiver
+ * @param {IArguments|unknown[]} args
+ * @returns {unknown}
+ */
+function runWithPoolQueryAcquire (acquire, method, receiver, args) {
+  const previous = currentPoolQueryAcquire
+  currentPoolQueryAcquire = acquire
+  try {
+    return method.apply(receiver, args)
+  } finally {
+    currentPoolQueryAcquire = previous
+  }
 }
 
 /**
@@ -346,22 +299,16 @@ function dispatchesAcquireSynchronously (method, receiver, acquireMethod, args) 
 }
 
 /**
- * An idle connection is handed back within a tick, so treat that as a zero wait and skip the clock
- * reads; only a queued or freshly established connection is worth timing. The free list is absent on
- * builds that predate it, which falls through to timing rather than crashing.
- *
  * @param {Pool} pool
  * @param {ClusterAcquire | typeof poolQueryAcquire} [acquire]
  * @returns {number|undefined}
  */
 function acquireStart (pool, acquire) {
-  if (acquire !== undefined && acquire !== poolQueryAcquire && acquire.start !== undefined) {
-    return acquire.start
-  }
+  if (isClusterAcquire(acquire) && acquire.start !== undefined) return acquire.start
   if (pool._freeConnections?.length > 0) return
 
   const start = performance.now()
-  if (acquire !== undefined && acquire !== poolQueryAcquire) acquire.start = start
+  if (isClusterAcquire(acquire)) acquire.start = start
   return start
 }
 
@@ -400,45 +347,38 @@ function takePoolWaitTime (connection) {
  * @param {PoolWaitTransfer} transfer
  * @param {object} connection
  * @param {number} waitTime
- * @returns {number|undefined}
+ * @param {Channel} channel
+ * @param {object} ctx
+ * @param {Function} callback
+ * @param {unknown} thisArg
+ * @param {IArguments|unknown[]} args
+ * @returns {unknown}
  */
-function startPoolWaitTransfer (transfer, connection, waitTime) {
+function runWithPoolWait (transfer, connection, waitTime, channel, ctx, callback, thisArg, args) {
   clearPoolWaitTime(connection)
 
   if (transfer.deferred) {
     deferPoolWaitTime(transfer, connection, waitTime)
-    return
+    return channel.runStores(ctx, callback, thisArg, ...args)
   }
 
   const index = poolWaitConnections.length
   poolWaitConnections.push(connection)
   poolWaitTimes.push(waitTime)
-  return index
-}
-
-/**
- * @param {PoolWaitTransfer} transfer
- * @param {object} connection
- * @param {number} waitTime
- * @param {number|undefined} index
- */
-function finishPoolWaitTransfer (transfer, connection, waitTime, index) {
-  if (index === undefined) return
-
-  if (poolWaitConnections[index] !== undefined) {
-    deferPoolWaitTime(transfer, connection, waitTime)
+  try {
+    return channel.runStores(ctx, callback, thisArg, ...args)
+  } finally {
+    if (poolWaitConnections[index] !== undefined) deferPoolWaitTime(transfer, connection, waitTime)
+    poolWaitConnections.pop()
+    poolWaitTimes.pop()
   }
-  poolWaitConnections.pop()
-  poolWaitTimes.pop()
 }
 
 /**
  * @param {object} connection
  */
 function clearPoolWaitTime (connection) {
-  if (deferredPoolWaitCount !== 0 && deferredPoolWaitTimes.delete(connection)) {
-    deferredPoolWaitCount--
-  }
+  if (deferredPoolWaitCount !== 0 && deferredPoolWaitTimes.delete(connection)) deferredPoolWaitCount--
 }
 
 /**
@@ -447,14 +387,13 @@ function clearPoolWaitTime (connection) {
  * @param {number} waitTime
  */
 function deferPoolWaitTime (transfer, connection, waitTime) {
-  const candidate = { transfer, waitTime }
   if (!deferredPoolWaitTimes.has(connection)) deferredPoolWaitCount++
-  deferredPoolWaitTimes.set(connection, candidate)
+  deferredPoolWaitTimes.set(connection, { transfer, waitTime })
 }
 
 /**
  * @param {PoolWaitTransfer} poolWaitTransfer
- * @param {ClusterAcquire | typeof poolQueryAcquire | undefined} acquire
+ * @param {ClusterAcquire | typeof poolQueryAcquire} acquire
  * @param {number|undefined} start
  * @param {unknown} error
  * @param {object|undefined} connection
@@ -465,7 +404,7 @@ function deferPoolWaitTime (transfer, connection, waitTime) {
  * @param {IArguments} args
  * @returns {unknown}
  */
-function runConnectionCallback (
+function runPoolQueryConnectionCallback (
   poolWaitTransfer,
   acquire,
   start,
@@ -477,37 +416,42 @@ function runConnectionCallback (
   thisArg,
   args
 ) {
-  if (acquire === undefined && !error && connection !== undefined) clearPoolWaitTime(connection)
-
-  if (acquire === undefined || error || connection === undefined) {
-    if (error && acquire !== undefined && acquire !== poolQueryAcquire) {
+  if (error || connection === undefined) {
+    if (error && isClusterAcquire(acquire)) {
       if (acquire.key !== undefined) deferredClusterAcquires.set(acquire.key, acquire)
-
-      const previous = currentPoolQueryAcquire
-      currentPoolQueryAcquire = acquire
-      try {
-        return connectionFinishCh.runStores(ctx, callback, thisArg, ...args)
-      } finally {
-        currentPoolQueryAcquire = previous
-      }
+      return runWithPoolQueryAcquire(
+        acquire,
+        connectionFinishCh.runStores,
+        connectionFinishCh,
+        [ctx, callback, thisArg, ...args]
+      )
     }
-
     return connectionFinishCh.runStores(ctx, callback, thisArg, ...args)
   }
 
-  if (acquire !== poolQueryAcquire) {
+  if (isClusterAcquire(acquire)) {
     if (acquire.key !== undefined) deferredClusterAcquires.delete(acquire.key)
     acquire.key = undefined
   }
 
-  const waitTime = acquireWait(start)
-  const index = startPoolWaitTransfer(poolWaitTransfer, connection, waitTime)
+  return runWithPoolWait(
+    poolWaitTransfer,
+    connection,
+    acquireWait(start),
+    connectionFinishCh,
+    ctx,
+    callback,
+    thisArg,
+    args
+  )
+}
 
-  try {
-    return connectionFinishCh.runStores(ctx, callback, thisArg, ...args)
-  } finally {
-    finishPoolWaitTransfer(poolWaitTransfer, connection, waitTime, index)
-  }
+/**
+ * @param {unknown} value
+ * @returns {value is ClusterAcquire}
+ */
+function isClusterAcquire (value) {
+  return value !== undefined && value !== poolQueryAcquire
 }
 
 /**
@@ -532,16 +476,14 @@ function takeClusterAcquire (key) {
 module.exports = {
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
-  finishPoolWaitTransfer,
-  runDeferredPoolQueryAcquire,
-  startPoolWaitTransfer,
-  takeDeferredPoolQueryAcquire,
+  isPoolQueryAcquire,
+  runOutsidePoolQueryAcquire,
+  runWithPoolWait,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,
   wrapPoolClusterMethod,
   wrapPoolClusterQueryMethod,
   wrapPoolGetConnection,
-  wrapPoolQueryCarrier,
   wrapPoolQueryMethod,
 }

@@ -11,11 +11,12 @@ const {
 const {
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
-  finishPoolWaitTransfer,
-  startPoolWaitTransfer,
+  isPoolQueryAcquire,
+  runOutsidePoolQueryAcquire,
+  runWithPoolWait,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
-  wrapPoolQueryCarrier,
+  wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
 
 const startCh = channel('apm:pg:query:start')
@@ -34,10 +35,6 @@ const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
 // Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
-
-// Pool.query reports its internal acquire on the query span; explicit connects get an acquire span.
-// Pool.query calls connect synchronously; the connect wrap consumes this flag before entering pg-pool.
-let acquiringForPoolQuery = false
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
@@ -94,7 +91,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
       const ctx = {}
       const start = acquireStart(this)
-      const poolQueryAcquire = acquiringForPoolQuery
+      const poolQueryAcquire = isPoolQueryAcquire()
       let acquireCtx
 
       if (poolQueryAcquire) {
@@ -102,12 +99,16 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
           const client = args[1]
           if (client !== undefined) {
             const waitTime = acquireWait(start)
-            const transferIndex = startPoolWaitTransfer(poolWaitTransfer, client, waitTime)
-            try {
-              return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
-            } finally {
-              finishPoolWaitTransfer(poolWaitTransfer, client, waitTime, transferIndex)
-            }
+            return runWithPoolWait(
+              poolWaitTransfer,
+              client,
+              waitTime,
+              poolConnectFinishCh,
+              ctx,
+              callback,
+              this,
+              args
+            )
           }
           return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
         }
@@ -130,7 +131,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
 
       poolConnectStartCh.publish(ctx)
 
-      if (acquireCtx === undefined) return connectForPoolQuery(connect, this, arguments)
+      if (acquireCtx === undefined) return runOutsidePoolQueryAcquire(connect, this, arguments)
 
       return connectForAcquire(connect, this, arguments, acquireCtx, start)
     }
@@ -139,12 +140,11 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       wrappedConnect,
       connect,
       poolConnectStartCh,
-      deferredPoolAcquire,
-      runPoolQueryAcquire
+      deferredPoolAcquire
     )
   })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(
-    wrapPoolQueryCarrier(query, poolConnectStartCh, deferredPoolAcquire)
+    wrapPoolQueryMethod(query, poolConnectStartCh, deferredPoolAcquire)
   ))
   return pg
 })
@@ -356,21 +356,6 @@ function connectForAcquire (connect, pool, args, acquireCtx, start) {
 }
 
 /**
- * @param {Function} connect
- * @param {InstrumentedPool} pool
- * @param {IArguments} args
- */
-function connectForPoolQuery (connect, pool, args) {
-  const previous = acquiringForPoolQuery
-  acquiringForPoolQuery = false
-  try {
-    return connect.apply(pool, args)
-  } finally {
-    acquiringForPoolQuery = previous
-  }
-}
-
-/**
  * @param {AcquireContext} ctx
  * @param {number | undefined} start
  */
@@ -379,28 +364,10 @@ function finishAcquire (ctx, start) {
   poolAcquireFinishCh.publish(ctx)
 }
 
-/**
- * @param {Function} method
- * @param {InstrumentedPool} pool
- * @param {unknown[]} args
- * @returns {unknown}
- */
-function runPoolQueryAcquire (method, pool, args) {
-  const previous = acquiringForPoolQuery
-  acquiringForPoolQuery = true
-  try {
-    return method.apply(pool, args)
-  } finally {
-    acquiringForPoolQuery = previous
-  }
-}
-
 function wrapPoolQuery (query) {
   return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return poolConnectStartCh.hasSubscribers
-        ? runPoolQueryAcquire(query, this, args)
-        : query.apply(this, args)
+      return query.apply(this, args)
     }
 
     const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
@@ -430,9 +397,7 @@ function wrapPoolQuery (query) {
         })
       }
 
-      const retval = poolConnectStartCh.hasSubscribers
-        ? runPoolQueryAcquire(query, this, args)
-        : query.apply(this, args)
+      const retval = query.apply(this, args)
 
       if (retval?.then) {
         retval.then(() => {

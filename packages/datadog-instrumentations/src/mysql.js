@@ -90,7 +90,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     reentersQueuedCallbacks: true,
   }, deferredPoolAcquire))
 
-  shimmer.wrap(Pool.prototype, 'query', query => function (...args) {
+  shimmer.wrap(Pool.prototype, 'query', query => wrapPoolQueryMethod(function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
       return query.apply(this, args)
     }
@@ -115,13 +115,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
       return retval
     })
-  })
-
-  shimmer.wrap(
-    Pool.prototype,
-    'query',
-    query => wrapPoolQueryMethod(query, connectionStartCh, deferredPoolAcquire)
-  )
+  }, connectionStartCh, deferredPoolAcquire))
 
   return Pool
 })

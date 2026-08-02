@@ -309,7 +309,7 @@ function wrapPool (Pool, version) {
 
   wrapGetConnection(Pool, deferredQueryAcquire || deferredExecuteAcquire)
 
-  shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
+  shimmer.wrap(Pool.prototype, 'query', query => wrapPoolQueryMethod(function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
     const resolvedSql = resolveSqlString(sql)
@@ -345,9 +345,9 @@ function wrapPool (Pool, version) {
     }
 
     return query.apply(this, arguments)
-  })
+  }, connectionStartCh, deferredQueryAcquire))
 
-  shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
+  shimmer.wrap(Pool.prototype, 'execute', execute => wrapPoolQueryMethod(function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
     const resolvedSql = resolveSqlString(sql)
@@ -370,18 +370,7 @@ function wrapPool (Pool, version) {
     }
 
     return execute.apply(this, arguments)
-  })
-
-  shimmer.wrap(
-    Pool.prototype,
-    'query',
-    query => wrapPoolQueryMethod(query, connectionStartCh, deferredQueryAcquire)
-  )
-  shimmer.wrap(
-    Pool.prototype,
-    'execute',
-    execute => wrapPoolQueryMethod(execute, connectionStartCh, deferredExecuteAcquire)
-  )
+  }, connectionStartCh, deferredExecuteAcquire))
 
   return Pool
 }

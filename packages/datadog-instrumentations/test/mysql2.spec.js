@@ -365,10 +365,10 @@ describe('mysql2 instrumentation', () => {
         pool = mysql2.createPool(config)
       })
 
-      describe('Pool.prototype.query', () => {
-        it('dispatches getConnection before query returns', async () => {
+      for (const method of ['query', 'execute']) {
+        it(`dispatches getConnection before ${method} returns`, async () => {
           const getConnection = pool.getConnection
-          let queryReturned = false
+          let methodReturned = false
           let acquireDispatchedBeforeReturn = false
 
           /**
@@ -376,24 +376,25 @@ describe('mysql2 instrumentation', () => {
            * @returns {unknown}
            */
           pool.getConnection = function (...args) {
-            if (!queryReturned) acquireDispatchedBeforeReturn = true
+            if (!methodReturned) acquireDispatchedBeforeReturn = true
             return getConnection.apply(this, args)
           }
 
           try {
-            const query = new Promise((resolve, reject) => {
-              pool.query(sql, error => error ? reject(error) : resolve())
+            const result = new Promise((resolve, reject) => {
+              pool[method](sql, error => error ? reject(error) : resolve())
             })
-            queryReturned = true
-
-            await query
+            methodReturned = true
+            await result
 
             assert.strictEqual(acquireDispatchedBeforeReturn, true)
           } finally {
             pool.getConnection = getConnection
           }
         })
+      }
 
+      describe('Pool.prototype.query', () => {
         it('does not transfer an aborted query wait to the next connection user', async function () {
           if (!semver.satisfies(mysql2Version, '>=3.11.5')) return this.skip()
 
@@ -596,34 +597,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.execute', () => {
-        it('dispatches getConnection before execute returns', async () => {
-          const getConnection = pool.getConnection
-          let executeReturned = false
-          let acquireDispatchedBeforeReturn = false
-
-          /**
-           * @param {...unknown} args
-           * @returns {unknown}
-           */
-          pool.getConnection = function (...args) {
-            if (!executeReturned) acquireDispatchedBeforeReturn = true
-            return getConnection.apply(this, args)
-          }
-
-          try {
-            const execute = new Promise((resolve, reject) => {
-              pool.execute(sql, error => error ? reject(error) : resolve())
-            })
-            executeReturned = true
-
-            await execute
-
-            assert.strictEqual(acquireDispatchedBeforeReturn, true)
-          } finally {
-            pool.getConnection = getConnection
-          }
-        })
-
         describe('with object as query', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
@@ -913,50 +886,6 @@ describe('mysql2 instrumentation', () => {
             acquireFinishCh.unsubscribe(acquireFinish)
             await new Promise(resolve => cluster.end(resolve))
           }
-        })
-
-        it('treats the retried internal acquire as a pooled-query acquire, not an explicit one', (done) => {
-          // A pool cluster with `canRetry` (the default) retries `getConnection` on the next node when
-          // the first one fails. That retry is dispatched from the first acquire's async failure
-          // callback, after the synchronous pool-query flag is cleared, so without carrying the
-          // pool-query intent across it the failover acquire opens a standalone acquire span.
-          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
-          const acquireStart = sinon.stub()
-          acquireStartCh.subscribe(acquireStart)
-
-          const probe = net.createServer()
-          probe.listen(0, '127.0.0.1', () => {
-            const deadPort = probe.address().port
-
-            probe.close(() => {
-              const cluster = mysql2.createPoolCluster()
-              cluster.add('dead', { ...config, port: deadPort, connectionLimit: 1, connectTimeout: 500 })
-              cluster.add('live', { ...config, connectionLimit: 1 })
-              cluster.on('warn', () => {})
-              const namespace = cluster.of('*')
-
-              function cleanup (error) {
-                acquireStartCh.unsubscribe(acquireStart)
-                cluster.end(() => done(error))
-              }
-
-              namespace.query(sql, (error) => {
-                if (error) {
-                  cleanup(error)
-                  return
-                }
-
-                try {
-                  sinon.assert.notCalled(acquireStart)
-                } catch (assertionError) {
-                  cleanup(assertionError)
-                  return
-                }
-
-                cleanup()
-              })
-            })
-          })
         })
       })
     })

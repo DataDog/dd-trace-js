@@ -412,43 +412,25 @@ describe('Plugin', () => {
           })
         })
 
-        it('records the pool acquire wait time on the pooled query span', done => {
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+        for (const [method, sql] of [
+          ['query', 'SELECT 4 AS pool_wait_probe'],
+          ['execute', 'SELECT 14 AS execute_pool_wait'],
+        ]) {
+          it(`records the pool acquire wait time on the pooled ${method} span`, async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
 
-            assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
-            assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
-            // The tag carries the wait here, so the acquire must not also cost a span.
-            assert.ok(
-              !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-            )
-          }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
-            .then(done)
-            .catch(done)
-
-          pool.query('SELECT 4 AS pool_wait_probe', error => {
-            if (error) done(error)
+                assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
+                assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
+                assert.strictEqual(traces[0].find(span => span.name === 'mysql2.pool.acquire'), undefined)
+              }, { spanResourceMatch: new RegExp(`^${sql}$`) }),
+              new Promise((resolve, reject) => {
+                pool[method](sql, error => error ? reject(error) : resolve())
+              }),
+            ])
           })
-        })
-
-        it('records the pool acquire wait time on the pooled execute span', async () => {
-          await Promise.all([
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
-              assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
-              assert.ok(
-                !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-                `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-              )
-            }, { spanResourceMatch: /^SELECT 14 AS execute_pool_wait$/ }),
-            new Promise((resolve, reject) => {
-              pool.execute('SELECT 14 AS execute_pool_wait', error => error ? reject(error) : resolve())
-            }),
-          ])
-        })
+        }
 
         it('carries the pool wait when query dispatch is deferred after acquisition', async () => {
           const getConnection = pool.getConnection
@@ -464,10 +446,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
 
                 assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
-                assert.ok(
-                  !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-                )
+                assert.strictEqual(traces[0].find(span => span.name === 'mysql2.pool.acquire'), undefined)
               }, { spanResourceMatch: /^SELECT 13 AS deferred_dispatch$/ }),
               new Promise((resolve, reject) => {
                 pool.query('SELECT 13 AS deferred_dispatch', error => error ? reject(error) : resolve())
@@ -493,21 +472,6 @@ describe('Plugin', () => {
               pool.query('SELECT 7 AS idle_probe', error => error ? reject(error) : resolve())
             }),
           ])
-        })
-
-        it('does not create an acquire span for pool.query', done => {
-          agent.assertSomeTraces(traces => {
-            assert.ok(
-              !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-            )
-          }, { spanResourceMatch: /^SELECT 6 AS six$/ })
-            .then(done)
-            .catch(done)
-
-          pool.query('SELECT 6 AS six', error => {
-            if (error) done(error)
-          })
         })
 
         it('creates a dedicated acquire span for an explicit callback pool.getConnection()', done => {
@@ -559,33 +523,30 @@ describe('Plugin', () => {
           await tracePromise
         })
 
-        it('records an error on the acquire span when an explicit acquire fails', done => {
-          const probe = net.createServer().listen(0, '127.0.0.1', () => {
-            const { port } = probe.address()
+        it('records an error on the acquire span when an explicit acquire fails', async () => {
+          const failingPool = mysql2.createPool({
+            host: '127.0.0.1',
+            port: await getClosedPort(),
+            user: 'root',
+            connectTimeout: 500,
+          })
+          failingPool.on('error', () => {})
 
-            probe.close(() => {
-              const failingPool = mysql2.createPool({
-                host: '127.0.0.1',
-                port,
-                user: 'root',
-                connectTimeout: 500,
-              })
-              failingPool.on('error', () => {})
-
+          try {
+            await Promise.all([
               agent.assertSomeTraces(traces => {
                 const acquireSpan = traces[0].find(span => span.name === 'mysql2.pool.acquire')
 
                 assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
                 assert.strictEqual(acquireSpan.error, 1)
-              })
-                .then(() => failingPool.end(() => done()))
-                .catch(error => failingPool.end(() => done(error)))
-
-              failingPool.getConnection(error => {
-                assert.ok(error, 'expected the pool connection to fail')
-              })
-            })
-          })
+              }),
+              new Promise((resolve, reject) => {
+                failingPool.getConnection(error => error ? resolve() : reject(new Error('expected acquire error')))
+              }),
+            ])
+          } finally {
+            await new Promise(resolve => failingPool.end(resolve))
+          }
         })
 
         it('does not create an acquire span for a pool cluster query', function (done) {
@@ -602,10 +563,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            assert.ok(
-              !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-            )
+            assert.strictEqual(traces[0].find(span => span.name === 'mysql2.pool.acquire'), undefined)
             assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
             assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
           }, { spanResourceMatch: /^SELECT 8 AS cluster_probe$/ })
@@ -667,10 +625,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
 
                 assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
-                assert.ok(
-                  !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
-                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
-                )
+                assert.strictEqual(traces[0].find(span => span.name === 'mysql2.pool.acquire'), undefined)
               }, { spanResourceMatch: /^SELECT 9 AS failover_probe$/ }),
               new Promise((resolve, reject) => {
                 namespace.query('SELECT 9 AS failover_probe', error => error ? reject(error) : resolve())
