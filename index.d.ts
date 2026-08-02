@@ -314,7 +314,12 @@ interface Plugins {
 }
 
 declare namespace tracer {
-  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  export type SpanTagValue = string | number | boolean | Buffer | URL | Error | {
+    [key: string]: string | number | boolean | Buffer | URL
+  }
+  export type SpanTags = Record<string, SpanTagValue>
+
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf' | 'tags'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
    * exists in the current async context. If 'undefined' the parent will be inferred from the
@@ -325,6 +330,10 @@ declare namespace tracer {
      * Optional name of the integration that crated this span.
      */
     integrationName?: string;
+    /**
+     * Tags for the newly created span.
+     */
+    tags?: SpanTags;
   };
   export { Tracer };
 
@@ -361,6 +370,21 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Adds a tag to the span.
+     *
+     * @param key The tag name.
+     * @param value The tag value.
+     */
+    setTag (key: string, value: SpanTagValue): this;
+
+    /**
+     * Adds tags to the span.
+     *
+     * @param keyValueMap The tags to add.
+     */
+    addTags (keyValueMap: SpanTags): this;
 
     /**
      * Adds a single link to the span.
@@ -861,7 +885,7 @@ declare namespace tracer {
      * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    tags?: { [key: string]: any };
+    tags?: SpanTags;
 
     /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
