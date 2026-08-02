@@ -385,11 +385,17 @@ describe('release changelog', () => {
         subject: 'docs(types): document the public tracer API (#9004)',
         files: ['docs/API.md'],
       },
+      {
+        sha: 'abc005',
+        subject: 'fix(core): preserve context without changed paths (#9005)',
+        files: [],
+      },
     ])
 
     assert.strictEqual(changelog.isMinor, false)
     assert.strictEqual(changelog.markdown, [
       '### Fixes',
+      `- **General:** Preserve context without changed paths ${prLink(9005)}`,
       `- **General:** Preserve runtime context ${prLink(9003)}`,
       '',
       '### Documentation',
@@ -425,6 +431,7 @@ describe('release changelog', () => {
         sha: 'abc004',
         subject: 'chore(deps-dev): bump the dev-minor-and-patch-dependencies group across 1 directory ' +
           'with 4 updates (#8854)',
+        contributors: [{ name: '@dependabot', login: 'dependabot' }],
         files: ['package.json', 'yarn.lock'],
       },
       {
@@ -493,17 +500,9 @@ describe('release changelog', () => {
         contributors: [
           { name: '@alice', login: 'alice' },
           { name: '@bob', login: 'bob' },
+          { name: '@Zoe', login: 'Zoe' },
+          { name: 'Jane Doe' },
         ],
-      },
-      {
-        sha: 'abc003',
-        subject: 'ci(release): tweak the workflow (#3)',
-        contributors: [{ name: '@Zoe', login: 'Zoe' }],
-      },
-      {
-        sha: 'abc004',
-        subject: 'fix(core): another thing (#4)',
-        contributors: [{ name: 'Jane Doe' }],
       },
     ])
 
@@ -512,32 +511,12 @@ describe('release changelog', () => {
       `- **AppSec:** Add thing ${prLink(1)} — by ${contributorLink('Zoe')}`,
       '',
       '### Fixes',
-      `- **General:** Another thing ${prLink(4)} — by Jane Doe`,
-      `- **Profiling:** Fix thing ${prLink(2)} — by ${contributorLink('alice')}, ${contributorLink('bob')}`,
-      '',
-      '### Internal (CI, Testing, Benchmarking)',
-      `- **release:** Tweak the workflow ${prLink(3)} — by ${contributorLink('Zoe')}`,
+      `- **Profiling:** Fix thing ${prLink(2)} — by ${contributorLink('alice')}, ${contributorLink('bob')}, ` +
+        `${contributorLink('Zoe')}, Jane Doe`,
       '',
       '### Contributors',
       '',
       `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')} Jane Doe`,
-      '',
-    ].join('\n'))
-  })
-
-  it('omits contributors attached only to dropped entries', () => {
-    const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'fix(appsec): handle thing (#1)' },
-      {
-        sha: 'abc002',
-        subject: 'chore(deps-dev): bump test dependency (#2)',
-        contributors: [{ name: '@dependabot', login: 'dependabot' }],
-      },
-    ])
-
-    assert.strictEqual(changelog.markdown, [
-      '### Fixes',
-      `- **AppSec:** Handle thing ${prLink(1)}`,
       '',
     ].join('\n'))
   })

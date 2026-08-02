@@ -1,7 +1,5 @@
 'use strict'
 
-const { isInternalOnly } = require('./change-context')
-
 const INTERNAL_CATEGORY = 'Internal'
 const CATEGORY_ORDER = [
   'Features',
@@ -20,6 +18,18 @@ const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
 const UNCATEGORIZED_PRODUCT = 'Other'
 const DEPENDENCY_PRODUCT = 'Dependencies'
+const INTERNAL_PATH_PATTERNS = [
+  /^\.agents\//,
+  /^\.github\//,
+  /^\.gitlab(?:-ci\.yml|\/)/,
+  /^benchmark\//,
+  /^integration-tests\//,
+  /^scripts\//,
+  /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
+  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
+  /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
+  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
+]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs
 // directories are not shipped. The shipped manifests are the repo root and the
@@ -238,6 +248,25 @@ function parseChange (entry, options = {}) {
     revert: parsed.isRevert,
     contributors: entry.contributors ?? [],
   }
+}
+
+/**
+ * @param {string[]} files
+ */
+function isInternalOnly (files) {
+  if (files.length === 0) return false
+
+  for (const file of files) {
+    let internal = false
+    for (const pattern of INTERNAL_PATH_PATTERNS) {
+      if (pattern.test(file)) {
+        internal = true
+        break
+      }
+    }
+    if (!internal) return false
+  }
+  return true
 }
 
 /**
@@ -513,4 +542,5 @@ function renderPullRequest (number) {
 
 module.exports = {
   createReleaseChangelog,
+  isInternalOnly,
 }

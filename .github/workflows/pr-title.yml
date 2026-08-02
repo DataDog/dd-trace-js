@@ -62,7 +62,6 @@ jobs:
             }
             core.info(`PR title OK: ${title}`)
 
-            const { getReleaseNoteContextError } = require('./scripts/release/change-context')
             const type = match[3]
             const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
               ...context.repo,
@@ -71,8 +70,11 @@ jobs:
             })
             const files = []
             for (const file of changedFiles) files.push(file.filename)
-            const error = getReleaseNoteContextError(type, files)
-            if (error) core.setFailed(error)
+            const { isInternalOnly } = require('./scripts/release/changelog')
+            if (/^(?:feat|fix|perf|docs)$/.test(type) && isInternalOnly(files)) {
+              core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
+                'Use test, bench, ci, or chore.')
+            }
 
       - name: Sync labels with PR title
         if: steps.rename.outputs.renamed != 'true'

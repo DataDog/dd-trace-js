@@ -122,11 +122,13 @@ try {
       subject: capture(`git show -s --format=%s ${sha}`),
     })
   }
-  const hydratedNotesEntries = hydrateReleaseEntries(notesEntries)
   const breakingEntries = isPreRelease
-    ? hydrateReleaseEntries(getBreakingPullRequestEntries(releaseLine, upperBoundRef))
+    ? getBreakingPullRequestEntries(releaseLine, upperBoundRef)
     : []
-  const notes = createReleaseChangelog(hydratedNotesEntries, breakingEntries)
+  const notes = createReleaseChangelog(
+    hydrateReleaseEntries(notesEntries),
+    hydrateReleaseEntries(breakingEntries)
+  )
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
