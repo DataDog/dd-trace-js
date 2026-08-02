@@ -46,32 +46,24 @@ jobs:
             })
             core.setOutput('renamed', 'true')
 
-      - name: Validate PR title against Conventional Commits
+      - name: Validate PR title and release-note context
         if: >-
           steps.rename.outputs.renamed != 'true' &&
           (github.event.action != 'edited' || github.event.changes.title != null)
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
-            echo "::error::PR title does not follow Conventional Commits format."
-            echo "Got:      $PR_TITLE"
-            echo "Expected: <type>(<scope>)?(!)?: <subject>"
-            echo "          revert(!)?: <subject>  (for reverts, always semver-patch)"
-            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore"
-            exit 1
-          fi
-          echo "PR title OK: $PR_TITLE"
-
-      - name: Validate release-note context
-        if: steps.rename.outputs.renamed != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const { getReleaseNoteContextError } = require('./scripts/release/change-context')
             const pullRequest = context.payload.pull_request
-            const match = (pullRequest.title || '').match(new RegExp(process.env.PR_TITLE_PATTERN))
-            const type = match?.[3]
+            const title = pullRequest.title || ''
+            const match = title.match(new RegExp(process.env.PR_TITLE_PATTERN))
+            if (!match) {
+              core.setFailed('PR title does not follow Conventional Commits format.')
+              return
+            }
+            core.info(`PR title OK: ${title}`)
+
+            const { getReleaseNoteContextError } = require('./scripts/release/change-context')
+            const type = match[3]
             const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
               ...context.repo,
               pull_number: pullRequest.number,
