@@ -125,6 +125,107 @@ export default {
     /**
      * @param {import('estree').Node} node
      * @param {Set<import('estree').Node>} [seen]
+     * @returns {boolean}
+     */
+    function isCarrierReference (node, seen = new Set()) {
+      if (isCarrierIdentifier(node)) return true
+      if (seen.has(node)) return false
+      seen.add(node)
+
+      if (node.type === 'LogicalExpression') {
+        return isCarrierReference(node.left, seen) || isCarrierReference(node.right, seen)
+      }
+      if (node.type === 'ConditionalExpression') {
+        return isCarrierReference(node.consequent, seen) || isCarrierReference(node.alternate, seen)
+      }
+      if (node.type !== 'Identifier') return false
+
+      let scope = sourceCode.getScope(node)
+      while (scope) {
+        const variable = scope.set.get(node.name)
+        if (variable) {
+          let definition
+          for (const candidate of variable.defs) {
+            if (candidate.type === 'Variable' && candidate.node.init) {
+              definition = candidate
+              break
+            }
+          }
+          if (definition && isCarrierReference(definition.node.init, seen)) return true
+          for (const reference of variable.references) {
+            if (reference.isWrite() && reference.writeExpr && reference.identifier.range[0] < node.range[0] &&
+                isCarrierReference(reference.writeExpr, seen)) return true
+          }
+          return false
+        }
+        scope = scope.upper
+      }
+      return false
+    }
+
+    /**
+     * A helper that returns its carrier can hide the carrier behind the call
+     * result, where the rule can no longer follow it.
+     *
+     * @param {import('estree').Node} node
+     * @returns {boolean}
+     */
+    function returnsCarrier (node) {
+      if (node.type === 'ReturnStatement' && node.argument && isCarrierReference(node.argument)) return true
+      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' ||
+          node.type === 'ArrowFunctionExpression') return false
+
+      for (const key of sourceCode.visitorKeys[node.type]) {
+        const value = node[key]
+        if (Array.isArray(value)) {
+          for (const child of value) {
+            if (child?.type && returnsCarrier(child)) return true
+          }
+        } else if (value?.type && returnsCarrier(value)) {
+          return true
+        }
+      }
+      return false
+    }
+
+    /**
+     * Local function declarations are checked by this same rule, so carriers can
+     * safely pass through carrier-named parameters unless the binding is reassigned.
+     *
+     * @param {import('estree').Identifier} callee
+     * @param {Array<import('estree').Expression | import('estree').SpreadElement>} callArguments
+     * @returns {boolean}
+     */
+    function isCheckedLocalCarrierFunction (callee, callArguments) {
+      let scope = sourceCode.getScope(callee)
+      while (scope) {
+        const variable = scope.set.get(callee.name)
+        if (variable) {
+          if (variable.defs.length !== 1 || variable.defs[0].type !== 'FunctionName') return false
+          for (const reference of variable.references) {
+            if (reference.isWrite()) return false
+          }
+
+          const localFunction = variable.defs[0].node
+          if (returnsCarrier(localFunction.body)) return false
+
+          const parameters = localFunction.params
+          for (let index = 0; index < callArguments.length; index++) {
+            const argument = callArguments[index]
+            if (argument.type === 'SpreadElement' || !isCarrierReference(argument)) continue
+            const parameter = parameters[index]
+            if (parameter?.type !== 'Identifier' || !isCarrierIdentifier(parameter)) return false
+          }
+          return true
+        }
+        scope = scope.upper
+      }
+      return false
+    }
+
+    /**
+     * @param {import('estree').Node} node
+     * @param {Set<import('estree').Node>} [seen]
      * @returns {string | undefined}
      */
     function resolveString (node, seen = new Set()) {
@@ -211,7 +312,7 @@ export default {
       let reported = false
       for (const property of pattern.properties) {
         if (property.type === 'RestElement') {
-          if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
+          if (strictCarrierIdentifiers && isCarrierReference(target)) {
             report(property, 'noDirectCarrierAccess')
             reported = true
           }
@@ -222,7 +323,7 @@ export default {
         if (name && isManagedHeaderAccess(name, target)) {
           report(property, 'useCarrierField')
           reported = true
-        } else if (strictCarrierIdentifiers && isCarrierIdentifier(target)) {
+        } else if (strictCarrierIdentifiers && isCarrierReference(target)) {
           report(property, 'noDirectCarrierAccess')
           reported = true
         }
@@ -246,7 +347,7 @@ export default {
        */
       MemberExpression (node) {
         const name = getMemberName(node, resolveString)
-        const carrierObject = isCarrierIdentifier(node.object)
+        const carrierObject = isCarrierReference(node.object)
 
         if (name && isManagedHeaderAccess(name, node.object)) {
           report(node, 'useCarrierField')
@@ -276,7 +377,7 @@ export default {
         const name = resolveString(node.left)
         if (name && isManagedHeaderAccess(name, node.right)) {
           report(node, 'useCarrierField')
-        } else if (strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
+        } else if (strictCarrierIdentifiers && isCarrierReference(node.right)) {
           report(node, 'noDirectCarrierAccess')
         }
       },
@@ -298,7 +399,7 @@ export default {
           const name = resolveString(reflectiveAccess.key)
           if (name && isManagedHeaderAccess(name, reflectiveAccess.target)) {
             report(node, 'useCarrierField')
-          } else if (strictCarrierIdentifiers && isCarrierIdentifier(reflectiveAccess.target)) {
+          } else if (strictCarrierIdentifiers && isCarrierReference(reflectiveAccess.target)) {
             report(node, 'noDirectCarrierAccess')
           }
           return
@@ -306,10 +407,12 @@ export default {
 
         if (!strictCarrierIdentifiers || node.callee.type === 'Super') return
         if (node.callee.type === 'MemberExpression' && node.callee.object.type === 'ThisExpression') return
-        if (node.callee.type === 'Identifier' && carrierFunctions.has(node.callee.name)) return
+        if (node.callee.type === 'Identifier' &&
+            (carrierFunctions.has(node.callee.name) ||
+              isCheckedLocalCarrierFunction(node.callee, node.arguments))) return
 
         for (const argument of node.arguments) {
-          if (argument.type !== 'SpreadElement' && isCarrierIdentifier(argument)) {
+          if (argument.type !== 'SpreadElement' && isCarrierReference(argument)) {
             report(argument, 'noDirectCarrierAccess')
           }
         }
@@ -320,7 +423,7 @@ export default {
        * @returns {void}
        */
       SpreadElement (node) {
-        if (strictCarrierIdentifiers && isCarrierIdentifier(node.argument)) {
+        if (strictCarrierIdentifiers && isCarrierReference(node.argument)) {
           report(node, 'noDirectCarrierAccess')
         }
       },
@@ -332,7 +435,7 @@ export default {
       AssignmentExpression (node) {
         if (node.left.type !== 'ObjectPattern') return
         const reported = checkObjectPattern(node.left, node.right)
-        if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.right)) {
+        if (!reported && strictCarrierIdentifiers && isCarrierReference(node.right)) {
           report(node, 'noDirectCarrierAccess')
         }
       },
@@ -360,7 +463,7 @@ export default {
         recordCarrierFunctions(node)
         if (node.id.type === 'ObjectPattern' && node.init) {
           const reported = checkObjectPattern(node.id, node.init)
-          if (!reported && strictCarrierIdentifiers && isCarrierIdentifier(node.init)) {
+          if (!reported && strictCarrierIdentifiers && isCarrierReference(node.init)) {
             report(node, 'noDirectCarrierAccess')
           }
         }
