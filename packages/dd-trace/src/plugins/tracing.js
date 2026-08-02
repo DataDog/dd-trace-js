@@ -19,7 +19,7 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = /** @type {{ span?: import('../../../..').Span }} */ (legacyStorage.getStore())
+    const store = /** @type {{ span?: import('../opentracing/span') }} */ (legacyStorage.getStore())
 
     return store?.span
   }
@@ -75,7 +75,7 @@ class TracingPlugin extends Plugin {
   start () {} // implemented by individual plugins
 
   /**
-   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   * @param {{ currentStore?: { span: import('../opentracing/span') } }} ctx
    */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
@@ -83,7 +83,7 @@ class TracingPlugin extends Plugin {
   }
 
   /**
-   * @param {{ currentStore?: { span: import('../../../..').Span }, error?: unknown }} ctxOrError
+   * @param {{ currentStore?: { span: import('../opentracing/span') }, error?: unknown }} ctxOrError
    */
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
@@ -166,7 +166,7 @@ class TracingPlugin extends Plugin {
 
   /**
    * @param {unknown} error
-   * @param {import('../../../..').Span} [span]
+   * @param {import('../opentracing/span')} [span]
    */
   addError (error, span = this.activeSpan) {
     if (span && !span.context().getTag('error')) {
