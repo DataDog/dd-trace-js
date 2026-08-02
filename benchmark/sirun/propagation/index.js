@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
-const { getAllBaggageItems } = require('../../../packages/dd-trace/src/baggage')
+const { getAllBaggageItems, setBaggageItem } = require('../../../packages/dd-trace/src/baggage')
 const id = require('../../../packages/dd-trace/src/id')
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -19,11 +19,11 @@ const propagator = new TextMapPropagator({
     extract: ['datadog', 'tracecontext', 'baggage'],
     inject: ['datadog', 'tracecontext', 'baggage'],
   },
-  legacyBaggageEnabled: false,
+  legacyBaggageEnabled: true,
   baggageMaxItems: 64,
   baggageMaxBytes: 8192,
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
-  tracePropagationExtractFirst: false,
+  DD_TRACE_PROPAGATION_EXTRACT_FIRST: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
   baggageTagKeys: ['user.id', 'session.id', 'account.id'],
 })
@@ -49,6 +49,11 @@ const EXTRACT_CARRIER_DATADOG = {
   'x-datadog-origin': 'synthetics',
   'x-datadog-tags': '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef',
 }
+const NO_CONTEXT_CARRIER = {
+  accept: 'application/json',
+  host: 'example.test',
+  'user-agent': 'benchmark',
+}
 
 const injectContext = new SpanContext({
   traceId: id('1234567890abcdef'),
@@ -67,6 +72,10 @@ const injectContext = new SpanContext({
 if (VARIANT === 'extract') {
   const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
   assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+} else if (VARIANT === 'extract-no-context') {
+  setBaggageItem('stale', 'value')
+  assert.strictEqual(propagator.extract(NO_CONTEXT_CARRIER), null, 'extract returned a context')
+  assert.deepStrictEqual(getAllBaggageItems(), {})
 } else if (VARIANT === 'extract-baggage-percent') {
   const sanityExtract = propagator.extract(EXTRACT_CARRIER_PERCENT)
   assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
@@ -91,6 +100,12 @@ if (VARIANT === 'extract') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_ASCII)
   }
+} else if (VARIANT === 'extract-no-context') {
+  let extracted
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+    extracted = propagator.extract(NO_CONTEXT_CARRIER)
+  }
+  assert.strictEqual(extracted, null)
 } else if (VARIANT === 'extract-baggage-percent') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_PERCENT)
