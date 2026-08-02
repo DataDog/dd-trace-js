@@ -3,11 +3,10 @@
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 const {
-  acquireStart,
-  acquireWait,
-  isPoolQueryAcquire,
-  setPoolWaitTime,
+  dispatchesAcquireSynchronously,
   takePoolWaitTime,
+  wrapPoolClusterQueryMethod,
+  wrapPoolGetConnection,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
 
@@ -76,38 +75,20 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
   const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
   const acquireStartCh = channel('apm:mysql:pool:acquire:start')
   const acquireFinishCh = channel('apm:mysql:pool:acquire:finish')
+  const deferredPoolAcquire = !dispatchesAcquireSynchronously(
+    Pool.prototype.query,
+    Object.assign(Object.create(Pool.prototype), { config: { connectionConfig: {} } }),
+    'getConnection',
+    ['SELECT 1', () => {}]
+  )
 
-  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    if (!connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
-
-    const ctx = {}
-    const start = acquireStart(this)
-    const acquireCtx = isPoolQueryAcquire() || !acquireStartCh.hasSubscribers
-      ? undefined
-      : { conf: this.config.connectionConfig }
-
-    if (acquireCtx !== undefined) {
-      acquireStartCh.publish(acquireCtx)
-    }
-
-    arguments[0] = function (error, connection) {
-      if (acquireCtx === undefined) {
-        if (!error && connection !== undefined) {
-          setPoolWaitTime(connection, acquireWait(start))
-        }
-      } else {
-        acquireCtx.error = error
-        acquireCtx.poolWaitTime = acquireWait(start)
-        acquireFinishCh.publish(acquireCtx)
-      }
-
-      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
-    }
-
-    connectionStartCh.publish(ctx)
-
-    return getConnection.apply(this, arguments)
-  })
+  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => wrapPoolGetConnection(getConnection, {
+    connectionStartCh,
+    connectionFinishCh,
+    acquireStartCh,
+    acquireFinishCh,
+    reentersQueuedCallbacks: true,
+  }, deferredPoolAcquire))
 
   shimmer.wrap(Pool.prototype, 'query', query => function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
@@ -136,16 +117,20 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     })
   })
 
-  shimmer.wrap(Pool.prototype, 'query', wrapPoolQueryMethod)
+  shimmer.wrap(
+    Pool.prototype,
+    'query',
+    query => wrapPoolQueryMethod(query, connectionStartCh, deferredPoolAcquire)
+  )
 
   return Pool
 })
 
-// `PoolNamespace#query` acquires its connection internally, so bracket it with the pool-query flag to
-// fold the acquire wait into the query span rather than open a standalone acquire span. A `canRetry`
-// failover retries by re-invoking `query`, so the flag also covers the node it fails over to.
+// A `canRetry` failover re-invokes `query` with the same Query object. Key the acquire state by that
+// object so a retry remains part of the query even if a future mysql version defers it.
 addHook({ name: 'mysql', file: 'lib/PoolNamespace.js', versions: ['>=2'] }, PoolNamespace => {
-  shimmer.wrap(PoolNamespace.prototype, 'query', wrapPoolQueryMethod)
+  const connectionStartCh = channel('apm:mysql:connection:start')
+  shimmer.wrap(PoolNamespace.prototype, 'query', query => wrapPoolClusterQueryMethod(query, connectionStartCh))
 
   return PoolNamespace
 })

@@ -8,6 +8,15 @@ const {
   channel,
   addHook,
 } = require('./helpers/instrument')
+const {
+  clearPoolWaitTime,
+  dispatchesAcquireSynchronously,
+  finishPoolWaitTransfer,
+  startPoolWaitTransfer,
+  takePoolWaitTime,
+  wrapPoolAcquireCarrier,
+  wrapPoolQueryCarrier,
+} = require('./helpers/pool-acquire')
 
 const startCh = channel('apm:pg:query:start')
 const finishCh = channel('apm:pg:query:finish')
@@ -26,13 +35,8 @@ const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
 
-// Pool.query dispatches its client query synchronously from the connect callback, including nested
-// `_release` queue pulses, so the wait can cross that callback without retaining the client.
-const poolWaitClients = []
-const poolWaitTimes = []
-
 // Pool.query reports its internal acquire on the query span; explicit connects get an acquire span.
-// Pool.query calls connect synchronously, so a module flag reliably distinguishes the two.
+// Pool.query calls connect synchronously; the connect wrap consumes this flag before entering pg-pool.
 let acquiringForPoolQuery = false
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
@@ -46,79 +50,102 @@ addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => 
 })
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  const poolWaitTransfer = { deferred: false }
+  const deferredPoolAcquire = !dispatchesAcquireSynchronously(
+    pg.Pool.prototype.query,
+    Object.assign(Object.create(pg.Pool.prototype), { Promise }),
+    'connect',
+    ['SELECT 1', () => {}]
+  )
+
   // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
   // capture the caller's context and restore it around the callback so spans attach to the caller.
-  shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
-    // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
-    if (typeof cb !== 'function') {
-      if (!poolAcquireStartCh.hasSubscribers) {
+  shimmer.wrap(pg.Pool.prototype, 'connect', connect => {
+    /**
+     * @param {Function|undefined} callback
+     * @returns {unknown}
+     */
+    const wrappedConnect = function (callback) {
+      // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
+      if (typeof callback !== 'function') {
+        if (!poolAcquireStartCh.hasSubscribers) {
+          return connect.apply(this, arguments)
+        }
+
+        const start = acquireStart(this)
+        const acquireCtx = { poolOptions: this.options }
+        poolAcquireStartCh.publish(acquireCtx)
+
+        return connectForAcquire(connect, this, arguments, acquireCtx, start).then(client => {
+          clearPoolWaitTime(client)
+          acquireCtx.params = client.connectionParameters
+          finishAcquire(acquireCtx, start)
+          return client
+        }, error => {
+          acquireCtx.error = error
+          finishAcquire(acquireCtx, start)
+          throw error
+        })
+      }
+
+      if (!poolConnectStartCh.hasSubscribers) {
         return connect.apply(this, arguments)
       }
 
+      const ctx = {}
       const start = acquireStart(this)
-      const acquireCtx = { poolOptions: this.options }
-      poolAcquireStartCh.publish(acquireCtx)
+      const poolQueryAcquire = acquiringForPoolQuery
+      let acquireCtx
 
-      return connectForAcquire(connect, this, arguments, acquireCtx, start).then(client => {
-        acquireCtx.params = client.connectionParameters
-        finishAcquire(acquireCtx, start)
-        return client
-      }, error => {
-        acquireCtx.error = error
-        finishAcquire(acquireCtx, start)
-        throw error
-      })
-    }
-
-    if (!poolConnectStartCh.hasSubscribers) {
-      return connect.apply(this, arguments)
-    }
-
-    const ctx = {}
-    const start = acquireStart(this)
-    let acquireCtx
-
-    if (acquiringForPoolQuery) {
-      arguments[0] = function (...args) {
-        const client = args[1]
-        if (client !== undefined) {
-          poolWaitClients.push(client)
-          poolWaitTimes.push(acquireWait(start))
-        }
-        try {
-          return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
-        } finally {
+      if (poolQueryAcquire) {
+        arguments[0] = function (...args) {
+          const client = args[1]
           if (client !== undefined) {
-            poolWaitClients.pop()
-            poolWaitTimes.pop()
+            const waitTime = acquireWait(start)
+            const transferIndex = startPoolWaitTransfer(poolWaitTransfer, client, waitTime)
+            try {
+              return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
+            } finally {
+              finishPoolWaitTransfer(poolWaitTransfer, client, waitTime, transferIndex)
+            }
           }
+          return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
+        }
+      } else {
+        acquireCtx = { poolOptions: this.options }
+        poolAcquireStartCh.publish(acquireCtx)
+
+        arguments[0] = function (...args) {
+          const client = args[1]
+          acquireCtx.error = args[0]
+          // A failed acquire has no client, so keep the parameters `connectForAcquire` snapshotted.
+          if (client !== undefined) {
+            clearPoolWaitTime(client)
+            acquireCtx.params = client.connectionParameters
+          }
+          finishAcquire(acquireCtx, start)
+          return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
         }
       }
-    } else {
-      acquireCtx = { poolOptions: this.options }
-      poolAcquireStartCh.publish(acquireCtx)
 
-      arguments[0] = function (...args) {
-        const client = args[1]
-        acquireCtx.error = args[0]
-        // A failed acquire has no client, so keep the parameters `connectForAcquire` snapshotted.
-        if (client !== undefined) {
-          acquireCtx.params = client.connectionParameters
-        }
-        finishAcquire(acquireCtx, start)
-        return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
-      }
+      poolConnectStartCh.publish(ctx)
+
+      if (acquireCtx === undefined) return connectForPoolQuery(connect, this, arguments)
+
+      return connectForAcquire(connect, this, arguments, acquireCtx, start)
     }
 
-    poolConnectStartCh.publish(ctx)
-
-    if (acquireCtx === undefined) {
-      return connect.apply(this, arguments)
-    }
-
-    return connectForAcquire(connect, this, arguments, acquireCtx, start)
+    return wrapPoolAcquireCarrier(
+      wrappedConnect,
+      connect,
+      poolConnectStartCh,
+      deferredPoolAcquire,
+      runPoolQueryAcquire
+    )
   })
-  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
+  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(
+    wrapPoolQueryCarrier(query, poolConnectStartCh, deferredPoolAcquire)
+  ))
   return pg
 })
 
@@ -153,14 +180,9 @@ function wrapQuery (query) {
       stream,
     }
 
-    if (poolWaitClients.length !== 0) {
-      for (let i = poolWaitClients.length - 1; i >= 0; i--) {
-        if (poolWaitClients[i] === this) {
-          ctx.poolWaitTime = poolWaitTimes[i]
-          poolWaitClients[i] = undefined
-          break
-        }
-      }
+    const waitTime = takePoolWaitTime(this)
+    if (waitTime !== undefined) {
+      ctx.poolWaitTime = waitTime
     }
 
     const finish = (error, res) => {
@@ -334,6 +356,21 @@ function connectForAcquire (connect, pool, args, acquireCtx, start) {
 }
 
 /**
+ * @param {Function} connect
+ * @param {InstrumentedPool} pool
+ * @param {IArguments} args
+ */
+function connectForPoolQuery (connect, pool, args) {
+  const previous = acquiringForPoolQuery
+  acquiringForPoolQuery = false
+  try {
+    return connect.apply(pool, args)
+  } finally {
+    acquiringForPoolQuery = previous
+  }
+}
+
+/**
  * @param {AcquireContext} ctx
  * @param {number | undefined} start
  */
@@ -343,23 +380,26 @@ function finishAcquire (ctx, start) {
 }
 
 /**
- * @param {Function} query
+ * @param {Function} method
  * @param {InstrumentedPool} pool
  * @param {unknown[]} args
+ * @returns {unknown}
  */
-function acquireForPoolQuery (query, pool, args) {
+function runPoolQueryAcquire (method, pool, args) {
+  const previous = acquiringForPoolQuery
   acquiringForPoolQuery = true
   try {
-    return query.apply(pool, args)
+    return method.apply(pool, args)
   } finally {
-    acquiringForPoolQuery = false
+    acquiringForPoolQuery = previous
   }
 }
+
 function wrapPoolQuery (query) {
   return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
       return poolConnectStartCh.hasSubscribers
-        ? acquireForPoolQuery(query, this, args)
+        ? runPoolQueryAcquire(query, this, args)
         : query.apply(this, args)
     }
 
@@ -391,7 +431,7 @@ function wrapPoolQuery (query) {
       }
 
       const retval = poolConnectStartCh.hasSubscribers
-        ? acquireForPoolQuery(query, this, args)
+        ? runPoolQueryAcquire(query, this, args)
         : query.apply(this, args)
 
       if (retval?.then) {

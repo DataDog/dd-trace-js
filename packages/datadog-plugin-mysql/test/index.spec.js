@@ -414,6 +414,11 @@ describe('Plugin', () => {
 
             assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
             assert.ok(span.metrics['mysql.pool.wait_time'] >= 0)
+            // The tag carries the wait here, so the acquire must not also cost a span.
+            assert.ok(
+              !traces[0].some(span => span.name === 'mysql.pool.acquire'),
+              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+            )
           }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
             .then(done)
             .catch(done)
@@ -421,6 +426,80 @@ describe('Plugin', () => {
           pool.query('SELECT 4 AS pool_wait_probe', error => {
             if (error) done(error)
           })
+        })
+
+        it('carries the pool wait when query dispatch is deferred after acquisition', async () => {
+          const getConnection = pool.getConnection
+          pool.getConnection = function (callback) {
+            return getConnection.call(this, function () {
+              setImmediate(() => callback.apply(this, arguments))
+            })
+          }
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                assert.ok(
+                  !traces[0].some(span => span.name === 'mysql.pool.acquire'),
+                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+                )
+              }, { spanResourceMatch: /^SELECT 13 AS deferred_dispatch$/ }),
+              new Promise((resolve, reject) => {
+                pool.query('SELECT 13 AS deferred_dispatch', error => error ? reject(error) : resolve())
+              }),
+            ])
+          } finally {
+            pool.getConnection = getConnection
+          }
+        })
+
+        it('retains pooled-query classification across a tick-delayed canRetry failover', async function () {
+          const unsupportedCluster = mysql.createPoolCluster()
+          const supported = typeof unsupportedCluster.of('*').query === 'function'
+          unsupportedCluster.end(() => {})
+          if (!supported) return this.skip()
+
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const deadPort = probe.address().port
+          await new Promise(resolve => probe.close(resolve))
+
+          const cluster = mysql.createPoolCluster()
+          cluster.add('dead', { host: '127.0.0.1', user: 'root', port: deadPort, connectionLimit: 1 })
+          cluster.add('live', { host: '127.0.0.1', user: 'root', database: 'db', connectionLimit: 1 })
+          cluster.on('warn', () => {})
+          const namespace = cluster.of('*')
+          const query = namespace.query
+          let queryCalls = 0
+          namespace.query = function () {
+            if (++queryCalls === 2) {
+              setImmediate(() => query.apply(this, arguments))
+              return arguments[0]
+            }
+            return query.apply(this, arguments)
+          }
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                assert.ok(
+                  !traces[0].some(span => span.name === 'mysql.pool.acquire'),
+                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+                )
+              }, { spanResourceMatch: /^SELECT 9 AS failover_probe$/ }),
+              new Promise((resolve, reject) => {
+                namespace.query('SELECT 9 AS failover_probe', error => error ? reject(error) : resolve())
+              }),
+            ])
+          } finally {
+            await new Promise(resolve => cluster.end(resolve))
+          }
         })
 
         it('reports a zero wait time when an idle pooled connection is reused', async () => {

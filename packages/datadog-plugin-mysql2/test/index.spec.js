@@ -418,6 +418,11 @@ describe('Plugin', () => {
 
             assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
             assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
+            // The tag carries the wait here, so the acquire must not also cost a span.
+            assert.ok(
+              !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
+              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+            )
           }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
             .then(done)
             .catch(done)
@@ -425,6 +430,52 @@ describe('Plugin', () => {
           pool.query('SELECT 4 AS pool_wait_probe', error => {
             if (error) done(error)
           })
+        })
+
+        it('records the pool acquire wait time on the pooled execute span', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
+              assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
+              assert.ok(
+                !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
+                `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+              )
+            }, { spanResourceMatch: /^SELECT 14 AS execute_pool_wait$/ }),
+            new Promise((resolve, reject) => {
+              pool.execute('SELECT 14 AS execute_pool_wait', error => error ? reject(error) : resolve())
+            }),
+          ])
+        })
+
+        it('carries the pool wait when query dispatch is deferred after acquisition', async () => {
+          const getConnection = pool.getConnection
+          pool.getConnection = function (callback) {
+            return getConnection.call(this, function () {
+              setImmediate(() => callback.apply(this, arguments))
+            })
+          }
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
+                assert.ok(
+                  !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
+                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+                )
+              }, { spanResourceMatch: /^SELECT 13 AS deferred_dispatch$/ }),
+              new Promise((resolve, reject) => {
+                pool.query('SELECT 13 AS deferred_dispatch', error => error ? reject(error) : resolve())
+              }),
+            ])
+          } finally {
+            pool.getConnection = getConnection
+          }
         })
 
         it('reports a zero wait time when an idle pooled connection is reused', async () => {
@@ -549,10 +600,14 @@ describe('Plugin', () => {
           }
 
           agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
             assert.ok(
               !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
               `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
             )
+            assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
+            assert.ok(span.metrics['mysql2.pool.wait_time'] >= 0)
           }, { spanResourceMatch: /^SELECT 8 AS cluster_probe$/ })
             .then(() => cluster.end(() => done()))
             .catch(error => cluster.end(() => done(error)))
@@ -560,6 +615,128 @@ describe('Plugin', () => {
           namespace.query('SELECT 8 AS cluster_probe', error => {
             if (error) cluster.end(() => done(error))
           })
+        })
+
+        /**
+         * @returns {Promise<number>}
+         */
+        async function getClosedPort () {
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const port = probe.address().port
+          await new Promise(resolve => probe.close(resolve))
+          return port
+        }
+
+        /**
+         * @param {import('mysql2').PoolNamespace} namespace
+         */
+        function deferFirstRetry (namespace) {
+          const getConnection = namespace.getConnection
+          let getConnectionCalls = 0
+          namespace.getConnection = function () {
+            if (++getConnectionCalls === 2) {
+              setImmediate(() => getConnection.apply(this, arguments))
+              return
+            }
+            return getConnection.apply(this, arguments)
+          }
+        }
+
+        it('retains pooled-query classification across a tick-delayed canRetry failover', async function () {
+          const supportProbe = mysql2.createPoolCluster()
+          const supported = typeof supportProbe.of('*').query === 'function'
+          supportProbe.end(() => {})
+          if (!supported) return this.skip()
+
+          const cluster = mysql2.createPoolCluster()
+          cluster.add('dead', {
+            host: '127.0.0.1',
+            user: 'root',
+            port: await getClosedPort(),
+            connectionLimit: 1,
+          })
+          cluster.add('live', { host: '127.0.0.1', user: 'root', database: 'db', connectionLimit: 1 })
+          cluster.on('warn', () => {})
+          const namespace = cluster.of('*')
+          deferFirstRetry(namespace)
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+
+                assert.strictEqual(typeof span.metrics['mysql2.pool.wait_time'], 'number')
+                assert.ok(
+                  !traces[0].some(span => span.name === 'mysql2.pool.acquire'),
+                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+                )
+              }, { spanResourceMatch: /^SELECT 9 AS failover_probe$/ }),
+              new Promise((resolve, reject) => {
+                namespace.query('SELECT 9 AS failover_probe', error => error ? reject(error) : resolve())
+              }),
+            ])
+          } finally {
+            await new Promise(resolve => cluster.end(resolve))
+          }
+        })
+
+        it('creates a dedicated acquire span for an explicit namespace.getConnection()', function (done) {
+          const cluster = mysql2.createPoolCluster()
+          cluster.add('test-node', { host: '127.0.0.1', user: 'root', connectionLimit: 1 })
+          const namespace = cluster.of('*')
+
+          // The pool-cluster namespace instrumentation arrived together with PoolNamespace#query.
+          if (typeof namespace.query !== 'function' || typeof namespace.getConnection !== 'function') {
+            cluster.end(() => {})
+            return this.skip()
+          }
+
+          const parent = tracer.startSpan('namespace-acquire-parent')
+
+          agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'mysql2.pool.acquire')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+            // The wait belongs on the acquire span here, not folded into a later query span.
+            assert.strictEqual(typeof acquireSpan.metrics['mysql2.pool.wait_time'], 'number')
+            assert.ok(acquireSpan.metrics['mysql2.pool.wait_time'] >= 0)
+          }, { spanResourceMatch: /^mysql2\.pool\.acquire$/ })
+            .then(() => cluster.end(() => done()))
+            .catch(error => cluster.end(() => done(error)))
+
+          tracer.scope().activate(parent, () => {
+            namespace.getConnection((error, connection) => {
+              if (error) return cluster.end(() => done(error))
+              connection.release()
+              parent.finish()
+            })
+          })
+        })
+
+        it('surfaces the acquire error when every pool-cluster node fails', async function () {
+          const cluster = mysql2.createPoolCluster({ removeNodeErrorCount: 1 })
+          cluster.add('dead', {
+            host: '127.0.0.1',
+            user: 'root',
+            port: await getClosedPort(),
+            connectionLimit: 1,
+          })
+          cluster.on('warn', () => {})
+          const namespace = cluster.of('*')
+
+          if (typeof namespace.query !== 'function') {
+            cluster.end(() => {})
+            return this.skip()
+          }
+
+          const error = await new Promise(resolve => {
+            namespace.query('SELECT 12 AS all_nodes_down', resolve)
+          })
+          await new Promise(resolve => cluster.end(resolve))
+
+          assert.ok(error, 'expected the exhausted failover to surface an error')
         })
       })
       describe('with DBM propagation enabled with service using plugin configurations', () => {

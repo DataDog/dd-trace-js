@@ -366,6 +366,91 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.query', () => {
+        it('dispatches getConnection before query returns', async () => {
+          const getConnection = pool.getConnection
+          let queryReturned = false
+          let acquireDispatchedBeforeReturn = false
+
+          /**
+           * @param {...unknown} args
+           * @returns {unknown}
+           */
+          pool.getConnection = function (...args) {
+            if (!queryReturned) acquireDispatchedBeforeReturn = true
+            return getConnection.apply(this, args)
+          }
+
+          try {
+            const query = new Promise((resolve, reject) => {
+              pool.query(sql, error => error ? reject(error) : resolve())
+            })
+            queryReturned = true
+
+            await query
+
+            assert.strictEqual(acquireDispatchedBeforeReturn, true)
+          } finally {
+            pool.getConnection = getConnection
+          }
+        })
+
+        it('does not transfer an aborted query wait to the next connection user', async function () {
+          if (!semver.satisfies(mysql2Version, '>=3.11.5')) return this.skip()
+
+          startCh.subscribe(abort)
+          try {
+            const abortedQuery = pool.query(sql)
+            abortedQuery.once('error', noop)
+            await new Promise(resolve => abortedQuery.once('end', resolve))
+          } finally {
+            startCh.unsubscribe(abort)
+          }
+
+          const connection = await new Promise((resolve, reject) => {
+            pool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+          })
+          const directQuery = connection.query(sql)
+          await once(directQuery, 'end')
+          connection.release()
+
+          assert.strictEqual(apmQueryStart.lastCall.args[0].poolWaitTime, undefined)
+        })
+
+        it('treats an acquire reentered from enqueue as explicit', async () => {
+          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+          const acquireStart = sinon.stub()
+
+          const reentrantPool = mysql2.createPool({ ...config, connectionLimit: 1 })
+          const heldConnection = await new Promise((resolve, reject) => {
+            reentrantPool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+          })
+          acquireStartCh.subscribe(acquireStart)
+          let explicitAcquire
+
+          reentrantPool.once('enqueue', () => {
+            explicitAcquire = new Promise((resolve, reject) => {
+              reentrantPool.getConnection((error, connection) => {
+                if (error) return reject(error)
+                connection.release()
+                resolve()
+              })
+            })
+          })
+
+          try {
+            const query = new Promise((resolve, reject) => {
+              reentrantPool.query(sql, error => error ? reject(error) : resolve())
+            })
+            heldConnection.release()
+
+            await Promise.all([query, explicitAcquire])
+            sinon.assert.calledOnce(acquireStart)
+          } finally {
+            acquireStartCh.unsubscribe(acquireStart)
+            await new Promise(resolve => reentrantPool.end(resolve))
+          }
+        })
+
         describe('with object as query', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
@@ -511,6 +596,34 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.execute', () => {
+        it('dispatches getConnection before execute returns', async () => {
+          const getConnection = pool.getConnection
+          let executeReturned = false
+          let acquireDispatchedBeforeReturn = false
+
+          /**
+           * @param {...unknown} args
+           * @returns {unknown}
+           */
+          pool.getConnection = function (...args) {
+            if (!executeReturned) acquireDispatchedBeforeReturn = true
+            return getConnection.apply(this, args)
+          }
+
+          try {
+            const execute = new Promise((resolve, reject) => {
+              pool.execute(sql, error => error ? reject(error) : resolve())
+            })
+            executeReturned = true
+
+            await execute
+
+            assert.strictEqual(acquireDispatchedBeforeReturn, true)
+          } finally {
+            pool.getConnection = getConnection
+          }
+        })
+
         describe('with object as query', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
@@ -766,6 +879,42 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('PoolNamespace.prototype.getConnection failover', () => {
+        it('emits one acquire lifecycle per physical failover attempt', async () => {
+          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+          const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+          const acquireStart = sinon.stub()
+          const acquireFinish = sinon.stub()
+          acquireStartCh.subscribe(acquireStart)
+          acquireFinishCh.subscribe(acquireFinish)
+
+          const probe = net.createServer()
+          probe.listen(0, '127.0.0.1')
+          await once(probe, 'listening')
+          const deadPort = probe.address().port
+          await new Promise(resolve => probe.close(resolve))
+
+          const cluster = mysql2.createPoolCluster()
+          cluster.add('dead', { ...config, port: deadPort, connectionLimit: 1, connectTimeout: 500 })
+          cluster.add('live', { ...config, connectionLimit: 1 })
+          cluster.on('warn', () => {})
+
+          try {
+            const connection = await new Promise((resolve, reject) => {
+              cluster.of('*').getConnection((error, connection) => error ? reject(error) : resolve(connection))
+            })
+            connection.release()
+
+            sinon.assert.callCount(acquireStart, 2)
+            sinon.assert.callCount(acquireFinish, 2)
+            assert.ok(acquireFinish.firstCall.args[0].error)
+            assert.strictEqual(acquireFinish.secondCall.args[0].error, null)
+          } finally {
+            acquireStartCh.unsubscribe(acquireStart)
+            acquireFinishCh.unsubscribe(acquireFinish)
+            await new Promise(resolve => cluster.end(resolve))
+          }
+        })
+
         it('treats the retried internal acquire as a pooled-query acquire, not an explicit one', (done) => {
           // A pool cluster with `canRetry` (the default) retries `getConnection` on the next node when
           // the first one fails. That retry is dispatched from the first acquire's async failure
