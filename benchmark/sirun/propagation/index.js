@@ -41,6 +41,8 @@ const EXTRACT_CARRIER_PERCENT = {
   baggage: 'tenant=acme%20corp,path=%2Forders%2Fnew,note=hello%20world',
 }
 
+const EMPTY_CARRIER = {}
+
 const injectContext = new SpanContext({
   traceId: id('1234567890abcdef'),
   spanId: id('abcdef1234567890'),
@@ -57,6 +59,7 @@ const injectContext = new SpanContext({
 // breakage where the duck-typed config is missing a field the propagator now reads.
 const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
 assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+assert.strictEqual(propagator.extract(EMPTY_CARRIER), null, 'empty extract returned a context')
 
 const sanityInjected = {}
 propagator.inject(injectContext, sanityInjected)
@@ -67,6 +70,12 @@ if (VARIANT === 'extract') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_ASCII)
   }
+} else if (VARIANT === 'extract-empty') {
+  let extracted
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+    extracted = propagator.extract(EMPTY_CARRIER)
+  }
+  assert.strictEqual(extracted, null)
 } else if (VARIANT === 'extract-baggage-percent') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_PERCENT)
