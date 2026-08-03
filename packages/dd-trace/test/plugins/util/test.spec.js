@@ -46,11 +46,13 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getLibraryCapabilitiesTags,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../../src/plugins/util/test')
 
 const {
@@ -65,6 +67,21 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('library capabilities', () => {
+  it('advertises TIA for Vitest unless the execution mode does not support it', () => {
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0')[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      '1'
+    )
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0', {
+        omitTestImpactAnalysis: true,
+      })[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      undefined
+    )
+  })
+})
 
 describe('RUM test correlation', () => {
   const tracer = { _config: getConfig() }

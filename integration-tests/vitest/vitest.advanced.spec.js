@@ -85,12 +85,8 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
-              assert.ok(
-                !Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS),
-                `Available keys: ${inspect(Object.keys(metadata.test))}`
-              )
-
               assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: '1',
                 [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
                 [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
                 [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
