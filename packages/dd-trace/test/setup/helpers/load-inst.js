@@ -47,10 +47,10 @@ function loadOneInst (name) {
   try {
     loadInstFile(`${name}/server.js`, instrumentations)
     loadInstFile(`${name}/client.js`, instrumentations)
-  } catch (e) {
+  } catch {
     try {
       loadInstFile(`${name}/main.js`, instrumentations)
-    } catch (e) {
+    } catch {
       loadInstFile(`${name}.js`, instrumentations)
     }
   }

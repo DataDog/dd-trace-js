@@ -71,7 +71,7 @@ describe('TaintTracking lodash', () => {
               try {
                 const childProcess = require('child_process')
                 childProcess.execSync(commandResult, { stdio: 'ignore' })
-              } catch (e) {
+              } catch {
                 // do nothing
               }
             }, 'COMMAND_INJECTION')

@@ -146,7 +146,7 @@ describe('Plugin', () => {
               // This should fail because the topic already exists or similar error
               await publisher.createTopic({ name })
               await publisher.createTopic({ name }) // Try to create twice to force error
-            } catch (e) {
+            } catch {
             // this is just to prevent mocha from crashing
             }
             return expectedSpanPromise

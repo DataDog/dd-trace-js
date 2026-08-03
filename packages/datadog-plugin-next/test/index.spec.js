@@ -114,7 +114,7 @@ describe('Plugin', function () {
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
         try {
           execSync('yarn install', { cwd })
-        } catch (e) { // retry in case of error from registry
+        } catch { // retry in case of error from registry
           execSync('yarn install', { cwd })
         }
 
