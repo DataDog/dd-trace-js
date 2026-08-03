@@ -9,6 +9,7 @@ const {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getApprovalProjectSnapshot,
   serializeApprovalMaterial,
 } = require('../../../../ci/test-optimization-validation/approval')
 const {
@@ -57,6 +58,7 @@ describe('test optimization validation approval', () => {
       fs.realpathSync(fixture.runner),
       fixture.testFile,
     ].sort())
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
     assert.doesNotMatch(json, /npm (?:run |test)|shellCommand|setupCommands/)
   })
 
@@ -69,11 +71,68 @@ describe('test optimization validation approval', () => {
     assert.deepStrictEqual(material.executables, [])
     assert.deepStrictEqual(material.fixtureRecipeDigests, [])
     assert.deepStrictEqual(material.generatedFiles, [])
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
     assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
       path.join(fixture.root, 'package.json'),
     ])
     fs.appendFileSync(path.join(fixture.root, 'package.json'), ' ')
     assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
+  })
+
+  it('snapshots package scripts for a non-runnable framework in a mixed plan', () => {
+    input.manifest.frameworks[0].status = 'requires_manual_setup'
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const packageJson = path.join(fixture.root, 'package.json')
+
+    assert.ok(snapshot.sources.has(packageJson))
+    assert.ok(snapshot.projectFiles.some(file => file.path === packageJson))
+    assert.strictEqual(snapshot.sources.has(fs.realpathSync(fixture.runner)), false)
+  })
+
+  it('binds required browser and localhost capabilities without managing permissions', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.browserRequired = true
+    framework.localSocketRequired = true
+
+    const material = getApprovalMaterial(input)
+
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [
+      'browser_process',
+      'localhost_socket',
+    ])
+  })
+
+  it('derives mandatory browser capability from an inherently browser-backed framework', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'cypress'
+    delete framework.browserRequired
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+
+    framework.browserRequired = false
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+  })
+
+  it('derives browser capability from retained Vitest browser arguments', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'vitest'
+    framework.validation.runnerArgs = ['--browser']
+    framework.browserRequired = false
+
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+  })
+
+  it('refuses to publish approval artifacts when project inputs changed during preflight', () => {
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const capturedTestSource = snapshot.sources.get(fixture.testFile).toString('utf8')
+    fs.appendFileSync(fixture.testFile, '\n// changed during preflight\n')
+
+    assert.throws(
+      () => writeApprovalArtifacts({ ...input, expectedProjectFiles: snapshot.projectFiles }),
+      /project inputs changed during plan preflight/
+    )
+    assert.doesNotMatch(capturedTestSource, /changed during preflight/)
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval.json')), false)
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval-files.sha256')), false)
   })
 
   it('binds a CI file when local framework validation is unavailable', () => {
@@ -124,6 +183,16 @@ describe('test optimization validation approval', () => {
     const loaded = loadApprovedPlan(written.approvalJsonPath, written.digest)
 
     assert.strictEqual(loaded.path, written.approvalJsonPath)
+    const originalApproval = fs.readFileSync(written.approvalJsonPath)
+    const invalidApproval = JSON.parse(originalApproval)
+    invalidApproval.validation.requiredCapabilities = ['network_access']
+    fs.writeFileSync(written.approvalJsonPath, `${JSON.stringify(invalidApproval)}\n`)
+    const invalidDigest = crypto.createHash('sha256').update(fs.readFileSync(written.approvalJsonPath)).digest('hex')
+    assert.throws(
+      () => loadApprovedPlan(written.approvalJsonPath, invalidDigest),
+      /validation.requiredCapabilities/
+    )
+    fs.writeFileSync(written.approvalJsonPath, originalApproval)
     fs.appendFileSync(written.approvalJsonPath, ' ')
     assert.throws(
       () => loadApprovedPlan(written.approvalJsonPath, written.digest),

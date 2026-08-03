@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const { getArtifactId } = require('./artifact-id')
 const { createFileSafely, ensureSafeDirectory } = require('./safe-files')
+const { createValidationBlocker } = require('./validation-blocker')
 
 const MAX_FIXTURE_FILE_BYTES = 1024 * 1024
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
@@ -71,9 +72,13 @@ function createOfflineFixture ({
   }
   ensurePrivateDirectory(base)
   if (fs.existsSync(root)) {
-    throw new Error(
-      `Offline validation fixture already exists and will not be replaced or deleted: ${root}. ` +
-      'Inspect and remove it manually, then render a fresh approval plan.'
+    throw createValidationBlocker(
+      `Offline validation fixture already exists and will not be replaced or deleted: ${root}.`,
+      {
+        kind: 'offline-fixture-exists',
+        recommendation: `Inspect ${root}. Remove only that validator fixture after confirming no validation process ` +
+          'is active, then render and approve a fresh plan.',
+      }
     )
   }
   try {
@@ -244,7 +249,11 @@ function getFixtureSettingsOverrides (scenarioName) {
 function cleanupOfflineFixture (fixtureRoot) {
   const parent = path.dirname(path.dirname(fixtureRoot))
   ensureSafeDirectory(parent, fixtureRoot, 'offline validation fixture cleanup')
-  fs.rmSync(fixtureRoot, { recursive: true })
+  try {
+    fs.rmSync(fixtureRoot, { recursive: true })
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
   removeEmptyParents(path.dirname(fixtureRoot), parent)
 }
 
