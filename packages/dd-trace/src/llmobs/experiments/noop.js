@@ -88,10 +88,10 @@ class NoopExperiment {
   }
 
   /**
-   * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
+   * @returns {Promise<{experimentId: string, spanId: null, traceId: null, url: null}>}
    */
   submitSpan () {
-    return Promise.resolve({ experimentId: null, spanId: null, traceId: null, url: null })
+    return Promise.resolve({ experimentId: '', spanId: null, traceId: null, url: null })
   }
 
   /**
@@ -114,9 +114,11 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
+  #startExperiment
 
-  constructor (reason) {
+  constructor (reason, options = {}) {
     this.#reason = reason || 'LLMObs experiments are not available'
+    this.#startExperiment = options.startExperiment
   }
 
   #warn () {
@@ -143,6 +145,10 @@ class NoopExperiments {
    * @returns {Promise<NoopExperiment>}
    */
   startExperiment (options = {}) {
+    if (this.#startExperiment !== undefined && options.projectName) {
+      return this.#startExperiment(options)
+    }
+
     this.#warn()
     return Promise.resolve(new NoopExperiment(options.name))
   }

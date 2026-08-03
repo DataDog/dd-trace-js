@@ -165,7 +165,11 @@ describe('LLMObs Experiments facade', () => {
 
       exp.createDataset('d')
 
-      sinon.assert.calledWith(warn, sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/))
+      sinon.assert.calledWith(
+        warn,
+        'LLMObs experiments unavailable: %s',
+        sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/)
+      )
     })
   })
 
@@ -419,6 +423,22 @@ describe('LLMObs Experiments facade', () => {
       sinon.stub(ExperimentsClient.prototype, 'updateExperiment').resolves()
     }
 
+    it('honors projectName override when no global project is configured', async () => {
+      stubExperimentRecorderClient()
+      const warn = sinon.spy(log, 'warn')
+
+      const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
+      const recorder = await exp.startExperiment({
+        name: 'override-run',
+        projectName: 'override-project',
+        dataset: { id: 'dataset' },
+      })
+
+      assert.equal(recorder.experimentId(), 'exp')
+      sinon.assert.calledOnce(ExperimentsClient.prototype.createExperiment)
+      sinon.assert.notCalled(warn)
+    })
+
     it('starts an experiment, submits a generated row span, and submits metrics for that span', async () => {
       stubExperimentRecorderClient()
 
@@ -527,6 +547,75 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
     })
 
+    it('rejects external metrics for a different experiment before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-experiment-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ ...span, experimentId: 'other-exp' }, [{ label: 'score', value: 1 }]),
+        /Experiment span belongs to 'other-exp', not 'exp'/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('rejects external metrics without a value or error before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-shape-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics(span, [{ label: 'score' }]),
+        /Metric 'score' must include value or error/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('omits null dataset versions when starting external experiments', async () => {
+      stubExperimentRecorderClient()
+
+      await createExperiments(enabledConfig()).startExperiment({
+        name: 'null-version-run',
+        dataset: { id: 'dataset', version: null },
+      })
+
+      const attributes = ExperimentsClient.prototype.createExperiment.firstCall.args[0]
+      assert.equal(Object.hasOwn(attributes, 'dataset_version'), false)
+    })
+
+    it('defaults errored external closes to failed and surfaces close failures', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'close-run',
+        dataset: { id: 'dataset' },
+      })
+
+      await recorder.close({ error: new Error('boom') })
+      sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', {
+        status: 'failed',
+        error: 'boom',
+      })
+
+      ExperimentsClient.prototype.updateExperiment.resetHistory()
+      ExperimentsClient.prototype.updateExperiment.rejects(new Error('HTTP 500'))
+      await assert.rejects(
+        () => recorder.close({ status: 'completed' }),
+        /HTTP 500/
+      )
+      sinon.assert.calledOnce(ExperimentsClient.prototype.updateExperiment)
+    })
+
     it('records row error metadata and falls back for invalid timestamps', async () => {
       stubExperimentRecorderClient()
 
@@ -584,7 +673,7 @@ describe('LLMObs Experiments facade', () => {
       const recorder = await experiments.startExperiment({ name: 'disabled' })
       assert.equal(recorder.name(), 'disabled')
       assert.equal(recorder.url(), null)
-      assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
+      assert.deepEqual(await recorder.submitSpan(), { experimentId: '', spanId: null, traceId: null, url: null })
       await recorder.submitEvaluationMetrics({ spanId: 'span' }, [{ label: 'score', value: 1 }])
       await recorder.close({ status: 'completed' })
 
