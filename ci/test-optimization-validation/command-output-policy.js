@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { createValidationBlocker } = require('./validation-blocker')
+
 /**
  * Returns command-created paths that must be declared and removed after validation.
  *
@@ -32,10 +34,14 @@ function prepareCommandOutputs ({ command, artifactRoot, repositoryRoot }) {
   }
   for (const outputPath of outputPaths) {
     if (pathExists(outputPath)) {
-      throw new Error(
+      throw createValidationBlocker(
         `Command output path already exists and will not be moved or overwritten: ${outputPath}. ` +
-        'The validator will not delete pre-existing output. Inspect and remove it manually, or choose a fresh ' +
-        'output path, then render a new approval plan.'
+        'The validator will not delete pre-existing output.',
+        {
+          kind: 'command-output-exists',
+          recommendation: `Inspect ${outputPath}. Remove it manually only if it is disposable validator or test ` +
+            'output, or choose a fresh output path, then render and approve a fresh plan.',
+        }
       )
     }
     states.push({
