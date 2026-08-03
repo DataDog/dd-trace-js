@@ -13,8 +13,9 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging',
 }, (meta) => {
   const { agent } = meta
-  const queueAddErrorMessage = semver.gte(semver.coerce(meta.version), '6.0.0')
-    ? 'Constraint error, got value 0 expected range 1-12'
+  const isBullmq6 = semver.gte(semver.coerce(meta.version), '6.0.0')
+  const queueAddErrorMessage = isBullmq6
+    ? "JobId cannot be '0' or start with '0:'"
     : 'Validation error, cannot resolve alias "inv"'
 
   before(async () => {
@@ -57,7 +58,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
         },
       })
 
-      await assert.rejects(testSetup.queueAddError(), {
+      await assert.rejects(testSetup.queueAddError(isBullmq6), {
         name: 'Error',
         message: queueAddErrorMessage,
       })
