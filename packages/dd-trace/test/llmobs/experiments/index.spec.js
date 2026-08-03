@@ -453,7 +453,7 @@ describe('LLMObs Experiments facade', () => {
         { label: 'similarity', value: 0.92 },
         { label: 'verdict', value: 'passed' },
         { label: 'details', value: { assertions: 3 } },
-        { label: 'judge_error', error: 'judge unavailable' },
+        { label: 'judge_error', error: new Error('judge unavailable') },
       ])
       await recorder.close({ status: 'completed' })
 
@@ -510,11 +510,44 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', { status: 'completed' })
     })
 
+    it('records row error metadata and default duration', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'error-run',
+        dataset: { id: 'dataset', version: 7 },
+      })
+
+      await recorder.submitSpan({
+        name: 'string error',
+        input: 'bad input',
+        error: 'row failed',
+        startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      await recorder.submitSpan({
+        name: 'object error',
+        input: 'bad input',
+        error: { type: 'ValueError', message: 'bad row', stack: 'stack' },
+        startedAt: '2026-01-01T00:00:01.000Z',
+      })
+
+      const stringErrorSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
+      assert.equal(stringErrorSpan.status, 'error')
+      assert.equal(stringErrorSpan.duration, 0)
+      assert.deepEqual(stringErrorSpan.meta.error, { type: 'Error', message: 'row failed', stack: '' })
+
+      const objectErrorSpan = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].spans[0]
+      assert.equal(objectErrorSpan.status, 'error')
+      assert.deepEqual(objectErrorSpan.meta.error, { type: 'ValueError', message: 'bad row', stack: 'stack' })
+      sinon.assert.notCalled(ExperimentsClient.prototype.createDataset)
+    })
+
     it('supports no-op external experiments when LLM Obs is disabled', async () => {
       const warn = sinon.spy(log, 'warn')
       const experiments = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
       const recorder = await experiments.startExperiment({ name: 'disabled' })
+      assert.equal(recorder.name(), 'disabled')
       assert.equal(recorder.url(), null)
       assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
       await recorder.submitEvaluationMetrics({ spanId: 'span' }, [{ label: 'score', value: 1 }])
