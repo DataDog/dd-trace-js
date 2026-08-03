@@ -503,6 +503,7 @@ jobs:
         version: [oldest, latest]
         spec:
           - vitest.core
+          - vitest.tia
           - vitest.test-management
           - vitest.advanced
           - vitest.msw
