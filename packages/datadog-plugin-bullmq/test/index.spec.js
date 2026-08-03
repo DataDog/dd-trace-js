@@ -55,7 +55,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.queueAddError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 
@@ -114,7 +114,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.queueAddBulkError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 
@@ -194,7 +194,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.flowProducerAddError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 

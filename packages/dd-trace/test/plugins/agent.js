@@ -742,7 +742,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
@@ -772,7 +771,6 @@ module.exports = {
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
@@ -799,7 +797,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
