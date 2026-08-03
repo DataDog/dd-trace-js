@@ -325,7 +325,7 @@ function agentNameWireSafe (name) {
  * already resolved its own nearest agent at registration, so the child inherits that with a
  * single lookup rather than walking the ancestor chain. An agent never attributes itself.
  *
- * @param {Record<string, any> | undefined} tags - Registry entry for the parent span.
+ * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
  * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
  * @returns {{ name: string | undefined, spanId: string | undefined }}
  */

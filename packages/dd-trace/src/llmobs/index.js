@@ -155,7 +155,9 @@ function handleLLMObsInjection ({ carrier }) {
   // active span sits under a distributed agent, `resolveAgentAttribution` inherits the propagated
   // id/name already on the parent's registry entry, so the chain survives multiple hops. Resolved
   // after the bail-out above so we don't allocate when there is nothing to inject.
-  const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(LLMObsTagger.tagMap.get(parent), parent)
+  const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(
+    LLMObsTagger.tagMap.get(parent), parent
+  )
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
