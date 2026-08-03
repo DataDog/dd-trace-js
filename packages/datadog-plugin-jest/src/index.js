@@ -237,9 +237,8 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
-        // requestErrorTags from test env options may be undefined
-        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
-        ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),
+        ...requestErrorTags,
+        ...itrSkippingEnabledTags,
       }
 
       if (_ddUnskippable) {
@@ -297,23 +296,6 @@ class JestPlugin extends CiPlugin {
       }))
       for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      }
-    })
-
-    this.addSub('ci:jest:worker-report:telemetry', data => {
-      const telemetryEvents = JSON.parse(data)
-      for (const event of telemetryEvents) {
-        if (event.type === 'ciVisEvent') {
-          this.telemetry.ciVisEvent(event.name, event.testLevel, {
-            ...event.tags,
-            testFramework: event.testFramework,
-            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
-          })
-        } else if (event.type === 'count') {
-          this.telemetry.count(event.name, event.tags, event.value)
-        } else if (event.type === 'distribution') {
-          this.telemetry.distribution(event.name, event.tags, event.measure)
-        }
       }
     })
 

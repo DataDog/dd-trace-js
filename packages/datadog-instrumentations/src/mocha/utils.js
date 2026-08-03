@@ -2,11 +2,13 @@
 
 const { performance } = require('node:perf_hooks')
 
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
   getMaxEfdRetryCount,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -40,6 +42,7 @@ const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
 const attemptToFixExecutions = new Map()
+const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
 function waitForHitProbe () {
   const promises = {}
@@ -47,6 +50,59 @@ function waitForHitProbe () {
   return promises.hitBreakpointPromise
 }
 const loggedAttemptToFixTests = new Set()
+
+/**
+ * Checks whether a Mocha test failed, including serialized tests from parallel workers.
+ *
+ * @param {object} test
+ * @returns {boolean}
+ */
+function isTestFailed (test) {
+  if (test.isFailed) {
+    return test.isFailed()
+  }
+  if (test.isPending) {
+    return !test.isPending() && test.state === 'failed'
+  }
+  return false
+}
+
+/**
+ * Applies EFD and quarantine failure suppression to a completed Mocha runner.
+ *
+ * @param {object} runner
+ * @param {object} config
+ * @returns {void}
+ */
+function adjustRunnerFailuresForTestOptimization (runner, config) {
+  if (config.isEarlyFlakeDetectionEnabled) {
+    for (const tests of Object.values(efdTests)) {
+      const executedEfdTests = tests.filter(test => !test.isPending())
+      const failingEfdTests = tests.filter(test => isTestFailed(test))
+      const areAllEfdTestsFailing = failingEfdTests.length === executedEfdTests.length
+      const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+      if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+        if (runner.stats) {
+          runner.stats.failures -= nonQuarantinedFailingEfdTests.length
+        }
+        runner.failures -= nonQuarantinedFailingEfdTests.length
+      }
+    }
+  }
+
+  if (config.isTestManagementTestsEnabled) {
+    let numFailedQuarantinedTests = 0
+    for (const test of testsQuarantined) {
+      if (isTestFailed(test)) {
+        numFailedQuarantinedTests++
+      }
+    }
+    if (runner.stats) {
+      runner.stats.failures -= numFailedQuarantinedTests
+    }
+    runner.failures -= numFailedQuarantinedTests
+  }
+}
 
 function getAfterEachHooks (testOrHook) {
   const hooks = []
@@ -165,6 +221,7 @@ function isDatadogManagedRetryTest (test, config) {
  * Checks whether a runnable belongs to an Early Flake Detection execution.
  * @param {{
  *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsDisabled?: boolean,
  *   _ddIsEfdRetry?: boolean,
  *   _ddIsModified?: boolean,
  *   _ddIsNew?: boolean
@@ -174,6 +231,7 @@ function isDatadogManagedRetryTest (test, config) {
  */
 function isEarlyFlakeDetectionTest (test, config) {
   return !test._ddIsAttemptToFix &&
+    !test._ddIsDisabled &&
     config.isEarlyFlakeDetectionEnabled &&
     (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
 }
@@ -229,7 +287,6 @@ function getSuitesByTestFile (root) {
         suitesByTestFile[suite.file] = [suite]
       }
     }
-    // eslint-disable-next-line unicorn/no-array-for-each
     suite.suites.forEach(suite => {
       getSuites(suite)
     })
@@ -588,6 +645,17 @@ function getTestFinishInfo (test, status, config, error) {
     isFinalAttempt,
   })
 
+  if (!isMochaWorker) {
+    recordTestManagementExecution({
+      testSuite: getTestSuitePath(test.file, process.cwd()),
+      testName: test.fullTitle(),
+      status,
+      isAttemptToFix: _ddIsAttemptToFix,
+      isDisabled: _ddIsDisabled,
+      isQuarantined: _ddIsQuarantined,
+    })
+  }
+
   if (_ddIsAttemptToFix) {
     recordAttemptToFixExecution(attemptToFixExecutions, {
       testSuite: getTestSuitePath(test.file, process.cwd()),
@@ -920,7 +988,6 @@ function getOnPendingHandler () {
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
     if (config.isTestManagementTestsEnabled) {
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
         if (isAttemptToFix && !test.isPending()) {
@@ -944,7 +1011,6 @@ function getRunTestsWrapper (runTests, config) {
     }
 
     if (config.isImpactedTestsEnabled) {
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
           modifiedFiles: config.modifiedFiles,
@@ -952,7 +1018,12 @@ function getRunTestsWrapper (runTests, config) {
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
-              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+              if (
+                !test.isPending() &&
+                !test._ddIsDisabled &&
+                !test._ddIsAttemptToFix &&
+                config.isEarlyFlakeDetectionEnabled
+              ) {
                 retryTest(
                   test,
                   getConfiguredEfdRetryCount(config),
@@ -968,11 +1039,15 @@ function getRunTestsWrapper (runTests, config) {
 
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
+          if (
+            config.isEarlyFlakeDetectionEnabled &&
+            !test._ddIsDisabled &&
+            !test._ddIsAttemptToFix &&
+            !test._ddIsModified
+          ) {
             retryTest(
               test,
               getConfiguredEfdRetryCount(config),
@@ -1019,4 +1094,5 @@ module.exports = {
   testsStatuses,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 }

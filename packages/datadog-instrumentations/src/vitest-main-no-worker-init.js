@@ -4,6 +4,7 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
@@ -11,6 +12,7 @@ const {
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
@@ -29,9 +31,9 @@ const {
   testSuiteStartCh,
 } = require('./vitest-util')
 
-// No-worker-init instrumentation for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
-// When enabled, Vitest workers do not initialize dd-trace, so this main-process instrumentation
-// takes over some worker responsibilities, including test span creation and lifecycle reporting.
+// Main-process Vitest reporting used by no-worker-init and Browser Mode.
+// Execution changes are applied by an instrumentation-less setup file in the test environment,
+// while this module creates test spans from Vitest reporter events.
 const mainProcessReporterStates = new WeakMap()
 const loggedAttemptToFixTests = new Set()
 
@@ -53,15 +55,180 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
+  name: 'datadog:vitest-browser-setup-file',
+  config: configureVitestBrowserSetupFile,
+  configResolved: allowVitestBrowserSetupFile,
+}
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
   'The lighter Vitest worker path only works when each test file runs in an isolated worker.'
 const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
+const VITEST_BROWSER_STACK_LOCATION_RE = /:\d+:\d+$/
+const VITEST_BROWSER_URL_RE = /https?:\/\/[^\s)"'>\]]+/g
 let hasWarnedDisabledIsolate = false
 let hasWarnedUnsupportedVersion = false
 let nodeOptionsBeforeNoWorkerInit
 
 function noop () {}
+
+/**
+ * Removes Vite and Vitest runtime query parameters from browser error URLs.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function removeVitestBrowserUrlMetadata (url) {
+  const locationMatch = url.match(VITEST_BROWSER_STACK_LOCATION_RE)
+  const location = locationMatch?.[0] || ''
+  const urlWithoutLocation = location ? url.slice(0, -location.length) : url
+  const queryStart = urlWithoutLocation.indexOf('?')
+  if (queryStart === -1) return url
+
+  const fragmentStart = urlWithoutLocation.indexOf('#', queryStart)
+  const queryEnd = fragmentStart === -1 ? urlWithoutLocation.length : fragmentStart
+  const parameters = urlWithoutLocation.slice(queryStart + 1, queryEnd).split('&')
+  const keptParameters = []
+  let removedParameter = false
+
+  for (const parameter of parameters) {
+    const valueSeparator = parameter.indexOf('=')
+    const name = valueSeparator === -1 ? parameter : parameter.slice(0, valueSeparator)
+    if (name === 'import' || name === 'browserv') {
+      removedParameter = true
+    } else {
+      keptParameters.push(parameter)
+    }
+  }
+
+  if (!removedParameter) return url
+
+  const query = keptParameters.length ? `?${keptParameters.join('&')}` : ''
+  return urlWithoutLocation.slice(0, queryStart) + query + urlWithoutLocation.slice(queryEnd) + location
+}
+
+/**
+ * Removes Vite and Vitest runtime URL metadata from browser error text.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeVitestBrowserErrorText (value) {
+  return value.replaceAll(VITEST_BROWSER_URL_RE, removeVitestBrowserUrlMetadata)
+}
+
+/**
+ * Removes the ephemeral Vite server origin in addition to its runtime query parameters.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function normalizeVitestBrowserStackUrl (url) {
+  const normalizedUrl = removeVitestBrowserUrlMetadata(url)
+  const protocolEnd = normalizedUrl.indexOf('://')
+  const pathStart = normalizedUrl.indexOf('/', protocolEnd + 3)
+  return pathStart === -1 ? normalizedUrl : normalizedUrl.slice(pathStart)
+}
+
+/**
+ * Normalizes browser URLs in a stack when Vitest does not provide parsed frames.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeVitestBrowserStackText (value) {
+  return value.replaceAll(VITEST_BROWSER_URL_RE, normalizeVitestBrowserStackUrl)
+}
+
+/**
+ * Rebuilds an error stack from the source-mapped frames already parsed by Vitest.
+ *
+ * @param {{
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }} error
+ * @returns {string|undefined}
+ */
+function normalizeVitestBrowserErrorStack (error) {
+  if (typeof error.stack !== 'string') return error.stack
+  if (!Array.isArray(error.stacks)) {
+    return normalizeVitestBrowserStackText(error.stack)
+  }
+
+  const firstLineEnd = error.stack.indexOf('\n')
+  const stackLines = new Array(error.stacks.length + 1)
+  stackLines[0] = normalizeVitestBrowserErrorText(
+    firstLineEnd === -1 ? error.stack : error.stack.slice(0, firstLineEnd)
+  )
+
+  for (let index = 0; index < error.stacks.length; index++) {
+    const frame = error.stacks[index]
+    const location = `${frame.file}:${frame.line}:${frame.column}`
+    stackLines[index + 1] = frame.method
+      ? `    at ${frame.method} (${location})`
+      : `    at ${location}`
+  }
+
+  return stackLines.join('\n')
+}
+
+/**
+ * Returns an error copy with browser-only URL metadata removed.
+ *
+ * @param {{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }|undefined} error
+ * @returns {{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }|undefined}
+ */
+function normalizeVitestBrowserError (error) {
+  if (!error) return error
+
+  const message = typeof error.message === 'string'
+    ? normalizeVitestBrowserErrorText(error.message)
+    : error.message
+  const stack = normalizeVitestBrowserErrorStack(error)
+  if (message === error.message && stack === error.stack) return error
+
+  const normalizedError = { ...error }
+  if (error.name !== undefined) normalizedError.name = error.name
+  if (message !== undefined) normalizedError.message = message
+  if (stack !== undefined) normalizedError.stack = stack
+  return normalizedError
+}
+
+/**
+ * Normalizes browser errors without mutating Vitest's task result.
+ *
+ * @param {Array<{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }>|undefined} errors
+ * @returns {Array<{
+ *   message?: string,
+ *   name?: string,
+ *   stack?: string,
+ *   stacks?: Array<{ column: number, file: string, line: number, method?: string }>
+ * }>}
+ */
+function normalizeVitestBrowserErrors (errors) {
+  if (!errors?.length) return []
+
+  const normalizedErrors = new Array(errors.length)
+  for (let index = 0; index < errors.length; index++) {
+    normalizedErrors[index] = normalizeVitestBrowserError(errors[index])
+  }
+  return normalizedErrors
+}
 
 function isRequested () {
   return getValueFromEnvSources(VITEST_NO_WORKER_INIT_REQUEST_ENV) === true
@@ -144,19 +311,22 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
-  const { getConfiguredEfdRetryCount, state } = options
+  const { getConfiguredEfdRetryCount, shouldReportTestModule, state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
+  addVitestBrowserSetupFileAccess(testSpecifications)
 
   const {
     knownTestsBySuite,
     modifiedFiles,
     repositoryRoot,
     testManagementTestsBySuite,
+    testPropertiesByFilepath,
     testSessionConfiguration,
   } = setupData
 
   setProvidedContext(ctx, {
     _ddVitestWorkerSetup: {
+      isActive: true,
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
@@ -167,14 +337,19 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
       earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
+      isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
       quarantinedTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isQuarantined'),
       repositoryRoot: repositoryRoot || process.cwd(),
+      rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+      testPropertiesByFilepath: testPropertiesByFilepath || {},
     },
-  }, 'Could not send Vitest worker setup context, so no-worker execution changes will not work.')
+  }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
 
-  installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state)
+  installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state, {
+    shouldReportTestModule,
+  })
 }
 
 function deactivate (ctx) {
@@ -182,6 +357,11 @@ function deactivate (ctx) {
   if (installedReporterState) {
     installedReporterState.isActive = false
   }
+  setProvidedContext(ctx, {
+    _ddVitestWorkerSetup: {
+      isActive: false,
+    },
+  }, 'Could not deactivate Vitest main-process execution changes.')
 }
 
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
@@ -224,14 +404,75 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
   for (const config of configs) {
     if (!config) continue
 
+    config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []
     } else if (typeof config.setupFiles === 'string') {
       config.setupFiles = [config.setupFiles]
     }
 
-    if (!config.setupFiles.includes(setupFile)) {
-      config.setupFiles.push(setupFile)
+    const setupFileIndex = config.setupFiles.indexOf(setupFile)
+    if (setupFileIndex !== 0) {
+      if (setupFileIndex > 0) {
+        config.setupFiles.splice(setupFileIndex, 1)
+      }
+      config.setupFiles.unshift(setupFile)
+    }
+  }
+}
+
+/**
+ * Resolves the Vitest runner from the browser project's dependency tree.
+ *
+ * @param {{
+ *   resolve?: { dedupe?: string[] }
+ * }} viteConfig
+ * @returns {void}
+ */
+function configureVitestBrowserSetupFile (viteConfig) {
+  viteConfig.resolve ||= {}
+  viteConfig.resolve.dedupe ||= []
+
+  if (!viteConfig.resolve.dedupe.includes('@vitest/runner')) {
+    viteConfig.resolve.dedupe.push('@vitest/runner')
+  }
+}
+
+/**
+ * Allows Vite to serve the Datadog setup file after its default workspace detection has run.
+ *
+ * @param {{ server?: { fs?: { allow?: string[] } } }} viteConfig
+ * @returns {void}
+ */
+function allowVitestBrowserSetupFile (viteConfig) {
+  const allow = viteConfig.server?.fs?.allow
+  if (allow && !allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
+    allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
+  }
+}
+
+/**
+ * Installs the Vite access plugin on each parent project that owns a Browser Mode server.
+ *
+ * @param {object[]|undefined} testSpecifications
+ * @returns {void}
+ */
+function addVitestBrowserSetupFileAccess (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return
+
+  const configuredProjects = new Set()
+  for (const testSpecification of testSpecifications) {
+    const project = getTestSpecificationProject(testSpecification)
+    if (!isBrowserTestSpecification(testSpecification)) continue
+
+    const browserServerProject = project?._parent || project
+    if (!browserServerProject || configuredProjects.has(browserServerProject)) continue
+
+    configuredProjects.add(browserServerProject)
+    browserServerProject.options ||= {}
+    browserServerProject.options.plugins ||= []
+    if (!browserServerProject.options.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
+      browserServerProject.options.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
     }
   }
 }
@@ -279,12 +520,20 @@ function getSelectedTestManagementTests (testManagementTestsBySuite, propertyNam
   return selectedTests
 }
 
-function installMainProcessReporter (ctx, frameworkVersion, testSessionConfiguration, testOptimizationData, state) {
+function installMainProcessReporter (
+  ctx,
+  frameworkVersion,
+  testSessionConfiguration,
+  testOptimizationData,
+  state,
+  options
+) {
   if (!ctx?.reporters) return
 
   const reporterState = {
     frameworkVersion,
     isActive: true,
+    shouldReportTestModule: options.shouldReportTestModule,
     state,
     testSessionConfiguration,
     testOptimizationData,
@@ -307,26 +556,26 @@ function createMainProcessReporter (reporterState) {
 
   return {
     onTestModuleStart (testModule) {
-      if (!isActive()) return
+      if (!shouldReport(testModule)) return
 
       startTestSuite(testModule)
     },
 
     onTestModuleEnd (testModule) {
-      if (!isActive()) return
+      if (!shouldReport(testModule)) return
 
       return reportTestModule(testModule)
     },
 
     onTestCaseResult (testCase) {
-      if (!isActive()) return
+      if (!shouldReport(testCase.module || testCase.task?.file)) return
 
       const task = getTestCaseTask(testCase)
       recordFinalTaskAttemptResult(task)
     },
 
     onTaskUpdate (packs, events) {
-      if (!isActive()) return
+      if (!isReporterActive()) return
       if (!events) return
 
       for (const event of events) {
@@ -336,21 +585,41 @@ function createMainProcessReporter (reporterState) {
       }
     },
 
+    onWatcherRerun () {
+      for (const testSuiteCtx of testSuiteContexts.values()) {
+        testSuiteFinishCh.publish({
+          status: 'skip',
+          deferFlush: true,
+          onDone: noop,
+          ...testSuiteCtx.currentStore,
+        })
+      }
+      testSuiteContexts.clear()
+      finishedTestModules.clear()
+      taskAttemptStatuses.clear()
+      tasksWithRecordedFinalAttempt.clear()
+    },
+
     onFinished (files) {
-      if (!isActive()) return
+      if (!isReporterActive()) return
       if (!files) return
 
       for (const file of files) {
         const testModule = createTestModuleFromFile(file)
-        if (!finishedTestModules.has(file.id)) {
+        if (shouldReport(testModule) && !finishedTestModules.has(file.id)) {
           reportTestModule(testModule)
         }
       }
     },
   }
 
-  function isActive () {
+  function isReporterActive () {
     return reporterState.isActive === true
+  }
+
+  function shouldReport (testModule) {
+    return isReporterActive() &&
+      (!reporterState.shouldReportTestModule || reporterState.shouldReportTestModule(testModule))
   }
 
   function recordTaskAttemptStatus (taskId, status, attemptCount) {
@@ -389,7 +658,7 @@ function createMainProcessReporter (reporterState) {
     let testSuiteError
 
     for (const task of testTasks) {
-      const testReport = getTestReport(task, testSuiteCtx.currentStore)
+      const testReport = getTestReport(task, testSuiteCtx.currentStore, testSuiteCtx.browserEnvironment)
       testReports.push(testReport)
 
       for (const attempt of testReport.nonFinalAttempts) {
@@ -412,14 +681,16 @@ function createMainProcessReporter (reporterState) {
     }
 
     if (testSuiteError) {
-      testSuiteCtx.error = testSuiteError
+      testSuiteCtx.error = testSuiteCtx.browserEnvironment
+        ? normalizeVitestBrowserError(testSuiteError)
+        : testSuiteError
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
     testSuiteFinishCh.publish({
       status: getDatadogStatus(testSuiteResult),
       deferFlush: true,
-      onFinish: noop,
+      onDone: noop,
       ...testSuiteCtx.currentStore,
     })
     testSuiteContexts.delete(testModuleId)
@@ -428,16 +699,22 @@ function createMainProcessReporter (reporterState) {
   function startTestSuite (testModule) {
     const { frameworkVersion, testSessionConfiguration } = reporterState
     const testModuleId = getTestModuleId(testModule)
+    const browserEnvironment = getTestModuleBrowserEnvironment(testModule)
     const testSuiteCtx = {
+      browserEnvironment,
+      browserDriver: browserEnvironment?.browserDriver,
+      browserName: browserEnvironment?.browserName,
+      browserProjectName: browserEnvironment?.browserProjectName,
       testSuiteAbsolutePath: getTestModuleFilepath(testModule),
       frameworkVersion,
       testSessionId: testSessionConfiguration.testSessionId,
       testModuleId: testSessionConfiguration.testModuleId,
       testCommand: testSessionConfiguration.testCommand,
       repositoryRoot: testSessionConfiguration.repositoryRoot,
-      codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
+      codeOwnersEntries: testSessionConfiguration.codeOwnersEntries ?? undefined,
       requestErrorTags: reporterState.state.requestErrorTags,
       isTestFrameworkWorker: true,
+      isBrowserMode: browserEnvironment !== undefined,
       isVitestNoWorkerInitActive: true,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
@@ -445,7 +722,7 @@ function createMainProcessReporter (reporterState) {
     return testSuiteCtx
   }
 
-  function getTestReport (task, testSuiteStore) {
+  function getTestReport (task, testSuiteStore, browserEnvironment) {
     const result = task.result
     const testSuiteAbsolutePath = task.file?.filepath
     const testName = getTestName(task)
@@ -459,6 +736,7 @@ function createMainProcessReporter (reporterState) {
 
     if (testProperties.isAttemptToFix && task.meta?.__ddTestOptAtfStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptAtfErrorCounts,
         finalStatus: getAttemptToFixFinalStatus,
         state,
@@ -470,6 +748,7 @@ function createMainProcessReporter (reporterState) {
 
     if (testProperties.isEarlyFlakeDetection && task.meta?.__ddTestOptEfdStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptEfdErrorCounts,
         finalStatus: getEarlyFlakeDetectionFinalStatus,
         state,
@@ -481,8 +760,9 @@ function createMainProcessReporter (reporterState) {
 
     if (!testProperties.isAttemptToFix && task.meta?.__ddTestOptRepeatStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptRepeatErrorCounts,
-        finalStatus: () => status,
+        finalStatus: () => getExternalFinalStatus(status, testProperties),
         state,
         statuses: task.meta.__ddTestOptRepeatStatuses,
         testSuiteStore,
@@ -491,11 +771,18 @@ function createMainProcessReporter (reporterState) {
     }
 
     const attemptStatuses = taskAttemptStatuses.get(task.id)
-    if (!testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection && attemptStatuses?.length > 1) {
+    const retryCount = task.result?.retryCount || 0
+    if (
+      !testProperties.isAttemptToFix &&
+      !testProperties.isEarlyFlakeDetection &&
+      (attemptStatuses?.length > 1 || retryCount > 0)
+    ) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
-        finalStatus: () => status,
+        browserEnvironment,
+        errorCounts: task.meta?.__ddTestOptRetryErrorCounts,
+        finalStatus: () => getExternalFinalStatus(status, testProperties),
         state,
-        statuses: attemptStatuses,
+        statuses: getRetriedTaskStatuses(attemptStatuses, retryCount, status),
         testSuiteStore,
         type: 'external',
       })
@@ -503,6 +790,7 @@ function createMainProcessReporter (reporterState) {
 
     if (!testProperties.isAttemptToFix && task.result?.repeatCount > 0) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         finalStatus: () => status,
         state,
         statuses: getRepeatedTaskStatuses(task, status),
@@ -522,24 +810,14 @@ function createMainProcessReporter (reporterState) {
       result.state = 'pass'
     }
 
-    const errors = result?.errors || []
-    const finalErrorIndex = status === 'fail' ? errors.length - 1 : -1
-    const nonFinalAttempts = []
-
-    if (status !== 'skip') {
-      for (let index = 0; index < errors.length; index++) {
-        if (index === finalErrorIndex) continue
-        nonFinalAttempts.push({
-          error: errors[index],
-          isRetry: index > 0,
-          status: 'fail',
-        })
-      }
-    }
+    const errors = browserEnvironment
+      ? normalizeVitestBrowserErrors(result?.errors)
+      : result?.errors || []
 
     return {
+      browserEnvironment,
       errors,
-      nonFinalAttempts,
+      nonFinalAttempts: [],
       state,
       status,
       task,
@@ -643,6 +921,7 @@ function createTaskFromReportedTask (reportedTask, file, suite) {
     id: reportedTask.id,
     type: reportedTask.type,
     name: reportedTask.name || reportedTask.relativeModuleId || reportedTask.moduleId,
+    location: reportedTask.location,
     mode: reportedTask.options?.mode,
     meta: getReportedTaskMeta(reportedTask),
     result: getReportedTaskResult(reportedTask),
@@ -731,8 +1010,10 @@ function getTestModuleProjectName (testModule) {
 
 function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
   const result = task.result
-  const errors = result?.errors || []
-  const { errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
+  const { browserEnvironment, errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
+  const errors = browserEnvironment
+    ? normalizeVitestBrowserErrors(result?.errors)
+    : result?.errors || []
   const finalAttemptStatus = finalStatus(statuses)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
@@ -757,7 +1038,9 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
       errorIndex++
     }
     const attempt = {
+      index,
       attemptToFixFailed: type === 'attempt_to_fix' && isFinalAttempt && hasFailure,
+      duration: task.meta?.__ddTestOptAttemptDurations?.[index],
       earlyFlakeAbortReason: type === 'early_flake_detection' && isFinalAttempt
         ? task.meta?.__ddTestOptEfdAbortReason
         : undefined,
@@ -783,8 +1066,9 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
   }
 
   return {
+    browserEnvironment,
     errors,
-    finalAttempt: attempts[attempts.length - 1],
+    finalAttempt: attempts.at(-1),
     nonFinalAttempts: attempts.slice(0, -1),
     state,
     status,
@@ -841,6 +1125,17 @@ function getEarlyFlakeDetectionFinalStatus (statuses) {
   return statuses.includes('pass') ? 'pass' : 'fail'
 }
 
+/**
+ * Returns the final status for user-configured retries and repeats.
+ *
+ * @param {string} status
+ * @param {{ isDisabled?: boolean, isQuarantined?: boolean }} testProperties
+ * @returns {string}
+ */
+function getExternalFinalStatus (status, testProperties) {
+  return testProperties.isDisabled || testProperties.isQuarantined ? 'skip' : status
+}
+
 function getRepeatedTaskStatuses (task, status) {
   const repeatedStatuses = []
   const repeatCount = task.result?.repeatCount || 0
@@ -850,8 +1145,27 @@ function getRepeatedTaskStatuses (task, status) {
   return repeatedStatuses
 }
 
+/**
+ * Completes reporter retry events with Vitest's final retry count and status.
+ *
+ * @param {string[]} recordedStatuses
+ * @param {number} retryCount
+ * @param {string} finalStatus
+ * @returns {string[]}
+ */
+function getRetriedTaskStatuses (recordedStatuses = [], retryCount, finalStatus) {
+  const statuses = [...recordedStatuses]
+  const attemptCount = Math.max(statuses.length, retryCount + 1)
+  while (statuses.length < attemptCount - 1) {
+    statuses.push('fail')
+  }
+  statuses[attemptCount - 1] = finalStatus
+  return statuses
+}
+
 function reportFinalTestAttempt (testReport) {
   const {
+    browserEnvironment,
     errors,
     state,
     status,
@@ -863,13 +1177,40 @@ function reportFinalTestAttempt (testReport) {
   } = testReport
 
   if (status === 'skip') {
+    recordTestManagementExecution({
+      testSuite: testProperties.testSuite,
+      testName,
+      status,
+      isAttemptToFix: testProperties.isAttemptToFix,
+      isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
+    })
+    if (testProperties.isAttemptToFix) {
+      recordAttemptToFixExecution(state.attemptToFixExecutions, {
+        testSuite: testProperties.testSuite,
+        testName,
+        status,
+        isDisabled: testProperties.isDisabled,
+        isQuarantined: testProperties.isQuarantined,
+      })
+    }
+    const {
+      isRumActive,
+      testExecutionId,
+    } = getRumCorrelation(task)
     testSkipCh.publish({
+      ...browserEnvironment,
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix: testProperties.isAttemptToFix,
       isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
+      isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
+      testStartLine: task.location?.line,
+      testExecutionId,
       ...testSuiteStore,
     })
     return
@@ -880,7 +1221,7 @@ function reportFinalTestAttempt (testReport) {
   const finalAttempt = testReport.finalAttempt
 
   if (status === 'fail') {
-    const error = errors[errors.length - 1] || errors[0]
+    const error = finalAttempt?.error || errors[0]
     reportTestAttempt(testReport, finalAttempt || {
       error,
       finalStatus,
@@ -892,7 +1233,7 @@ function reportFinalTestAttempt (testReport) {
         true,
         true
       ),
-      isRetry: errors.length > 1 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+      isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
       status: 'fail',
     })
     return finalStatus === 'skip' ? undefined : error
@@ -900,13 +1241,14 @@ function reportFinalTestAttempt (testReport) {
 
   reportTestAttempt(testReport, finalAttempt || {
     finalStatus,
-    isRetry: errors.length > 0 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+    isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
     status: 'pass',
   })
 }
 
 function reportTestAttempt (testReport, attempt) {
   const {
+    browserEnvironment,
     state,
     task,
     testName,
@@ -916,7 +1258,27 @@ function reportTestAttempt (testReport, attempt) {
   } = testReport
   const result = task.result
   const status = attempt.status
+  const {
+    isRumActive,
+    testExecutionId,
+  } = getRumCorrelation(task, attempt.index)
+  const attemptStartTimes = task.meta?.__ddTestOptAttemptStartTimes
+  const attemptStartIndex = attempt.index ?? (attemptStartTimes?.length || 1) - 1
+  const attemptStartTime = attemptStartTimes?.[attemptStartIndex]
+  let duration
+  if (status === 'pass') {
+    if (
+      attempt.duration !== undefined ||
+      (!attempt.isRetry && isFinalTestAttempt(testReport, attempt) && result?.duration !== undefined)
+    ) {
+      duration = attempt.duration ?? result.duration
+    }
+  } else {
+    duration = attempt.duration ??
+      (shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined)
+  }
   const testCtx = {
+    ...browserEnvironment,
     currentStore: testSuiteStore,
     testName,
     testSuiteAbsolutePath,
@@ -931,9 +1293,23 @@ function reportTestAttempt (testReport, attempt) {
     isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
     isRetryReasonAtr: !testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection &&
       testProperties.isFlakyTestRetries,
+    isRumActive,
     isTestFrameworkWorker: true,
     requestErrorTags: state.requestErrorTags,
+    startTime: Number.isFinite(attemptStartTime)
+      ? attemptStartTime
+      : (Number.isFinite(duration) && duration >= 0 ? Date.now() - duration : undefined),
+    testStartLine: task.location?.line,
+    testExecutionId,
   }
+  recordTestManagementExecution({
+    testSuite: testProperties.testSuite,
+    testName,
+    status,
+    isAttemptToFix: testProperties.isAttemptToFix,
+    isDisabled: testProperties.isDisabled,
+    isQuarantined: testProperties.isQuarantined,
+  })
   if (testProperties.isAttemptToFix) {
     recordAttemptToFixExecution(state.attemptToFixExecutions, {
       testSuite: testProperties.testSuite,
@@ -954,13 +1330,8 @@ function reportTestAttempt (testReport, attempt) {
   testStartCh.runStores(testCtx, () => {})
   testCtx.status = status
   testCtx.task = task
-  if (
-    status === 'pass' &&
-    !attempt.isRetry &&
-    isFinalTestAttempt(testReport, attempt) &&
-    result?.duration !== undefined
-  ) {
-    testCtx.duration = result.duration
+  if (status === 'pass' && duration !== undefined) {
+    testCtx.duration = duration
   }
   testFinishTimeCh.runStores(testCtx, () => {})
 
@@ -975,7 +1346,7 @@ function reportTestAttempt (testReport, attempt) {
   }
 
   testErrorCh.publish({
-    duration: shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined,
+    duration,
     error: attempt.error,
     earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
     finalStatus: attempt.finalStatus,
@@ -983,6 +1354,24 @@ function reportTestAttempt (testReport, attempt) {
     attemptToFixFailed: attempt.attemptToFixFailed,
     ...testCtx.currentStore,
   })
+}
+
+/**
+ * Returns the browser RUM correlation metadata for a test attempt.
+ *
+ * @param {object} task
+ * @param {number|undefined} attemptIndex
+ * @returns {{ isRumActive?: boolean, testExecutionId?: string }}
+ */
+function getRumCorrelation (task, attemptIndex) {
+  const testExecutionIds = task.meta?.__ddTestOptRumTestExecutionIds
+  if (!Array.isArray(testExecutionIds) || testExecutionIds.length === 0) return {}
+
+  attemptIndex ??= testExecutionIds.length - 1
+  return {
+    isRumActive: task.meta?.__ddTestOptRumActive?.[attemptIndex] === true,
+    testExecutionId: testExecutionIds[attemptIndex],
+  }
 }
 
 function isFinalTestAttempt (testReport, attempt) {
@@ -1207,10 +1596,11 @@ function getTestSpecificationPool (testSpecification) {
   const options = getTestSpecificationOptions(testSpecification)
   const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
+  const projectConfig = safeConfig(project)
   return options?.pool ||
     file?.pool ||
     testSpecification?.pool ||
-    project?.config?.pool ||
+    projectConfig?.pool ||
     project?.serializedConfig?.pool ||
     project?.pool
 }
@@ -1243,15 +1633,16 @@ function getTestSpecificationIsolate (testSpecification, pool) {
   const options = getTestSpecificationOptions(testSpecification)
   const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
+  const projectConfig = safeConfig(project)
   return getPoolOptionsIsolate(options, pool) ??
     getPoolOptionsIsolate(file, pool) ??
-    getPoolOptionsIsolate(project?.config, pool) ??
+    getPoolOptionsIsolate(projectConfig, pool) ??
     getPoolOptionsIsolate(project?.serializedConfig, pool) ??
     getPoolOptionsIsolate(project, pool) ??
     getPoolOptionsIsolate(testSpecification, pool) ??
     options?.isolate ??
     file?.isolate ??
-    project?.config?.isolate ??
+    projectConfig?.isolate ??
     project?.serializedConfig?.isolate ??
     project?.isolate ??
     testSpecification?.isolate
@@ -1263,7 +1654,7 @@ function getEffectiveTestSpecificationIsolate (testSpecification, pool, defaultI
 }
 
 function getProjectName (project) {
-  return normalizeProjectName(project?.name || project?.config?.name || project?.test?.name)
+  return normalizeProjectName(project?.name || safeConfig(project)?.name || project?.test?.name)
 }
 
 function normalizeProjectName (name) {
@@ -1271,6 +1662,111 @@ function normalizeProjectName (name) {
 
   const label = name?.label
   return typeof label === 'string' ? label : undefined
+}
+
+/**
+ * Returns whether a Vitest specification runs in Browser Mode.
+ *
+ * @param {object} testSpecification
+ * @returns {boolean}
+ */
+function isBrowserTestSpecification (testSpecification) {
+  return getTestSpecificationPool(testSpecification) === 'browser' ||
+    isBrowserProject(getTestSpecificationProject(testSpecification))
+}
+
+/**
+ * Returns whether a Vitest project has Browser Mode enabled.
+ *
+ * @param {object|undefined} project
+ * @returns {boolean}
+ */
+function isBrowserProject (project) {
+  try {
+    if (project?.isBrowserEnabled?.() === true) return true
+  } catch {}
+  return getProjectReportingConfig(project)?.browser?.enabled === true
+}
+
+/**
+ * Returns whether Vitest can overlap tests or their setup and teardown.
+ *
+ * @param {object|undefined} config
+ * @returns {boolean}
+ */
+function hasConcurrentTestExecution (config) {
+  const sequence = config?.sequence
+  return sequence?.concurrent === true ||
+    sequence?.hooks === 'parallel' ||
+    sequence?.setupFiles === 'parallel'
+}
+
+/**
+ * Returns whether Vitest can overlap browser execution that shares the RUM correlation cookie origin.
+ *
+ * @param {object} ctx
+ * @param {object[]|undefined} testSpecifications
+ * @returns {boolean}
+ */
+function canRaceRumCorrelation (ctx, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return hasConcurrentTestExecution(safeConfig(ctx))
+  }
+
+  let browserFileCount = 0
+  let hasBrowserProject = false
+  let project
+  for (const testSpecification of testSpecifications) {
+    const testProject = getTestSpecificationProject(testSpecification)
+    if (!isBrowserTestSpecification(testSpecification)) continue
+
+    const config = getProjectReportingConfig(testProject) || safeConfig(ctx)
+    if (hasConcurrentTestExecution(config)) return true
+
+    browserFileCount++
+    if (hasBrowserProject && testProject !== project) return true
+    project = testProject
+    hasBrowserProject = true
+  }
+  if (browserFileCount < 2) return false
+
+  const config = getProjectReportingConfig(project) || safeConfig(ctx)
+  const fileParallelism = config?.browser?.fileParallelism ?? config?.fileParallelism
+  return fileParallelism !== false && config?.maxWorkers !== 1
+}
+
+function getTestModuleBrowserEnvironment (testModule) {
+  const project = testModule?.project
+  const config = getProjectReportingConfig(project)
+  const isBrowserMode = testModule?.task?.pool === 'browser' ||
+    testModule?.pool === 'browser' ||
+    isBrowserProject(project)
+  if (!isBrowserMode) return
+
+  const provider = config?.browser?.provider
+  const browserDriver = typeof provider === 'string' ? provider : provider?.name
+
+  return {
+    browserDriver,
+    browserName: config?.browser?.name,
+    browserProjectName: getTestModuleProjectName(testModule),
+    isBrowserMode: true,
+  }
+}
+
+/**
+ * Returns the runtime or serialized project configuration used for read-only reporting metadata.
+ *
+ * @param {object|undefined} project
+ * @returns {object|undefined}
+ */
+function getProjectReportingConfig (project) {
+  const config = safeConfig(project)
+  if (config) return config
+
+  try {
+    return project?.serializedConfig
+  } catch {}
 }
 
 function safeConfig (project) {
@@ -1293,5 +1789,6 @@ module.exports = {
   configure,
   deactivate,
   configureWorkerEnv,
+  isSupportedVersion,
   shouldUse,
 }

@@ -27,6 +27,7 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -46,6 +47,10 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const {
+  getChannelPromise,
+  publishWithCompletion,
+} = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -92,7 +97,7 @@ const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-even
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
-const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
+const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
@@ -274,6 +279,10 @@ function getTestEnvironmentOptions (config) {
 
 const MAX_IGNORED_TEST_NAMES = 10
 
+/**
+ * @typedef {Parameters<typeof logTestOptimizationSummary>[0]} TestOptimizationSummary
+ */
+
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -284,22 +293,20 @@ function getTestStats (testStatuses) {
 /**
  * Formats the ignored-failure section for the Test Optimization summary.
  *
- * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @param {{
+ *   efdNames: string[],
+ *   quarantineNames: string[],
+ *   totalCount: number,
+ *   efdFailureCount: number
+ * } | undefined} ignoredFailures
  * @returns {string}
  */
 function formatIgnoredFailuresSummary (ignoredFailures) {
-  if (!ignoredFailures) return ''
+  if (!ignoredFailures?.efdFailureCount) return ''
 
-  const items = []
+  const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
 
-  for (const n of ignoredFailures.efdNames) {
-    items.push({ text: n, suffix: 'Early Flake Detection' })
-  }
-  for (const n of ignoredFailures.quarantineNames) {
-    items.push({ text: n, suffix: 'Quarantine' })
-  }
-
-  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
+  if (items.length === 0) return ''
 
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
@@ -308,13 +315,19 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
     .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
     .join('\n') + moreSuffix
 
-  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
+  return `${ignoredFailures.efdFailureCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
  * Logs a single "Datadog Test Optimization" summary at session end.
  *
- * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @param {{
+ *   efdNames: string[],
+ *   quarantineNames: string[],
+ *   totalCount: number,
+ *   efdFailureCount: number
+ * } | undefined} ignoredFailures
+ * @param {NonNullable<TestOptimizationSummary['attemptToFixExecutions']>} attemptToFixExecutions
  */
 function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
   logTestOptimizationSummary({
@@ -345,11 +358,11 @@ function getAttemptToFixExecutionsFromJestResults (result) {
 
     for (const { fullName, status } of testResults) {
       const testName = removeSeedSuffixFromTestName(fullName)
-      const testStatus = getTestStatusFromJestResult(status)
-      if (!testStatus) continue
-
       const testManagementTest = testManagementTestsForSuite[testName]?.properties
       if (!testManagementTest?.attempt_to_fix) continue
+      const testStatus = getTestStatusFromJestResult(status) ||
+        (status === 'pending' || status === 'todo' ? 'skip' : undefined)
+      if (!testStatus) continue
 
       recordAttemptToFixExecution(executions, {
         testSuite,
@@ -362,6 +375,51 @@ function getAttemptToFixExecutionsFromJestResults (result) {
   }
 
   return executions
+}
+
+/**
+ * Records test-management results reported by Jest after all retries have finished.
+ *
+ * @param {{
+ *   globalConfig?: { rootDir?: string },
+ *   results: {
+ *     testResults: Array<{
+ *       testResults: Array<{ fullName: string, status: string }>,
+ *       testFilePath: string
+ *     }>
+ *   }
+ * }} result
+ * @param {string[]} quarantineFailureNames
+ */
+function recordTestManagementExecutionsFromJestResults (result, quarantineFailureNames) {
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+  const failedQuarantinedTests = new Set(quarantineFailureNames)
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = removeSeedSuffixFromTestName(fullName)
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest) continue
+
+      const name = `${testSuite} › ${testName}`
+      recordTestManagementExecution({
+        testSuite,
+        testName,
+        status: failedQuarantinedTests.has(name) ? 'fail' : getTestStatusFromJestResult(status),
+        isAttemptToFix: testManagementTest.attempt_to_fix,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      })
+    }
+  }
 }
 
 function wrapConsoleErrorForJestReferenceErrors () {
@@ -1188,9 +1246,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.testParameters = testParameters
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
-        ctx.isEfdRetry = ctx.isEfdRetry || numEfdRetry > 0
+        ctx.isEfdRetry ||= numEfdRetry > 0
         ctx.isAttemptToFix = isAttemptToFix
-        ctx.isAttemptToFixRetry = ctx.isAttemptToFixRetry || numOfAttemptsToFixRetries > 0
+        ctx.isAttemptToFixRetry ||= numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
@@ -1357,8 +1415,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
-      }
-      if (event.name === 'test_done') {
+      } else if (event.name === 'test_done') {
         const originalError = event.test?.errors?.[0]
         let status = 'pass'
         if (event.test.errors && event.test.errors.length) {
@@ -1507,6 +1564,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
           return
         }
+        if (!isJestWorker) {
+          recordTestManagementExecution({
+            testSuite: ctx.suite,
+            testName: ctx.name,
+            status,
+            isAttemptToFix: ctx.isAttemptToFix,
+            isDisabled: ctx.isDisabled,
+            isQuarantined: ctx.isQuarantined,
+          })
+        }
         if (ctx.concurrentTestState && !ctx.currentStore && !ctx.isDisabled) {
           testStartCh.runStores(ctx, () => {})
         }
@@ -1561,8 +1628,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (ctx.concurrentTestState) {
           ctx.currentStore = undefined
         }
-      }
-      if (event.name === 'run_finish') {
+      } else if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
@@ -1591,8 +1657,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
-      }
-      if (event.name === 'test_skip' || event.name === 'test_todo') {
+      } else if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {
@@ -1971,6 +2036,9 @@ function shouldFinishBailTestSession (globalConfig, results) {
   return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
 }
 
+/**
+ * @param {Record<string, unknown> & { onDone?: () => void }} payload
+ */
 async function waitForTestSessionFinish (payload) {
   if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
 
@@ -1978,8 +2046,9 @@ async function waitForTestSessionFinish (payload) {
 
   let timeoutId
 
+  let onDone
   const flushPromise = new Promise((resolve) => {
-    payload.onDone = () => {
+    onDone = () => {
       clearTimeout(timeoutId)
       resolve()
     }
@@ -1992,7 +2061,7 @@ async function waitForTestSessionFinish (payload) {
     timeoutId.unref?.()
   })
 
-  testSessionFinishCh.publish(payload)
+  publishWithCompletion(testSessionFinishCh, payload, onDone)
 
   const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
@@ -2157,12 +2226,6 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, payload = {}) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ ...payload, onDone: resolve })
-  })
-}
-
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
@@ -2296,12 +2359,11 @@ function getCliWrapper (isNewJestVersion) {
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
             skippableSuitesCoverage = {}
-            skippedSuitesCoverage = {}
           } else {
             skippableSuites = receivedSkippableSuites
             skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
-            skippedSuitesCoverage = {}
           }
+          skippedSuitesCoverage = {}
         } catch (err) {
           log.error('Jest test-suite skippable error', err)
         }
@@ -2379,15 +2441,24 @@ function getCliWrapper (isNewJestVersion) {
         }
       }
 
-      /** @type {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} */
+      /**
+       * @type {{
+       *   efdNames: string[],
+       *   quarantineNames: string[],
+       *   totalCount: number,
+       *   efdFailureCount: number
+       * } | undefined}
+       */
       let ignoredFailuresSummary
       if (isEarlyFlakeDetectionEnabled) {
         for (const [testName, testStatuses] of newTestsTestStatuses) {
           const { pass, fail } = getTestStats(testStatuses)
           if (pass > 0) { // as long as one passes, we'll consider the test passed
             numEfdFailedTestsToIgnore += fail
-            const suite = fullNameToSuite.get(testName)
-            efdIgnoredNames.push(suite ? `${suite} › ${testName}` : testName)
+            if (fail > 0) {
+              const suite = fullNameToSuite.get(testName)
+              efdIgnoredNames.push(suite ? `${suite} › ${testName}` : testName)
+            }
           }
         }
         // If every test that failed was an EFD retry, we'll consider the suite passed
@@ -2401,6 +2472,7 @@ function getCliWrapper (isNewJestVersion) {
             efdNames: efdIgnoredNames,
             quarantineNames: [],
             totalCount: numEfdFailedTestsToIgnore,
+            efdFailureCount: numEfdFailedTestsToIgnore,
           }
         }
       }
@@ -2473,6 +2545,7 @@ function getCliWrapper (isNewJestVersion) {
               efdNames: [],
               quarantineNames: quarantineIgnoredNames,
               totalCount: totalQuarantineFailures,
+              efdFailureCount: 0,
             }
           }
         }
@@ -2498,6 +2571,7 @@ function getCliWrapper (isNewJestVersion) {
             efdNames: efdIgnoredNames,
             quarantineNames: quarantineIgnoredNames,
             totalCount: visibleIgnoredFailures + numSuppressedQuarantinedTests,
+            efdFailureCount: numEfdFailedTestsToIgnore,
           }
         }
       }
@@ -2517,11 +2591,10 @@ function getCliWrapper (isNewJestVersion) {
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
-        await new Promise((resolve) => {
-          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
-        })
+        await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
+      recordTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
       resetSuiteSkippingRunState()
@@ -2537,6 +2610,10 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {boolean} waitForFinish
+ */
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2545,12 +2622,9 @@ function publishTestSuiteFinish (payload, waitForFinish) {
     return
   }
 
-  return new Promise(resolve => {
-    testSuiteFinishCh.publish({
-      ...payload,
-      waitForFinish,
-      onDone: resolve,
-    })
+  return getChannelPromise(testSuiteFinishCh, {
+    ...payload,
+    waitForFinish,
   })
 }
 
@@ -3036,9 +3110,7 @@ function wrapJestObject (jestObject, suiteFilePath) {
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
     // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    }
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
   })

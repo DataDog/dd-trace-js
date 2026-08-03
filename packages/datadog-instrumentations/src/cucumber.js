@@ -6,6 +6,7 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
@@ -20,14 +21,16 @@ const {
   getMaxEfdRetryCount,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const satisfies = require('../../../vendor/dist/semifies')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const cucumberWorkerThreadsPatchModule = require.resolve('./cucumber-worker-threads')
@@ -61,6 +64,18 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
+
+/**
+ * Removes Cucumber's generated retry suffix without changing literal scenario names.
+ *
+ * @param {string} testName
+ * @param {boolean} isRetry
+ * @returns {string}
+ */
+function getCucumberTestName (testName, isRetry) {
+  return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
+}
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -280,7 +295,7 @@ function handleDdWorkerMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-      collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
+      collectTestOptimizationSummariesFromTraces(payload, { attemptToFixExecutions })
       workerReportTraceCh.publish(payload)
       return true
     }
@@ -341,7 +356,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
   }
 
   const testFileAbsolutePath = pickle.uri
-  const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
+  const finished = (pickleResultByFile[testFileAbsolutePath] ||= [])
 
   if (isEarlyFlakeDetectionEnabled && isNew) {
     const testFullname = `${pickle.uri}:${pickle.name}`
@@ -554,19 +569,12 @@ function getErrorFromCucumberResult (cucumberResult) {
     return
   }
 
-  const [message] = cucumberResult.message.split('\n')
-  const error = new Error(message)
+  const error = new Error(getSegment(cucumberResult.message, '\n', 0))
   if (cucumberResult.exception) {
     error.type = cucumberResult.exception.type
   }
   error.stack = cucumberResult.message
   return error
-}
-
-function getChannelPromise (channelToPublishTo, frameworkVersion = null) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
-  })
 }
 
 function getShouldBeSkippedSuite (pickle, suitesToSkip) {
@@ -701,7 +709,7 @@ function publishRetriedAttempt (runner, state) {
 
   // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
   if (isFlakyTestRetriesEnabled) {
-    const nameForKey = runner.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+    const nameForKey = getCucumberTestName(runner.pickle.name, currentAttempt > 0)
     const atrKey = `${runner.pickle.uri}:${nameForKey}`
     if (atrStatusesByScenarioKey.has(atrKey)) {
       atrStatusesByScenarioKey.get(atrKey).push('fail')
@@ -798,7 +806,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testFnCh.runStores(ctx, () => {
         promise = run.apply(this, args)
       })
-      promise.finally(async () => {
+      const finalize = async () => {
         if (!canAwaitRetries) {
           this.eventBroadcaster.removeListener('envelope', onEnvelope)
         }
@@ -807,6 +815,7 @@ function wrapRun (pl, isLatestVersion, version) {
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
+        const testName = getCucumberTestName(this.pickle.name, state.numAttempt > 0)
 
         if (lastStatusByPickleId.has(this.pickle.id)) {
           lastStatusByPickleId.get(this.pickle.id).push(status)
@@ -826,7 +835,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          const testProperties = getTestProperties(testSuitePath, testName)
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
           isAttemptToFix = testProperties.attemptToFix
           isAttemptToFixRetry = isAttemptToFix && numRetries > 0
@@ -894,8 +903,7 @@ function wrapRun (pl, isLatestVersion, version) {
         // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
         // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
         if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
-          const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
-          const atrKey = `${this.pickle.uri}:${nameForKey}`
+          const atrKey = `${this.pickle.uri}:${testName}`
           if (atrStatusesByScenarioKey.has(atrKey)) {
             atrStatusesByScenarioKey.get(atrKey).push(status)
           } else {
@@ -914,10 +922,21 @@ function wrapRun (pl, isLatestVersion, version) {
 
         const error = getErrorFromCucumberResult(result)
 
+        if (!testStartPayload.isParallel) {
+          recordTestManagementExecution({
+            testSuite: testSuitePath,
+            testName,
+            status,
+            isAttemptToFix,
+            isDisabled,
+            isQuarantined,
+          })
+        }
+
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {
             testSuite: testSuitePath,
-            testName: this.pickle.name,
+            testName,
             status,
             isDisabled,
             isQuarantined,
@@ -971,6 +990,9 @@ function wrapRun (pl, isLatestVersion, version) {
           ...attemptCtx.currentStore,
           finalStatus,
         })
+      }
+      promise.then(finalize, finalize).catch(error => {
+        log.error('Cucumber test finalization error', error)
       })
       return promise
     } catch (err) {
@@ -1036,7 +1058,9 @@ function testCaseHook (TestCaseRunner, version) {
 // Valid for old and new cucumber versions
 function getCucumberOptions (adapterOrCoordinator) {
   if (adapterOrCoordinator.adapter) {
-    return adapterOrCoordinator.adapter.worker?.options || adapterOrCoordinator.adapter.options
+    return adapterOrCoordinator.adapter.worker?.options ||
+      adapterOrCoordinator.adapter.executor?.options ||
+      adapterOrCoordinator.adapter.options
   }
   return adapterOrCoordinator.options
 }
@@ -1054,7 +1078,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, { frameworkVersion }) || {}
 
     repositoryRoot = configurationResponse.repositoryRoot
     isItrEnabled = configurationResponse.libraryConfig?.isItrEnabled
@@ -1087,7 +1111,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isKnownTestsEnabled) {
       const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
-      if (currentKnownTestsResponse.err) {
+      if (!currentKnownTestsResponse || currentKnownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
       } else {
@@ -1096,7 +1120,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableResponse = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
+      const skippableResponse = skippableSuitesResponse ||
+        await getChannelPromise(skippableSuitesCh) ||
+        { err: true }
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
@@ -1145,7 +1171,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     if (isTestManagementTestsEnabled) {
       const currentTestManagementTestsResponse =
         testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
-      if (currentTestManagementTestsResponse.err) {
+      if (!currentTestManagementTestsResponse || currentTestManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
       } else {
         testManagementTests = currentTestManagementTestsResponse.testManagementTests
@@ -1154,7 +1180,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isImpactedTestsEnabled) {
       const impactedTestsResponse = await getChannelPromise(modifiedFilesCh)
-      if (!impactedTestsResponse.err) {
+      if (impactedTestsResponse && !impactedTestsResponse.err) {
         modifiedFiles = impactedTestsResponse.modifiedFiles
       }
     }
@@ -1213,7 +1239,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    sessionFinishCh.publish({
+    const flushPromise = getChannelPromise(sessionFinishCh, {
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
@@ -1226,9 +1252,11 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
+    await flushPromise
     return result
   }
 }
@@ -1434,13 +1462,14 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
   }
 }
 
-function patchCucumberWorkerRunTestCase (workerPackage, isWorker) {
-  const workerPrototype = workerPackage?.Worker?.prototype
-  if (!workerPrototype || patchedCucumberWorkers.has(workerPrototype)) return
+function patchCucumberWorkerRunTestCase (runtimeExecutorPackage, isWorker) {
+  const runtimeExecutorPrototype =
+    runtimeExecutorPackage?.Worker?.prototype || runtimeExecutorPackage?.Executor?.prototype
+  if (!runtimeExecutorPrototype || patchedCucumberWorkers.has(runtimeExecutorPrototype)) return
 
-  patchedCucumberWorkers.add(workerPrototype)
+  patchedCucumberWorkers.add(runtimeExecutorPrototype)
   shimmer.wrap(
-    workerPrototype,
+    runtimeExecutorPrototype,
     'runTestCase',
     runTestCase => getWrappedRunTestCase(runTestCase, true, isWorker)
   )
@@ -1572,13 +1601,23 @@ addHook({
 // `getWrappedRunTestCase` does two things:
 // - generates suite start and finish events in the main process,
 // - handles EFD in both the main process and the worker process.
+// Shimmer is required because this wrapper may invoke the original test case multiple times and mutate runtime options.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
+  versions: ['>=11.0.0 <13.2.0'],
   file: 'lib/runtime/worker.js',
 }, (workerPackage) => {
   patchCucumberWorkerRunTestCase(workerPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   return workerPackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=13.2.0'],
+  file: 'lib/runtime/executor.js',
+}, (executorPackage) => {
+  patchCucumberWorkerRunTestCase(executorPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
+  return executorPackage
 })
 
 // `getWrappedStart` generates session start and finish events

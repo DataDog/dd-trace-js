@@ -86,6 +86,7 @@ tracer.use('pg', {
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+<h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="pg"></h5>
@@ -170,6 +171,7 @@ tracer.use('pg', {
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
+* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pg](./interfaces/export_.plugins.pg.html)
@@ -512,10 +514,18 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
+reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
+accepted; if more are provided, the report is uploaded without flags.
+
 Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
+The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
+are disabled, quarantined, or run in Attempt to Fix mode.
 
 <h3 id="custom-logging">Custom Logging</h3>
 

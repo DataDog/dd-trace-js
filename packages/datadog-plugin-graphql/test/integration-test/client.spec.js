@@ -16,7 +16,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('graphql', 'graphql', version => {
     useSandbox([`'graphql@${version}'`], false, [
@@ -26,9 +25,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'graphqlLib', 'GraphQLSchema, GraphQLString, graphql, GraphQLObjectType',
-        'graphql')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'graphqlLib',
+      packageName: 'graphql',
+      defaultExport: true,
+      namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
@@ -36,7 +38,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

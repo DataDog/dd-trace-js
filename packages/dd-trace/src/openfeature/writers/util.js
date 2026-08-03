@@ -18,7 +18,7 @@ function setAgentStrategy (config, setWriterEnabledValue) {
     }
 
     const endpoints = agentInfo.endpoints
-    const normalizedPath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
+    const normalizedPath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
     const hasEndpoint = Array.isArray(endpoints) &&
       endpoints.includes(normalizedPath) || endpoints.includes(normalizedPath + '/')
 

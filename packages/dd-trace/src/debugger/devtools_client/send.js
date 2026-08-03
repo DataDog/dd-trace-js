@@ -67,14 +67,13 @@ function send (message, logger, dd, snapshot, processTags) {
 
     if (pruned) {
       json = pruned
-      size = Buffer.byteLength(json)
     } else {
       // Fallback if pruning fails
       const line = Object.keys(snapshot.captures.lines)[0]
       snapshot.captures.lines[line] = { pruned: true }
       json = JSON.stringify(payload)
-      size = Buffer.byteLength(json)
     }
+    size = Buffer.byteLength(json)
   }
 
   jsonBuffer.write(json, size)

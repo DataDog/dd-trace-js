@@ -149,10 +149,12 @@
 /integration-tests/mocha/ @DataDog/ci-app-libraries
 /integration-tests/playwright/ @DataDog/ci-app-libraries
 /integration-tests/vitest/ @DataDog/ci-app-libraries
+/integration-tests/webdriverio/ @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/vitest.second-project.config.mjs @DataDog/ci-app-libraries
 /integration-tests/vitest.typecheck.config.mjs @DataDog/ci-app-libraries
 /integration-tests/tsconfig.typecheck.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-overlap.json @DataDog/ci-app-libraries
 /integration-tests/tsconfig.typecheck-fail.json @DataDog/ci-app-libraries
 /integration-tests/tsconfig.typecheck-test-management-fail.json @DataDog/ci-app-libraries
 /integration-tests/tsconfig.typecheck-test-management-file-fail.json @DataDog/ci-app-libraries
@@ -165,6 +167,7 @@
 /integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-component.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
@@ -176,11 +179,13 @@
 /integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-support-file-false.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.ts @DataDog/ci-app-libraries
+/integration-tests/vite.config.mjs @DataDog/ci-app-libraries
 
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
@@ -243,6 +248,7 @@
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/log/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js
@@ -276,7 +282,10 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities-js
+/scripts/helpers/test-file-index.js @DataDog/apm-sdk-capabilities-js
+/scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities-js
+/scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities-js
 /supported_versions_output.json @DataDog/apm-sdk-capabilities-js
 /supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
 
@@ -350,6 +359,7 @@
 /integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/helpers/ @DataDog/lang-platform-js
+/integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/memory-leak/ @DataDog/lang-platform-js
@@ -367,6 +377,9 @@
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/guardrails/ @DataDog/lang-platform-js
+/packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
@@ -381,6 +394,7 @@
 /packages/dd-trace/test/histogram.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/id.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/loader-hook.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
 /packages/dd-trace/test/mocha-hooks.spec.js @DataDog/lang-platform-js

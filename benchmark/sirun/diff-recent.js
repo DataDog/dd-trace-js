@@ -23,7 +23,7 @@ function getReadmes () {
         const name = require(path.join(__dirname, dirent.name, 'meta.json')).name
         const value = fs.readFileSync(path.join(__dirname, dirent.name, 'README.md'), 'utf8')
         readmes[name] = value
-      } catch (e) {
+      } catch {
         // just keep going
       }
     }

@@ -1,14 +1,19 @@
 'use strict'
 
+const path = require('node:path')
 const { performance } = require('node:perf_hooks')
+const { fileURLToPath } = require('node:url')
 
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
+  getTestSuitePath,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../dd-trace/src/plugins/util/test')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
 const {
   testStartCh,
@@ -26,6 +31,7 @@ const {
   getTypeTasks,
   getTestName,
   getProvidedContext,
+  realpath,
   isFlakyTestRetriesEnabledForTask,
   getVitestTestProperties,
 } = require('./vitest-util')
@@ -51,10 +57,184 @@ const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
-const switchedStatuses = new WeakSet()
+const switchedStatuses = new WeakMap()
 let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
+let preciseCoverageSession
+let isPreciseCoverageUnavailable = false
+let vitestCoverageSnapshot
+const wrappedCoverageWorkerStates = new WeakSet()
+const nonIsolatedCoverageFiles = new Set()
+
+/**
+ * Sends a command to a Node.js inspector session.
+ *
+ * @param {import('node:inspector').Session} session
+ * @param {string} method
+ * @param {object} [params]
+ * @returns {Promise<object>}
+ */
+function postInspectorCommand (session, method, params) {
+  return new Promise((resolve, reject) => {
+    session.post(method, params, (error, result) => {
+      if (error) {
+        reject(error)
+      } else {
+        resolve(result || {})
+      }
+    })
+  })
+}
+
+async function startPreciseCoverage () {
+  if (preciseCoverageSession) return true
+  if (isPreciseCoverageUnavailable) return false
+
+  let session
+  try {
+    const inspector = require('node:inspector')
+    session = new inspector.Session()
+    session.connect()
+    await postInspectorCommand(session, 'Profiler.enable')
+    await postInspectorCommand(session, 'Profiler.startPreciseCoverage', {
+      callCount: false,
+      detailed: false,
+    })
+    preciseCoverageSession = session
+    return true
+  } catch (error) {
+    isPreciseCoverageUnavailable = true
+    try {
+      session?.disconnect()
+    } catch {}
+    log.warn('Could not start Vitest TIA code coverage: %s', error?.message)
+    return false
+  }
+}
+
+function getCoverageFilename (url) {
+  if (!url) return
+
+  if (url.startsWith('file://')) {
+    try {
+      return fileURLToPath(url)
+    } catch {
+      return
+    }
+  }
+
+  if (path.isAbsolute(url)) return url
+}
+
+function isFileInRepository (filename, repositoryRoot) {
+  const relativeFilename = path.relative(repositoryRoot, filename)
+  return relativeFilename !== '..' &&
+    !relativeFilename.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativeFilename) &&
+    !relativeFilename.startsWith(`node_modules${path.sep}`) &&
+    !relativeFilename.includes(`${path.sep}node_modules${path.sep}`)
+}
+
+function isV8ScriptCovered (scriptCoverage) {
+  for (const functionCoverage of scriptCoverage.functions || []) {
+    for (const range of functionCoverage.ranges || []) {
+      if (range.count > 0) return true
+    }
+  }
+  return false
+}
+
+function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
+  const coveredFiles = []
+  for (const scriptCoverage of coverage?.result || []) {
+    if (!isV8ScriptCovered(scriptCoverage)) continue
+
+    const coverageFilename = getCoverageFilename(scriptCoverage.url)
+    if (!coverageFilename) continue
+
+    const filename = realpath(coverageFilename)
+    if (isFileInRepository(filename, repositoryRoot)) {
+      coveredFiles.push(filename)
+    }
+  }
+  return coveredFiles
+}
+
+function getVitestCoverageOptions () {
+  return globalThis.__vitest_worker__?.config?.coverage
+}
+
+/**
+ * Check whether the current Vitest worker reuses its module cache across test suites.
+ *
+ * @returns {boolean}
+ */
+function isNonIsolatedRun () {
+  const config = globalThis.__vitest_worker__?.config
+  if (config?.isolate === false) return true
+
+  return config?.poolOptions?.[config.pool]?.isolate === false
+}
+
+/**
+ * Conservatively include files covered by earlier suites when Vitest reuses its module cache.
+ *
+ * @param {string[] | undefined} coverageFiles
+ * @returns {string[] | undefined}
+ */
+function includePreviouslyCoveredFiles (coverageFiles) {
+  if (!coverageFiles || !isNonIsolatedRun()) return coverageFiles
+
+  // TODO: Track module cache hits per suite instead; cumulative coverage can under-skip with isolate:false.
+  for (const filename of coverageFiles) {
+    nonIsolatedCoverageFiles.add(filename)
+  }
+  return [...nonIsolatedCoverageFiles]
+}
+
+function usesVitestV8CoverageSnapshot (coverageOptions) {
+  return coverageOptions?.enabled === true &&
+    coverageOptions.provider === 'v8'
+}
+
+async function getPreciseCoverageFiles (repositoryRoot) {
+  if (!await startPreciseCoverage()) return
+
+  try {
+    const coverage = await postInspectorCommand(preciseCoverageSession, 'Profiler.takePreciseCoverage')
+    return getCoveredFilesFromV8Result(coverage, repositoryRoot)
+  } catch (error) {
+    isPreciseCoverageUnavailable = true
+    try {
+      preciseCoverageSession.disconnect()
+    } catch {}
+    preciseCoverageSession = undefined
+    log.warn('Could not collect Vitest TIA code coverage: %s', error?.message)
+  }
+}
+
+function getVitestCoverageFiles (repositoryRoot) {
+  return getCoveredFilesFromV8Result(vitestCoverageSnapshot, repositoryRoot)
+}
+
+function wrapVitestCoverageRpc () {
+  const workerState = globalThis.__vitest_worker__
+  if (!workerState?.rpc || wrappedCoverageWorkerStates.has(workerState)) return
+
+  wrappedCoverageWorkerStates.add(workerState)
+  workerState.rpc = new Proxy(workerState.rpc, {
+    get (target, property, receiver) {
+      const value = Reflect.get(target, property, receiver)
+      if (property !== 'onAfterSuiteRun' || typeof value !== 'function') return value
+
+      return function (metadata) {
+        vitestCoverageSnapshot = metadata?.coverage
+        return value.apply(this, arguments)
+      }
+    },
+  })
+}
 
 function waitForHitProbe () {
   const promises = {}
@@ -280,14 +460,14 @@ function wrapVitestTestRunner (VitestTestRunner) {
       if (isAttemptingToFix) {
         const statuses = attemptToFixTaskToStatuses.get(task)
         if (task.result.state === 'pass' && statuses?.includes('fail')) {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
           task.result.state = 'fail'
         }
       }
 
       if (!isAttemptingToFix && isQuarantined) {
         if (task.result.state === 'fail') {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
         }
         task.result.state = 'pass'
       }
@@ -298,7 +478,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       // If the test has passed at least once, we consider it passed
       if (statuses.includes('pass')) {
         if (task.result.state === 'fail') {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
         }
         task.result.state = 'pass'
       }
@@ -648,6 +828,19 @@ addHook({
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
     const providedContext = getProvidedContext()
+    const repositoryRoot = providedContext.repositoryRoot || process.cwd()
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, repositoryRoot)
+    const coverageOptions = getVitestCoverageOptions()
+    const shouldUseVitestCoverage = usesVitestV8CoverageSnapshot(coverageOptions)
+    const coverageLibrary = 'v8'
+    vitestCoverageSnapshot = undefined
+    if (providedContext.isCodeCoverageEnabled) {
+      if (shouldUseVitestCoverage) {
+        wrapVitestCoverageRpc()
+      } else {
+        await startPreciseCoverage()
+      }
+    }
 
     const testSuiteCtx = {
       testSuiteAbsolutePath,
@@ -655,16 +848,16 @@ addHook({
       testSessionId: providedContext.testSessionId,
       testModuleId: providedContext.testModuleId,
       testCommand: providedContext.testCommand,
-      repositoryRoot: providedContext.repositoryRoot,
+      repositoryRoot,
       codeOwnersEntries: providedContext.codeOwnersEntries,
+      isCodeCoverageEnabled: providedContext.isCodeCoverageEnabled,
+      coverageLibrary,
+      itrCorrelationId: providedContext.itrCorrelationId,
+      isUnskippable: providedContext.unskippableSuites?.[testSuite] === true,
+      isForcedToRun: providedContext.forcedToRunSuites?.[testSuite] === true,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
-
-    let onFinish = null
-    const onFinishPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
     const testEventPromises = []
@@ -675,14 +868,15 @@ addHook({
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
-      const isSwitchedStatus = switchedStatuses.has(task)
+      const switchedStatus = switchedStatuses.get(task)
+      const isSwitchedStatus = switchedStatus !== undefined
 
       if (result) {
         const { state, duration, errors } = result
         const testError = getCurrentAttemptTestError(task, errors)
         if (attemptToFixTasks.has(task)) {
-          const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
-          recordFinalAttemptToFixExecution(task, status, providedContext)
+          const attemptToFixStatus = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
+          recordFinalAttemptToFixExecution(task, attemptToFixStatus, providedContext)
         }
 
         if (state === 'skip') { // programmatic skip
@@ -690,7 +884,9 @@ addHook({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
+            isAttemptToFix: attemptToFixTasks.has(task),
             isDisabled: disabledTasks.has(task),
+            isQuarantined: quarantinedTasks.has(task),
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
@@ -787,7 +983,9 @@ addHook({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
+          isAttemptToFix: attemptToFixTasks.has(task),
           isDisabled: disabledTasks.has(task),
+          isQuarantined: quarantinedTasks.has(task),
         })
       }
     }
@@ -811,9 +1009,21 @@ addHook({
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
-    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
+    let coverageFiles
+    if (providedContext.isCodeCoverageEnabled) {
+      const currentCoverageFiles = shouldUseVitestCoverage
+        ? getVitestCoverageFiles(repositoryRoot)
+        : await getPreciseCoverageFiles(repositoryRoot)
+      coverageFiles = includePreviouslyCoveredFiles(currentCoverageFiles)
+    }
 
-    await onFinishPromise
+    await getChannelPromise(testSuiteFinishCh, {
+      status: testSuiteResult.state,
+      coverageFiles,
+      coverageLibrary,
+      testSuiteAbsolutePath,
+      ...testSuiteCtx.currentStore,
+    })
 
     return startTestsResponse
   })

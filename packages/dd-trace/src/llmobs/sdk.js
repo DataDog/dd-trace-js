@@ -11,6 +11,7 @@ const {
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
+  TRACE_ID,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -19,6 +20,7 @@ const {
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+const { createExperiments } = require('./experiments')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -50,6 +52,15 @@ class LLMObs extends NoopLLMObs {
 
   get enabled () {
     return this._config.llmobs.DD_LLMOBS_ENABLED ?? false
+  }
+
+  /**
+   * Datasets & Experiments API. Requires LLM Observability to be enabled and
+   * DD_API_KEY / DD_APP_KEY to be set; otherwise the returned facade throws with
+   * a clear message on use.
+   */
+  get experiments () {
+    return createExperiments(this._config, this)
   }
 
   enable (options = {}) {
@@ -300,14 +311,14 @@ class LLMObs extends NoopLLMObs {
       }
       throw e
     } finally {
-      if (autoinstrumented === false) {
+      if (!autoinstrumented) {
         telemetry.recordLLMObsAnnotate(span, err)
       }
     }
   }
 
   exportSpan (span) {
-    span = span || this._active()
+    span ||= this._active()
     let err = ''
     try {
       if (!span) {
@@ -328,7 +339,7 @@ class LLMObs extends NoopLLMObs {
     }
     try {
       return {
-        traceId: span.context().toTraceId(true),
+        traceId: LLMObsTagger.tagMap.get(span)[TRACE_ID],
         spanId: span.context().toSpanId(),
       }
     } catch {
@@ -408,7 +419,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
       }
-      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
+      if (metricType === 'json' && (typeof value !== 'object' || value == null || Array.isArray(value))) {
         err = 'invalid_metric_value'
         throw new Error('value must be a JSON object for a json metric')
       }

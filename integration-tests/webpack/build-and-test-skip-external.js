@@ -8,6 +8,7 @@ const path = require('path')
 const assert = require('assert')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
+const experiments = require('./webpack-experiments')
 
 const OUTFILE = path.join(__dirname, 'skip-external-out.js')
 
@@ -16,6 +17,7 @@ const compiler = webpack({
   entry: path.join(__dirname, 'skip-external.js'),
   target: 'node',
   externalsType: 'commonjs',
+  ...(experiments && { experiments }),
   output: {
     filename: 'skip-external-out.js',
     path: __dirname,
