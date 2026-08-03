@@ -508,6 +508,53 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
+      it('reports skipped and todo attempt to fix tests', async () => {
+        const testSuite = 'ci-visibility/test-management/test-attempt-to-fix-skip.js'
+        let testOutput = ''
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              [testSuite]: {
+                tests: {
+                  'skipped attempt to fix tests can skip': {
+                    properties: { attempt_to_fix: true },
+                  },
+                  'skipped attempt to fix tests can be todo': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-skip',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(
+          testOutput,
+          /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./
+        )
+      })
+
       it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
@@ -1382,7 +1429,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
-      const runDisableTest = (done, isDisabling, extraEnvVars = {}, isParallel = false) => {
+      const runDisableTest = (
+        done,
+        isDisabling,
+        extraEnvVars = {},
+        isParallel = false,
+        isReportEnabled = true
+      ) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
 
@@ -1408,6 +1461,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              if (isReportEnabled) {
+                assert.match(stdout, /Disabled: 1 test skipped\./)
+              } else {
+                assert.doesNotMatch(stdout, /Datadog Test Optimization/)
+              }
               // even though a test fails, the exit code is 0 because the test is disabled
               assert.strictEqual(exitCode, 0)
             } else {
@@ -1423,6 +1481,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runDisableTest(done, true)
+      })
+
+      it('can disable the Test Management report without disabling Test Management', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, true, { DD_TEST_MANAGEMENT_REPORT_ENABLED: 'false' }, false, false)
       })
 
       onlyLatestIt('skips disabled concurrent test bodies before they run', async () => {
@@ -1747,8 +1811,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(exitCode, 0)
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
-          assert.match(stdout, /\d+ test failure\(s\) were ignored/)
-          assert.match(stdout, /Quarantine/)
+          assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
           assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
@@ -1942,6 +2005,66 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 0)
       })
 
+      onlyLatestIt('reports failed ATR attempts when a quarantined test eventually passes', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-passes.js': {
+                tests: {
+                  'test-flaky-test-retries can retry flaky tests': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'test-flaky-test-retries can retry flaky tests')
+
+            assert.strictEqual(tests.length, 3)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+              RUN_IN_PARALLEL: 'true',
+              TESTS_TO_RUN: 'jest-flaky/flaky-passes.js',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+      })
+
       it('session passes when EFD flaky retries and quarantine failures are combined', async () => {
         const NUM_RETRIES_EFD = 3
 
@@ -2023,6 +2146,67 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // - The flaky test has at least one passing retry (EFD considers it OK)
         // - The always-failing test is quarantined
         assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('does not report passing EFD retries as ignored failures', async () => {
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          test_management: { enabled: true },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-quarantine-1.js': {
+                tests: {
+                  'quarantine tests can quarantine a test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+        assert.doesNotMatch(stdout, /0 test failure\(s\) were ignored/)
+        assert.doesNotMatch(stdout, /Early Flake Detection/)
       })
 
       it('does not flip exit code to 0 when a test suite fails to parse', async () => {

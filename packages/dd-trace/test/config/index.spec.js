@@ -3568,6 +3568,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3694,6 +3695,15 @@ describe('Config', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
+      })
+      it('should leave the Test Management report setting unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, undefined)
+      })
+      it('should disable the Test Management report from the environment', () => {
+        process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'

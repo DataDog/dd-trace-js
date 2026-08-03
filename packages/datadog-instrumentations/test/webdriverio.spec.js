@@ -24,6 +24,7 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_HAS_DYNAMIC_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_NAME,
   TEST_STATUS,
   TEST_SUITE,
@@ -537,6 +538,70 @@ describe('webdriverio instrumentation', () => {
       } else {
         process.env.NODE_OPTIONS = originalNodeOptions
       }
+    }
+  })
+
+  it('scopes test management summaries to each coordinator', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const consoleWarn = sinon.stub(console, 'warn')
+    const runs = [
+      {
+        file: path.join(process.cwd(), 'first.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'first test',
+        worker: createWorker(),
+      },
+      {
+        file: path.join(process.cwd(), 'second.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'second test',
+        worker: createWorker(),
+      },
+    ]
+
+    function onTestFinish () {}
+
+    testFinishCh.subscribe(onTestFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      for (let index = 0; index < runs.length; index++) {
+        const { file, localRunner, worker } = runs[index]
+        registerWorker(localRunner, worker, file)
+        requestConfiguration(worker, file, `request-${index}`)
+      }
+      await new Promise(setImmediate)
+
+      for (const { file, testName, worker } of runs) {
+        worker.emit('message', [
+          MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+          JSON.stringify([[{
+            meta: {
+              [TEST_MANAGEMENT_IS_QUARANTINED]: 'true',
+              [TEST_NAME]: testName,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: path.basename(file),
+            },
+          }]]),
+        ])
+        worker.emit('exit', { exitCode: 0, retries: 0 })
+      }
+
+      await finishLocalRunner(runs[0].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 1)
+      assert.match(consoleWarn.firstCall.args[0], /first\.spec\.js › first test/)
+      assert.doesNotMatch(consoleWarn.firstCall.args[0], /second\.spec\.js › second test/)
+
+      await finishLocalRunner(runs[1].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 2)
+      assert.match(consoleWarn.secondCall.args[0], /second\.spec\.js › second test/)
+      assert.doesNotMatch(consoleWarn.secondCall.args[0], /first\.spec\.js › first test/)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      consoleWarn.restore()
     }
   })
 
