@@ -3,7 +3,6 @@
 const { channel } = require('dc-polyfill')
 
 const { isError } = require('../util')
-const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
@@ -13,6 +12,16 @@ const {
   INPUT_VALUE,
   TRACE_ID,
 } = require('./constants/tags')
+const {
+  FEEDBACK_TARGET_KEYS,
+  buildMetricTags,
+  validateAssessment,
+  validateLabel,
+  validateMetricType,
+  validateMetricValue,
+  validateReasoning,
+  validateTimestamp,
+} = require('./eval-metric')
 const {
   getFunctionArguments,
   validateKind,
@@ -392,80 +401,22 @@ class LLMObs extends NoopLLMObs {
       }
 
       const timestampMs = options.timestampMs || Date.now()
-      if (typeof timestampMs !== 'number' || timestampMs < 0) {
-        err = 'invalid_timestamp'
-        throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
-      }
+      validateTimestamp(timestampMs, 'evaluation')
 
       const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
-      if (!label) {
-        err = 'invalid_metric_label'
-        throw new Error('label must be the specified name of the evaluation metric')
-      }
-      if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
-        err = 'invalid_metric_type'
-        throw new Error('metricType must be one of "categorical", "score", "boolean" or "json"')
-      }
-      if (metricType === 'categorical' && typeof value !== 'string') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a string for a categorical metric.')
-      }
-      if (metricType === 'score' && typeof value !== 'number') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a number for a score metric.')
-      }
-      if (metricType === 'boolean' && typeof value !== 'boolean') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a boolean for a boolean metric')
-      }
-      if (metricType === 'json' && (typeof value !== 'object' || value == null || Array.isArray(value))) {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a JSON object for a json metric')
-      }
-      if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
-        err = 'invalid_assessment'
-        throw new Error('assessment must be pass or fail')
-      }
-      if (reasoning != null && typeof reasoning !== 'string') {
-        err = 'invalid_reasoning'
-        throw new Error('reasoning must be a string')
-      }
+      validateLabel(label, 'evaluation')
+      validateMetricType(metricType, 'evaluation')
+      validateMetricValue(metricType, value)
+      validateAssessment(assessment)
+      validateReasoning(reasoning)
       if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
       }
 
-      const evaluationTags = {
-        'ddtrace.version': tracerVersion,
-        ml_app: mlApp,
-      }
-
-      if (tags) {
-        for (const key in tags) {
-          const tag = tags[key]
-          if (typeof tag === 'string') {
-            evaluationTags[key] = tag
-          } else if (typeof tag.toString === 'function') {
-            evaluationTags[key] = tag.toString()
-          } else if (tag == null) {
-            evaluationTags[key] = Object.prototype.toString.call(tag)
-          } else {
-            // should be a rare case
-            // every object in JS has a toString, otherwise every primitive has its own toString
-            // null and undefined are handled above
-            err = 'invalid_tags'
-            throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
-          }
-        }
-      }
-
-      // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (this._config.DD_TRACE_OTEL_ENABLED) {
-        evaluationTags.source = 'otel'
-      }
-
       const payload = {
+        event_kind: 'evaluation',
         join_on: {
           span: {
             span_id: spanId,
@@ -477,7 +428,8 @@ class LLMObs extends NoopLLMObs {
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
-        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+        // When OTel tracing is enabled, `source:otel` lets the backend wait for OTel span conversion
+        tags: buildMetricTags(tags, mlApp, 'evaluation', this._config.DD_TRACE_OTEL_ENABLED),
       }
       if (reasoning != null) {
         payload.reasoning = reasoning
@@ -491,8 +443,133 @@ class LLMObs extends NoopLLMObs {
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext
       evalMetricAppendCh.publish({ payload, routing })
+    } catch (e) {
+      if (e.ddErrorTag) err = e.ddErrorTag
+      throw e
     } finally {
       telemetry.recordSubmitEvaluation(options, err)
+    }
+  }
+
+  /**
+   * Submits end-user feedback for a span, trace, session, or customer-defined entity.
+   *
+   * Exactly one target must be provided: `span` (as returned by `llmobs.exportSpan()`) or
+   * `spanId` to target a span, `traceId` a trace, `sessionId` a session, or `feedbackJoinKey`
+   * a customer-defined entity.
+   * `label`, `metricType`, `value` and `submitter` are required, and are validated at call time.
+   * @param {object} [options] - The feedback options.
+   * @param {string} [options.label] - The name of the feedback metric.
+   * @param {'categorical' | 'score' | 'boolean' | 'json' | 'text'} [options.metricType] - The value type.
+   * @param {string | number | boolean | Record<string, unknown>} [options.value] - The feedback value,
+   *   matching `metricType`.
+   * @param {{ id: string, type?: string }} [options.submitter] - Who submitted the feedback.
+   * @param {{ traceId: string, spanId: string }} [options.span] - Span context to attach the feedback to.
+   * @param {string} [options.spanId] - ID of the span to attach the feedback to.
+   * @param {string} [options.traceId] - ID of the trace to attach the feedback to.
+   * @param {string} [options.sessionId] - ID of the session to attach the feedback to.
+   * @param {string} [options.feedbackJoinKey] - Customer-defined key to attach the feedback to.
+   * @param {Record<string, string>} [options.tags] - Tags to attach to the feedback.
+   * @param {string} [options.mlApp] - The ML app name. Defaults to the configured one.
+   * @param {number} [options.timestampMs] - When the feedback was generated. Defaults to now.
+   * @param {'pass' | 'fail'} [options.assessment] - Assessment of the feedback.
+   * @param {string} [options.reasoning] - Explanation of the feedback.
+   * @returns {void}
+   */
+  submitFeedback (options = {}) {
+    if (!this.enabled) return
+
+    let err = ''
+    let targetType = 'other'
+    try {
+      const { span, spanId, traceId, sessionId, feedbackJoinKey, submitter } = options
+
+      // The intake keys feedback off a single top-level identifier, so more than one target
+      // would be ambiguous and none would leave the feedback unattached.
+      const providedTargets = []
+      if (span != null) providedTargets.push('span')
+      if (spanId != null) providedTargets.push('spanId')
+      if (traceId != null) providedTargets.push('traceId')
+      if (sessionId != null) providedTargets.push('sessionId')
+      if (feedbackJoinKey != null) providedTargets.push('feedbackJoinKey')
+
+      if (providedTargets.length !== 1) {
+        err = 'invalid_target_count'
+        throw new Error(
+          'Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` ' +
+          'must be specified to submit feedback.'
+        )
+      }
+
+      const targetName = providedTargets[0]
+      targetType = FEEDBACK_TARGET_KEYS[targetName]
+      // `span` also carries a traceId, but feedback targets a single identifier: passing
+      // `span` is wire-equivalent to passing its `spanId` directly.
+      const targetValue = targetName === 'span' ? span?.spanId : options[targetName]
+      if (typeof targetValue !== 'string' || !targetValue) {
+        if (targetName === 'span') {
+          err = 'invalid_span'
+          throw new TypeError(
+            '`span` must be an object containing a non-empty string spanId. ' +
+            '`llmobs.exportSpan()` can be used to generate this object from a given span.'
+          )
+        }
+        err = `invalid_${targetType}`
+        throw new TypeError(`\`${targetName}\` must be a non-empty string`)
+      }
+
+      if (typeof submitter?.id !== 'string' || !submitter.id) {
+        err = 'invalid_submitter'
+        throw new TypeError('submitter must be an object containing a non-empty string id')
+      }
+      if (submitter.type != null && typeof submitter.type !== 'string') {
+        err = 'invalid_submitter'
+        throw new TypeError('submitter.type must be a string')
+      }
+
+      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      if (!mlApp) {
+        err = 'missing_ml_app'
+        throw new Error('ML App name is required for sending feedback. Feedback data will not be sent.')
+      }
+
+      const timestampMs = options.timestampMs || Date.now()
+      validateTimestamp(timestampMs, 'feedback')
+
+      const { label, value, tags, reasoning, assessment } = options
+      const metricType = options.metricType?.toLowerCase()
+      validateLabel(label, 'feedback')
+      validateMetricType(metricType, 'feedback')
+      validateMetricValue(metricType, value)
+      validateAssessment(assessment)
+      validateReasoning(reasoning)
+
+      const payload = {
+        event_kind: 'feedback',
+        [targetType]: targetValue,
+        label,
+        metric_type: metricType,
+        ml_app: mlApp,
+        [`${metricType}_value`]: value,
+        timestamp_ms: timestampMs,
+        tags: buildMetricTags(tags, mlApp, 'feedback'),
+        submitter: submitter.type == null ? { id: submitter.id } : { id: submitter.id, type: submitter.type },
+      }
+      if (reasoning != null) {
+        payload.reasoning = reasoning
+      }
+      if (assessment != null) {
+        payload.assessment = assessment
+      }
+
+      const currentStore = storage.getStore()
+      const routing = currentStore?.routingContext
+      evalMetricAppendCh.publish({ payload, routing })
+    } catch (e) {
+      if (e.ddErrorTag) err = e.ddErrorTag
+      throw e
+    } finally {
+      telemetry.recordSubmitFeedback(options, targetType, err)
     }
   }
 
