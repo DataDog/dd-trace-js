@@ -1,5 +1,7 @@
 'use strict'
 
+// eslint-disable-next-line import/no-extraneous-dependencies
+const tracer = require('dd-trace')
 const { createServer } = require('node:http')
 const { URL } = require('node:url')
 
@@ -18,6 +20,14 @@ app.prepare().then(() => {
     if (url.pathname === '/exit') {
       server.close()
     } else {
+      const upstreamRoute = req.headers['x-test-upstream-route']
+      if (typeof upstreamRoute === 'string') {
+        tracer.scope().active()?.addTags({
+          'http.route': upstreamRoute,
+          'resource.name': `GET ${upstreamRoute}`,
+        })
+      }
+
       handle(req, res, {
         pathname: url.pathname,
         path: url.pathname + url.search,

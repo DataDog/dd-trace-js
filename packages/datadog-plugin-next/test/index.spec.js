@@ -46,7 +46,7 @@ describe('Plugin', function () {
       after(done => downstreamServer.close(done))
 
       const startServer = (
-        { withConfig, standalone, serverFile = 'server' },
+        { withConfig, standalone, withHttp = true, serverFile = 'server' },
         schemaVersion = 'v0',
         defaultToGlobalService = false
       ) => {
@@ -70,6 +70,7 @@ describe('Plugin', function () {
               DOWNSTREAM_PORT: String(downstreamPort),
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
+              WITH_HTTP: String(withHttp),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               // eslint-disable-next-line n/no-path-concat
@@ -324,12 +325,35 @@ describe('Plugin', function () {
 
                 assert.strictEqual(spans[0].name, 'web.request')
                 assert.strictEqual(spans[0].resource, 'GET /api/hello/[name]')
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].parent_id.toString(), spans[0].span_id.toString())
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://127.0.0.1:${port}/api/hello/world`)
+              .catch(done)
+          })
+
+          it('should preserve an upstream-established route on the HTTP parent', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assert.strictEqual(spans[0].name, 'web.request')
+                assert.strictEqual(spans[0].resource, 'GET /upstream/[id]')
+                assert.strictEqual(spans[0].meta['http.route'], '/upstream/[id]')
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].resource, 'GET /api/hello/[name]')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/hello/world`, {
+                headers: { 'x-test-upstream-route': '/upstream/[id]' },
+              })
               .catch(done)
           })
 
@@ -570,6 +594,26 @@ describe('Plugin', function () {
               })
 
             return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
+          })
+
+          it('should not replace an upstream parent route for static files', () => {
+            const tracingPromise = agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assert.strictEqual(spans[0].name, 'web.request')
+                assert.strictEqual(spans[0].resource, 'GET /upstream/[id]')
+                assert.strictEqual(spans[0].meta['http.route'], '/upstream/[id]')
+                assert.strictEqual(spans[1].name, 'next.request')
+                assert.strictEqual(spans[1].resource, 'GET /public/*')
+              })
+
+            return Promise.all([
+              axios.get(`http://127.0.0.1:${port}/test.txt`, {
+                headers: { 'x-test-upstream-route': '/upstream/[id]' },
+              }),
+              tracingPromise,
+            ])
           })
         })
 
@@ -855,6 +899,34 @@ describe('Plugin', function () {
             assert.strictEqual(response.status, 200)
           })
         }
+      })
+
+      describe('without HTTP instrumentation', () => {
+        startServer({ withConfig: false, standalone: false, withHttp: false })
+
+        it('should continue incoming distributed context', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const spans = traces[0]
+
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, 'next.request')
+              assert.strictEqual(spans[0].trace_id.toString(), '1234')
+              assert.strictEqual(spans[0].parent_id.toString(), '5678')
+            })
+            .then(done)
+            .catch(done)
+
+          axios
+            .get(`http://127.0.0.1:${port}/api/hello/world`, {
+              headers: {
+                'x-datadog-trace-id': '1234',
+                'x-datadog-parent-id': '5678',
+                'x-datadog-sampling-priority': '1',
+              },
+            })
+            .catch(done)
+        })
       })
     })
   })
