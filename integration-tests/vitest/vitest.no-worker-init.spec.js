@@ -1287,11 +1287,13 @@ SUPPORTED_VERSIONS.forEach((version) => {
                 'attempt to fix skip tests can statically skip': {
                   properties: {
                     attempt_to_fix: true,
+                    quarantined: true,
                   },
                 },
                 'attempt to fix skip tests can programmatically skip': {
                   properties: {
                     attempt_to_fix: true,
+                    quarantined: true,
                   },
                 },
               },
@@ -1355,6 +1357,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
           const skippedAttemptToFixTest = getTestByName(tests, testName)
           assert.strictEqual(skippedAttemptToFixTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
         }
       })
 
