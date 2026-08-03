@@ -1,11 +1,11 @@
 'use strict'
 
-// eslint-disable-next-line import/no-extraneous-dependencies
-const tracer = require('dd-trace')
 const { createServer } = require('node:http')
 const { URL } = require('node:url')
 
 const next = require('next')
+
+const tracer = require('../../..')
 
 const { PORT, HOSTNAME } = process.env
 
