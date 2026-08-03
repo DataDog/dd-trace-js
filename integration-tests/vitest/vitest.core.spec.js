@@ -796,6 +796,12 @@ versions.forEach((version) => {
                     attempt_to_fix: true,
                   },
                 },
+                'typecheck can report skipped assertion': {
+                  properties: {
+                    attempt_to_fix: true,
+                    quarantined: true,
+                  },
+                },
                 'typecheck nested suite can report nested disabled assertion': {
                   properties: {
                     disabled: true,
@@ -820,6 +826,9 @@ versions.forEach((version) => {
           const attemptToFixTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report attempt-to-fix assertion'
           )
+          const skippedAttemptToFixTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report skipped assertion'
+          )
           const nestedDisabledTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck nested suite can report nested disabled assertion'
           )
@@ -827,6 +836,7 @@ versions.forEach((version) => {
           assert.ok(disabledTest, testOutput)
           assert.ok(quarantinedTest, testOutput)
           assert.ok(attemptToFixTest, testOutput)
+          assert.ok(skippedAttemptToFixTest, testOutput)
           assert.ok(nestedDisabledTest, testOutput)
 
           assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
@@ -839,6 +849,10 @@ versions.forEach((version) => {
 
           assert.strictEqual(attemptToFixTest.meta[TEST_STATUS], 'pass')
           assert.strictEqual(attemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
 
           assert.strictEqual(nestedDisabledTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(nestedDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
@@ -868,7 +882,7 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(code, 0, testOutput)
-      assert.match(testOutput, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+      assert.match(testOutput, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
       assert.match(testOutput, /Disabled: 2 tests skipped\./)
       assert.match(testOutput, /Quarantined: 1 test run; all passed\./)
     })
