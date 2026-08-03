@@ -5,7 +5,6 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { retainVercelRequest } = require('../../serverless')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -93,7 +92,6 @@ class OtlpHttpExporterBase {
     let resolvePending
     const pending = new Promise(resolve => { resolvePending = resolve })
     this.#pendingRequests.add(pending)
-    retainVercelRequest(pending)
 
     let completed = false
     const complete = (result) => {
