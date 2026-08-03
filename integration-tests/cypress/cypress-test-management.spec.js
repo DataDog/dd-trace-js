@@ -831,6 +831,67 @@ moduleTypes.forEach(({
         )
       })
 
+      it('reports statically skipped attempt to fix tests', async () => {
+        let testOutput = ''
+        receiver.setSettings({
+          test_management: {
+            enabled: true,
+            attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES,
+          },
+        })
+        receiver.setTestManagementTests({
+          cypress: {
+            suites: {
+              'cypress/e2e/skipped-test.js': {
+                tests: {
+                  'skipped skipped': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+        const specToRun = 'cypress/e2e/skipped-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+          }
+        )
+
+        assert.strictEqual(childProcess.exitCode, 0)
+        assert.match(
+          testOutput,
+          /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./
+        )
+      })
+
       over12It('does not retry attempt to fix tests when testIsolation is false', async () => {
         receiver.setSettings({
           test_management: { enabled: true },

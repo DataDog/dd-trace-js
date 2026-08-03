@@ -1449,6 +1449,15 @@ class CypressPlugin {
         isDisabled,
         isQuarantined,
       })
+      if (isAttemptToFix) {
+        recordAttemptToFixExecution(this.attemptToFixExecutions, {
+          testSuite: spec.relative,
+          testName: cypressTestName,
+          status: 'skip',
+          isDisabled,
+          isQuarantined,
+        })
+      }
 
       skippedTestSpan.finish()
     }

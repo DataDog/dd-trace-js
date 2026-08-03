@@ -1272,7 +1272,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                 DD_TRACE_DEBUG: '1',
               },

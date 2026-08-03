@@ -130,6 +130,7 @@ const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
   { limitMs: 5 * 60 * 1000, key: '5m' },
 ]
 const CI_APP_ORIGIN = 'ciapp-test'
+const TEST_OPTIMIZATION_NAME_WHITESPACE_RE = /\s+/g
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
 // - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
@@ -1889,7 +1890,7 @@ function formatTestOptimizationName (testSuite, testName) {
  * @returns {string}
  */
 function sanitizeTestOptimizationName (value) {
-  return value.replaceAll(/\s+/g, ' ').trim()
+  return value.replaceAll(TEST_OPTIMIZATION_NAME_WHITESPACE_RE, ' ').trim()
 }
 
 /**
