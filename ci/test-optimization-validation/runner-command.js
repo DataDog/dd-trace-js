@@ -20,10 +20,11 @@ const GENERATED_SCENARIO_BY_FEATURE = {
  * Builds the validator-owned direct command for an existing representative test.
  *
  * @param {object} framework normalized framework manifest entry
+ * @param {string} [testFile] selected representative test
  * @returns {object} structured direct-runner command
  */
-function getBasicCommand (framework) {
-  return buildCommand(framework, framework.validation.testFile, false)
+function getBasicCommand (framework, testFile = framework.validation.testFile) {
+  return buildCommand(framework, testFile, false)
 }
 
 /**
@@ -49,6 +50,9 @@ function getFrameworkCommands (framework, requestedScenario = null) {
   if (requestedScenario === 'ci-wiring') return []
 
   const commands = [['basic-reporting', getBasicCommand(framework)]]
+  for (const [index, fallback] of (framework.validation.fallbackTests || []).entries()) {
+    commands.push([`basic-reporting:fallback-${index + 1}`, getBasicCommand(framework, fallback.testFile)])
+  }
   for (const scenario of framework.generatedTestStrategy?.scenarios || []) {
     if (!shouldIncludeGeneratedScenario(scenario.id, requestedScenario)) continue
     commands.push([`generated:${scenario.id}`, getGeneratedCommand(framework, scenario)])
@@ -85,14 +89,12 @@ function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
   const files = new Set()
   for (const framework of manifest.frameworks || []) {
     addExistingFile(files, framework.ciWiring?.configFile)
-    if (!includeLocal) {
-      addExistingFile(files, framework.project?.packageJson)
-      continue
-    }
+    addExistingFile(files, framework.project?.packageJson)
+    if (!includeLocal) continue
     if (framework.status !== 'runnable') continue
     addExistingFile(files, framework.validation?.runner)
     addExistingFile(files, framework.validation?.testFile)
-    addExistingFile(files, framework.project?.packageJson)
+    for (const fallback of framework.validation?.fallbackTests || []) addExistingFile(files, fallback.testFile)
     for (const filename of framework.project?.configFiles || []) addExistingFile(files, filename)
   }
   return [...files].sort()
@@ -123,10 +125,11 @@ function buildCommand (framework, testFile, generated) {
   const outputPaths = framework.framework === 'playwright'
     ? [playwright.getOutputPath(testFile)]
     : []
+  const cwd = framework.project.root
 
   return inheritApprovedExecutable(framework.validation, {
     argv: [process.execPath, runner, ...getRunnerArgs(framework, testFile, generated)],
-    cwd: framework.project.root,
+    cwd,
     description: `${formatFrameworkName(framework.framework)} ${generated ? 'generated' : 'representative'} test`,
     env: getRunnerEnv(framework),
     outputPaths,
@@ -148,12 +151,13 @@ function getRunnerArgs (framework, testFile, generated) {
   const name = framework.framework
   const configuration = framework.validation.runnerArgs || []
   if (name === 'cucumber') {
-    if (!generated) return [...configuration, ...cucumber.getFocusedTestArgs(testFile)]
+    if (!generated) return [...configuration, ...cucumber.getFocusedTestArgs(testFile, framework.project.root)]
     return [
       ...configuration,
       ...cucumber.getGeneratedTestArgs(
         testFile,
-        cucumber.getGeneratedStepsPath(framework.generatedTestStrategy.testDirectory)
+        cucumber.getGeneratedStepsPath(framework.generatedTestStrategy.testDirectory),
+        framework.project.root
       ),
     ]
   }

@@ -12,6 +12,7 @@ const { sanitizeForReport } = require('./redaction')
 const { getManifestInputFiles } = require('./runner-command')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
+const MAX_CAPTURED_PROJECT_SOURCE_BYTES = 512 * 1024
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
 const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', '.nyc_output', 'node_modules'])
 
@@ -105,10 +106,7 @@ function getApprovalMaterial ({
       path: path.resolve(manifest.__path),
       sha256: getManifestDigest(manifest),
     },
-    projectFiles: getManifestInputFiles(manifest, { includeLocal }).map(filename => ({
-      path: filename,
-      sha256: getFileDigest(filename),
-    })),
+    projectFiles: getApprovalProjectFiles(manifest, { includeLocal }),
     selection: {
       frameworks: [...selectedFrameworkIds],
       scenario: requestedScenario,
@@ -117,6 +115,11 @@ function getApprovalMaterial ({
       outputDirectory: path.resolve(out),
       offlineFixtureNonce,
       keepTemporaryFiles: keepTempFiles,
+      requiredCapabilities: getRequiredCapabilities({
+        manifest,
+        requestedScenario,
+        selectedFrameworkIds,
+      }),
       verbose,
     },
     fixtureRecipeDigests: includeLocal
@@ -131,6 +134,51 @@ function getApprovalMaterial ({
     generatedFiles: getGeneratedFileMaterial(manifest, requestedScenario),
     executables: executableIdentities,
   }
+}
+
+// Capability metadata is approval-only; the validator does not request permissions or start prerequisites.
+function getRequiredCapabilities ({ manifest, requestedScenario, selectedFrameworkIds = [] }) {
+  if (requestedScenario === 'ci-wiring') return []
+  const selected = new Set(selectedFrameworkIds)
+  const frameworks = (manifest.frameworks || []).filter(framework => {
+    return framework.status === 'runnable' && (selected.size === 0 || selected.has(framework.id))
+  })
+  const capabilities = new Set()
+  if (frameworks.some(framework => ['cypress', 'playwright'].includes(framework.framework) ||
+    (framework.framework === 'vitest' && framework.validation?.runnerArgs?.includes('--browser')) ||
+    framework.browserRequired === true)) {
+    capabilities.add('browser_process')
+  }
+  if (frameworks.some(framework => framework.localSocketRequired === true ||
+    (framework.validation?.fallbackTests || []).some(fallback => fallback.localSocketRequired === true))) {
+    capabilities.add('localhost_socket')
+  }
+  return [...capabilities].sort()
+}
+
+function getApprovalProjectFiles (manifest, { includeLocal = true } = {}) {
+  return getApprovalProjectSnapshot(manifest, { includeLocal }).projectFiles
+}
+
+// Hashes and static-analysis sources come from the same reads to avoid approval-time races.
+function getApprovalProjectSnapshot (manifest, { includeLocal = true } = {}) {
+  const projectFiles = []
+  const sources = new Map()
+  for (const filename of getManifestInputFiles(manifest, { includeLocal })) {
+    const stat = fs.lstatSync(filename)
+    const contents = fs.readFileSync(filename)
+    projectFiles.push({
+      path: filename,
+      sha256: crypto.createHash('sha256').update(contents).digest('hex'),
+    })
+    sources.set(
+      filename,
+      stat.isFile() && !stat.isSymbolicLink() && contents.length <= MAX_CAPTURED_PROJECT_SOURCE_BYTES
+        ? contents
+        : undefined
+    )
+  }
+  return { projectFiles, sources }
 }
 
 /**
@@ -332,5 +380,7 @@ module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getApprovalProjectSnapshot,
+  getRequiredCapabilities,
   serializeApprovalMaterial,
 }
