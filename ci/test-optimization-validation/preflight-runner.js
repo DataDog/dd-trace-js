@@ -85,17 +85,6 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   }
 }
 
-/**
- * Runs one disclosed representative candidate without Datadog initialization.
- *
- * @param {object} input candidate inputs
- * @param {object} input.framework framework manifest entry
- * @param {number} input.index candidate index
- * @param {object} input.options validator options
- * @param {string} input.out validation output directory
- * @param {string} input.testFile candidate test file
- * @returns {Promise<object>} candidate result and evidence
- */
 async function runCandidate ({ framework, index, options, out, testFile }) {
   const suffix = index === 0 ? '' : `-fallback-${index}`
   const command = getBasicCommand(framework, testFile)
@@ -178,13 +167,7 @@ function getFailureDiagnosis (result, observedTestCount, commandFailure, diagnos
     `that test normally, then create a fresh validation plan.${sharedPrerequisite}`
 }
 
-/**
- * Reports whether every disclosed candidate would encounter the same prerequisite.
- *
- * @param {object|undefined} commandFailure classified command blocker
- * @param {object} framework framework manifest entry
- * @returns {boolean} whether fallback candidates cannot provide new evidence
- */
+// Do not try fallbacks when every disclosed candidate shares the same prerequisite.
 function isSharedCandidateBlocker (commandFailure, framework) {
   if (!commandFailure) return false
   if (commandFailure.kind === 'local-test-socket-blocked') {

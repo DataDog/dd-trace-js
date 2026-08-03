@@ -111,49 +111,32 @@ describe('test optimization validation CI audit', () => {
     })
   }
 
-  it('does not reinterpret npm manager options as test-script arguments', () => {
-    const npmCommand = 'npm test --workspace fixture'
-    fs.writeFileSync(workflow, workflowSource({ command: npmCommand }))
-    completeReview({ command: npmCommand, initialization: 'not_configured', transport: 'none' })
-    const result = runCiWiring({ framework, manifest })
+  for (const [manager, prefix, managerOption] of [
+    ['npm', 'npm test', '--workspace fixture'],
+    ['pnpm', 'pnpm run test', '--filter fixture'],
+  ]) {
+    it(`does not reinterpret ${manager} manager options as test-script arguments`, () => {
+      const selectedCommand = `${prefix} ${managerOption}`
+      fs.writeFileSync(workflow, workflowSource({ command: selectedCommand }))
+      completeReview({ command: selectedCommand, initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
 
-    assert.strictEqual(result.status, 'error')
-    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
-    assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
-  })
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+      assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
+    })
 
-  it('forwards npm test-script arguments only after the explicit separator', () => {
-    const npmCommand = 'npm test -- --grep smoke'
-    fs.writeFileSync(workflow, workflowSource({ command: npmCommand }))
-    completeReview({ command: npmCommand, initialization: 'not_configured', transport: 'none' })
-    const result = runCiWiring({ framework, manifest })
+    it(`forwards ${manager} test-script arguments only after the explicit separator`, () => {
+      const selectedCommand = `${prefix} -- --grep smoke`
+      fs.writeFileSync(workflow, workflowSource({ command: selectedCommand }))
+      completeReview({ command: selectedCommand, initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
 
-    assert.strictEqual(result.status, 'fail')
-    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
-    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
-  })
-
-  it('does not reinterpret pnpm filtering options as test-script arguments', () => {
-    const pnpmCommand = 'pnpm run test --filter fixture'
-    fs.writeFileSync(workflow, workflowSource({ command: pnpmCommand }))
-    completeReview({ command: pnpmCommand, initialization: 'not_configured', transport: 'none' })
-    const result = runCiWiring({ framework, manifest })
-
-    assert.strictEqual(result.status, 'error')
-    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
-    assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
-  })
-
-  it('forwards pnpm test-script arguments only after the explicit separator', () => {
-    const pnpmCommand = 'pnpm run test -- --grep smoke'
-    fs.writeFileSync(workflow, workflowSource({ command: pnpmCommand }))
-    completeReview({ command: pnpmCommand, initialization: 'not_configured', transport: 'none' })
-    const result = runCiWiring({ framework, manifest })
-
-    assert.strictEqual(result.status, 'fail')
-    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
-    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
-  })
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+      assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
+    })
+  }
 
   it('resolves recursive local scripts and an inert coverage launcher', () => {
     writeScripts({

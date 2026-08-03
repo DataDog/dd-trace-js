@@ -1,14 +1,6 @@
 'use strict'
 
-/**
- * Matches the small literal glob subset used for statically selected test and support files.
- *
- * Dynamic extglobs, negation, character classes, and malformed braces fail closed.
- *
- * @param {string} filename normalized repository-relative filename
- * @param {string} pattern literal glob pattern
- * @returns {boolean} whether the filename matches
- */
+// Dynamic extglobs, negation, character classes, and malformed braces fail closed.
 function matchesLiteralGlob (filename, pattern) {
   const source = String(pattern || '').replaceAll('\\', '/').replace(/^\.\//, '')
   if (!source || /[!()[\]]/.test(source)) return false

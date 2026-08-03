@@ -20,6 +20,7 @@ const {
 const {
   createRepositoryFixture,
   removeFixture,
+  withRepositoryFixture,
 } = require('./validation-test-helpers')
 
 const PACKAGE_ROOT = path.resolve(__dirname, '../../../..')
@@ -165,17 +166,15 @@ describe('test optimization validation CLI', () => {
 
   it('writes a final static-only report without approval when no framework can run', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'cypress' })
-    const packageJsonPath = path.join(fixture.root, 'package.json')
-    const installedPackageJsonPath = path.join(fixture.root, 'node_modules', 'cypress', 'package.json')
-    for (const filename of [packageJsonPath, installedPackageJsonPath]) {
-      const packageJson = JSON.parse(fs.readFileSync(filename))
-      if (filename === packageJsonPath) packageJson.devDependencies.cypress = '11.2.0'
-      else packageJson.version = '11.2.0'
-      fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
-    }
-
-    try {
+    withRepositoryFixture({ framework: 'cypress' }, fixture => {
+      const packageJsonPath = path.join(fixture.root, 'package.json')
+      const installedPackageJsonPath = path.join(fixture.root, 'node_modules', 'cypress', 'package.json')
+      for (const filename of [packageJsonPath, installedPackageJsonPath]) {
+        const packageJson = JSON.parse(fs.readFileSync(filename))
+        if (filename === packageJsonPath) packageJson.devDependencies.cypress = '11.2.0'
+        else packageJson.version = '11.2.0'
+        fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
+      }
       assert.strictEqual(runCli(fixture.root, ['--init-manifest', '--framework', 'cypress']).status, 0)
       const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
       fs.mkdirSync(out, { recursive: true })
@@ -191,16 +190,13 @@ describe('test optimization validation CLI', () => {
       assert.match(report, /\*\*Report state: FINAL\*\*/)
       assert.doesNotMatch(report, /Approved execution plan/)
       assert.strictEqual(fs.existsSync(path.join(out, EXECUTION_LOCK_FILENAME)), false)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('reuses a valid existing manifest without overwriting it', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'mocha' })
-    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
-    try {
+    withRepositoryFixture({ framework: 'mocha' }, fixture => {
+      const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const original = fs.readFileSync(manifestPath)
 
@@ -210,16 +206,13 @@ describe('test optimization validation CLI', () => {
       assert.match(repeated.stdout, /Existing validation manifest is valid for this repository/)
       assert.match(repeated.stdout, /refresh only its ciWiring evidence if needed/)
       assert.deepStrictEqual(fs.readFileSync(manifestPath), original)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('refuses to replace an invalid existing manifest and names only that recovery path', () => {
-    const fixture = createRepositoryFixture({ framework: 'mocha' })
-    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
-    fs.writeFileSync(manifestPath, '{ invalid json\n')
-    try {
+    withRepositoryFixture({ framework: 'mocha' }, fixture => {
+      const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+      fs.writeFileSync(manifestPath, '{ invalid json\n')
       const repeated = runCli(fixture.root, ['--init-manifest'])
 
       assert.strictEqual(repeated.status, 2)
@@ -227,9 +220,7 @@ describe('test optimization validation CLI', () => {
       assert.ok(repeated.stderr.includes(`remove only ${manifestPath}`))
       assert.match(repeated.stderr, /did not delete or replace it/)
       assert.strictEqual(fs.readFileSync(manifestPath, 'utf8'), '{ invalid json\n')
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('shows structurally invalid CI evidence as incomplete before approval', function () {
@@ -242,8 +233,7 @@ describe('test optimization validation CLI', () => {
       '      - uses: acme/remote-test-action@v1',
       '',
     ].join('\n')
-    const fixture = createRepositoryFixture({ framework: 'mocha', ciSource })
-    try {
+    withRepositoryFixture({ framework: 'mocha', ciSource }, fixture => {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
       const manifest = JSON.parse(fs.readFileSync(manifestPath))
@@ -268,17 +258,14 @@ describe('test optimization validation CLI', () => {
         /CI pre-approval result: incomplete: The recorded command and step could not be bound structurally/
       )
       assert.match(planned.stdout, /Approve executing exactly the plan above/)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('refuses to replace an existing execution lock while printing a plan', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'mocha' })
-    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
-    const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
-    try {
+    withRepositoryFixture({ framework: 'mocha' }, fixture => {
+      const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       fs.mkdirSync(out, { recursive: true })
       fs.writeFileSync(lockPath, 'existing lock\n')
@@ -290,9 +277,7 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stderr, /confirming no validation process is active/)
       assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), 'existing lock\n')
       assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('holds the execution lock through runnable plan preflight and publication', async () => {
@@ -440,12 +425,11 @@ describe('test optimization validation CLI', () => {
 
   it('does not publish an approval failure without owning the execution lock', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'mocha' })
-    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
-    const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
-    const reportPath = path.join(out, 'report.md')
-    const pendingReport = 'active validation pending\n'
-    try {
+    withRepositoryFixture({ framework: 'mocha' }, fixture => {
+      const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      const lockPath = path.join(out, EXECUTION_LOCK_FILENAME)
+      const reportPath = path.join(out, 'report.md')
+      const pendingReport = 'active validation pending\n'
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       assert.strictEqual(runCli(fixture.root, ['--print-plan', '--scenario', 'basic-reporting']).status, 0)
       const approvalPath = path.join(out, 'approval.json')
@@ -464,9 +448,7 @@ describe('test optimization validation CLI', () => {
       assert.match(executed.stderr, /changed after approval/)
       assert.strictEqual(fs.readFileSync(reportPath, 'utf8'), pendingReport)
       assert.strictEqual(fs.readFileSync(lockPath, 'utf8'), 'active validation lock\n')
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('reports a lock-release failure instead of finalizing the earlier result', function () {
@@ -515,17 +497,14 @@ describe('test optimization validation CLI', () => {
 
   it('describes an omitted Mocha reporter without calling it Vitest typechecking', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha --reporter dot' })
-    try {
+    withRepositoryFixture({ framework: 'mocha', script: 'mocha --reporter dot' }, fixture => {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const planned = runCli(fixture.root, ['--print-plan'])
 
       assert.strictEqual(planned.status, 0, planned.stderr)
       assert.match(planned.stdout, /`--reporter` selects only Mocha report presentation/)
       assert.doesNotMatch(planned.stdout, /`--typecheck` is excluded/)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('prints a usable plan when a runner disappears after manifest creation', function () {
@@ -546,8 +525,7 @@ describe('test optimization validation CLI', () => {
 
   it('explains the scoped permission needed by browser-backed validation', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'cypress' })
-    try {
+    withRepositoryFixture({ framework: 'cypress' }, fixture => {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const planned = runCli(fixture.root, ['--print-plan'])
 
@@ -555,15 +533,12 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stdout, /Browser permission: this approved validation command launches the project browser/)
       assert.match(planned.stdout, /request its narrow permission for the exact checksum-bound validator command/)
       assert.match(planned.stdout, /do not change or broaden the command/)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('writes a final CI-only report without approval', function () {
     this.timeout(20_000)
-    const fixture = createRepositoryFixture({ framework: 'mocha' })
-    try {
+    withRepositoryFixture({ framework: 'mocha' }, fixture => {
       assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
       const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
       const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
@@ -576,9 +551,7 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(fs.existsSync(path.join(out, 'approval.json')), false)
       assert.match(report, /CI audit is incomplete/)
       assert.match(report, /\*\*Report state: FINAL\*\*/)
-    } finally {
-      removeFixture(fixture.root)
-    }
+    })
   })
 
   it('does not evaluate local runner availability during a CI-only run', function () {

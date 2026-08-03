@@ -8,24 +8,11 @@ const { createValidationBlocker } = require('./validation-blocker')
 
 const EXECUTION_LOCK_FILENAME = '.dd-test-optimization-validation.lock'
 
-/**
- * Returns the fixed single-flight lock path for one result directory.
- *
- * @param {string} out validation result directory
- * @returns {string} lock path
- */
 function getExecutionLockPath (out) {
   return path.join(path.resolve(out), EXECUTION_LOCK_FILENAME)
 }
 
-/**
- * Acquires a non-reclaiming single-flight lock for live validation.
- *
- * @param {object} input lock inputs
- * @param {string} input.out validation result directory
- * @param {string} input.approvedPlanSha256 approved plan digest
- * @returns {{dev: bigint, ino: bigint, path: string}} lock identity
- */
+// Locks are never reclaimed automatically; only the creator may release the exact file identity.
 function acquireExecutionLock ({ out, approvedPlanSha256 }) {
   const lockPath = getExecutionLockPath(out)
   const content = `${JSON.stringify({
@@ -47,12 +34,6 @@ function acquireExecutionLock ({ out, approvedPlanSha256 }) {
   return { dev: stat.dev, ino: stat.ino, path: lockPath }
 }
 
-/**
- * Releases only the exact lock file created by this process.
- *
- * @param {{dev: bigint, ino: bigint, path: string}} lock lock identity
- * @returns {void}
- */
 function releaseExecutionLock (lock) {
   let stat
   try {
@@ -69,12 +50,6 @@ function releaseExecutionLock (lock) {
   fs.unlinkSync(lock.path)
 }
 
-/**
- * Builds the fail-closed blocker for an existing lock.
- *
- * @param {string} lockPath existing lock path
- * @returns {Error} typed blocker
- */
 function getExistingLockError (lockPath) {
   return createValidationBlocker(
     `Another validation may be active, or an interrupted run left its execution lock: ${lockPath}.`,

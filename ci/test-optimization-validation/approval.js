@@ -136,17 +136,7 @@ function getApprovalMaterial ({
   }
 }
 
-/**
- * Describes host capabilities required by the selected project tests.
- *
- * This is approval metadata only. The validator does not request permissions or start prerequisites.
- *
- * @param {object} input approval selection
- * @param {object} input.manifest validation manifest
- * @param {string|null} input.requestedScenario requested scenario
- * @param {string[]} input.selectedFrameworkIds selected framework ids
- * @returns {string[]} sorted capability ids
- */
+// Capability metadata is approval-only; the validator does not request permissions or start prerequisites.
 function getRequiredCapabilities ({ manifest, requestedScenario, selectedFrameworkIds = [] }) {
   if (requestedScenario === 'ci-wiring') return []
   const selected = new Set(selectedFrameworkIds)
@@ -166,26 +156,11 @@ function getRequiredCapabilities ({ manifest, requestedScenario, selectedFramewo
   return [...capabilities].sort()
 }
 
-/**
- * Captures the approval-bound project file identities used by static and live validation.
- *
- * @param {object} manifest loaded validation manifest
- * @param {object} [options] file selection options
- * @param {boolean} [options.includeLocal] include local runner inputs
- * @returns {Array<{path: string, sha256: string}>} sorted project file identities
- */
 function getApprovalProjectFiles (manifest, { includeLocal = true } = {}) {
   return getApprovalProjectSnapshot(manifest, { includeLocal }).projectFiles
 }
 
-/**
- * Captures approval identities and bounded static-analysis sources from the same file reads.
- *
- * @param {object} manifest loaded validation manifest
- * @param {object} [options] file selection options
- * @param {boolean} [options.includeLocal] include local runner inputs
- * @returns {{projectFiles: Array<{path: string, sha256: string}>, sources: Map<string, Buffer|undefined>}} snapshot
- */
+// Hashes and static-analysis sources come from the same reads to avoid approval-time races.
 function getApprovalProjectSnapshot (manifest, { includeLocal = true } = {}) {
   const projectFiles = []
   const sources = new Map()

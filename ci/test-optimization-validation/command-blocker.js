@@ -324,13 +324,6 @@ function getCommandBlocker (result, options = {}) {
   }
 }
 
-/**
- * Returns whether command output identifies missing project-owned build output.
- *
- * @param {string} output command output
- * @param {string} projectRoot selected project root
- * @returns {boolean} whether a project build artifact is missing
- */
 function hasMissingProjectBuildArtifact (output, projectRoot) {
   for (const line of output.split(/\r?\n/)) {
     if (!BUILD_ARTIFACT_MISSING_PATTERN.test(line)) continue
@@ -353,12 +346,6 @@ function getBuildScript (packageJson) {
   } catch {}
 }
 
-/**
- * Returns the customer-facing browser runner name.
- *
- * @param {string} framework framework identifier
- * @returns {string} browser runner name
- */
 function getBrowserRunnerName (framework) {
   if (framework === 'cucumber') return 'Cucumber browser support'
   if (framework === 'vitest') return 'Vitest browser mode'

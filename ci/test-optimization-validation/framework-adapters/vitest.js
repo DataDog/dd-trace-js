@@ -70,15 +70,6 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
   return bindings[0]
 }
 
-/**
- * Selects only an explicit approval-bound config or root-level default config candidates.
- *
- * @param {object} input config selection inputs
- * @param {string[]} input.configFiles approval-bound configuration files
- * @param {string} input.projectRoot detected project root
- * @param {string[]} input.runnerArgs retained Vitest arguments
- * @returns {{error?: string, files?: string[]}} selected configuration files
- */
 function getSelectedConfigFiles ({ configFiles, projectRoot, runnerArgs }) {
   const explicitConfigs = getOptionValues(runnerArgs, '--config')
   if (explicitConfigs.length > 1) {
@@ -134,16 +125,6 @@ function supportsGeneratedFiles (project, strategy) {
   })
 }
 
-/**
- * Applies one statically bound Vitest project's include and exclude patterns.
- *
- * @param {object} project bound project
- * @param {string[]} project.excludePatterns literal exclusion patterns
- * @param {string[]} project.includePatterns literal inclusion patterns
- * @param {string} project.root project root
- * @param {string} filename candidate test file
- * @returns {boolean} whether Vitest can collect the file
- */
 function matchesProjectFile (project, filename) {
   const relative = path.relative(project.root, filename)
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false
@@ -329,12 +310,6 @@ function readText (filename) {
   } catch {}
 }
 
-/**
- * Resolves one regular non-symbolic-link path physically.
- *
- * @param {string} filename candidate filename
- * @returns {string|undefined} physical filename
- */
 function getPhysicalPath (filename) {
   try {
     const stat = fs.lstatSync(filename)
@@ -343,12 +318,6 @@ function getPhysicalPath (filename) {
   } catch {}
 }
 
-/**
- * Resolves one physical directory.
- *
- * @param {string} directory candidate directory
- * @returns {string|undefined} physical directory
- */
 function getPhysicalDirectory (directory) {
   try {
     const physical = fs.realpathSync(directory)

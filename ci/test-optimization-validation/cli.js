@@ -470,14 +470,6 @@ function printPlan (manifest, options) {
   }
 }
 
-/**
- * Produces a final report without approval when no local check can run or only static checks were selected.
- *
- * @param {object} manifest selected validation manifest
- * @param {string} out output directory
- * @param {object} options CLI options
- * @returns {void}
- */
 function writeStaticOnlyReport (manifest, out, options) {
   const results = []
   const localScenariosSelected = hasLocalScenarios(options.scenarios)
@@ -523,12 +515,6 @@ function writeStaticOnlyReport (manifest, out, options) {
   process.exitCode = validatorExitCode
 }
 
-/**
- * Reuses an existing same-repository manifest without overwriting it.
- *
- * @param {string} manifestPath existing manifest path
- * @returns {void}
- */
 function reuseExistingManifest (manifestPath) {
   try {
     const manifest = loadManifest(manifestPath)
@@ -551,22 +537,10 @@ function reuseExistingManifest (manifestPath) {
   ].join('\n')))
 }
 
-/**
- * Returns whether the selected checks include local validation.
- *
- * @param {Set<string>} scenarios selected scenarios
- * @returns {boolean} whether local validation is selected
- */
 function hasLocalScenarios (scenarios) {
   return [...scenarios].some(scenario => scenario !== CI_WIRING)
 }
 
-/**
- * Builds a pre-approval installed-package blocker.
- *
- * @param {{diagnosis: string, recommendation: string}} packageCheck failed package check
- * @returns {Error} CLI error
- */
 function getInstalledPackageCheckError (packageCheck) {
   const error = new Error(
     `INSTALLED DD-TRACE PACKAGE BLOCKER: ${packageCheck.diagnosis} ${packageCheck.recommendation}`

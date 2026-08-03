@@ -12,13 +12,7 @@ const LOAD_MARKER = 'dd-trace-test-optimization-package-check-ok'
 const MAX_OUTPUT_BYTES = 64 * 1024
 const TIMEOUT_MS = 10_000
 
-/**
- * Loads the installed Test Optimization initialization entrypoint in an isolated child without initializing tracing.
- *
- * @param {object} [input] package-check inputs
- * @param {string} [input.packageRoot] installed dd-trace package root
- * @returns {{ok: boolean, diagnosis: string, recommendation?: string}} package-load result
- */
+// Loads the initialization entrypoint in an isolated child without initializing tracing.
 function checkInstalledPackage ({ packageRoot = DEFAULT_PACKAGE_ROOT } = {}) {
   const root = path.resolve(packageRoot)
   const initPath = path.join(root, 'ci', 'init.js')
@@ -63,13 +57,6 @@ function checkInstalledPackage ({ packageRoot = DEFAULT_PACKAGE_ROOT } = {}) {
   }
 }
 
-/**
- * Builds a local-validation blocker for an installed dd-trace package that cannot load.
- *
- * @param {object} framework framework entry
- * @param {{diagnosis: string, recommendation: string}} packageCheck failed package check
- * @returns {object} Basic Reporting blocker
- */
 function getInstalledPackageFailure (framework, packageCheck) {
   return {
     frameworkId: framework.id,
@@ -87,12 +74,6 @@ function getInstalledPackageFailure (framework, packageCheck) {
   }
 }
 
-/**
- * Returns one bounded diagnostic line from a failed package-load child.
- *
- * @param {import('node:child_process').SpawnSyncReturns<string>} result child result
- * @returns {string} diagnostic detail
- */
 function getFailureDetail (result) {
   if (result.error?.code === 'ETIMEDOUT') return `the isolated load check exceeded ${TIMEOUT_MS} ms.`
   if (result.error) return `${sanitizeLine(result.error.message)}.`
@@ -106,12 +87,6 @@ function getFailureDetail (result) {
   return `the isolated load check exited ${result.status ?? 'without a status'}.`
 }
 
-/**
- * Sanitizes one child-output line for customer-facing diagnostics.
- *
- * @param {string} value raw output
- * @returns {string} bounded safe line
- */
 function sanitizeLine (value) {
   return sanitizeString(String(value)).replaceAll(/\p{Cc}+/gu, ' ').trim().slice(0, 1000).replace(/[.]+$/, '')
 }

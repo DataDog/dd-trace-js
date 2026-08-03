@@ -245,12 +245,6 @@ function expandProfiles ({ configFiles, projectFiles, projectRoot, runnerArgs })
   return expandSupportPaths([...expanded, ...directArgs], projectFiles, projectRoot)
 }
 
-/**
- * Returns the validator-owned empty config that prevents Cucumber from reloading project profiles.
- *
- * @param {string} cwd command working directory
- * @returns {string[]} isolation arguments
- */
 function getIsolationArgs (cwd) {
   return ['--config', path.relative(cwd, ISOLATION_CONFIG_PATH)]
 }

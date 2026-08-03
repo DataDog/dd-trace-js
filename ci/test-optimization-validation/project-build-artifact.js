@@ -5,16 +5,7 @@ const path = require('node:path')
 const BUILD_DIRECTORY_PATTERN = /(?:^|\/)(?:build|dist|generated)(?:\/|$)/
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:\//
 
-/**
- * Returns whether a path names a project-owned conventional build output.
- *
- * Bare package subpaths and paths below node_modules belong to dependencies, not to the customer project.
- *
- * @param {string} filename referenced path
- * @param {string} projectRoot owning project root
- * @param {string} [baseDirectory] directory that owns a relative reference; defaults to the project root
- * @returns {boolean} whether the path is project-owned build output
- */
+// Bare package subpaths and node_modules paths belong to dependencies, not to the customer project.
 function isProjectBuildArtifactPath (filename, projectRoot, baseDirectory = projectRoot) {
   const normalized = String(filename).replaceAll('\\', '/')
   if (!BUILD_DIRECTORY_PATTERN.test(normalized) ||

@@ -224,12 +224,6 @@ function getVerdicts (results) {
   ]
 }
 
-/**
- * Returns the four independent verdict lanes for each framework.
- *
- * @param {object[]} results validation results
- * @returns {object[]} verdict rows
- */
 function getIndependentVerdicts (results) {
   const verdicts = []
   for (const [framework, frameworkResults] of groupByFramework(results)) {
@@ -599,24 +593,12 @@ function formatExecutionStatus (status) {
   return String(status || 'incomplete').replaceAll('_', ' ').toUpperCase()
 }
 
-/**
- * Formats how much of the selected validation scope reached a conclusion.
- *
- * @param {string|undefined} coverage internal validation coverage id
- * @returns {string} customer-facing scope
- */
 function formatValidationScope (coverage) {
   return coverage === 'complete'
     ? 'all selected checks reached a conclusion'
     : 'some selected checks are incomplete'
 }
 
-/**
- * Explains the process exit code without implying a library or validator failure.
- *
- * @param {number|undefined} exitCode validator process exit code
- * @returns {string} code and meaning
- */
 function formatValidatorExitCode (exitCode) {
   const meanings = {
     0: 'completed without a confirmed problem',

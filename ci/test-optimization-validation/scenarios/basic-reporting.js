@@ -194,12 +194,6 @@ async function runBasicReporting ({ framework, out, options }) {
   }
 }
 
-/**
- * Runs the normal debug rerun and keeps an intermittent initialized result inconclusive.
- *
- * @param {object} input debug rerun inputs
- * @returns {Promise<object>} scenario result
- */
 async function failBasicWithDebugRerun (input) {
   const result = await failWithDebugRerun(input)
   const debug = result.evidence?.debugRerun
@@ -219,13 +213,6 @@ async function failBasicWithDebugRerun (input) {
   return result
 }
 
-/**
- * Checks whether the debug rerun established the complete controlled reporting path.
- *
- * @param {object|undefined} debug debug rerun summary
- * @param {object|undefined} selector original representative-file evidence
- * @returns {boolean} whether the rerun disproved a repeatable failure
- */
 function isSuccessfulDebugRerun (debug, selector) {
   return isDebugSelectorVerified(debug, selector) &&
     debug?.ran === true &&
@@ -239,13 +226,7 @@ function isSuccessfulDebugRerun (debug, selector) {
     debug.testEvents > 0
 }
 
-/**
- * Requires a debug rerun through a repository wrapper to report only the approved representative.
- *
- * @param {object|undefined} debug debug rerun summary
- * @param {object|undefined} selector original representative-file evidence
- * @returns {boolean} whether the debug rerun preserved the approved selector
- */
+// A wrapper rerun is comparable only when events identify the approved representative and no other file.
 function isDebugSelectorVerified (debug, selector) {
   if (selector?.verified !== true) return false
   if (selector.mode === 'bounded_direct_runner') return true

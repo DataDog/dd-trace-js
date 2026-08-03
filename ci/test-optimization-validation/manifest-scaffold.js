@@ -713,14 +713,6 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName, 
   return candidates.slice(0, 3)
 }
 
-/**
- * Returns whether test source statically imports project-owned build output.
- *
- * @param {string} source test source
- * @param {string} projectRoot selected project root
- * @param {string} sourceDirectory directory containing the test source
- * @returns {boolean} whether a project build artifact is required
- */
 function requiresProjectBuildArtifact (source, projectRoot, sourceDirectory) {
   for (const match of source.matchAll(IMPORT_SPECIFIER_PATTERN)) {
     if (isProjectBuildArtifactPath(match[2], projectRoot, sourceDirectory)) return true
@@ -728,14 +720,6 @@ function requiresProjectBuildArtifact (source, projectRoot, sourceDirectory) {
   return false
 }
 
-/**
- * Reports whether bounded Cucumber support code visibly imports a browser driver.
- *
- * @param {string[]} files bounded project files
- * @param {string[]} retainedInputs approval-bound runner input files
- * @param {string} projectRoot selected project root
- * @returns {boolean} whether Cucumber may launch a project browser
- */
 function hasCucumberBrowserSupport (files, retainedInputs, projectRoot) {
   const retained = new Set(retainedInputs)
   for (const filename of new Set([...files, ...retained])) {
@@ -1138,13 +1122,6 @@ function getDetectionPackageJson (repositoryRoot, location) {
   }
 }
 
-/**
- * Finds the exact package manifest that owns a live-validation target.
- *
- * @param {string} repositoryRoot repository root
- * @param {object} detection framework detection
- * @returns {{json: object, path: string}|undefined} package metadata
- */
 function getFrameworkPackageJson (repositoryRoot, detection) {
   const preciseLocation = detection.commandLocation ||
     detection.supportedVersion?.relativePath ||
@@ -1178,12 +1155,6 @@ function findOwningPackageJson (repositoryRoot, location) {
   }
 }
 
-/**
- * Gets the most precise serialized package location available for a detection.
- *
- * @param {object} detection framework detection
- * @returns {string|undefined} detected package manifest path
- */
 function getDetectionPackageLocation (detection) {
   return detection.commandLocation ||
     detection.supportedVersion?.relativePath ||

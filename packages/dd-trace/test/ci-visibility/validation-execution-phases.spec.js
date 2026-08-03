@@ -535,37 +535,28 @@ describe('test optimization validation execution boundary', () => {
     assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cucumber-browser-missing')
   })
 
-  it('includes the concrete project failure when every disclosed candidate fails', async () => {
-    fs.writeFileSync(fixture.runner, [
-      "console.error('Error: missing generated build output')",
-      'process.exit(1)',
-    ].join('\n'))
-    const result = await runFrameworkPreflight({
-      framework,
-      options: { repositoryRoot: fixture.root },
-      out,
+  for (const [description, stream, output, expected] of [
+    ['concrete project failure', 'error', 'Error: missing generated build output', /missing generated build output/],
+    [
+      'TypeError from project output',
+      'log',
+      "TypeError: Cannot read properties of null (reading 'port')",
+      /Cannot read properties of null/,
+    ],
+  ]) {
+    it(`includes the ${description} when every disclosed candidate fails`, async () => {
+      fs.writeFileSync(fixture.runner, `console.${stream}(${JSON.stringify(output)})\nprocess.exit(1)\n`)
+      const result = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: fixture.root },
+        out,
+      })
+
+      assert.strictEqual(result.ok, false)
+      assert.match(result.failure.diagnosis, expected)
+      assert.match(result.failure.evidence.recommendation, expected)
     })
-
-    assert.strictEqual(result.ok, false)
-    assert.match(result.failure.diagnosis, /missing generated build output/)
-    assert.match(result.failure.evidence.recommendation, /missing generated build output/)
-  })
-
-  it('includes a TypeError from project output when every disclosed candidate fails', async () => {
-    fs.writeFileSync(fixture.runner, [
-      "console.log(\"TypeError: Cannot read properties of null (reading 'port')\")",
-      'process.exit(1)',
-    ].join('\n'))
-    const result = await runFrameworkPreflight({
-      framework,
-      options: { repositoryRoot: fixture.root },
-      out,
-    })
-
-    assert.strictEqual(result.ok, false)
-    assert.match(result.failure.diagnosis, /Cannot read properties of null/)
-    assert.match(result.failure.evidence.recommendation, /Cannot read properties of null/)
-  })
+  }
 
   it('explains when every disclosed candidate shares a localhost prerequisite', async () => {
     fs.writeFileSync(fixture.runner, [
@@ -632,46 +623,36 @@ describe('test optimization validation execution boundary', () => {
     assert.match(result.failure.evidence.commandFailure.recommendation, /Cucumber browser tests can launch/)
   })
 
-  it('keeps a Cucumber formatter exception unclassified without browser failure evidence', async () => {
-    fs.writeFileSync(fixture.runner, [
-      "console.error(\"TypeError: Cannot read properties of undefined (reading 'line')\")",
-      'process.exit(1)',
-    ].join('\n'))
-    framework.framework = 'cucumber'
-    framework.browserRequired = true
+  for (const [description, browserFailure, expectedKind] of [
+    ['keeps a Cucumber formatter exception unclassified without', '', undefined],
+    [
+      'classifies a Cucumber formatter exception only with',
+      'Browser session closed before formatter completion\n',
+      'cucumber-browser-execution-incomplete',
+    ],
+  ]) {
+    it(`${description} browser failure evidence`, async () => {
+      const output = `${browserFailure}TypeError: Cannot read properties of undefined (reading 'line')`
+      fs.writeFileSync(fixture.runner, `console.error(${JSON.stringify(output)})\nprocess.exit(1)\n`)
+      framework.framework = 'cucumber'
+      framework.browserRequired = true
 
-    const result = await runFrameworkPreflight({
-      framework,
-      options: { repositoryRoot: fixture.root },
-      out,
+      const result = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: fixture.root },
+        out,
+      })
+
+      assert.strictEqual(result.ok, false)
+      assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
+      assert.strictEqual(result.failure.evidence.commandFailure?.kind, expectedKind)
+      if (!expectedKind) {
+        assert.strictEqual(result.failure.evidence.blockerCategory, 'CLEAN_TEST_FAILED')
+        assert.strictEqual(result.failure.evidence.commandFailure, undefined)
+        assert.match(result.failure.diagnosis, /Cannot read properties of undefined/)
+      }
     })
-
-    assert.strictEqual(result.ok, false)
-    assert.strictEqual(result.failure.evidence.blockerCategory, 'CLEAN_TEST_FAILED')
-    assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
-    assert.strictEqual(result.failure.evidence.commandFailure, undefined)
-    assert.match(result.failure.diagnosis, /Cannot read properties of undefined/)
-  })
-
-  it('classifies a Cucumber formatter exception only with browser failure evidence', async () => {
-    fs.writeFileSync(fixture.runner, [
-      "console.error('Browser session closed before formatter completion')",
-      "console.error(\"TypeError: Cannot read properties of undefined (reading 'line')\")",
-      'process.exit(1)',
-    ].join('\n'))
-    framework.framework = 'cucumber'
-    framework.browserRequired = true
-
-    const result = await runFrameworkPreflight({
-      framework,
-      options: { repositoryRoot: fixture.root },
-      out,
-    })
-
-    assert.strictEqual(result.ok, false)
-    assert.strictEqual(result.failure.evidence.domain, 'local_runtime')
-    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cucumber-browser-execution-incomplete')
-  })
+  }
 
   it('accepts an exact generated test when the reporter omits the test count', async () => {
     fs.writeFileSync(fixture.runner, 'process.exit(0)\n')

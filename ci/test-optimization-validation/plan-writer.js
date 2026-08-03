@@ -389,12 +389,6 @@ function formatCandidateRequirements (candidate) {
   return requirements.length > 0 ? ` (${requirements.join(', ')} required)` : ''
 }
 
-/**
- * Formats one static CI result for the customer-visible approval plan.
- *
- * @param {object} result CI audit result
- * @returns {string} concise pre-approval result
- */
 function formatCiPreflightResult (result) {
   const status = result.status === 'fail'
     ? 'confirmed actionable problem'

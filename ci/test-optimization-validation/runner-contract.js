@@ -156,17 +156,6 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
   }
 }
 
-/**
- * Validates adapter-expanded runner configuration without reparsing a shell command.
- *
- * @param {string} framework framework name
- * @param {string[]} runnerArgs statically expanded runner arguments
- * @param {Record<string, string>} environment retained runner environment
- * @param {string} projectRoot detected project root
- * @param {string} repositoryRoot repository root
- * @returns {{environment: Record<string, string>, error?: string, inputFiles: string[], runnerArgs: string[]}}
- * runner contract
- */
 function getRunnerConfigurationContract (framework, runnerArgs, environment, projectRoot, repositoryRoot) {
   const runnerArgsError = getRunnerArgsError(framework, runnerArgs)
   if (runnerArgsError) {
@@ -476,12 +465,6 @@ function getFrameworkInvocation (command, framework) {
   return { runnerIndex, tokens }
 }
 
-/**
- * Validates inert launchers before a direct framework executable.
- *
- * @param {string[]} prefix invocation tokens before the runner
- * @returns {string|undefined} validation error
- */
 function getRunnerPrefixError (prefix) {
   let coverageLauncher = false
   for (let index = 0; index < prefix.length; index++) {
