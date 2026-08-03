@@ -699,7 +699,7 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName, 
       explicitFilename: TEST_FILE_PATTERN.test(path.basename(filename)),
       path: filename,
       rank: getTestRank(filename, source, projectRoot),
-      requiresBuildArtifact: requiresProjectBuildArtifact(source, projectRoot),
+      requiresBuildArtifact: requiresProjectBuildArtifact(source, projectRoot, path.dirname(filename)),
       requiresExternalService: framework === 'cypress' && CYPRESS_LOCAL_ORIGIN_PATTERN.test(source),
       requiresLocalSocket: LOCAL_SOCKET_PATTERN.test(source),
     })
@@ -718,11 +718,12 @@ function selectRepresentativeTests (files, framework, projectRoot, packageName, 
  *
  * @param {string} source test source
  * @param {string} projectRoot selected project root
+ * @param {string} sourceDirectory directory containing the test source
  * @returns {boolean} whether a project build artifact is required
  */
-function requiresProjectBuildArtifact (source, projectRoot) {
+function requiresProjectBuildArtifact (source, projectRoot, sourceDirectory) {
   for (const match of source.matchAll(IMPORT_SPECIFIER_PATTERN)) {
-    if (isProjectBuildArtifactPath(match[2], projectRoot)) return true
+    if (isProjectBuildArtifactPath(match[2], projectRoot, sourceDirectory)) return true
   }
   return false
 }

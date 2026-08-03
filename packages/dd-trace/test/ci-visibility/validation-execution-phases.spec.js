@@ -69,7 +69,7 @@ describe('test optimization validation execution boundary', () => {
 
     const blocker = getCommandBlocker({
       exitCode: 1,
-      stderr: "Error: Cannot find module '../dist/generated/schema.js'",
+      stderr: "Error: Cannot find module './dist/generated/schema.js'",
       stdout: '',
     }, {
       framework: 'mocha',
@@ -107,6 +107,7 @@ describe('test optimization validation execution boundary', () => {
       "Error: Cannot find module '@scope/dependency/dist/index.js'",
       `Error: Cannot find module '${path.join(fixture.root, 'node_modules', 'dependency', 'dist', 'index.js')}'`,
       "Error: Cannot find module '/opt/vendor/dist/index.js'",
+      "Error: Cannot find module '../vendor/dist/index.js'",
     ]) {
       const blocker = getCommandBlocker({ exitCode: 1, stderr, stdout: '' }, {
         framework: 'mocha',

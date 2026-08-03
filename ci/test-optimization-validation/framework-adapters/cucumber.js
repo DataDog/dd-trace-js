@@ -201,9 +201,11 @@ function expandProfiles ({ configFiles, projectFiles, projectRoot, runnerArgs })
   const selectedProfiles = getOptionValues(runnerArgs, new Set(['-p', '--profile']))
   const explicitConfig = getOptionValues(runnerArgs, new Set(['--config']))[0]
   const explicitConfigFile = explicitConfig && getPhysicalPath(path.resolve(projectRoot, explicitConfig))
+  const physicalProjectRoot = getPhysicalDirectory(projectRoot)
   const configFile = explicitConfig
     ? configFiles.find(filename => path.resolve(filename) === explicitConfigFile)
-    : configFiles.find(filename => CONFIG_PATTERN.test(path.basename(filename)))
+    : configFiles.find(filename =>
+      path.dirname(filename) === physicalProjectRoot && CONFIG_PATTERN.test(path.basename(filename)))
   const directArgs = omitOptions(runnerArgs, new Set(['-p', '--config', '--profile']))
 
   if (explicitConfig && !configFile) {
@@ -604,6 +606,13 @@ function getJsonScenarioCount (output) {
     } catch {}
   }
   return null
+}
+
+function getPhysicalDirectory (directory) {
+  try {
+    const physical = fs.realpathSync(directory)
+    if (fs.statSync(physical).isDirectory()) return physical
+  } catch {}
 }
 
 module.exports = {

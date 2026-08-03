@@ -12,15 +12,16 @@ const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:\//
  *
  * @param {string} filename referenced path
  * @param {string} projectRoot owning project root
+ * @param {string} [baseDirectory] directory that owns a relative reference; defaults to the project root
  * @returns {boolean} whether the path is project-owned build output
  */
-function isProjectBuildArtifactPath (filename, projectRoot) {
+function isProjectBuildArtifactPath (filename, projectRoot, baseDirectory = projectRoot) {
   const normalized = String(filename).replaceAll('\\', '/')
   if (!BUILD_DIRECTORY_PATTERN.test(normalized) ||
     /(?:^|\/)node_modules(?:\/|$)/.test(normalized)) return false
 
-  if (normalized.startsWith('./') || normalized.startsWith('../')) return true
-  if ((!normalized.startsWith('/') && !WINDOWS_ABSOLUTE_PATH_PATTERN.test(normalized)) ||
+  const relativePath = normalized.startsWith('./') || normalized.startsWith('../')
+  if ((!relativePath && !normalized.startsWith('/') && !WINDOWS_ABSOLUTE_PATH_PATTERN.test(normalized)) ||
     typeof projectRoot !== 'string') return false
 
   const normalizedRoot = projectRoot.replaceAll('\\', '/')
@@ -31,7 +32,9 @@ function isProjectBuildArtifactPath (filename, projectRoot) {
   const root = pathApi.resolve(normalizedRoot)
   const candidate = /^\/(?:build|dist|generated)(?:\/|$)/.test(normalized)
     ? pathApi.resolve(root, normalized.slice(1))
-    : pathApi.resolve(normalized)
+    : relativePath
+      ? pathApi.resolve(String(baseDirectory).replaceAll('\\', '/'), normalized)
+      : pathApi.resolve(normalized)
   const relative = pathApi.relative(root, candidate)
   return relative === '' || (!relative.startsWith('..') && !pathApi.isAbsolute(relative))
 }

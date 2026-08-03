@@ -122,7 +122,7 @@ describe('test optimization validation manifest scaffold', () => {
   it('isolates generated Cucumber checks from project profiles', () => {
     const fixture = createRepositoryFixture({
       framework: 'cucumber',
-      script: 'cucumber-js --profile ci',
+      script: 'cucumber-js --require features/cucumber.js --profile ci',
     })
     fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
       'module.exports = {',
@@ -134,10 +134,12 @@ describe('test optimization validation manifest scaffold', () => {
     ].join('\n'))
     const supportFile = path.join(fixture.root, 'features', 'steps.js')
     const importFile = path.join(fixture.root, 'features', 'steps.mjs')
+    const directSupportFile = path.join(fixture.root, 'features', 'cucumber.js')
     const staleFile = path.join(fixture.root, 'legacy', 'stale.js')
     fs.mkdirSync(path.dirname(staleFile), { recursive: true })
     fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
     fs.writeFileSync(importFile, 'export default function () {}\n')
+    fs.writeFileSync(directSupportFile, 'module.exports = function () {}\n')
     fs.writeFileSync(staleFile, 'throw new Error("stale profile must not be loaded")\n')
     try {
       const framework = createManifestScaffold({
@@ -151,6 +153,7 @@ describe('test optimization validation manifest scaffold', () => {
       assert.deepStrictEqual(framework.validation.runnerArgs, [
         '--require', supportFile,
         '--import', importFile,
+        '--require', directSupportFile,
       ])
       assert.strictEqual(basic.argv.includes('--profile'), false)
       assert.ok(basic.argv.some(argument => argument.endsWith('cucumber-validation.json')))
@@ -491,6 +494,7 @@ describe('test optimization validation manifest scaffold', () => {
   it('marks only project-owned build artifact imports as setup prerequisites', () => {
     for (const [specifier, expected] of [
       ['../dist/app.js', true],
+      ['../../vendor/dist/index.js', false],
       ['@scope/dependency/dist/index.js', false],
       ['./node_modules/dependency/dist/index.js', false],
       ['/opt/vendor/dist/index.js', false],
