@@ -358,11 +358,11 @@ function getAttemptToFixExecutionsFromJestResults (result) {
 
     for (const { fullName, status } of testResults) {
       const testName = removeSeedSuffixFromTestName(fullName)
-      const testStatus = getTestStatusFromJestResult(status)
-      if (!testStatus) continue
-
       const testManagementTest = testManagementTestsForSuite[testName]?.properties
       if (!testManagementTest?.attempt_to_fix) continue
+      const testStatus = getTestStatusFromJestResult(status) ||
+        (status === 'pending' || status === 'todo' ? 'skip' : undefined)
+      if (!testStatus) continue
 
       recordAttemptToFixExecution(executions, {
         testSuite,

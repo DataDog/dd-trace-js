@@ -856,6 +856,22 @@ describe('test management summary', () => {
     assert.match(detailLine, /unique suffix/)
   })
 
+  it('strips terminal control sequences from displayed test names', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: '\x1b[2Jsuite.js',
+      testName: '\x1b]8;;https://example.com\x07linked\x1b]8;;\x07 \x07name',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, '  • [disabled] suite.js › linked name')
+  })
+
   it('can disable the end-of-session report without retaining results', () => {
     const executions = new Map()
     const attemptToFixExecutions = new Map()

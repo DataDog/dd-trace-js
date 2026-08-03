@@ -3,6 +3,7 @@
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
+const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
@@ -130,6 +131,8 @@ const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
   { limitMs: 5 * 60 * 1000, key: '5m' },
 ]
 const CI_APP_ORIGIN = 'ciapp-test'
+// eslint-disable-next-line no-control-regex
+const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
 const TEST_OPTIMIZATION_NAME_WHITESPACE_RE = /\s+/g
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -1890,7 +1893,10 @@ function formatTestOptimizationName (testSuite, testName) {
  * @returns {string}
  */
 function sanitizeTestOptimizationName (value) {
-  return value.replaceAll(TEST_OPTIMIZATION_NAME_WHITESPACE_RE, ' ').trim()
+  return stripVTControlCharacters(value)
+    .replaceAll(TEST_OPTIMIZATION_NAME_CONTROL_RE, '')
+    .replaceAll(TEST_OPTIMIZATION_NAME_WHITESPACE_RE, ' ')
+    .trim()
 }
 
 /**

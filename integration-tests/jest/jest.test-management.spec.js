@@ -508,6 +508,53 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
+      it('reports skipped and todo attempt to fix tests', async () => {
+        const testSuite = 'ci-visibility/test-management/test-attempt-to-fix-skip.js'
+        let testOutput = ''
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              [testSuite]: {
+                tests: {
+                  'skipped attempt to fix tests can skip': {
+                    properties: { attempt_to_fix: true },
+                  },
+                  'skipped attempt to fix tests can be todo': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-skip',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(
+          testOutput,
+          /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./
+        )
+      })
+
       it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
