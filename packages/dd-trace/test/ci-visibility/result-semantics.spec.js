@@ -89,6 +89,7 @@ describe('test optimization validation result semantics', () => {
       name: 'reports required project setup separately from sandbox blocking',
       results: [
         getResult('all', 'blocked', {
+          blockerCategory: 'PROJECT_SETUP_REQUIRED',
           blockedByProjectSetup: true,
         }),
         getResult('ci-wiring', 'error', incompleteCiEvidence('incomplete')),
@@ -118,12 +119,15 @@ describe('test optimization validation result semantics', () => {
       ],
     },
     {
-      name: 'returns two when the execution environment blocks local validation',
+      name: 'returns two with a distinct execution-environment blocker',
       results: [
-        getResult('basic-reporting', 'blocked', { blockedByExecutionEnvironment: true }),
+        getResult('basic-reporting', 'blocked', {
+          blockerCategory: 'EXECUTION_ENVIRONMENT_BLOCKED',
+          blockedByExecutionEnvironment: true,
+        }),
         getResult('ci-wiring', 'error', incompleteCiEvidence('incomplete')),
       ],
-      executionStatus: 'blocked',
+      executionStatus: 'execution_environment_blocked',
       exitCode: 2,
       resultSemantics: [
         { conclusion: 'incomplete', domain: 'execution_environment' },
@@ -131,12 +135,15 @@ describe('test optimization validation result semantics', () => {
       ],
     },
     {
-      name: 'returns two when an unattributed local runtime abort blocks validation',
+      name: 'returns two when the clean test fails without attributable evidence',
       results: [
-        getResult('basic-reporting', 'blocked', { localRuntimeBlocked: true }),
+        getResult('basic-reporting', 'blocked', {
+          blockerCategory: 'CLEAN_TEST_FAILED',
+          localRuntimeBlocked: true,
+        }),
         getResult('ci-wiring', 'error', incompleteCiEvidence('incomplete')),
       ],
-      executionStatus: 'blocked',
+      executionStatus: 'clean_test_failed',
       exitCode: 2,
       resultSemantics: [
         { conclusion: 'incomplete', domain: 'local_runtime' },
@@ -146,12 +153,16 @@ describe('test optimization validation result semantics', () => {
     {
       name: 'returns two when no supported runnable adapter produced live evidence',
       results: [{
-        ...getResult('all', 'skip', { validatorAdapterUnavailable: true }),
+        ...getResult('all', 'skip', {
+          blockerCategory: 'VALIDATOR_LIMITATION',
+          validationIncomplete: true,
+          validatorAdapterUnavailable: true,
+        }),
         frameworkId: 'playwright:root',
       }],
-      executionStatus: 'completed',
+      executionStatus: 'validator_limitation',
       exitCode: 2,
-      resultSemantics: [{ conclusion: 'not_eligible', domain: 'validator_adapter' }],
+      resultSemantics: [{ conclusion: 'incomplete', domain: 'validator_adapter' }],
     },
     {
       name: 'returns two when a requested feature was not checked',
