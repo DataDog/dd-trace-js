@@ -429,7 +429,8 @@ describe('LLMObs Experiments facade', () => {
         metadata: { suite: 'smoke' },
         config: { revision: 'abc123' },
       })
-      assert.equal(recorder.experimentId, 'exp')
+      assert.equal(recorder.experimentId(), 'exp')
+      assert.equal(recorder.name(), 'eve-run')
       assert.equal(recorder.url(), 'https://app.datadoghq.com/llm/experiments/exp')
 
       const span = await recorder.submitSpan({
@@ -449,7 +450,7 @@ describe('LLMObs Experiments facade', () => {
       assert.match(span.traceId, /^[a-f0-9]{32}$/)
 
       await recorder.submitEvaluationMetrics(span, [
-        { label: 'gate:succeeded', value: true },
+        { label: 'gate_succeeded', value: true },
         { label: 'similarity', value: 0.92 },
         { label: 'verdict', value: 'passed' },
         { label: 'details', value: { assertions: 3 } },
@@ -469,8 +470,7 @@ describe('LLMObs Experiments facade', () => {
         ensure_unique: true,
         dataset_version: 1,
         config: { revision: 'abc123' },
-        metadata: { suite: 'smoke' },
-        tags: { source: 'eve' },
+        metadata: { suite: 'smoke', tags: ['source:eve'] },
       })
 
       const submittedSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
@@ -510,7 +510,24 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', { status: 'completed' })
     })
 
-    it('records row error metadata and default duration', async () => {
+    it('rejects invalid external metric labels before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-label-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics(span, [{ label: 'bad name', value: 1 }]),
+        /Evaluator name 'bad name' is invalid/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('records row error metadata and falls back for invalid timestamps', async () => {
       stubExperimentRecorderClient()
 
       const recorder = await createExperiments(enabledConfig()).startExperiment({
@@ -531,6 +548,19 @@ describe('LLMObs Experiments facade', () => {
         startedAt: '2026-01-01T00:00:01.000Z',
       })
 
+      const fallbackMs = Date.UTC(2026, 0, 1, 0, 0, 2)
+      const clock = sinon.useFakeTimers({ now: fallbackMs })
+      try {
+        await recorder.submitSpan({
+          name: 'invalid date',
+          input: 'bad date',
+          startedAt: new Date('invalid'),
+          completedAt: new Date('invalid'),
+        })
+      } finally {
+        clock.restore()
+      }
+
       const stringErrorSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
       assert.equal(stringErrorSpan.status, 'error')
       assert.equal(stringErrorSpan.duration, 0)
@@ -539,6 +569,11 @@ describe('LLMObs Experiments facade', () => {
       const objectErrorSpan = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].spans[0]
       assert.equal(objectErrorSpan.status, 'error')
       assert.deepEqual(objectErrorSpan.meta.error, { type: 'ValueError', message: 'bad row', stack: 'stack' })
+
+      const invalidDateSpan = ExperimentsClient.prototype.postExperimentEvents.thirdCall.args[1].spans[0]
+      assert.equal(invalidDateSpan.start_ns, fallbackMs * 1e6)
+      assert.equal(invalidDateSpan.duration, 0)
+      assert.doesNotMatch(invalidDateSpan.trace_id, /NaN/)
       sinon.assert.notCalled(ExperimentsClient.prototype.createDataset)
     })
 

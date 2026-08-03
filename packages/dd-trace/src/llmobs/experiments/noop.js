@@ -86,32 +86,6 @@ class NoopExperiment {
   run () {
     return Promise.resolve({ experimentId: null, rows: [], url: null })
   }
-}
-
-class NoopExperimentRecorder {
-  #name
-
-  /**
-   * @param {string} name
-   */
-  constructor (name = '') {
-    this.#name = name
-    this.experimentId = null
-  }
-
-  /**
-   * @returns {string}
-   */
-  name () {
-    return this.#name
-  }
-
-  /**
-   * @returns {null}
-   */
-  url () {
-    return null
-  }
 
   /**
    * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
@@ -166,11 +140,11 @@ class NoopExperiments {
 
   /**
    * @param {object} options
-   * @returns {Promise<NoopExperimentRecorder>}
+   * @returns {Promise<NoopExperiment>}
    */
   startExperiment (options = {}) {
     this.#warn()
-    return Promise.resolve(new NoopExperimentRecorder(options.name))
+    return Promise.resolve(new NoopExperiment(options.name))
   }
 }
 

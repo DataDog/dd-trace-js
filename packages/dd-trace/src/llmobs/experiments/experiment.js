@@ -99,7 +99,10 @@ function createFallbackSpanContext (startNs) {
 
 function timestampMs (value, fallback = Date.now()) {
   if (value === null || value === undefined) return fallback
-  if (value instanceof Date) return value.getTime()
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    return Number.isFinite(timestamp) ? timestamp : fallback
+  }
   if (typeof value === 'number' && Number.isFinite(value)) return value
   const parsed = Date.parse(String(value))
   return Number.isFinite(parsed) ? parsed : fallback
@@ -140,57 +143,69 @@ function errorMessage (error) {
   return error.message ?? String(error)
 }
 
-class ExperimentRecorder {
+// Builder + run() orchestration: runs rows sequentially, emits one root span
+// per dataset row, and posts spans + metrics to the experiments events API.
+class Experiment {
   #client
+  #llmobs
+  #external
   #name
   #description
+  #dataset
+  #task
+  #evaluators
+  #summaryEvaluators
   #config
   #tags
   #metadata
-  #dataset
   #projectId
   #experimentId
 
-  /**
-   * @param {import('./client').ExperimentsClient} client
-   * @param {object} options
-   */
-  constructor (client, options = {}) {
+  constructor (client, options = {}, llmobs) {
     if (!options.name) throw new Error('Experiment name is required')
+    this.#external = options.external === true
+    if (!this.#external) {
+      if (!options.dataset) throw new Error('Experiment dataset is required')
+      if (typeof options.task !== 'function') throw new Error('Experiment task is required')
+    }
 
     this.#client = client
+    this.#llmobs = llmobs
     this.#name = options.name
     this.#description = options.description ?? ''
+    this.#dataset = options.dataset ?? {}
+    this.#task = options.task
+    this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
+    this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
     this.#tags = { ...options.tags }
     this.#metadata = { ...options.metadata }
-    this.#dataset = options.dataset ?? {}
     this.#projectId = null
     this.#experimentId = null
   }
 
-  /**
-   * @returns {string | null}
-   */
-  get experimentId () {
+  name () {
+    return this.#name
+  }
+
+  experimentId () {
     return this.#experimentId
   }
 
-  /**
-   * @returns {string | null}
-   */
   url () {
     if (this.#experimentId === null) return null
     return `${this.#client.appBase}/llm/experiments/${this.#experimentId}`
   }
 
   /**
-   * @returns {Promise<ExperimentRecorder>}
+   * @returns {Promise<Experiment>}
    */
   async start () {
+    if (!this.#external) throw new Error('Experiment is not externally driven')
+
     this.#projectId = await this.#client.ensureProjectId()
 
-    const dataset = await this.#ensureDataset()
+    const dataset = await this.#ensureExternalDataset()
     const attributes = {
       name: this.#name,
       project_id: this.#projectId,
@@ -200,8 +215,10 @@ class ExperimentRecorder {
     }
     if (dataset.version !== undefined) attributes.dataset_version = dataset.version
     if (hasEntries(this.#config)) attributes.config = this.#config
-    if (hasEntries(this.#metadata)) attributes.metadata = this.#metadata
-    if (hasEntries(this.#tags)) attributes.tags = this.#tags
+
+    const metadata = { ...this.#metadata }
+    if (hasEntries(this.#tags)) metadata.tags = buildTags(this.#tags, {})
+    if (hasEntries(metadata)) attributes.metadata = metadata
 
     let created
     try {
@@ -213,7 +230,7 @@ class ExperimentRecorder {
     return this
   }
 
-  async #ensureDataset () {
+  async #ensureExternalDataset () {
     if (this.#dataset.id) {
       return { id: this.#dataset.id, version: this.#dataset.version }
     }
@@ -279,7 +296,7 @@ class ExperimentRecorder {
       runIteration: input.runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
 
-    await this.#postEvents([span], [])
+    await this.#postEvents(this.#experimentId, [span], [])
 
     return {
       experimentId: this.#experimentId,
@@ -305,6 +322,7 @@ class ExperimentRecorder {
     const experimentId = span.experimentId ?? this.#experimentId
     const payload = []
     for (const metric of metrics) {
+      validateEvaluatorName(metric.label)
       payload.push(toMetric(
         metric.label,
         metric.value,
@@ -318,7 +336,7 @@ class ExperimentRecorder {
       ))
     }
 
-    await this.#postEvents([], payload)
+    await this.#postEvents(this.#experimentId, [], payload)
   }
 
   /**
@@ -331,79 +349,9 @@ class ExperimentRecorder {
     await this.#updateStatus(this.#experimentId, status, errorMessage(options.error))
   }
 
-  /**
-   * @param {object[]} spans
-   * @param {object[]} metrics
-   * @returns {Promise<void>}
-   */
-  async #postEvents (spans, metrics) {
-    await this.#client.postExperimentEvents(this.#experimentId, { spans, metrics })
-  }
-
-  /**
-   * @param {string} experimentId
-   * @param {string} status
-   * @param {string | null} error
-   * @returns {Promise<void>}
-   */
-  async #updateStatus (experimentId, status, error) {
-    const attributes = { status }
-    if (error !== null) attributes.error = error
-    try {
-      await this.#client.updateExperiment(experimentId, attributes)
-    } catch {
-      // Status update is best-effort; never let it mask the real result/error.
-    }
-  }
-}
-
-// Builder + run() orchestration: runs rows sequentially, emits one root span
-// per dataset row, and posts spans + metrics to the experiments events API.
-class Experiment {
-  #client
-  #llmobs
-  #name
-  #description
-  #dataset
-  #task
-  #evaluators
-  #summaryEvaluators
-  #config
-  #tags
-  #experimentId
-
-  constructor (client, options = {}, llmobs) {
-    if (!options.name) throw new Error('Experiment name is required')
-    if (!options.dataset) throw new Error('Experiment dataset is required')
-    if (typeof options.task !== 'function') throw new Error('Experiment task is required')
-
-    this.#client = client
-    this.#llmobs = llmobs
-    this.#name = options.name
-    this.#description = options.description ?? ''
-    this.#dataset = options.dataset
-    this.#task = options.task
-    this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
-    this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
-    this.#config = { ...options.config }
-    this.#tags = { ...options.tags }
-    this.#experimentId = null
-  }
-
-  name () {
-    return this.#name
-  }
-
-  experimentId () {
-    return this.#experimentId
-  }
-
-  url () {
-    if (this.#experimentId === null) return null
-    return `${this.#client.appBase}/llm/experiments/${this.#experimentId}`
-  }
-
   async run (options = {}) {
+    if (this.#external) throw new Error('Externally-driven experiments cannot run local tasks')
+
     const {
       maxRetries = 0,
       retryDelay = (attempt) => 100 * (attempt + 1),
@@ -734,4 +682,4 @@ class Experiment {
   }
 }
 
-module.exports = { Experiment, ExperimentRecorder, normalizeEvaluators, validateEvaluatorName }
+module.exports = { Experiment, normalizeEvaluators, validateEvaluatorName }
