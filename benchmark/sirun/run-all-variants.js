@@ -26,7 +26,7 @@ const env = { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' }
 
   try {
     fs.unlinkSync(path.join(process.cwd(), 'meta-temp.json'))
-  } catch (e) {
+  } catch {
     // it's ok if we can't delete a temp file
   }
 })()

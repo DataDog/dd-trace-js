@@ -49,14 +49,15 @@ describe('profiler', function () {
     },
   }
 
-  function waitForExport () {
-    return Promise.all([
+  async function waitForExport () {
+    await Promise.all([
       wallProfilePromise,
       spaceProfilePromise,
       exporterPromise,
-    // After all profiles resolve, need to wait another microtask
-    // tick until _collect method calls _submit to begin the export.
-    ]).then(() => Promise.resolve())
+    ])
+    // The profiles resolving is not enough: _collect still has to reach its
+    // _submit call, which happens one microtask tick later.
+    await Promise.resolve()
   }
 
   function setUpProfiler () {
