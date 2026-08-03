@@ -1,21 +1,17 @@
 'use strict'
 
-const fs = require('fs')
 const exporters = require('../../../ext/exporters')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const constants = require('./constants')
 const { isTrue } = require('./util')
 
+// On the native-spans branch, `getExporter` is only used for the CI Visibility
+// pipeline — regular APM tracing uses the native exporter (see
+// `opentracing/tracer.js`). `ci/init.js` sets `experimental.exporter` to one of
+// the CI-vis exporter names below, so this maps those names to the matching
+// CI-vis exporter. The APM exporters (agent/agentless/log/electron) are not part
+// of this pipeline and are intentionally not referenced here.
 module.exports = function getExporter (name) {
   switch (name) {
-    case exporters.ELECTRON:
-      return require('./exporters/electron')
-    case exporters.LOG:
-      return require('./exporters/log')
-    case exporters.AGENT:
-      return require('./exporters/agent')
-    case exporters.AGENTLESS:
-      return require('./exporters/agentless')
     case exporters.DATADOG:
       return require('./ci-visibility/exporters/agentless')
     case exporters.AGENT_PROXY:
@@ -31,12 +27,7 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
   }
 
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-  const usingAgent = inAWSLambda && (
-    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
-    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
-  )
-  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
+  return require('./exporters/agent')
 }
 
 function hasCiValidationEnvironment () {

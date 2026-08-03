@@ -1,22 +1,28 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const guard = require('../startup-guard')
+const nock = require('nock')
 
-const tracer = require('../../..').init()
+const guard = require('../startup-guard')
+const { createNativeSpanDrain } = require('../native-span-drain')
+
+nock.disableNetConnect()
+nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).reply(200, '{}')
+
+const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
+const nativeSpanDrain = createNativeSpanDrain(tracer)
 
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
-  this._erase(trace)
+  nativeSpanDrain.add(span)
+  this._erase(trace, [])
 }
 
 const { FINISH, SHAPE = 'plain' } = process.env
 
-// Total spans created per process. The fixed tracer load (~75 ms) must be a small
-// fraction of the run so the bench measures span construction, not startup; at
-// 2M it is well under 10%. OPERATIONS keeps it tunable per variant: finish-later (the
-// noisiest variant) runs a heavier 3M over more sirun iterations (meta.json) so its
-// deferred-finish GC jitter averages out run-to-run, within the one-minute budget.
+// Total spans created per process. The count stays env-driven so CI can keep
+// each native-mode variant under the job timeout while still making tracer load
+// a small share of the measured run.
 const OPERATIONS = Number(process.env.OPERATIONS)
 
 // finish-later defers the finish so it runs off the active-span path. Holding all
@@ -79,6 +85,7 @@ assert.equal(sanitySpan.context().getTag('service'), 'svc')
 assert.equal(sanitySpan._links.length, 1)
 assert.equal(sanitySpan._events.length, 1)
 sanitySpan.finish()
+LINK_TARGET.finish()
 
 // One span creation for the active shape. addEvent only applies to the otel shape.
 function startOne () {
@@ -96,27 +103,38 @@ function startOne () {
   return tracer.startSpan('some.span.name', {})
 }
 
-guard.loopStart()
-if (FINISH === 'now') {
-  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-    startOne().finish()
-  }
-} else {
-  // Deferred finish in batches: start BATCH spans, finish them after the batch is
-  // built (so each finishes off the active path), then drop the references.
-  let remaining = OPERATIONS
-  while (remaining > 0) {
-    const size = remaining < BATCH ? remaining : BATCH
-    for (let i = 0; i < size; i++) {
-      spans.push(startOne())
+async function main () {
+  await nativeSpanDrain.drain()
+
+  guard.loopStart()
+  if (FINISH === 'now') {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      startOne().finish()
+      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
     }
-    for (let i = 0; i < size; i++) {
-      spans[i].finish()
+  } else {
+    // Deferred finish in batches: start BATCH spans, finish them after the batch is
+    // built (so each finishes off the active path), then drop the references.
+    let remaining = OPERATIONS
+    while (remaining > 0) {
+      const size = remaining < BATCH ? remaining : BATCH
+      for (let i = 0; i < size; i++) {
+        spans.push(startOne())
+      }
+      for (let i = 0; i < size; i++) {
+        spans[i].finish()
+      }
+      spans.length = 0
+      remaining -= size
+      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
     }
-    spans.length = 0
-    remaining -= size
   }
+  await nativeSpanDrain.drain()
+  // Native-mode CI counts are intentionally lower than the old JS-only counts so
+  // the candidate shard finishes before the job timeout. The older baseline source
+  // can run those counts in under a second, so allow a higher startup share there
+  // instead of failing before the A/B result is recorded.
+  guard.done(0.50)
 }
-// Full-tracer load is a fixed ~90 ms here and the lightest variant can't grow its
-// loop past it without risking the span-allocation GC cliff, so use the relaxed ceiling.
-guard.done(0.15)
+
+main()

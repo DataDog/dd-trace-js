@@ -122,4 +122,27 @@ describe('OTel TracerProvider', () => {
     provider.forceFlush()
     sinon.assert.calledOnce(processor.forceFlush)
   })
+
+  it('still delegates forceFlush when the exporter has no flush method', () => {
+    // A Lambda with neither the extension nor the mini agent gets the stdout
+    // exporter, which writes synchronously and implements only `export`. An
+    // unguarded `exporter.flush()` turned forceFlush() into a TypeError there, so
+    // the active span processor never got flushed either.
+    const ddTracer = require('../../index')._tracer
+    const originalExporter = ddTracer._exporter
+    ddTracer._exporter = { export: sinon.stub() }
+
+    const provider = new TracerProvider()
+    const processor = new NoopSpanProcessor()
+    provider.addSpanProcessor(processor)
+    processor.forceFlush = sinon.stub()
+
+    try {
+      provider.forceFlush()
+    } finally {
+      ddTracer._exporter = originalExporter
+    }
+
+    sinon.assert.calledOnce(processor.forceFlush)
+  })
 })

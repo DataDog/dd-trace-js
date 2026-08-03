@@ -139,7 +139,8 @@ class DatadogTracer extends Tracer {
   }
 
   setUrl (url) {
-    this._exporter.setUrl(url)
+    // The stdout exporter (Lambda with no local agent) has no URL to set.
+    this._exporter.setUrl?.(url)
     this._dataStreamsProcessor.setUrl(url)
   }
 

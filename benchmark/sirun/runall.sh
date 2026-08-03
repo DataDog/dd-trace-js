@@ -40,10 +40,12 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
+YARN_INSTALL_FLAGS=(--ignore-engines --network-timeout 600000)
+
 (
   cd ../../ &&
   npm install --global yarn || (sleep 60 && npm install --global yarn) \
-    && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
+    && yarn install "${YARN_INSTALL_FLAGS[@]}" || (sleep 60 && yarn install "${YARN_INSTALL_FLAGS[@]}") \
     && PLUGINS="graphql|express" yarn services
 )
 

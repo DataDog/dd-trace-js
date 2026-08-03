@@ -69,6 +69,20 @@ class DatadogWebpackPlugin {
    * @param {object} compiler
    */
   apply (compiler) {
+    // `@datadog/libdatadog` ships platform-specific native/.wasm binaries that it
+    // loads at runtime by reading its own `prebuilds/` directory and dynamically
+    // requiring the resolved file. Bundling it inlines that loader so its path
+    // resolution points at the output bundle instead of the package. It is a
+    // hard, always-loaded dependency of the native span pipeline, so externalize
+    // it automatically (resolved from node_modules at runtime) rather than making
+    // every webpack config list it in `externals`.
+    const ExternalsPlugin = compiler.webpack?.ExternalsPlugin
+    if (ExternalsPlugin) {
+      new ExternalsPlugin('node-commonjs', ['@datadog/libdatadog']).apply(compiler)
+    } else {
+      log.warn('compiler.webpack.ExternalsPlugin unavailable; @datadog/libdatadog must be listed in externals manually')
+    }
+
     // optimization.minimize is not yet set when apply() is called in webpack 5.54.0+
     // (applyWebpackOptionsDefaults runs after plugins), so we defer the check to the
     // environment hook which fires synchronously after defaults are applied.

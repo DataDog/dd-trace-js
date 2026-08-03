@@ -148,7 +148,7 @@ class FakeCiVisIntake extends FakeAgent {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
 
-    app.put('/v0.4/traces', (req, res) => {
+    const handleV04Traces = (req, res) => {
       if (req.body.length === 0) return res.status(200).send()
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       this.emit('message', {
@@ -156,7 +156,9 @@ class FakeCiVisIntake extends FakeAgent {
         payload: msgpack.decode(req.body, { useBigInt64: true }),
         url: req.url,
       })
-    })
+    }
+    app.put('/v0.4/traces', handleV04Traces)
+    app.post('/v0.4/traces', handleV04Traces)
 
     app.get('/info', (req, res) => {
       res.status(200).send(JSON.stringify(this.#infoResponse))

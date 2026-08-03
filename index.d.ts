@@ -737,11 +737,11 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * Whether to write traces to log output or agentless, rather than send to an agent
+       * Whether to write traces to an alternate supported exporter rather than send to an agent.
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      exporter?: 'log' | 'agent' | 'datadog' | 'electron'
+      exporter?: 'agent' | 'datadog' | 'electron'
 
       /**
        * Whether to enable the experimental `getRumData` method.

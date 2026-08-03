@@ -1,31 +1,41 @@
 'use strict'
 
+const { AUTO_KEEP } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
+const native = require('./native')
 const processTags = require('./process-tags')
-const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { MAX_META_VALUE_LENGTH, normalizeSpan } = require('./encode/tags-processors')
+const {
+  APM_TRACING_ENABLED_KEY,
+  SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
+  DECISION_MAKER_KEY,
+  ORIGIN_KEY,
+} = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
+  constructor (exporter, prioritySampler, config, nativeSpans, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this._nativeSpans = nativeSpans
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
+    if (otlpStatsExporter) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
-    this._spanSampler = new SpanSampler(config.sampler)
+    this._spanSampler = new SpanSampler({ spanSamplingRules: config.sampler?.spanSamplingRules, nativeSpans })
     this._gitMetadataTagger = new GitMetadataTagger(config)
-
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
@@ -33,27 +43,251 @@ class SpanProcessor {
 
   sample (span) {
     const spanContext = span.context()
-    this._prioritySampler.sample(spanContext)
+
+    this._sampleNative(span, spanContext)
+
+    // Single span sampling always runs in JS
     this._spanSampler.sample(spanContext)
+  }
+
+  /**
+   * Perform sampling in native mode.
+   *
+   * Sampling itself runs JS-side: manual overrides are evaluated first via
+   * `_getPriorityFromTags`, otherwise the standard JS priority sampler runs.
+   * The decision is then mirrored into native storage so the WASM exporter
+   * sees the same priority/mechanism the JS path observes.
+   *
+   * @param {object} span - The span to sample
+   * @param {object} spanContext - The span's context
+   * @private
+   */
+  _sampleNative (span, spanContext) {
+    const root = spanContext._trace.started[0]
+
+    if (!root) return // noop span
+
+    // Decide a priority only if one hasn't been set yet. A priority may already
+    // be set before the span is processed — AppSec force-keep, a manual
+    // keep/drop via the API, or a value propagated from upstream — in which case
+    // we keep it but still mirror it into native storage below. (Previously an
+    // early return here skipped that sync, so those traces reached the exporter
+    // without `_sampling_priority_v1`.)
+    if (spanContext._sampling.priority === undefined) {
+      // Check for manual override tags first (stays in JS)
+      const manualPriority = this._prioritySampler._getPriorityFromTags(
+        spanContext.getTags(),
+        spanContext
+      )
+
+      if (this._prioritySampler.validate(manualPriority)) {
+        // Manual override - set in JS context
+        spanContext._sampling.priority = manualPriority
+        spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      } else {
+        // Use JS-side sampling
+        this._prioritySampler.sample(spanContext)
+      }
+    }
+
+    // Mirror the sampling decision (however it was made) into native storage so
+    // the WASM exporter emits `_sampling_priority_v1` (+ `_dd.p.dm`).
+    if (spanContext._nativeSpanId !== undefined) {
+      this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
+    }
+
+    // Add decision maker tag
+    this._addDecisionMaker(root)
+  }
+
+  /**
+   * Sync the trace-level tags (chunk/propagation tags such as `_dd.p.tid` and
+   * `_dd.p.dm`) into native storage. String tags become trace meta, finite
+   * numbers become trace metrics. `_addDecisionMaker` (run inside sample(),
+   * before this) has already set/cleared `_dd.p.dm` on `trace.tags`, so it is
+   * the single source of truth here — crucially including extracted distributed
+   * traces, whose `_dd.p.dm` arrives on `trace.tags` with no local sampling
+   * mechanism set.
+   *
+   * @param {object} spanContext - The span context
+   * @param {number} spanId - The native span id (op handle)
+   * @private
+   */
+  _syncTraceTagsToNative (spanContext, spanId) {
+    const traceTags = spanContext._trace.tags
+    for (const key of Object.keys(traceTags)) {
+      const value = traceTags[key]
+      if (typeof value === 'string') {
+        this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, key, value)
+      } else if (typeof value === 'number' && !Number.isNaN(value)) {
+        this._nativeSpans.queueOp(native.OpCode.SetTraceMetricsAttr, spanId, key, ['f64', value])
+      }
+    }
+
+    // The JS formatter stamped `_dd.origin` (the trace's distributed origin,
+    // e.g. `synthetics`) on the chunk root's meta. It lives on `_trace.origin`,
+    // not in `_trace.tags`, so mirror it as trace meta here.
+    const origin = spanContext._trace.origin
+    if (typeof origin === 'string') {
+      this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, ORIGIN_KEY, origin)
+    }
+  }
+
+  _syncProcessTagsToNative (spanContext, spanId) {
+    if (typeof this._processTags !== 'string' || this._processTags.length === 0) return
+    if (spanContext.hasTag(processTags.TRACING_FIELD_NAME)) return
+
+    const value = this._processTags.length > MAX_META_VALUE_LENGTH
+      ? `${this._processTags.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : this._processTags
+
+    this._nativeSpans.queueOp(
+      native.OpCode.SetMetaAttr,
+      spanId,
+      processTags.TRACING_FIELD_NAME,
+      value
+    )
+  }
+
+  _isNativeLocalRoot (span) {
+    if (!span) return true
+
+    const context = span.context()
+    if (!context._parentId) return true
+    if (context._isRemote) return true
+
+    const trace = context._trace
+    return trace?.started?.[0] === span
+  }
+
+  _nativeChunkRoot (spans) {
+    return spans.find(span => this._isNativeLocalRoot(span)) || spans[0]
+  }
+
+  /**
+   * Sync sampling decision from JS to native storage.
+   *
+   * @param {object} spanContext - The span context
+   * @param {number} spanId - The native span id (op handle)
+   * @private
+   */
+  _syncSamplingToNative (spanContext, spanId) {
+    // Sync priority as trace metric
+    this._nativeSpans.queueOp(
+      native.OpCode.SetTraceMetricsAttr,
+      spanId,
+      '_sampling_priority_v1',
+      ['f64', spanContext._sampling.priority]
+    )
+
+    // `_dd.p.dm` is NOT emitted here: `_addDecisionMaker` sets/clears it on
+    // `trace.tags` (honoring an extracted value, adding the local mechanism for
+    // kept traces, deleting it for drops) and `_syncTraceTagsToNative` mirrors
+    // it. Emitting it here too would duplicate it and miss extracted traces
+    // whose mechanism is unset.
+
+    // Forward sampling-decision metrics written by priority_sampler.js
+    // Previously span_format.js copied these from _trace[KEY] onto root spans.
+    const traceObj = spanContext._trace
+    if (typeof traceObj[SAMPLING_RULE_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        spanId,
+        SAMPLING_RULE_DECISION,
+        ['f64', traceObj[SAMPLING_RULE_DECISION]]
+      )
+    }
+    if (typeof traceObj[SAMPLING_LIMIT_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        spanId,
+        SAMPLING_LIMIT_DECISION,
+        ['f64', traceObj[SAMPLING_LIMIT_DECISION]]
+      )
+    }
+    if (typeof traceObj[SAMPLING_AGENT_DECISION] === 'number') {
+      this._nativeSpans.queueOp(
+        native.OpCode.SetTraceMetricsAttr,
+        spanId,
+        SAMPLING_AGENT_DECISION,
+        ['f64', traceObj[SAMPLING_AGENT_DECISION]]
+      )
+    }
+  }
+
+  /**
+   * Add decision maker trace tag when priority is keep.
+   *
+   * @param {object} span - The root span
+   * @private
+   */
+  _addDecisionMaker (span) {
+    const context = span.context()
+    const trace = context._trace
+    const priority = context._sampling.priority
+    const mechanism = context._sampling.mechanism
+
+    // Only kept traces (priority >= AUTO_KEEP, where AUTO_KEEP === 1) carry the
+    // decision-maker tag; the legacy priority sampler omits it for auto-reject
+    // (0) and manual-drop (-1).
+    if (priority >= AUTO_KEEP) {
+      if (!trace.tags[DECISION_MAKER_KEY] && mechanism !== undefined) {
+        trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
+      }
+    } else if (DECISION_MAKER_KEY in trace.tags) {
+      // Guard the `delete` so the common drop path doesn't pay the V8
+      // dictionary-mode transition unless a prior keep decision actually
+      // set the tag.
+      delete trace.tags[DECISION_MAKER_KEY]
+    }
+  }
+
+  _discardNativeSpans (spans) {
+    if (spans.length === 0) return
+    this._exporter._discardNativeSpans?.(spans)
+    for (const span of spans) {
+      const context = span.context()
+      if (typeof context.markExported === 'function') context.markExported()
+    }
   }
 
   process (span) {
     const spanContext = span.context()
-    const active = []
-    const formatted = []
     const trace = spanContext._trace
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
-    if (trace.record === false) return
-    if (DD_TRACE_ENABLED === false) {
-      this._erase(trace, active)
+    if (trace.record === false) {
+      this._discardNativeSpans(started)
+      this._erase(trace, [])
+      this._exporter._resetNativeStateWhenIdle?.()
       return
     }
-    if (started.length === finished.length || finished.length >= flushMinSpans) {
+    if (DD_TRACE_ENABLED === false) {
+      this._discardNativeSpans(started)
+      this._erase(trace, [])
+      this._exporter._resetNativeStateWhenIdle?.()
+      return
+    }
+    const allStartedFinished = started.length === finished.length
+    if (allStartedFinished || finished.length >= flushMinSpans) {
+      const active = []
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      // Mirror trace-level tags (`_dd.p.tid`, other `_dd.p.*`, `baggage.*`, and
+      // the git metadata tagged just above) into native storage now that all
+      // trace tags are set — tagGitMetadata runs after sample(), so this must
+      // come after it. `_addDecisionMaker` reconciles `_dd.p.dm` on trace.tags.
+      if (spanContext._nativeSpanId !== undefined) {
+        this._syncTraceTagsToNative(spanContext, spanContext._nativeSpanId)
+      }
+
+      // Pass raw spans to the native exporter; the WASM pipeline serializes
+      // them. When native stats are enabled the concentrator handles stats
+      // aggregation during flush_chunk.
+      const finishedSpansToExport = allStartedFinished ? started : []
+      const otelSemantics = this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
 
@@ -61,26 +295,72 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (!allStartedFinished) finishedSpansToExport.push(span)
+          const context = span.context()
           if (stampApmDisabled) {
-            formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+            context.setTag(APM_TRACING_ENABLED_KEY, 0)
+          }
+
+          if (trace.isRecording !== false) {
+            // Build the same final formatted span the legacy JS processor used.
+            // Native storage has no delete/clear op, so all mutable tags are
+            // materialized from this final snapshot rather than synced eagerly.
+            let formattedSpan
+            if (this._stats) {
+              formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+              this._stats.onSpanFinished(formattedSpan)
+            }
+
+            if (typeof context.syncFinalTagsToNative === 'function') {
+              formattedSpan ??= spanFormat(span, isFirstSpanInChunk, this._processTags)
+              // The v0.4 encoder runs `normalizeSpan` on every span as it encodes
+              // (encode/0.4.js picks it as the per-span formatter), so the JS
+              // pipeline never ships a span without the intake defaults and the
+              // 100-char caps on service/name/type. The native path writes these
+              // fields straight into WASM, so apply the same pass here or it
+              // becomes the only pipeline sending un-normalized core fields.
+              // Applied after the stats snapshot, matching the legacy ordering
+              // where normalization happens at encode time rather than at finish.
+              context.syncFinalTagsToNative(normalizeSpan(formattedSpan))
+            }
+
+            // Remap Datadog HTTP tags to OpenTelemetry names on the native span
+            // before export. Done after final DD snapshot sync because the remap
+            // reads JS tags and writes only OTel output names.
+            if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
+              context.applyOtelHttpSemantics()
+            }
           }
           isFirstSpanInChunk = false
-          // Span stats read Datadog HTTP tag names from the formatted span, so
-          // record them before the OTel rename — an export-only transform.
-          this._stats?.onSpanFinished(formattedSpan)
-          if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-            applyHttpOtelSemantics(formattedSpan)
-          }
-          formatted.push(formattedSpan)
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
-        this._exporter.export(formatted)
+      if (finishedSpansToExport.length !== 0 && trace.isRecording !== false) {
+        const chunkRoot = this._nativeChunkRoot(finishedSpansToExport)
+        const chunkRootContext = chunkRoot?.context()
+        if (chunkRootContext?._nativeSpanId !== undefined) {
+          this._syncProcessTagsToNative(chunkRootContext, chunkRootContext._nativeSpanId)
+        }
+
+        this._exporter.export(finishedSpansToExport)
+        // The exporter has taken these spans; their native Create is (or is about
+        // to be) removed from the change-buffer map. Mark each context exported
+        // so late writes skip native sync for a now-missing span. All required
+        // native writes for these spans (`_syncTraceTagsToNative`,
+        // `_syncSamplingToNative`, `syncFinalTagsToNative`,
+        // `applyOtelHttpSemantics`, span-sampler metrics, finish-time span
+        // events/meta_struct) ran earlier in this same synchronous pass.
+        for (const span of finishedSpansToExport) {
+          const context = span.context()
+          if (typeof context.markExported === 'function') context.markExported()
+        }
       }
 
       this._erase(trace, active)
+      if (trace.isRecording === false) {
+        this._discardNativeSpans(finishedSpansToExport)
+        this._exporter._resetNativeStateWhenIdle?.()
+      }
     }
 
     if (this._killAll) {
