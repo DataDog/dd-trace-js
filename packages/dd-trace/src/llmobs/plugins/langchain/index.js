@@ -3,7 +3,9 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const pluginManager = require('../../../../../..')._pluginManager
+// require the bootstrap module directly rather than the package root to avoid transitively
+// pulling in register-features.js before the Electron entry point's guard can apply.
+const pluginManager = require('../../../bootstrap')._pluginManager
 
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'

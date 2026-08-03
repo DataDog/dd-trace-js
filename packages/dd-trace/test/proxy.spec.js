@@ -7,6 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const featureRegistry = require('../src/feature-registry')
+const optionalFeatureRegistry = require('../src/optional-feature-registry')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -33,6 +34,7 @@ describe('TracerProxy', () => {
   let log
   let profiler
   let appsec
+  let appsecRemoteConfig
   let aiguard
   let telemetry
   let iast
@@ -48,6 +50,22 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let originalOptionalFeatureKeys
+
+  // `optionalFeatures` is a process-wide singleton (see optional-feature-registry.js), so the
+  // stub 'appsec'/'iast' features registered below must be removed afterwards or they leak into
+  // any other spec file that runs a real Tracer in the same process.
+  beforeEach(() => {
+    originalOptionalFeatureKeys = Object.keys(optionalFeatureRegistry.optionalFeatures)
+  })
+
+  afterEach(() => {
+    for (const key of Object.keys(optionalFeatureRegistry.optionalFeatures)) {
+      if (!originalOptionalFeatureKeys.includes(key)) {
+        delete optionalFeatureRegistry.optionalFeatures[key]
+      }
+    }
+  })
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -192,6 +210,10 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
+    appsecRemoteConfig = {
+      enable: sinon.spy(),
+    }
+
     aiguard = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -287,6 +309,17 @@ describe('TracerProxy', () => {
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
       },
+    })
+
+    optionalFeatureRegistry.registerOptionalFeature({
+      name: 'appsec',
+      factory: () => appsec,
+      remoteConfigFactory: () => appsecRemoteConfig,
+    })
+
+    optionalFeatureRegistry.registerOptionalFeature({
+      name: 'iast',
+      factory: () => iast,
     })
 
     proxy = new ProxyClass()
@@ -669,6 +702,27 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(iast.enable)
+      })
+
+      it('does not throw when an optional feature was never registered', () => {
+        config.iast.enabled = true
+        config.appsec.enabled = true
+
+        proxy.init()
+      })
+
+      it('leaves _modules.rewriter undefined when the rewriter feature was never registered', () => {
+        proxy.init()
+
+        assert.strictEqual(proxy._modules.rewriter, undefined)
+      })
+
+      it('registers appsec remote config through the optional feature\'s remoteConfigFactory ' +
+        'without requiring its factory', () => {
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(appsecRemoteConfig.enable, rc, config, proxy._modules.appsec)
+        sinon.assert.notCalled(appsec.enable)
       })
 
       it('should not load the profiler when not configured', () => {

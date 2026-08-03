@@ -58,6 +58,10 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-skip-external.js', { timeout })
     })
 
+    it('does not bundle the appsec/iast/rewriter native dependencies into the electron entry point', () => {
+      execSync('node ./build-and-test-electron.js', { timeout })
+    })
+
     it('does not follow `@datadog/openfeature-node-server` into its optional peer chain', () => {
       execSync('node ./build-and-test-openfeature.js', { timeout })
     })

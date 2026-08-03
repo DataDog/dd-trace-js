@@ -105,7 +105,7 @@ const tracer = skipVitestWorkerInit
       init () {},
       use () {},
     }
-  : require('../packages/dd-trace')
+  : require('../packages/dd-trace/index.ci')
 
 if (shouldInit && !skipVitestWorkerInit) {
   tracer.init(baseOptions)

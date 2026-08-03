@@ -1,7 +1,9 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const tracer = require('../../dd-trace')
+// require the bootstrap module directly rather than the package root to avoid transitively
+// pulling in register-features.js before the Electron entry point's guard can apply.
+const tracer = require('../../dd-trace/src/bootstrap')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook } = require('./helpers/instrument')
 
