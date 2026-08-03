@@ -8,17 +8,56 @@ const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const axios = require('axios')
+const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { storage } = require('../../datadog-core')
+const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
+require('../../datadog-instrumentations/src/next')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+
+function getCompiledRuntimeHook (runtime) {
+  return instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+}
+
+function getDisabledRuntimeHooks () {
+  const hooks = []
+  const channels = new Map()
+  const getChannel = name => {
+    if (!channels.has(name)) {
+      channels.set(name, {
+        hasSubscribers: false,
+        publish: () => { throw new Error(`unexpected ${name} publish`) },
+        runStores: () => { throw new Error(`unexpected ${name} instrumentation`) },
+      })
+    }
+    return channels.get(name)
+  }
+
+  proxyquire.noPreserveCache()('../../datadog-instrumentations/src/next', {
+    '../../datadog-shimmer': {
+      wrap (target, method, wrapper) {
+        target[method] = wrapper(target[method])
+      },
+    },
+    '../../dd-trace/src/opentelemetry/span-ending-hook': {},
+    './helpers/instrument': {
+      channel: getChannel,
+      addHook: (metadata, hook) => hooks.push({ ...metadata, hook }),
+    },
+  })
+
+  return runtime => hooks.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
+}
 
 describe('Plugin', function () {
   let server
@@ -948,6 +987,161 @@ describe('Plugin', function () {
             .catch(done)
         })
       })
+    })
+  })
+})
+
+describe('compiled Next runtimes', () => {
+  it('bypasses all runtime wrappers without Next subscribers', () => {
+    const getHook = getDisabledRuntimeHooks()
+    const cases = [
+      ['app-route', 'AppRouteRouteModule', 'handle', [{ headers: {}, method: 'GET' }, {}]],
+      ['pages-api', 'PagesAPIRouteModule', 'render', [{ headers: {}, method: 'GET' }, { statusCode: 200 }, {}]],
+      ['app-page', 'AppPageRouteModule', 'render', [{ headers: {}, method: 'GET' }, { statusCode: 200 }, {}]],
+    ]
+
+    for (const [runtime, exportName, method, args] of cases) {
+      const returned = {}
+      class RouteModule {
+        [method] (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned
+        }
+      }
+      const routeModule = new RouteModule()
+
+      getHook(runtime)({ [exportName]: RouteModule })
+
+      assert.strictEqual(routeModule[method](...args), returned)
+    }
+  })
+
+  describe('as the first tracing entrypoint', () => {
+    before(async () => {
+      await agent.load('next')
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+    })
+    after(() => agent.close())
+
+    it('traces an App Route lifecycle with status and incoming context', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/first-entry' }
+
+        handle () {
+          return Promise.resolve({ status: 201 })
+        }
+      }
+      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+
+      const request = {
+        headers: {
+          'x-datadog-trace-id': '1234',
+          'x-datadog-parent-id': '5678',
+          'x-datadog-sampling-priority': '1',
+        },
+        method: 'GET',
+        url: '/api/first-entry',
+      }
+      const lifecycle = []
+      const onStart = () => lifecycle.push('start')
+      const onPage = () => lifecycle.push('page')
+      const onFinish = () => lifecycle.push('finish')
+      dc.channel('apm:next:request:start').subscribe(onStart)
+      dc.channel('apm:next:page:load').subscribe(onPage)
+      dc.channel('apm:next:request:finish').subscribe(onFinish)
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /api/first-entry',
+          meta: {
+            'http.status_code': '201',
+            'next.page': '/api/first-entry',
+          },
+        })
+        assert.strictEqual(span.trace_id.toString(), '1234')
+        assert.strictEqual(span.parent_id.toString(), '5678')
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      const response = await new AppRouteRouteModule().handle(request, {})
+      assert.strictEqual(response.status, 201)
+      await trace
+      assert.deepStrictEqual(lifecycle, ['start', 'page', 'finish'])
+      dc.channel('apm:next:request:start').unsubscribe(onStart)
+      dc.channel('apm:next:page:load').unsubscribe(onPage)
+      dc.channel('apm:next:request:finish').unsubscribe(onFinish)
+    })
+
+    it('records Pages API errors and status without an existing request store', async () => {
+      class PagesAPIRouteModule {
+        definition = { page: '/api/first-entry' }
+
+        render (_req, res, context) {
+          res.statusCode = 503
+          context.onError(new Error('Pages API first-entry error'))
+          return Promise.resolve()
+        }
+      }
+      getCompiledRuntimeHook('pages-api')({ PagesAPIRouteModule })
+
+      const response = { statusCode: 200 }
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /api/first-entry',
+          error: 1,
+          meta: {
+            'http.status_code': '503',
+            'error.message': 'Pages API first-entry error',
+            'error.type': 'Error',
+          },
+        })
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      await new PagesAPIRouteModule().render({ headers: {}, method: 'GET', url: '/api/first-entry' }, response, {
+        page: '/api/first-entry',
+      })
+      await trace
+    })
+
+    it('records App Page errors and status without an existing request store', async () => {
+      class AppPageRouteModule {
+        definition = { pathname: '/first-entry' }
+
+        render () {
+          return Promise.reject(new Error('App Page first-entry error'))
+        }
+      }
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      const response = { statusCode: 200 }
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'GET /first-entry',
+          error: 1,
+          meta: {
+            'http.status_code': '500',
+            'error.message': 'App Page first-entry error',
+            'error.type': 'Error',
+          },
+        })
+      })
+
+      assert.strictEqual(storage('legacy').getStore(), undefined)
+      await assert.rejects(
+        new AppPageRouteModule().render({ headers: {}, method: 'GET', url: '/first-entry' }, response, {
+          page: '/first-entry',
+        }),
+        /App Page first-entry error/
+      )
+      assert.strictEqual(response.statusCode, 500)
+      await trace
     })
   })
 })

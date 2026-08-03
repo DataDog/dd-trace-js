@@ -302,6 +302,10 @@ function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
 
 function wrapAppRouteHandle (handle) {
   return function (req, context) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return handle.apply(this, arguments)
+    }
+
     const res = { statusCode: 500 }
     nodeNextRequestsToNextRequests.set(req, req)
 
@@ -336,6 +340,10 @@ function instrumentAppRouteRuntime (runtime) {
 
 function wrapPagesApiRender (render) {
   return function (req, res, context = {}) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, context.page, false)
 
@@ -359,6 +367,10 @@ function instrumentPagesApiRuntime (runtime) {
 
 function wrapAppPageRender (render) {
   return function (req, res, context = {}) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, context.page, true)
 
