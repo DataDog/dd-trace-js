@@ -789,6 +789,6 @@ function getConfig (options) {
  * @param {import('./config-base')} config
  */
 function refreshRuntimeId (config) {
-  runtimeId = uuid()
+  runtimeId = uuid({ disableEntropyCache: true })
   config.tags['runtime-id'] = runtimeId
 }

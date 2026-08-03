@@ -961,6 +961,8 @@ describe('RemoteConfig', () => {
 
       // once at module load for the initial clientId, once on refresh
       sinon.assert.calledTwice(uuidStub)
+      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
+      assert.deepStrictEqual(uuidStub.secondCall.args, [{ disableEntropyCache: true }])
     })
   })
 })
