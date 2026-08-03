@@ -213,7 +213,7 @@ class Experiment {
       description: this.#description,
       ensure_unique: true,
     }
-    if (dataset.version !== undefined) attributes.dataset_version = dataset.version
+    if (dataset.version != null) attributes.dataset_version = dataset.version
     if (hasEntries(this.#config)) attributes.config = this.#config
 
     const metadata = { ...this.#metadata }
@@ -320,13 +320,21 @@ class Experiment {
     }
 
     const experimentId = span.experimentId ?? this.#experimentId
+    if (experimentId !== this.#experimentId) {
+      throw new Error(`Experiment span belongs to '${experimentId}', not '${this.#experimentId}'`)
+    }
+
     const payload = []
     for (const metric of metrics) {
       validateEvaluatorName(metric.label)
+      const metricError = errorMessage(metric.error)
+      if (metric.value === undefined && metricError === null) {
+        throw new Error(`Metric '${metric.label}' must include value or error`)
+      }
       payload.push(toMetric(
         metric.label,
         metric.value,
-        errorMessage(metric.error),
+        metricError,
         span.spanId,
         span.traceId ?? '',
         timestampMs(metric.timestamp),
@@ -336,7 +344,7 @@ class Experiment {
       ))
     }
 
-    await this.#postEvents(this.#experimentId, [], payload)
+    await this.#postEvents(experimentId, [], payload)
   }
 
   /**
@@ -345,8 +353,9 @@ class Experiment {
    */
   async close (options = {}) {
     if (this.#experimentId === null) return
-    const status = options.status ?? 'completed'
-    await this.#updateStatus(this.#experimentId, status, errorMessage(options.error))
+    const error = errorMessage(options.error)
+    const status = options.status ?? (error === null ? 'completed' : 'failed')
+    await this.#updateStatus(this.#experimentId, status, error, false)
   }
 
   async run (options = {}) {
@@ -669,14 +678,15 @@ class Experiment {
     await this.#client.postExperimentEvents(experimentId, attributes)
   }
 
-  async #updateStatus (experimentId, status, error) {
+  async #updateStatus (experimentId, status, error, suppressErrors = true) {
     if (!experimentId) return
     // The experiment-update model has no status field, so this is a direct PATCH.
     const attributes = { status }
     if (error !== null) attributes.error = error
     try {
       await this.#client.updateExperiment(experimentId, attributes)
-    } catch {
+    } catch (err) {
+      if (!suppressErrors) throw err
       // Status update is best-effort; never let it mask the real result/error.
     }
   }

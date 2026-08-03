@@ -191,12 +191,13 @@ function createExperiments (config, llmobs) {
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }
   if (!config.llmobs?.mlApp && !config.service) {
-    log.warn('LLMObs experiments: no project name configured, set DD_LLMOBS_ML_APP or DD_SERVICE')
-    return new NoopExperiments(
-      'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
+    const reason = 'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
       'tracer.init()) to name the LLM Obs project, or DD_SERVICE (or service in tracer.init()) as a fallback, ' +
       'then retry'
-    )
+    const experiments = new Experiments(config, llmobs)
+    return new NoopExperiments(reason, {
+      startExperiment: (options) => experiments.startExperiment(options),
+    })
   }
   return new Experiments(config, llmobs)
 }
