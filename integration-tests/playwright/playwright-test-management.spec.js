@@ -181,8 +181,19 @@ versions.forEach((version) => {
           }
         )
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -203,18 +214,9 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           })
 
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-            },
-          }
-        )
-
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        // The default fixture includes a known failing test.
+        assert.strictEqual(exitCode, 1)
       })
     })
 
