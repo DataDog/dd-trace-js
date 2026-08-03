@@ -31,7 +31,7 @@ include:
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   # Compare changes to the repository's agent instructions against master.
   - project: "DataDog/llm-validation-platform"
-    ref: pabloerhard/performance-improvements
+    ref: main
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
@@ -39,11 +39,6 @@ include:
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
     ref: "main"
-
-"llm validation":
-  variables:
-    LLMVAL_CONCURRENCY: "4"
-    LLMVAL_PLATFORM_REF: "pabloerhard/performance-improvements"
 
 workflow:
   auto_cancel:
