@@ -48,7 +48,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
           'error.type': 'Error',
-          'error.message': 'Validation error, cannot resolve alias "inv"',
+          'error.message': 'Custom Id cannot contain :',
           'error.stack': ANY_STRING,
         },
       })
