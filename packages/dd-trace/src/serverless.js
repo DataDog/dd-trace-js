@@ -43,26 +43,35 @@ function isInServerlessEnvironment () {
 }
 
 /**
- * Adds Vercel runtime metadata without replacing user-provided tags.
+ * Gets tags describing the platform where the tracer is running.
  *
- * @param {Record<string, string>} tags
+ * @returns {Record<string, string>}
  */
-function addVercelSpanTags (tags) {
-  if (getEnvironmentVariable('VERCEL') !== '1') return
+function getPlatformTags () {
+  return getVercelTags()
+}
 
-  const metadata = {
+/**
+ * @returns {Record<string, string>}
+ */
+function getVercelTags () {
+  if (getEnvironmentVariable('VERCEL') !== '1') return {}
+
+  const tags = {
     'vercel.project_id': getEnvironmentVariable('VERCEL_PROJECT_ID'),
     'vercel.environment': getEnvironmentVariable('VERCEL_ENV'),
     'vercel.region': getEnvironmentVariable('VERCEL_REGION'),
   }
 
-  for (const [name, value] of Object.entries(metadata)) {
-    if (value) tags[name] ??= value
+  for (const [name, value] of Object.entries(tags)) {
+    if (!value) delete tags[name]
   }
+
+  return tags
 }
 
 module.exports = {
-  addVercelSpanTags,
+  getPlatformTags,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,

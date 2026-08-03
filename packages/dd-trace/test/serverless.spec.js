@@ -6,7 +6,7 @@ const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 
-const { addVercelSpanTags, enableGCPPubSubPushSubscription } = require('../src/serverless')
+const { getPlatformTags, enableGCPPubSubPushSubscription } = require('../src/serverless')
 const agent = require('./plugins/agent')
 
 describe('enableGCPPubSubPushSubscription', () => {
@@ -79,7 +79,10 @@ describe('Vercel span metadata', () => {
       VERCEL_TARGET_ENV: 'staging',
     }
 
-    const tracer = await agent.load([], [], { service: 'vercel-metadata-test' })
+    const tracer = await agent.load([], [], {
+      service: 'vercel-metadata-test',
+      tags: { 'vercel.region': 'custom-region' },
+    })
     tracer.startSpan('vercel-span').finish()
 
     await agent.assertSomeTraces(traces => {
@@ -88,17 +91,22 @@ describe('Vercel span metadata', () => {
       ), {
         'vercel.project_id': 'prj_123',
         'vercel.environment': 'preview',
-        'vercel.region': 'iad1',
+        'vercel.region': 'custom-region',
       })
     })
   })
 
-  it('omits absent Vercel metadata and preserves explicit tags', () => {
-    process.env = { ...environment, VERCEL: '1' }
-    const tags = { 'vercel.region': 'custom-region' }
+  it('discovers only present Vercel metadata as platform tags', () => {
+    process.env = {
+      ...environment,
+      VERCEL: '1',
+      VERCEL_ENV: 'preview',
+      VERCEL_PROJECT_ID: 'prj_123',
+    }
 
-    addVercelSpanTags(tags)
-
-    assert.deepStrictEqual(tags, { 'vercel.region': 'custom-region' })
+    assert.deepStrictEqual(getPlatformTags(), {
+      'vercel.project_id': 'prj_123',
+      'vercel.environment': 'preview',
+    })
   })
 })
