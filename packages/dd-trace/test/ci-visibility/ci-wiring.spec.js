@@ -133,6 +133,28 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
   })
 
+  it('does not reinterpret pnpm filtering options as test-script arguments', () => {
+    const pnpmCommand = 'pnpm run test --filter fixture'
+    fs.writeFileSync(workflow, workflowSource({ command: pnpmCommand }))
+    completeReview({ command: pnpmCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.doesNotMatch(result.evidence.ciFacts.runnerInvocation.resolvedCommand || '', /mocha/)
+  })
+
+  it('forwards pnpm test-script arguments only after the explicit separator', () => {
+    const pnpmCommand = 'pnpm run test -- --grep smoke'
+    fs.writeFileSync(workflow, workflowSource({ command: pnpmCommand }))
+    completeReview({ command: pnpmCommand, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /--grep smoke$/)
+  })
+
   it('resolves recursive local scripts and an inert coverage launcher', () => {
     writeScripts({
       test: 'npm run test:unit',

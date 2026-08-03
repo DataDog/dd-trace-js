@@ -333,11 +333,13 @@ function getOmittedRunnerOptions (framework, invocation) {
     .map(token => token.split('=', 1)[0]))]
 }
 
-function getArgumentOptionValue (args, expected) {
+function getArgumentOptionValues (args, expected) {
+  const values = []
   for (let index = 0; index < args.length; index++) {
     if (args[index].split('=', 1)[0] !== expected) continue
-    return args[index].includes('=') ? args[index].slice(args[index].indexOf('=') + 1) : args[index + 1]
+    values.push(args[index].includes('=') ? args[index].slice(args[index].indexOf('=') + 1) : args[index + 1])
   }
+  return values
 }
 
 /**
@@ -401,8 +403,8 @@ function getRunnerArgsError (framework, args) {
   }
 
   if (framework === 'cucumber') {
-    const language = getArgumentOptionValue(args, '--language')
-    if (language && language !== 'en') {
+    const language = getArgumentOptionValues(args, '--language').find(value => value !== 'en')
+    if (language) {
       return `--language ${language} is not supported by the validator-generated English scenarios`
     }
   }

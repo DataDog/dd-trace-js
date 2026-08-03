@@ -79,6 +79,16 @@ describe('test optimization validation approval', () => {
     assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
   })
 
+  it('snapshots package scripts for a non-runnable framework in a mixed plan', () => {
+    input.manifest.frameworks[0].status = 'requires_manual_setup'
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const packageJson = path.join(fixture.root, 'package.json')
+
+    assert.ok(snapshot.sources.has(packageJson))
+    assert.ok(snapshot.projectFiles.some(file => file.path === packageJson))
+    assert.strictEqual(snapshot.sources.has(fs.realpathSync(fixture.runner)), false)
+  })
+
   it('binds required browser and localhost capabilities without managing permissions', () => {
     const framework = input.manifest.frameworks[0]
     framework.browserRequired = true

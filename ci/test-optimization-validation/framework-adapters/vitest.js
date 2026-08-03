@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { matchesLiteralGlob } = require('../literal-glob')
+const { maskJavaScriptNonCode } = require('../source-text')
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
 const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
@@ -103,7 +104,7 @@ function getBindingFromObject ({ configFile, projectFiles, projectObject, projec
   const rootProperty = getLiteralProperty(projectObject, 'root')
   if (rootProperty.dynamic) return { error: 'the selected Vitest project has a dynamic root' }
 
-  const standaloneProject = /\bdefineProject\s*\(/.test(source)
+  const standaloneProject = /\bdefineProject\s*\(/.test(maskJavaScriptNonCode(source))
   const rootBase = standaloneProject ? path.dirname(configFile) : projectRoot
   const root = rootProperty.value
     ? path.resolve(rootBase, rootProperty.value)

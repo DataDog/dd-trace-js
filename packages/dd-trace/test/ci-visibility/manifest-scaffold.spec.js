@@ -201,6 +201,33 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('ignores support paths inside quoted Cucumber YAML profile comments', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile ci',
+    })
+    const supportFile = path.join(fixture.root, 'features', 'steps.js')
+    const staleFile = path.join(fixture.root, 'legacy', 'stale.js')
+    fs.mkdirSync(path.dirname(staleFile), { recursive: true })
+    fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+    fs.writeFileSync(staleFile, 'throw new Error("commented support must not load")\n')
+    fs.writeFileSync(
+      path.join(fixture.root, 'cucumber.yaml'),
+      'ci: "--require features/steps.js" # "--require legacy/stale.js"\n'
+    )
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--require', supportFile])
+      assert.strictEqual(framework.validation.runnerArgs.includes(staleFile), false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('accepts the last bounded Cucumber config and rejects the first oversized config', () => {
     const fixture = createRepositoryFixture({ framework: 'cucumber' })
     const config = path.join(fixture.root, 'cucumber.js')
@@ -443,6 +470,7 @@ describe('test optimization validation manifest scaffold', () => {
       ['../dist/app.js', true],
       ['@scope/dependency/dist/index.js', false],
       ['./node_modules/dependency/dist/index.js', false],
+      ['/opt/vendor/dist/index.js', false],
     ]) {
       const fixture = createRepositoryFixture({ framework: 'mocha', script: 'mocha' })
       fs.writeFileSync(fixture.testFile, [
@@ -739,6 +767,29 @@ describe('test optimization validation manifest scaffold', () => {
     })
     fs.writeFileSync(path.join(fixture.root, 'cucumber.json'), `${JSON.stringify({
       default: { language: 'fr' },
+    })}\n`)
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join('\n'), /--language fr is not supported/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('rejects a non-English language in any expanded Cucumber profile', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile english --profile localized',
+    })
+    fs.writeFileSync(path.join(fixture.root, 'cucumber.json'), `${JSON.stringify({
+      english: { language: 'en' },
+      localized: { language: 'fr' },
     })}\n`)
     try {
       const framework = createManifestScaffold({
@@ -1319,7 +1370,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('binds a Vitest project only through its explicit config', () => {
+  it('binds a Vitest project only through its explicit config and ignores defineProject text', () => {
     const fixture = createRepositoryFixture({
       framework: 'vitest',
       script: 'vitest --run --config configs/selected.ts --project fastly',
@@ -1334,6 +1385,7 @@ describe('test optimization validation manifest scaffold', () => {
     fs.writeFileSync(selected, "test('selected', () => {})\n")
     fs.writeFileSync(outside, "test('outside', () => {})\n")
     writeVitestProjectConfig(selectedConfig, 'runtime-tests/selected/**/*.test.ts')
+    fs.appendFileSync(selectedConfig, '// defineProject(\nconst description = "defineProject("\n')
     writeVitestProjectConfig(
       path.join(fixture.root, 'vitest.config.ts'),
       'runtime-tests/outside/**/*.test.ts'

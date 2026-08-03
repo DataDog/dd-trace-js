@@ -154,9 +154,9 @@ function getPackageScriptInvocation (command) {
   if (manager === 'bun' && match[2] !== 'run') return
   if (!match[2] && RESERVED_PACKAGE_MANAGER_COMMANDS[manager]?.has(match[3])) return
   const args = match[4]?.trim()
-  const npmArguments = manager === 'npm' && args ? /^--(?:\s+(.+))?$/.exec(args) : undefined
-  if (manager === 'npm' && args && !npmArguments) return
-  const scriptArguments = manager === 'npm' ? npmArguments?.[1]?.trim() : args
+  const separatedArguments = args ? /^--(?:\s+(.+))?$/.exec(args) : undefined
+  if (['npm', 'pnpm'].includes(manager) && args && !separatedArguments) return
+  const scriptArguments = ['npm', 'pnpm'].includes(manager) ? separatedArguments?.[1]?.trim() : args
   if (scriptArguments && !splitLiteralAndChain(scriptArguments)) return
   return {
     ...(scriptArguments ? { arguments: scriptArguments } : {}),

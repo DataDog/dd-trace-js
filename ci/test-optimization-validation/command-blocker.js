@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+const path = require('node:path')
 
 const { BLOCKER_CATEGORIES } = require('./blocker-category')
 const { isProjectBuildArtifactPath } = require('./project-build-artifact')
@@ -255,7 +256,8 @@ function getCommandBlocker (result, options = {}) {
     }
   }
 
-  if (result.exitCode !== 0 && hasMissingProjectBuildArtifact(output)) {
+  const projectRoot = typeof options.packageJson === 'string' ? path.dirname(options.packageJson) : undefined
+  if (result.exitCode !== 0 && hasMissingProjectBuildArtifact(output, projectRoot)) {
     const buildScript = getBuildScript(options.packageJson)
     return {
       blockerCategory: BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED,
@@ -326,13 +328,14 @@ function getCommandBlocker (result, options = {}) {
  * Returns whether command output identifies missing project-owned build output.
  *
  * @param {string} output command output
+ * @param {string} projectRoot selected project root
  * @returns {boolean} whether a project build artifact is missing
  */
-function hasMissingProjectBuildArtifact (output) {
+function hasMissingProjectBuildArtifact (output, projectRoot) {
   for (const line of output.split(/\r?\n/)) {
     if (!BUILD_ARTIFACT_MISSING_PATTERN.test(line)) continue
     for (const match of line.matchAll(FILE_PATH_REFERENCE_PATTERN)) {
-      if (isProjectBuildArtifactPath(match[1])) return true
+      if (isProjectBuildArtifactPath(match[1], projectRoot)) return true
     }
   }
   return false

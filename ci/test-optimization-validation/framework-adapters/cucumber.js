@@ -386,13 +386,46 @@ function getYamlStringProfileDefinitions (source) {
   const definitions = new Map()
   for (const line of source.split(/\r?\n/)) {
     if (!line.trim() || /^\s*#/.test(line)) continue
-    const match = /^([A-Za-z0-9_-]+):\s*(?:(["'])(.*)\2|([^#\s].*?))(?:\s+#.*)?\s*$/.exec(line)
-    if (!match || /^\s/.test(line)) {
+    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
+    const definition = match && !/^\s/.test(line) ? getYamlStringProfileDefinition(match[2]) : undefined
+    if (definition === undefined) {
       throw new Error('YAML profiles must be literal one-line command strings')
     }
-    definitions.set(match[1], match[3] ?? match[4])
+    definitions.set(match[1], definition)
   }
   return definitions
+}
+
+function getYamlStringProfileDefinition (source) {
+  const value = source.trimStart()
+  const quote = value[0]
+  if (quote !== '"' && quote !== "'") {
+    const comment = /\s+#/.exec(value)
+    const definition = value.slice(0, comment?.index ?? value.length).trimEnd()
+    return definition || undefined
+  }
+
+  let definition = ''
+  for (let index = 1; index < value.length; index++) {
+    const character = value[index]
+    if (quote === '"' && character === '\\') {
+      if (index + 1 >= value.length) return
+      definition += character + value[++index]
+      continue
+    }
+    if (quote === "'" && character === quote && value[index + 1] === quote) {
+      definition += quote
+      index++
+      continue
+    }
+    if (character !== quote) {
+      definition += character
+      continue
+    }
+    const remainder = value.slice(index + 1)
+    if (!remainder.trim() || /^\s+#/.test(remainder)) return definition
+    return
+  }
 }
 
 function readQuotedString (source, start) {
