@@ -964,6 +964,15 @@ describe('RemoteConfig', () => {
       // must bypass the entropy cache, or every clone reads the same pre-generated UUID
       assert.deepStrictEqual(uuidStub.secondCall.args, [{ disableEntropyCache: true }])
     })
+
+    it('should catch and log an error instead of throwing when uuid generation fails', () => {
+      const error = new Error('boom')
+      uuidStub.onSecondCall().throws(error)
+
+      channel('datadog:identity:update').publish(config)
+
+      sinon.assert.calledWith(log.error, '[RC] Error refreshing identity', error)
+    })
   })
 })
 
