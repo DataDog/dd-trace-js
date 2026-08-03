@@ -10,13 +10,27 @@ const {
 } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
 
+const MAX_DATE_MILLISECONDS = 8.64e15
+const NANOSECONDS_PER_SECOND = 1e9
+
 function toHrTime (timestamp) {
-  // The vendored OTel version treats every number before timeOrigin as performance.now().
-  // Preserve historical Unix-millisecond inputs as absolute timestamps.
-  if (typeof timestamp === 'number' && timestamp >= performance.timeOrigin / 2) {
-    return millisToHrTime(timestamp)
+  if (typeof timestamp !== 'number') {
+    return timeInputToHrTime(timestamp)
   }
-  return timeInputToHrTime(timestamp)
+
+  // Older versions documented numeric timestamps as Unix nanoseconds.
+  if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
+    const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
+    return [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
+  }
+
+  // A number within this process's elapsed time is a performance timestamp.
+  if (timestamp >= 0 && timestamp <= performance.now()) {
+    return timeInputToHrTime(timestamp)
+  }
+
+  // All other numbers are Unix milliseconds, including historical dates.
+  return millisToHrTime(timestamp)
 }
 
 /**

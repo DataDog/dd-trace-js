@@ -263,6 +263,27 @@ describe('OpenTelemetry Logs', () => {
       logger.emit({ body: 'hrtime timestamp', timestamp: [1700000000, 789123456] })
     })
 
+    it('preserves legacy numeric Unix-nanosecond timestamps', () => {
+      const legacyTimestamp = 1700000000123 * 1e6
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), BigInt(legacyTimestamp).toString())
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Legacy timestamp', timestamp: legacyTimestamp })
+    })
+
+    it('preserves historical Unix-millisecond timestamps', () => {
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), '631152000000000000')
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Historical timestamp', timestamp: Date.UTC(1990, 0, 1) })
+    })
+
     it('encodes exact timestamp strings using the OTLP JSON protocol', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
       mockOtlpExport((decoded) => {
