@@ -1868,6 +1868,60 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
+    it('retries a concurrent test after its original throws synchronously', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-throw-test.js'
+      receiver.setKnownTests({ jest: {} })
+      const RETRY_COUNT = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': RETRY_COUNT,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          assert.deepStrictEqual(
+            tests.map(test => test.meta[TEST_STATUS]).sort(),
+            ['fail', 'pass', 'pass']
+          )
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, RETRY_COUNT)
+          const finalTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
+          assert.strictEqual(finalTests.length, 1)
+          assert.strictEqual(finalTests[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-throw-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('retries a new test that takes a done callback', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/callback-test.js'
@@ -1958,6 +2012,73 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ...getCiVisEvpProxyConfig(receiver.port),
             EFD_RETRY_COUNT: String(SELECTED_RETRIES),
             TESTS_TO_RUN: 'test-early-flake-detection/concurrent-callback-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    onlyLatestIt('reports errors from concurrent done-callback retries', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-callback-error-test.js'
+      receiver.setKnownTests({ jest: {} })
+      const RETRY_COUNT = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': RETRY_COUNT,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite)
+
+          const expectedErrors = new Map([
+            [
+              'new concurrent done-callback test that throws on retries',
+              /concurrent done-callback retry throws/,
+            ],
+            [
+              'new concurrent done-callback test that returns on retries',
+              /Test functions cannot both take a 'done' callback and return something/,
+            ],
+          ])
+          for (const [testName, expectedError] of expectedErrors) {
+            const matchingTests = tests.filter(test => test.meta[TEST_NAME] === testName)
+            assert.strictEqual(matchingTests.length, RETRY_COUNT + 1)
+            assert.strictEqual(matchingTests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            const failedRetries = matchingTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedRetries.length, RETRY_COUNT)
+            for (const retry of failedRetries) {
+              assert.strictEqual(retry.meta[TEST_IS_RETRY], 'true')
+              assert.match(retry.meta[ERROR_MESSAGE], expectedError)
+            }
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-callback-error-test',
             SHOULD_CHECK_RESULTS: '1',
           },
         }
