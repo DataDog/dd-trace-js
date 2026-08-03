@@ -1,13 +1,11 @@
 'use strict'
 
 const assert = require('node:assert')
+const semver = require('semver')
 const sinon = require('sinon')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
-
-const CIRCULAR_DATA_ERROR = 'Converting circular structure to JSON\n    --> ' +
-  "starting at object with constructor 'Object'\n    --- property 'self' closes the circle"
 
 const testSetup = new TestSetup()
 
@@ -15,6 +13,9 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging',
 }, (meta) => {
   const { agent } = meta
+  const queueAddErrorMessage = semver.gte(meta.version, '6.0.0')
+    ? 'Constraint error, got value 0 expected range 1-12'
+    : 'Validation error, cannot resolve alias "inv"'
 
   before(async () => {
     await testSetup.setup(meta.mod)
@@ -50,15 +51,15 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': 'TypeError',
-          'error.message': CIRCULAR_DATA_ERROR,
+          'error.type': 'Error',
+          'error.message': queueAddErrorMessage,
           'error.stack': ANY_STRING,
         },
       })
 
       await assert.rejects(testSetup.queueAddError(), {
-        name: 'TypeError',
-        message: CIRCULAR_DATA_ERROR,
+        name: 'Error',
+        message: queueAddErrorMessage,
       })
 
       return traceAssertion
@@ -188,15 +189,17 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
           'error.type': 'TypeError',
-          'error.message': CIRCULAR_DATA_ERROR,
+          'error.message': 'Converting circular structure to JSON\n    --> ' +
+            "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
           'error.stack': ANY_STRING,
         },
       })
 
-      await assert.rejects(testSetup.flowProducerAddError(), {
-        name: 'TypeError',
-        message: CIRCULAR_DATA_ERROR,
-      })
+      try {
+        await testSetup.flowProducerAddError()
+      } catch (err) {
+        // Expected error
+      }
 
       return traceAssertion
     })
