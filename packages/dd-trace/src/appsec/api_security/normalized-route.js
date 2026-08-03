@@ -2,6 +2,7 @@
 
 const { HTTP_ROUTE } = require('../../../../../ext/tags')
 const web = require('../../plugins/util/web')
+const { getExpressRouteDialect } = require('../../../../datadog-instrumentations/src/express')
 const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
 
 /**
@@ -16,8 +17,8 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * Design: Express 5 / path-to-regexp v8 only. The route is parsed once by path-to-regexp's `parse()`
  * (token tree → segment templates, cached per route string). Per-request presence of optional
  * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
- * only optional groups (no param to capture) are dropped (rendered absent). Express 4 ships 0.x (no
- * `parse()`) → no tag.
+ * only optional groups (no param to capture) are dropped (rendered absent). Requires Express 5 (its
+ * v8 route grammar); anything else gets no tag.
  */
 
 // path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
@@ -429,7 +430,9 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // v8 `parse`/`match` exist only in Express 5 (v4 ships 0.x) → no tag otherwise.
+      // Routes are read as v8 grammar; v4's differs ('/a{2}' matches '/aa' there), so a v4 or mixed
+      // process must not be normalized. A loaded v8 path-to-regexp alone wouldn't prove v5.
+      if (getExpressRouteDialect() !== 'v8') return null
       const parse = getParse()
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null

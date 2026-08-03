@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 // path-to-regexp is a transitive (vendored) dependency; require it directly to exercise the
 // normalizer against the real Express 5 (v8) parser/matcher.
 // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
@@ -264,6 +265,19 @@ describe('normalizeRouteExpress', () => {
     // the short-circuit when there is no active web span.
     it('returns null when there is no active web span', () => {
       assert.equal(normalizeRoute({ originalUrl: '/x', params: {} }), null)
+    })
+
+    // No express is loaded here, so the route-dialect gate must refuse despite the component tag.
+    it('returns null when the Express route dialect is not v8', () => {
+      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
+      const req = { originalUrl: '/users/1', params: { id: '1' } }
+      const web = require('../../../src/plugins/util/web')
+      const root = sinon.stub(web, 'root').returns(span)
+      try {
+        assert.equal(normalizeRoute(req), null)
+      } finally {
+        root.restore()
+      }
     })
   })
 })

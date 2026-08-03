@@ -147,6 +147,25 @@ function wrapAppUse (use) {
   }
 }
 
+let express4Loaded = false
+let express5Loaded = false
+
+addHook({ name: 'express', versions: ['>=5.0.0'], file: 'lib/express.js' }, express => {
+  express5Loaded = true
+  return express
+})
+
+/**
+ * Grammar the loaded Express majors declare routes in: v5 uses path-to-regexp v8, v4 its own (where
+ * `{2}`/`|` are live regex). A process can serve both, and a route string can't then be attributed
+ * to either, hence 'mixed'.
+ * @returns {'v8' | 'legacy' | 'mixed' | undefined}
+ */
+function getExpressRouteDialect () {
+  if (express4Loaded) return express5Loaded ? 'mixed' : 'legacy'
+  return express5Loaded ? 'v8' : undefined
+}
+
 addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.application, 'all', wrapAppAll)
@@ -164,6 +183,8 @@ addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express 
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
+  express4Loaded = true
+
   // `wrapLegacyHandle` only fires for express <4.6.0 layers, which have no
   // prototype dispatch; 4.6.0+ keeps `handle` pristine (wrapped below).
   const { wrapLegacyHandle } = createLayerDispatchWrappers('express')
@@ -273,3 +294,5 @@ addHook({ name: 'express', file: 'lib/request.js', versions: ['>=5.0.0'] }, requ
 
   return request
 })
+
+module.exports = { getExpressRouteDialect }

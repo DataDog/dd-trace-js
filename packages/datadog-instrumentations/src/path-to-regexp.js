@@ -58,7 +58,9 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
       makeMatcher = route => {
         let matcher
         try {
-          matcher = match(route)
+          // Callers read which params matched, never their values: skipping decode is faster and
+          // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
+          matcher = match(route, { decode: false })
         } catch {
           return
         }
