@@ -32,7 +32,7 @@ const STATUSES = {
   INSTALLED: 'INSTALLED',
   EMITTING: 'EMITTING',
   ERROR: 'ERROR',
-  BLOCKED: 'BLOCKED', // TODO: Implement once support for allow list, deny list or max probe limit has been added
+  // TODO: Add BLOCKED once support for allow list, deny list or max probe limit has been added
 }
 
 function ackReceived ({ id: probeId, version }) {
