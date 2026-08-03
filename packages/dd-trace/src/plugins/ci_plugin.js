@@ -1173,11 +1173,11 @@ module.exports = class CiPlugin extends Plugin {
         return
       }
 
-      const { filePath, format } = coverageReports[reportIndex]
+      const { filePath, fileDevice, fileInode, format } = coverageReports[reportIndex]
       reportIndex++
 
       this.tracer._exporter.uploadCoverageReport(
-        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
+        { filePath, fileDevice, fileInode, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
         (err) => {
           if (err) {
             failedCount++
