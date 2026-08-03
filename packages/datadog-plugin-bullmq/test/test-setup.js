@@ -1,11 +1,5 @@
 'use strict'
 
-function createCircularData () {
-  const data = { test: true }
-  data.self = data
-  return data
-}
-
 class BullmqTestSetup {
   async setup (module) {
     const connection = {
@@ -51,7 +45,9 @@ class BullmqTestSetup {
   }
 
   async queueAddError () {
-    await this.queue.add('error-job', createCircularData())
+    await this.queue.add('error-job', { data: 'test' }, {
+      repeat: { pattern: 'invalid-cron-pattern' },
+    })
   }
 
   async queueAddBulk () {
@@ -94,10 +90,13 @@ class BullmqTestSetup {
   }
 
   async flowProducerAddError () {
+    // Pass circular reference to trigger JSON serialization error
+    const circularData = { test: true }
+    circularData.self = circularData
     await this.flowProducer.add({
       name: 'invalid-flow',
       queueName: 'test-queue',
-      data: createCircularData(),
+      data: circularData,
     })
   }
 
