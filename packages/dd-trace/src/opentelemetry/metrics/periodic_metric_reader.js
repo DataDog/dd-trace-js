@@ -205,7 +205,7 @@ class PeriodicMetricReader {
       return Promise.resolve()
     }
     this.#collectAndExport()
-    return this.exporter.forceFlush()
+    return this.exporter.forceFlush?.() || Promise.resolve()
   }
 
   /**
