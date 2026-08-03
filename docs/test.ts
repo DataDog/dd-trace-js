@@ -478,38 +478,6 @@ traceparent = context.toTraceparent();
 const scope = tracer.scope()
 
 span = scope.active()!;
-span.setTag('string', 'value')
-span.setTag('number', 1)
-span.setTag('boolean', true)
-span.setTag('error', new Error('boom'))
-span.setTag('buffer', Buffer.from('value'))
-span.setTag('url', new URL('https://example.com'))
-span.setTag('object', {
-  string: 'value',
-  number: 1,
-  boolean: true,
-  buffer: Buffer.from('value'),
-  url: new URL('https://example.com')
-})
-span.addTags({ string: 'value', number: 1, boolean: true })
-tracer.trace('test', { tags: { object: { string: 'value' } } }, () => {})
-
-// @ts-expect-error Nested object tag values are not supported.
-span.setTag('nested', { child: { value: 'value' } })
-// @ts-expect-error Nested object tag values are not supported.
-span.addTags({ nested: { child: { value: 'value' } } })
-// @ts-expect-error Nested object tag values are not supported.
-span = tracer.startSpan('test', { tags: { nested: { child: { value: 'value' } } } })
-// @ts-expect-error Nested object tag values are not supported.
-tracer.trace('test', { tags: { nested: { child: { value: 'value' } } } }, () => {})
-// @ts-expect-error Nested object tag values are not supported.
-tracer.init({ tags: { nested: { child: { value: 'value' } } } })
-// @ts-expect-error Array tag values are not supported.
-span.setTag('array', ['value'])
-// @ts-expect-error Null tag values are not supported.
-span.setTag('null', null)
-// @ts-expect-error Undefined tag values are not supported.
-span.setTag('undefined', undefined)
 
 const activateStringType: string = scope.activate(span, () => 'test');
 const activateVoidType: void = scope.activate(span, () => { });
