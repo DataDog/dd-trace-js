@@ -470,6 +470,8 @@ class NativeSpansInterface {
         return offset + 8
       case 13: // CreateSpan
         return offset + 44
+      case 14: // CreateSpanFull
+        return offset + 56
       case 15: { // BatchSetMeta
         const count = this._cqbView.getUint32(offset, true)
         return offset + 4 + count * 8
@@ -757,6 +759,90 @@ class NativeSpansInterface {
     idx += 8
 
     view.setUint32(idx, nameId, true)
+    idx += 4
+
+    const ns = Math.round(startMs * 1e6)
+    view.setUint32(idx, ns % 0x1_00_00_00_00, true)
+    view.setUint32(idx + 4, Math.floor(ns / 0x1_00_00_00_00), true)
+    idx += 8
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Queue a CreateSpanFull operation (Create + name + service + resource + type + start).
+   *
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
+   * @param {number} segmentId The local-trace segment id (u64)
+   * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
+   * @param {string} name Span name
+   * @param {string} service Service name
+   * @param {string} resource Resource name
+   * @param {string} type Span type
+   * @param {number} startMs Start time in milliseconds
+   */
+  queueCreateSpanFull (spanId, traceId, segmentId, parentId, name, service, resource, type, startMs) {
+    this.#checkDetach()
+    this.#evictIdleStringTable()
+    let idx = this._cqbIndex
+
+    if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    const nameId = this.getStringId(name)
+    const serviceId = this.getStringId(service)
+    const resourceId = this.getStringId(resource)
+    const typeId = this.getStringId(type)
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint16(idx, 14, true)
+    idx += 2
+    buf.set(spanId, idx)
+    idx += 8
+
+    const tb = typeof traceId?.toBuffer === 'function' ? traceId.toBuffer() : (traceId._buffer ?? traceId)
+    if (tb.length > 8) {
+      buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
+      buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
+      idx += 8
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+    } else {
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+      idx += 8
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+    }
+    idx += 8
+
+    view.setUint32(idx, segmentId % 0x1_00_00_00_00, true)
+    view.setUint32(idx + 4, Math.floor(segmentId / 0x1_00_00_00_00), true)
+    idx += 8
+
+    if (parentId === null || parentId === undefined) {
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+    } else {
+      const pb = typeof parentId.toBuffer === 'function' ? parentId.toBuffer() : (parentId._buffer ?? parentId)
+      buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
+      buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
+    }
+    idx += 8
+
+    view.setUint32(idx, nameId, true)
+    idx += 4
+    view.setUint32(idx, serviceId, true)
+    idx += 4
+    view.setUint32(idx, resourceId, true)
+    idx += 4
+    view.setUint32(idx, typeId, true)
     idx += 4
 
     const ns = Math.round(startMs * 1e6)

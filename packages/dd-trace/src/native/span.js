@@ -350,9 +350,9 @@ class NativeDatadogSpan extends DatadogSpan {
       : fields.startTime
     fields.startTime = createStartTime
 
-    // CreateSpan carries the name natively, so we set it silently on
-    // the JS side and shadow `_syncNameToNative` with a no-op for the
-    // duration of super(). See the constructor for the delete-restore.
+    // CreateSpanFull carries the common immutable/default core fields natively
+    // (name, service, resource, type, start), so final sync can skip no-op
+    // overwrites unless user tags changed them.
     spanContext._setNameLocal(operationName)
     spanContext._syncNameToNative = noopSyncName
 
@@ -360,34 +360,28 @@ class NativeDatadogSpan extends DatadogSpan {
     // shared `_trace` object (the local root allocates; children reuse).
     // Required by the native chunk flush, which keys a chunk by segment.
     const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
+    const nativeService = typeof fields.tags?.['service.name'] === 'string'
+      ? fields.tags['service.name']
+      : String(tracerService || '')
+    const nativeResource = typeof fields.tags?.['resource.name'] === 'string'
+      ? fields.tags['resource.name']
+      : operationName
+    const nativeType = typeof fields.tags?.['span.type'] === 'string'
+      ? fields.tags['span.type']
+      : ''
 
-    nativeSpans.queueCreateSpan(
+    nativeSpans.queueCreateSpanFull(
       spanContext._nativeSpanId,
       traceId,
       segmentId,
       parentId,
       operationName,
+      nativeService,
+      nativeResource,
+      nativeType,
       createStartTime
     )
-
-    // Default the resource to the operation name. The JS formatter defaulted
-    // `resource` to the span name at serialization time (only overriding it
-    // when `resource.name` is a string); the native pipeline has no format
-    // step, so a span created without a string `resource.name` (e.g.
-    // `tracer.trace('ai_guard')`) would otherwise export an empty resource.
-    // A string `resource.name` supplied at creation skips this default (the
-    // constructor syncs it instead); one set later via `setTag` overrides it
-    // via a subsequent SetResourceName op.
-    if (typeof fields.tags?.['resource.name'] !== 'string') {
-      nativeSpans.queueOp(OpCode.SetResourceName, spanContext._nativeSpanId, operationName)
-    }
-
-    // The JS formatter stamped `meta.language = 'javascript'` on every span at
-    // serialization time. The native pipeline has no format step, and the agent
-    // backfills an unset language from the `Datadog-Meta-Lang: nodejs` header,
-    // so a native span would otherwise export `language: nodejs`. Stamp it here
-    // to match (system-tests assert `language == javascript`).
-    nativeSpans.queueOp(OpCode.SetMetaAttr, spanContext._nativeSpanId, 'language', 'javascript')
+    spanContext._recordNativeCoreFields?.(operationName, nativeResource, nativeService, nativeType)
 
     return spanContext
   }

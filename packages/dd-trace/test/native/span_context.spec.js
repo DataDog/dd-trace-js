@@ -168,6 +168,56 @@ describe('NativeSpanContext', () => {
       )
     })
 
+    it('skips formatter-added process tags from final meta batching', () => {
+      spanContext.syncFinalTagsToNative({
+        name: 'operation',
+        resource: 'resource',
+        error: 0,
+        meta: { '_dd.tags.process': 'entrypoint.name:test', keep: 'yes' },
+        metrics: {},
+      })
+
+      sinon.assert.calledWith(
+        nativeSpans.queueBatchMetaFlat,
+        leSpanId,
+        ['keep', 'yes']
+      )
+    })
+
+    it('keeps explicit process tags in final meta batching', () => {
+      spanContext.setTag('_dd.tags.process', 'user:value')
+
+      spanContext.syncFinalTagsToNative({
+        name: 'operation',
+        resource: 'resource',
+        error: 0,
+        meta: { '_dd.tags.process': 'user:value', keep: 'yes' },
+        metrics: {},
+      })
+
+      sinon.assert.calledWith(
+        nativeSpans.queueBatchMetaFlat,
+        leSpanId,
+        ['_dd.tags.process', 'user:value', 'keep', 'yes']
+      )
+    })
+
+    it('skips final core fields already queued to native storage', () => {
+      spanContext._recordNativeCoreFields('operation', 'operation')
+
+      spanContext.syncFinalTagsToNative({
+        name: 'operation',
+        resource: 'operation',
+        error: 0,
+        meta: {},
+        metrics: {},
+      })
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
+    })
+
     it('does not queue the final snapshot after export', () => {
       spanContext.markExported()
       spanContext.syncFinalTagsToNative({

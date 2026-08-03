@@ -10,6 +10,7 @@ const {
   OTEL_OUTPUT_METRIC_KEYS,
 } = require('../plugins/util/http-otel-semantics')
 const { OpCode } = require('./index')
+const PROCESS_TAGS_META_KEY = '_dd.tags.process'
 
 /**
  * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
@@ -42,6 +43,11 @@ class NativeSpanContext extends DatadogSpanContext {
   // prevents the batch-drop cascade (see the elasticsearch product-check ping).
   #exported = false
   #hasErrorTags = false
+  #nativeName
+  #nativeResource
+  #nativeService
+  #nativeType
+  #nativeError = 0
 
   /**
    * @param {import('./native_spans')} nativeSpans - The NativeSpansInterface instance
@@ -87,6 +93,22 @@ class NativeSpanContext extends DatadogSpanContext {
 
   set _name (value) {
     this[NAME_VALUE] = value
+  }
+
+  /**
+   * Remember core fields already queued to native storage during span creation.
+   * Final sync can then skip no-op overwrites for the common unchanged case.
+   *
+   * @param {string} name span operation name already queued via CreateSpanFull
+   * @param {string|undefined} resource resource name already queued, if any
+   * @param {string|undefined} service service name already queued, if any
+   * @param {string|undefined} type span type already queued, if any
+   */
+  _recordNativeCoreFields (name, resource, service, type) {
+    this.#nativeName = name
+    this.#nativeResource = resource
+    this.#nativeService = service
+    this.#nativeType = type
   }
 
   /**
@@ -153,19 +175,34 @@ class NativeSpanContext extends DatadogSpanContext {
     if (this.#exported) return
 
     const spanId = this._nativeSpanId
-    this.#nativeSpans.queueOp(OpCode.SetName, spanId, String(formatted.name))
-    this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, String(formatted.resource))
-    if (typeof formatted.service === 'string') {
+    const name = String(formatted.name)
+    if (name !== this.#nativeName) {
+      this.#nativeSpans.queueOp(OpCode.SetName, spanId, name)
+      this.#nativeName = name
+    }
+    const resource = String(formatted.resource)
+    if (resource !== this.#nativeResource) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, resource)
+      this.#nativeResource = resource
+    }
+    if (typeof formatted.service === 'string' && formatted.service !== this.#nativeService) {
       this.#nativeSpans.queueOp(OpCode.SetServiceName, spanId, formatted.service)
+      this.#nativeService = formatted.service
     }
-    if (typeof formatted.type === 'string') {
+    if (typeof formatted.type === 'string' && formatted.type !== this.#nativeType) {
       this.#nativeSpans.queueOp(OpCode.SetType, spanId, formatted.type)
+      this.#nativeType = formatted.type
     }
-    this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', formatted.error ? 1 : 0])
+    const error = formatted.error ? 1 : 0
+    if (error !== this.#nativeError) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', error])
+      this.#nativeError = error
+    }
 
     const metaBatch = []
     for (const key of Object.keys(formatted.meta)) {
       if (this.#isOtelDeferredKey(key)) continue
+      if (key === PROCESS_TAGS_META_KEY && !this.hasTag(PROCESS_TAGS_META_KEY)) continue
       metaBatch.push(key, formatted.meta[key])
     }
     if (metaBatch.length > 0) {
@@ -217,6 +254,7 @@ class NativeSpanContext extends DatadogSpanContext {
         case 'error.stack':
           if (!this.getTag(IGNORE_OTEL_ERROR)) {
             this.#nativeSpans.queueOp(OpCode.SetError, this._nativeSpanId, ['i32', 1])
+            this.#nativeError = 1
           }
           if (value != null) {
             this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, key, String(value))
@@ -256,11 +294,13 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {string} name - Span name
    */
   _syncNameToNative (name) {
+    const stringName = String(name)
     this.#nativeSpans.queueOp(
       OpCode.SetName,
       this._nativeSpanId,
-      String(name)
+      stringName
     )
+    this.#nativeName = stringName
   }
 
   /**
@@ -324,10 +364,12 @@ class NativeSpanContext extends DatadogSpanContext {
     // The remap flips error on for error responses; it never clears it.
     if (view.error === 1 && errorBefore !== 1) {
       this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+      this.#nativeError = 1
     }
     // Only the unknown-verb (_OTHER) path rewrites the resource.
     if (typeof view.resource === 'string' && view.resource !== resourceBefore) {
       this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, view.resource)
+      this.#nativeResource = view.resource
     }
   }
 }

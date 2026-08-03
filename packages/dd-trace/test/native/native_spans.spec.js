@@ -925,6 +925,27 @@ describe('NativeSpansInterface', () => {
     })
   })
 
+  describe('queueCreateSpanFull', () => {
+    it('writes combined create, core string IDs, and start time', () => {
+      const traceId = Buffer.from('00112233445566778899aabbccddeeff', 'hex')
+      const parentId = Buffer.from('0102030405060708', 'hex')
+
+      nativeSpans.queueCreateSpanFull(spanId, traceId, 9, parentId, 'op', 'svc', 'res', 'web', 42)
+
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 14)
+      assert.ok(nativeSpans._stringMap.has('op'))
+      assert.ok(nativeSpans._stringMap.has('svc'))
+      assert.ok(nativeSpans._stringMap.has('res'))
+      assert.ok(nativeSpans._stringMap.has('web'))
+      assert.strictEqual(nativeSpans._cqbView.getUint32(50, true), nativeSpans._stringMap.get('op'))
+      assert.strictEqual(nativeSpans._cqbView.getUint32(54, true), nativeSpans._stringMap.get('svc'))
+      assert.strictEqual(nativeSpans._cqbView.getUint32(58, true), nativeSpans._stringMap.get('res'))
+      assert.strictEqual(nativeSpans._cqbView.getUint32(62, true), nativeSpans._stringMap.get('web'))
+      assert.strictEqual(nativeSpans._cqbView.getUint32(66, true), 42_000_000)
+    })
+  })
+
   describe('queueBatchMeta / queueBatchMetrics', () => {
     it('is a no-op for empty input', () => {
       const indexBefore = nativeSpans._cqbIndex

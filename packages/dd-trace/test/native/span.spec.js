@@ -83,12 +83,14 @@ describe('NativeDatadogSpan', () => {
     }
 
     // NativeSpansInterface allocates a segment id per local trace and uses
-    // queueCreateSpan for the combined Create+SetName+SetStart op. Stub
-    // these so the constructor can run without touching real WASM.
+    // queueCreateSpanFull for the combined Create+SetName+SetService+
+    // SetResource+SetType+SetStart op. Stub these so the constructor can run
+    // without touching real WASM.
     let nextSegment = 0
     nativeSpans = {
       queueOp: sinon.stub(),
       queueCreateSpan: sinon.stub(),
+      queueCreateSpanFull: sinon.stub(),
       queueBatchMeta: sinon.stub(),
       queueBatchMetrics: sinon.stub(),
       flushChangeQueue: sinon.stub(),
@@ -184,6 +186,7 @@ describe('NativeDatadogSpan', () => {
     // without dragging in the real parent class's deps.
     const MockDatadogSpan = class MockDatadogSpan {
       constructor (tracer, processor, prioritySampler, fields, debug) {
+        this._mockTracer = tracer
         this._processor = processor
         this._prioritySampler = prioritySampler
         this._debug = debug
@@ -201,7 +204,6 @@ describe('NativeDatadogSpan', () => {
           context: link.context,
           attributes: link.attributes ?? {},
         })) ?? []
-        this._mockTracer = tracer
       }
 
       tracer () { return this._mockTracer }
@@ -256,44 +258,49 @@ describe('NativeDatadogSpan', () => {
   })
 
   describe('constructor', () => {
-    it('should issue a combined queueCreateSpan op to native', () => {
-      // queueCreateSpan emits a single combined opcode that encodes name and
-      // start time alongside Create, saving WASM round-trips on construction.
+    it('should issue a combined queueCreateSpanFull op to native', () => {
+      // queueCreateSpanFull emits a single combined opcode that encodes the
+      // default core fields alongside Create, saving WASM change-buffer ops.
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
 
-      sinon.assert.calledOnce(nativeSpans.queueCreateSpan)
-      const args = nativeSpans.queueCreateSpan.getCall(0).args
-      // queueCreateSpan(spanId, traceId, segmentId, parentId, name, startMs)
+      sinon.assert.calledOnce(nativeSpans.queueCreateSpanFull)
+      sinon.assert.notCalled(nativeSpans.queueCreateSpan)
+      const args = nativeSpans.queueCreateSpanFull.getCall(0).args
+      // queueCreateSpanFull(spanId, traceId, segmentId, parentId,
+      //   name, service, resource, type, startMs)
       assert.ok(args[0] instanceof Uint8Array) // spanId (8-byte LE handle)
       assert.strictEqual(typeof args[2], 'number') // segmentId
       assert.strictEqual(args[4], 'test-operation') // name
-      assert.strictEqual(typeof args[5], 'number') // startMs
+      assert.strictEqual(args[5], 'test-service') // service
+      assert.strictEqual(args[6], 'test-operation') // resource
+      assert.strictEqual(args[7], '') // type
+      assert.strictEqual(typeof args[8], 'number') // startMs
     })
 
     it('defaults the resource to the operation name when no resource.name is supplied', () => {
-      // The JS formatter defaulted resource to the span name; native has no
-      // format step, so the span must queue SetResourceName(name) at creation.
+      // Keep the live native resource aligned with the JS formatter default;
+      // final sync tracks this value and skips the duplicate overwrite.
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
 
+      const args = nativeSpans.queueCreateSpanFull.getCall(0).args
+      assert.strictEqual(args[6], 'test-operation')
       const resourceOps = nativeSpans.queueOp.getCalls()
         .filter(c => c.args[0] === OpCode.SetResourceName)
-        .map(c => c.args[2])
-      assert.deepStrictEqual(resourceOps, ['test-operation'])
+      assert.strictEqual(resourceOps.length, 0)
     })
 
-    it('stamps meta.language = javascript at creation (matches the JS formatter)', () => {
-      // The JS formatter set `meta.language = 'javascript'` on every span; native
-      // has no format step and the agent would otherwise backfill `nodejs` from
-      // the Datadog-Meta-Lang header.
+    it('defers meta.language to final formatted sync', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
 
-      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, sinon.match.any, 'language', 'javascript')
+      const languageOps = nativeSpans.queueOp.getCalls()
+        .filter(c => c.args[0] === OpCode.SetMetaAttr && c.args[2] === 'language')
+      assert.strictEqual(languageOps.length, 0)
     })
 
     it('tracks active native spans on the exporter', () => {
@@ -313,7 +320,7 @@ describe('NativeDatadogSpan', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: undefined,
       }, false, nativeSpans)
-      const createCall = nativeSpans.queueCreateSpan.getCall(0)
+      const createCall = nativeSpans.queueCreateSpanFull.getCall(0)
       assert.strictEqual(createCall.args[4], 'undefined')
     })
 
@@ -323,11 +330,17 @@ describe('NativeDatadogSpan', () => {
         tags: { 'resource.name': 'GET /users' },
       }, false, nativeSpans)
 
-      // No default SetResourceName op is queued at creation...
-      const resourceOps = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetResourceName)
+      // No default SetResourceName op is queued at creation; the explicit resource
+      // is carried by CreateSpanFull and still observed by the tag path.
+      const createCall = nativeSpans.queueCreateSpanFull.getCall(0)
+      assert.strictEqual(createCall.args[6], 'GET /users')
+      const resourceOps = nativeSpans.queueOp.getCalls()
+        .filter(c => c.args[0] === OpCode.SetResourceName)
       assert.strictEqual(resourceOps.length, 0)
-      // ...the explicit resource.name is synced through the tag path instead.
-      sinon.assert.calledWith(span.context().syncToNativeOnly, sinon.match({ 'resource.name': 'GET /users' }))
+      sinon.assert.calledWith(
+        span.context().syncToNativeOnly,
+        sinon.match({ 'resource.name': 'GET /users' })
+      )
     })
 
     it('gives child spans the same 128-bit native trace id as the root (not zero-padded)', () => {
@@ -335,18 +348,18 @@ describe('NativeDatadogSpan', () => {
         operationName: 'root',
         traceId128BitGenerationEnabled: true,
       }, false, nativeSpans)
-      const rootTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      const rootTraceId = nativeSpans.queueCreateSpanFull.getCall(0).args[1]
       assert.ok(Array.isArray(rootTraceId) && rootTraceId.length === 16, 'root trace id should be 16 bytes')
       assert.ok(rootTraceId.slice(0, 8).some(b => b !== 0), 'root high 8 bytes (tid) should be non-zero')
 
-      nativeSpans.queueCreateSpan.resetHistory()
+      nativeSpans.queueCreateSpanFull.resetHistory()
       // eslint-disable-next-line no-new
       new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'child',
         parent: root.context(),
         traceId128BitGenerationEnabled: true,
       }, false, nativeSpans)
-      const childTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      const childTraceId = nativeSpans.queueCreateSpanFull.getCall(0).args[1]
       // Child must carry the SAME full 128-bit id, not a high-bits-zeroed one.
       assert.deepStrictEqual(childTraceId, rootTraceId)
     })
@@ -371,7 +384,7 @@ describe('NativeDatadogSpan', () => {
         parent,
         traceId128BitGenerationEnabled: true,
       }, false, nativeSpans)
-      const childTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      const childTraceId = nativeSpans.queueCreateSpanFull.getCall(0).args[1]
       // Low 8 bytes come from slice(-8) of the 16-byte id, not [0..7] (the high bytes).
       assert.deepStrictEqual(childTraceId, [...high, ...low])
     })
