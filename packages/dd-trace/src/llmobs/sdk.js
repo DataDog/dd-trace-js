@@ -405,7 +405,7 @@ class LLMObs extends NoopLLMObs {
 
       const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
-      validateLabel(label, 'evaluation')
+      const labelValue = validateLabel(label, 'evaluation')
       validateMetricType(metricType, 'evaluation')
       validateMetricValue(metricType, value)
       validateAssessment(assessment)
@@ -423,7 +423,7 @@ class LLMObs extends NoopLLMObs {
             trace_id: traceId,
           },
         },
-        label,
+        label: labelValue,
         metric_type: metricType,
         ml_app: mlApp,
         [`${metricType}_value`]: value,
@@ -538,7 +538,7 @@ class LLMObs extends NoopLLMObs {
 
       const { label, value, tags, reasoning, assessment } = options
       const metricType = options.metricType?.toLowerCase()
-      validateLabel(label, 'feedback')
+      const labelValue = validateLabel(label, 'feedback')
       validateMetricType(metricType, 'feedback')
       validateMetricValue(metricType, value)
       validateAssessment(assessment)
@@ -547,7 +547,7 @@ class LLMObs extends NoopLLMObs {
       const payload = {
         event_kind: 'feedback',
         [targetType]: targetValue,
-        label,
+        label: labelValue,
         metric_type: metricType,
         ml_app: mlApp,
         [`${metricType}_value`]: value,

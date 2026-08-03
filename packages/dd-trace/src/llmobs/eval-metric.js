@@ -88,6 +88,14 @@ function taggedError (errorTag, message) {
 }
 
 /**
+ * @param {MetricEventKind} kind
+ * @returns {Error} the tagged error, to be thrown by the caller.
+ */
+function invalidTagsError (kind) {
+  return taggedError('invalid_tags', `Failed to parse tags. Tags for ${TERMS[kind].metrics} must be strings`)
+}
+
+/**
  * @param {unknown} timestampMs
  * @param {MetricEventKind} kind
  * @returns {void}
@@ -102,20 +110,23 @@ function validateTimestamp (timestampMs, kind) {
 }
 
 /**
- * @param {string | undefined} label
+ * Validates the label and returns it coerced to the string the intake expects.
+ * @param {unknown} label
  * @param {MetricEventKind} kind
- * @returns {void}
+ * @returns {string} the label, as sent on the wire.
  */
 function validateLabel (label, kind) {
   if (!label) {
     throw taggedError('invalid_metric_label', `label must be the specified name of the ${TERMS[kind].metric}`)
   }
 
-  // A dot makes the label unusable as a facet key on the feedback side. `submitEvaluation` has
-  // always accepted dotted labels, so the check stays scoped to feedback to avoid a breaking change.
-  if (kind === 'feedback' && typeof label === 'string' && label.includes('.')) {
+  // A dot makes the label unusable as a facet key, for both kinds.
+  const labelValue = String(label)
+  if (labelValue.includes('.')) {
     throw taggedError('invalid_label_value', 'label value must not contain a "."')
   }
+
+  return labelValue
 }
 
 /**
@@ -182,25 +193,28 @@ function validateReasoning (reasoning) {
  * @returns {string[]} the serialized tag list.
  */
 function buildMetricTags (tags, mlApp, kind, otelEnabled = false) {
+  // An array or a string would otherwise be walked by index and produce tags named after
+  // their offsets, which the intake would happily store.
+  if (tags != null && (typeof tags !== 'object' || Array.isArray(tags))) {
+    throw invalidTagsError(kind)
+  }
+
   const metricTags = {
     'ddtrace.version': tracerVersion,
     ml_app: mlApp,
   }
 
   if (tags) {
-    for (const key in tags) {
+    for (const key of Object.keys(tags)) {
       const tag = tags[key]
       if (typeof tag === 'string') {
         metricTags[key] = tag
-      } else if (typeof tag.toString === 'function') {
-        metricTags[key] = tag.toString()
-      } else if (tag == null) {
-        metricTags[key] = Object.prototype.toString.call(tag)
+      } else if (tag == null || typeof tag.toString !== 'function') {
+        // Nullish values have no meaningful string form, and every other value in JS carries a
+        // `toString` — either its own or the one inherited from `Object.prototype`.
+        throw invalidTagsError(kind)
       } else {
-        // should be a rare case
-        // every object in JS has a toString, otherwise every primitive has its own toString
-        // null and undefined are handled above
-        throw taggedError('invalid_tags', `Failed to parse tags. Tags for ${TERMS[kind].metrics} must be strings`)
+        metricTags[key] = tag.toString()
       }
     }
   }

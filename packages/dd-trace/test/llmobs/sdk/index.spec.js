@@ -1550,6 +1550,75 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
+    it('throws for a dotted label', () => {
+      assert.throws(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'has.toxicity',
+          metricType: 'score',
+          value: 0.6,
+        })
+      }, { message: 'label value must not contain a "."' })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('sends a non-string label as a string', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 1234,
+        metricType: 'score',
+        value: 0.6,
+      })
+
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, '1234')
+    })
+
+    it('throws for non-object tags', () => {
+      assert.throws(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+          tags: 'host',
+        })
+      }, { message: 'Failed to parse tags. Tags for evaluation metrics must be strings' })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('throws for a nullish tag value', () => {
+      assert.throws(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+          tags: { host: null },
+        })
+      }, { message: 'Failed to parse tags. Tags for evaluation metrics must be strings' })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('coerces non-string tag values', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'test',
+        metricType: 'score',
+        value: 0.6,
+        tags: { port: 8126 },
+      })
+
+      assert.deepStrictEqual(
+        LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].tags,
+        [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'port:8126']
+      )
+    })
+
     it('throws for an invalid metric type', () => {
       assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
@@ -1982,6 +2051,43 @@ describe('sdk', () => {
         submitter,
         spanId: '5678',
       }), { message: 'label value must not contain a "."' })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('sends a non-string label as a string', () => {
+      llmobs.submitFeedback({
+        label: 1234,
+        metricType: 'boolean',
+        value: true,
+        submitter,
+        spanId: '5678',
+        timestampMs: 1234,
+      })
+
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, '1234')
+    })
+
+    it('throws for non-object tags', () => {
+      assert.throws(() => llmobs.submitFeedback({
+        label: 'thumbs_up',
+        metricType: 'boolean',
+        value: true,
+        submitter,
+        spanId: '5678',
+        tags: ['host'],
+      }), { message: 'Failed to parse tags. Tags for feedback metrics must be strings' })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('throws for a nullish tag value', () => {
+      assert.throws(() => llmobs.submitFeedback({
+        label: 'thumbs_up',
+        metricType: 'boolean',
+        value: true,
+        submitter,
+        spanId: '5678',
+        tags: { host: undefined },
+      }), { message: 'Failed to parse tags. Tags for feedback metrics must be strings' })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
