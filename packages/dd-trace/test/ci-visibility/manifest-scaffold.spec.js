@@ -228,6 +228,29 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('rejects escaped double-quoted Cucumber YAML profiles', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    })
+    fs.writeFileSync(
+      path.join(fixture.root, 'cucumber.yaml'),
+      `${String.raw`default: "--world-parameters '{\"browser\":\"chrome\"}'"`}\n`
+    )
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /YAML profiles must be literal one-line command strings/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('accepts the last bounded Cucumber config and rejects the first oversized config', () => {
     const fixture = createRepositoryFixture({ framework: 'cucumber' })
     const config = path.join(fixture.root, 'cucumber.js')
@@ -1169,7 +1192,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('binds quoted Vitest project properties to one static scope', () => {
+  it('binds quoted Vitest project properties with comments inside pattern arrays', () => {
     const fixture = createRepositoryFixture({
       framework: 'vitest',
       script: 'vitest --run --project fastly',
@@ -1189,7 +1212,9 @@ describe('test optimization validation manifest scaffold', () => {
       '      test: {',
       "        'name': 'fastly',",
       "        'root': 'runtime-tests',",
-      "        'include': ['shared/**/*.test.ts'],",
+      "        'include': [",
+      "          'shared/**/*.test.ts', // runtime tests",
+      '        ],',
       '      },',
       '    }],',
       '  },',

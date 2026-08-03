@@ -311,9 +311,6 @@ describe('test optimization validation CLI', () => {
           calls.push('acquire')
           return { path: path.join(out, EXECUTION_LOCK_FILENAME) }
         },
-        assertNoExecutionLock () {
-          calls.push('check')
-        },
         releaseExecutionLock () {
           calls.push('release')
         },

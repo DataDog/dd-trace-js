@@ -19,23 +19,6 @@ function getExecutionLockPath (out) {
 }
 
 /**
- * Refuses plan generation while a prior execution lock remains.
- *
- * @param {string} out validation result directory
- * @returns {void}
- */
-function assertNoExecutionLock (out) {
-  const lockPath = getExecutionLockPath(out)
-  try {
-    fs.lstatSync(lockPath)
-  } catch (error) {
-    if (error.code === 'ENOENT') return
-    throw error
-  }
-  throw getExistingLockError(lockPath)
-}
-
-/**
  * Acquires a non-reclaiming single-flight lock for live validation.
  *
  * @param {object} input lock inputs
@@ -107,7 +90,6 @@ function getExistingLockError (lockPath) {
 module.exports = {
   EXECUTION_LOCK_FILENAME,
   acquireExecutionLock,
-  assertNoExecutionLock,
   getExecutionLockPath,
   releaseExecutionLock,
 }

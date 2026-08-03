@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { matchesLiteralGlob } = require('../literal-glob')
-const { maskJavaScriptNonCode } = require('../source-text')
+const { maskJavaScriptComments, maskJavaScriptNonCode } = require('../source-text')
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
 const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
@@ -294,8 +294,9 @@ function getLiteralStringArray (source, property) {
   if (properties.length !== 1) return { dynamic: true, values: [] }
   const arrayMatch = /^\[([\s\S]{0,8192}?)\]/.exec(source.slice(properties[0].valueStart))
   if (!arrayMatch) return { dynamic: true, values: [] }
-  const values = [...arrayMatch[1].matchAll(/(["'])([^"'\\]+)\1/g)].map(match => match[2])
-  const residue = arrayMatch[1].replaceAll(/(["'])([^"'\\]+)\1/g, '').replaceAll(',', '').trim()
+  const syntax = maskJavaScriptComments(arrayMatch[1])
+  const values = [...syntax.matchAll(/(["'])([^"'\\]+)\1/g)].map(match => match[2])
+  const residue = syntax.replaceAll(/(["'])([^"'\\]+)\1/g, '').replaceAll(',', '').trim()
   return residue ? { dynamic: true, values: [] } : { values }
 }
 

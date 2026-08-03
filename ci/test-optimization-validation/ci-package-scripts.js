@@ -6,9 +6,10 @@ const MAX_SCRIPT_EXPANSIONS = 16
 const DYNAMIC_VALUE_PATTERN = /[$`]|\r|\n|%[^%\s]+%|![^!\s]+!/
 const RESERVED_PACKAGE_MANAGER_COMMANDS = {
   pnpm: new Set([
-    'add', 'audit', 'bin', 'config', 'create', 'deploy', 'dlx', 'env', 'exec', 'fetch', 'import', 'init', 'install',
-    'link', 'list', 'outdated', 'pack', 'patch', 'patch-commit', 'prune', 'publish', 'rebuild', 'remove', 'root',
-    'server', 'setup', 'store', 'uninstall', 'unlink', 'update', 'view', 'why',
+    'add', 'audit', 'bin', 'c', 'config', 'create', 'deploy', 'dlx', 'env', 'exec', 'fetch', 'i', 'import', 'init',
+    'install', 'link', 'list', 'ln', 'ls', 'outdated', 'pack', 'patch', 'patch-commit', 'prune', 'publish', 'rebuild',
+    'remove', 'rm', 'root', 'self-update', 'server', 'setup', 'store', 'uninstall', 'unlink', 'up', 'update', 'view',
+    'why',
   ]),
   yarn: new Set([
     'add', 'audit', 'bin', 'cache', 'check', 'config', 'constraints', 'create', 'dedupe', 'dlx', 'exec', 'global',

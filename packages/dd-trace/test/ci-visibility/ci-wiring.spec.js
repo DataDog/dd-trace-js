@@ -215,7 +215,14 @@ describe('test optimization validation CI audit', () => {
   })
 
   for (const [managerCommand, collidingScript] of [
+    ['pnpm c', 'c'],
     ['pnpm exec jest', 'exec'],
+    ['pnpm i', 'i'],
+    ['pnpm ln', 'ln'],
+    ['pnpm ls', 'ls'],
+    ['pnpm rm', 'rm'],
+    ['pnpm self-update', 'self-update'],
+    ['pnpm up', 'up'],
     ['yarn workspace fixture test', 'workspace'],
   ]) {
     it(`does not interpret a package-manager built-in as a colliding script: ${managerCommand}`, () => {

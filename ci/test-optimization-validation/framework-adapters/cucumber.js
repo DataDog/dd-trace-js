@@ -409,9 +409,7 @@ function getYamlStringProfileDefinition (source) {
   for (let index = 1; index < value.length; index++) {
     const character = value[index]
     if (quote === '"' && character === '\\') {
-      if (index + 1 >= value.length) return
-      definition += character + value[++index]
-      continue
+      return
     }
     if (quote === "'" && character === quote && value[index + 1] === quote) {
       definition += quote

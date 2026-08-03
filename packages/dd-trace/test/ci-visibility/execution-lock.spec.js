@@ -9,7 +9,6 @@ const proxyquire = require('proxyquire').noPreserveCache()
 
 const {
   acquireExecutionLock,
-  assertNoExecutionLock,
   getExecutionLockPath,
   releaseExecutionLock,
 } = require('../../../../ci/test-optimization-validation/execution-lock')
@@ -45,12 +44,10 @@ describe('test optimization validation execution lock', () => {
         return true
       }
     )
-    assert.throws(() => assertNoExecutionLock(out), /Another validation may be active/)
     assert.deepStrictEqual(fs.readFileSync(lockPath), original)
 
     releaseExecutionLock(lock)
     assert.strictEqual(fs.existsSync(lockPath), false)
-    assertNoExecutionLock(out)
   })
 
   it('refuses to remove a replacement at the approved lock path', () => {
