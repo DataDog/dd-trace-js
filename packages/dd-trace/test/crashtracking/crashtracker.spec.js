@@ -6,7 +6,10 @@ const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 require('../setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
 
@@ -131,6 +134,19 @@ describeNotWindows('crashtracker', () => {
       crashtracker.configure(null)
 
       crashtracker.configure(config)
+    })
+  })
+
+  describe('identity refresh', () => {
+    it('should reconfigure the binding with refreshed tags when the identity-refresh channel fires', () => {
+      crashtracker.start(config)
+
+      const refreshedConfig = { ...config, tags: { foo: 'baz' } }
+      identityRefreshChannel.publish(refreshedConfig)
+
+      sinon.assert.called(binding.updateMetadata)
+      const metadata = binding.updateMetadata.lastCall.args[0]
+      assert.ok(metadata.tags.includes('foo:baz'), `Expected tags to include foo:baz, got ${inspect(metadata.tags)}`)
     })
   })
 
