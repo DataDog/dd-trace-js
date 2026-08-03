@@ -17,6 +17,8 @@ const {
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
+  recordTestManagementExecution,
+  recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { getChannelPromise } = require('./helpers/channel')
@@ -1473,12 +1475,32 @@ function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
   const isModified = testProperties.isModified === true
   const isSkippedByTestManagement = !isAttemptToFix && isDisabled
   const status = getTypecheckTaskStatus(task)
+  const summaryStatus = isSkippedByTestManagement ? 'skip' : status
+
+  recordTestManagementExecution({
+    testSuite: testProperties.testSuite,
+    testName,
+    status: summaryStatus,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+  })
+  if (isAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: testProperties.testSuite,
+      testName,
+      status: summaryStatus,
+      isDisabled,
+      isQuarantined,
+    })
+  }
 
   if (status === 'skip' || isSkippedByTestManagement) {
     testSkipCh.publish({
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix,
       isDisabled,
     })
     updateTypecheckTaskResultForTestManagement(task, status, { isAttemptToFix, isDisabled, isQuarantined })
