@@ -30,6 +30,7 @@ describe('LLMObs Experiments control-plane client', () => {
   const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
     `dd-trace-js-experiments-${backendTestId}`
   const backendClientDatasetName = `${backendProjectName}-client-dataset`
+  const backendClientCustomRecordsDatasetName = `${backendProjectName}-client-custom-records-dataset`
   const backendClientExperimentDatasetName = `${backendProjectName}-client-experiment-dataset`
   const backendClientExperimentName = `${backendProjectName}-client-experiment`
   const backendClientTaskName = `${backendProjectName}-client-task`
@@ -116,6 +117,50 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.deepEqual(recordDataByInputValue(records.records), [
       { input: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'client-test' } },
       { input: { value: 2 }, expectedOutput: { value: 3 }, metadata: { source: 'client-test' } },
+    ])
+  })
+
+  it('submits custom record ids with append responses', async function () {
+    this.timeout(180_000)
+
+    const client = backendClient()
+    const projectId = await client.ensureProjectId()
+    const dataset = await client.createDataset(projectId, {
+      name: backendClientCustomRecordsDatasetName,
+      description: 'created by a dd-trace-js experiments custom records VCR test',
+    })
+    trackBackendDataset(client, projectId, dataset.id())
+
+    const customRecords = await client.appendDatasetRecords(projectId, dataset.id(), [
+      {
+        id: 'custom-a',
+        input: { value: 1 },
+        expected_output: { value: 2 },
+        metadata: { source: 'client-custom-records-test' },
+      },
+      {
+        id: 'custom-b',
+        input: { value: 2 },
+        expected_output: { value: 3 },
+        metadata: { source: 'client-custom-records-test' },
+      },
+    ])
+    assert.equal(customRecords.length, 2)
+    assert.deepEqual(customRecords.map(record => record.id), ['custom-a', 'custom-b'])
+    assert.deepEqual(recordDataByInputValue(customRecords), [
+      { input: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'client-custom-records-test' } },
+      { input: { value: 2 }, expectedOutput: { value: 3 }, metadata: { source: 'client-custom-records-test' } },
+    ])
+
+    await waitForBackend(5_000)
+    const records = await client.listDatasetRecords(projectId, dataset.id(), {
+      version: customRecords.find(record => record.version !== null)?.version ?? dataset.version(),
+    })
+    assert.equal(records.after, '')
+    assert.deepEqual(records.records.map(record => record.id).sort(), ['custom-a', 'custom-b'])
+    assert.deepEqual(recordDataByInputValue(records.records), [
+      { input: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'client-custom-records-test' } },
+      { input: { value: 2 }, expectedOutput: { value: 3 }, metadata: { source: 'client-custom-records-test' } },
     ])
   })
 
