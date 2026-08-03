@@ -3,7 +3,7 @@
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
-const { Experiment, ExperimentRecorder } = require('./experiment')
+const { Experiment } = require('./experiment')
 const NoopExperiments = require('./noop')
 
 // Poll `attempt` with exponential backoff until it returns true or the time
@@ -170,13 +170,13 @@ class Experiments {
    * submitEvaluationMetrics() with the generated span id.
    *
    * @param {object} options
-   * @returns {Promise<ExperimentRecorder>}
+   * @returns {Promise<Experiment>}
    */
   startExperiment (options) {
     const client = options?.projectName === undefined || options.projectName === this.#projectName
       ? this.#client
       : this.#clientForProject(options.projectName)
-    return new ExperimentRecorder(client, options).start()
+    return new Experiment(client, { ...options, external: true }).start()
   }
 }
 

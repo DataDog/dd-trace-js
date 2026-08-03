@@ -3842,6 +3842,80 @@ declare namespace tracer {
       url: string
     }
 
+    type ExperimentRecorderTimestamp = number | string | Date
+
+    interface ExperimentRecorderDatasetOptions {
+      /** Existing dataset id. When omitted, a placeholder dataset is created. */
+      id?: string
+      /** Dataset version to associate with the experiment. */
+      version?: number
+      /** Placeholder dataset name. Defaults to `<experiment name> dataset`. */
+      name?: string
+      /** Placeholder dataset description. */
+      description?: string
+    }
+
+    interface ExperimentRecorderOptions {
+      name: string
+      description?: string
+      /** Override the configured project name for this external experiment. */
+      projectName?: string
+      dataset?: ExperimentRecorderDatasetOptions
+      config?: Record<string, JSONType>
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExperimentRecorderSpanInput {
+      id?: string | number
+      name?: string
+      input?: JSONType
+      output?: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+      startedAt?: ExperimentRecorderTimestamp
+      completedAt?: ExperimentRecorderTimestamp
+      durationMs?: number
+      error?: string | Error | { type?: string, name?: string, message?: string, stack?: string }
+      datasetRecordId?: string
+      runId?: string
+      runIteration?: number
+    }
+
+    interface ExperimentRecorderSpan {
+      experimentId: string
+      spanId: string
+      traceId: string
+      url: string | null
+    }
+
+    interface ExperimentRecorderMetric {
+      label: string
+      value?: JSONType
+      error?: string | Error
+      timestamp?: ExperimentRecorderTimestamp
+      tags?: Record<string, string>
+      source?: string
+    }
+
+    interface ExperimentRecorderCloseOptions {
+      status?: string
+      error?: string | Error
+    }
+
+    interface ExperimentRecorder {
+      experimentId (): string | null
+      name (): string
+      url (): string | null
+      submitSpan (input?: ExperimentRecorderSpanInput): Promise<ExperimentRecorderSpan>
+      submitEvaluationMetrics (
+        span: { experimentId?: string, spanId: string, traceId?: string },
+        metrics: ExperimentRecorderMetric[]
+      ): Promise<void>
+      close (options?: ExperimentRecorderCloseOptions): Promise<void>
+    }
+
     interface DatasetPushResult {
       /** Number of records from this push that were confirmed with a record id. */
       pushedCount: number
@@ -3883,6 +3957,8 @@ declare namespace tracer {
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
       experiment (options: ExperimentOptions): Experiment
+      /** Start an externally-driven experiment recorder. */
+      startExperiment (options: ExperimentRecorderOptions): Promise<ExperimentRecorder>
     }
 
     interface LLMObservabilitySpan {
