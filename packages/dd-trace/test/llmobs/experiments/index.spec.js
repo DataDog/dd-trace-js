@@ -6,6 +6,7 @@ const sinon = require('sinon')
 
 const log = require('../../../src/log')
 const { createExperiments } = require('../../../src/llmobs/experiments')
+const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
 
 const enabledConfig = (overrides = {}) => ({
@@ -55,6 +56,23 @@ describe('LLMObs Experiments facade', () => {
     return dataset
   }
 
+  function datasetResource ({ name = 'remote-dataset', id = 'ds', description = 'desc', latestVersion = 3 } = {}) {
+    return {
+      name: () => name,
+      id: () => id,
+      description: () => description,
+      latestVersion: () => latestVersion,
+    }
+  }
+
+  function stubPullDatasetClient ({ projectId = 'proj', datasets = [], pages = [] } = {}) {
+    sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves(projectId)
+    sinon.stub(ExperimentsClient.prototype, 'listDatasets').resolves(datasets)
+    const listDatasetRecords = sinon.stub(ExperimentsClient.prototype, 'listDatasetRecords')
+    for (let i = 0; i < pages.length; i++) listDatasetRecords.onCall(i).resolves(pages[i])
+    return { listDatasetRecords }
+  }
+
   describe('createExperiments gating', () => {
     it('returns a no-op when LLM Obs is disabled', () => {
       const warn = sinon.spy(log, 'warn')
@@ -97,6 +115,15 @@ describe('LLMObs Experiments facade', () => {
           records: [{ id: 'r1', inputData: 'a' }, { id: 'r1', inputData: 'b' }],
         }),
         /Duplicate record id 'r1'/
+      )
+    })
+
+    it('rejects invalid custom record ids', () => {
+      assert.throws(
+        () => createExperiments(enabledConfig()).createDataset('d', {
+          records: [{ id: '', inputData: 'a' }],
+        }),
+        /record id must be a non-empty string/
       )
     })
 
@@ -173,6 +200,94 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(experiment.url(), null)
       assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
       sinon.assert.callCount(warn, 4)
+    })
+  })
+
+  describe('pullDataset', () => {
+    it('pulls records from the backend client with pagination and an explicit version', async () => {
+      const firstRecord = { id: 'r1', input: { value: 1 }, expectedOutput: 'one', metadata: { page: 1 } }
+      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
+      const { listDatasetRecords } = stubPullDatasetClient({
+        datasets: [datasetResource({ name: 'remote-dataset', id: 'ds', description: 'desc', latestVersion: 4 })],
+        pages: [
+          { records: [firstRecord], after: 'next-page' },
+          { records: [secondRecord], after: '' },
+        ],
+      })
+
+      const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', {
+        expectedRecordCount: 2,
+        maxWaitMs: 0,
+        version: 2,
+      })
+
+      assert.equal(dataset.name(), 'remote-dataset')
+      assert.equal(dataset.description(), 'desc')
+      assert.equal(dataset.id(), 'ds')
+      assert.equal(dataset.projectId(), 'proj')
+      assert.equal(dataset.version(), 2)
+      assert.equal(dataset.latestVersion(), 4)
+      assert.deepEqual(dataset.records(), [firstRecord, secondRecord])
+      assert.deepEqual(dataset.recordIds(), ['r1', ''])
+      sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
+      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
+    })
+
+    it('uses the latest dataset version when no version is requested', async () => {
+      const { listDatasetRecords } = stubPullDatasetClient({
+        datasets: [datasetResource({ name: 'remote-dataset', latestVersion: 5 })],
+        pages: [{ records: [], after: '' }],
+      })
+
+      const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 })
+
+      assert.equal(dataset.version(), 5)
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 5 }])
+    })
+
+    it('surfaces list failures from the backend client', async () => {
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves('proj')
+      sinon.stub(ExperimentsClient.prototype, 'listDatasets').rejects(new Error('list failed'))
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
+        /Failed to list datasets in project 'my-app': list failed/
+      )
+    })
+
+    it('surfaces a not-found dataset after the wait budget is exhausted', async () => {
+      stubPullDatasetClient({ datasets: [] })
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
+        /Dataset 'missing-dataset' not found in project 'my-app'/
+      )
+    })
+
+    it('surfaces record fetch failures from the backend client', async () => {
+      stubPullDatasetClient({ datasets: [datasetResource()] })
+      ExperimentsClient.prototype.listDatasetRecords.rejects(new Error('records failed'))
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Failed to fetch records for dataset 'remote-dataset' in project 'my-app': records failed/
+      )
+    })
+
+    it('surfaces an expected record count miss after the wait budget is exhausted', async () => {
+      stubPullDatasetClient({
+        datasets: [datasetResource()],
+        pages: [{ records: [], after: '' }],
+      })
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', {
+          expectedRecordCount: 1,
+          maxWaitMs: 0,
+        }),
+        /Dataset 'remote-dataset' has 0 record\(s\) after 0ms, expected 1/
+      )
     })
   })
 
