@@ -1941,6 +1941,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_MANAGEMENT_REPORT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
