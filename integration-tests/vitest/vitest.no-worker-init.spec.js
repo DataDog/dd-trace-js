@@ -1559,6 +1559,45 @@ SUPPORTED_VERSIONS.forEach((version) => {
       assert.strictEqual(exitCode, 1, testOutput)
     })
 
+    it('preserves user configured Vitest retries when the EFD retry budget is zero', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const tests = getTestsByName(
+          getEventContents(events, 'test'),
+          'flaky test retries can retry tests that eventually pass'
+        )
+        assert.strictEqual(tests.length, 2)
+        assert.ok(!(TEST_IS_RETRY in tests[0].meta), inspect(tests[0].meta))
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        assert.strictEqual(tests[1].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+      })
+
+      const [exitCode] = await Promise.all([
+        runVitest({
+          PROJECT_POOL_CONFIG: 'forks',
+          PROJECT_RETRY_CONFIG: '1',
+          TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+        }, './node_modules/.bin/vitest run --project project-pool -t "can retry tests that eventually pass"'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
     it('does not double report delayed final failed Vitest retries in no-worker mode', async () => {
       receiver.setSettings({
         itr_enabled: false,

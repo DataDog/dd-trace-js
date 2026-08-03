@@ -1,6 +1,7 @@
 'use strict'
 
 // Capture real timers at module load time, before any test can install fake timers.
+const realClearTimeout = clearTimeout
 const realSetTimeout = setTimeout
 
 const { readFileSync } = require('node:fs')
@@ -188,6 +189,7 @@ const handledJestEvents = new WeakSet()
  * @property {boolean} [isModified]
  * @property {(...args: unknown[]) => unknown} [sourceTestFn]
  * @property {string} [testParameters]
+ * @property {number} [timeout]
  */
 
 /**
@@ -770,6 +772,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             concurrentTest,
             concurrentTestThisArg: this,
             sourceTestFn: environment.concurrentTestSourceFns.get(testFn),
+            timeout: args[0],
           })
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
         }
@@ -906,6 +909,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         isModified: options?.isModified ?? this.isTestModified(asyncError, sourceTestFn),
         hasDynamicName: isNewTest && DYNAMIC_NAME_RE.test(testFullName),
         testSuiteAbsolutePath: this.testSuiteAbsolutePath,
+        testTimeout: options?.timeout || state.testTimeout,
       }
       let contexts = this.concurrentTestContexts.get(testFullName)
       if (contexts) {
@@ -1075,7 +1079,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retry.ctx.detachedEfdRetryError = error
             this.finishDetachedEfdRetry(retry)
           }
-          startPromise.then(run).then(
+          startPromise.then(() => this.runDetachedEfdRetryWithTimeout(ctx, run)).then(
             () => this.finishDetachedEfdRetry(retry),
             onRejected
           )
@@ -1086,6 +1090,46 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         retryGate.promise.then(onDecision)
       }
       return new Promise(enqueue)
+    }
+
+    /**
+     * Applies the timeout Jest 28/29 cannot start around a detached concurrent retry body.
+     *
+     * @param {object} ctx
+     * @param {() => unknown} run
+     * @returns {Promise<void>}
+     */
+    runDetachedEfdRetryWithTimeout (ctx, run) {
+      return new Promise((resolve, reject) => {
+        let completed = false
+        const timeoutId = realSetTimeout(() => {
+          if (completed) return
+
+          completed = true
+          reject(new Error(`Exceeded timeout of ${ctx.testTimeout} ms for a test.`))
+        }, ctx.testTimeout)
+
+        const settle = (callback, value) => {
+          if (completed) return
+
+          completed = true
+          timeoutId.unref?.()
+          realClearTimeout(timeoutId)
+          callback(value)
+        }
+
+        let result
+        try {
+          result = run()
+        } catch (error) {
+          settle(reject, error)
+          return
+        }
+        Promise.resolve(result).then(
+          () => settle(resolve),
+          error => settle(reject, error)
+        )
+      })
     }
 
     /**
@@ -1116,39 +1160,26 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     /**
-     * @param {EfdRetryGate} retryGate
-     * @param {object} ctx
+     * Preserves Jest's immediate error when a callback test also returns a value.
+     *
      * @param {() => unknown} run
      * @param {(error?: Error) => void} done
      * @returns {void}
      */
-    runCallbackEfdRetry (retryGate, ctx, run, done) {
-      /**
-       * @param {boolean} shouldRun
-       * @returns {void}
-       */
-      const onDecision = (shouldRun) => {
-        if (!shouldRun) {
-          ctx.isDiscardedEfdRetry = true
-          done()
-          return
-        }
-
-        let result
-        try {
-          result = run()
-        } catch (error) {
-          done(error)
-          return
-        }
-        if (result !== undefined) {
-          done(new Error(
-            "Test functions cannot both take a 'done' callback and return something. " +
-            "Either use a 'done' callback, or return a promise."
-          ))
-        }
+    runCallbackEfdRetry (run, done) {
+      let result
+      try {
+        result = run()
+      } catch (error) {
+        done(error)
+        return
       }
-      retryGate.promise.then(onDecision)
+      if (result !== undefined) {
+        done(new Error(
+          "Test functions cannot both take a 'done' callback and return something. " +
+          "Either use a 'done' callback, or return a promise."
+        ))
+      }
     }
 
     /**
@@ -1190,25 +1221,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const retryGate = ctx.efdRetryGates?.[ctx.efdRetryIndex - 1]
-      if (retryGate) {
-        if (!hasConcurrentTestsStartEvent) {
-          ctx.detachedEfdRetryPromise = this.enqueueDetachedEfdRetry(retryGate, ctx, runTestInContext)
-          return
-        }
-
-        const done = args[0]
-        if (typeof done === 'function') {
-          this.runCallbackEfdRetry(retryGate, ctx, runTestInContext, done)
-          return
-        }
-
-        return retryGate.promise.then(shouldRun => {
-          if (!shouldRun) {
-            ctx.isDiscardedEfdRetry = true
-            return
-          }
-          return runTestInContext()
-        })
+      if (retryGate && !hasConcurrentTestsStartEvent) {
+        ctx.detachedEfdRetryPromise = this.enqueueDetachedEfdRetry(retryGate, ctx, runTestInContext)
+        return
+      }
+      if (retryGate && typeof args[0] === 'function') {
+        this.runCallbackEfdRetry(runTestInContext, args[0])
+        return
       }
 
       if (!concurrentTestState.trackEfdCompletion) {
@@ -1427,6 +1446,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               isEfdRetry,
               isModified: isModified ?? concurrentTestState.ctx.isModified,
               testParameters: concurrentTestState.ctx.testParameters,
+              timeout,
             }
           )
           test.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
@@ -1668,7 +1688,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.#discardedEfdRetryTests = undefined
     }
 
-    // At the `add_test` event we don't have the test object yet, so we can't use it
+    // The `add_test` payload has no test node, so derive its full name from the current describe block.
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getRawJestTestName(state.currentDescribeBlock)
       const testName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
@@ -1691,6 +1711,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const testFullName = this.getTestNameFromAddTestEvent(event, state)
+      const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
+      const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
+        concurrentTestContexts?.at(-1)?.concurrentTestState
+      const registeredTest = state.currentDescribeBlock?.children?.at(-1)
+      if (concurrentTestState && registeredTest?.fn === event.fn) {
+        testContexts.set(registeredTest, concurrentTestState.ctx)
+      }
       if (retriedTestsToNumAttempts.has(testFullName)) {
         return
       }
@@ -1699,10 +1726,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
       const isDisabled = this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.disabled?.includes(testFullName)
-      const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
-      const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
-        concurrentTestContexts?.at(-1)?.concurrentTestState
-
       if (isAttemptToFix && !isSkipped) {
         retriedTestsToNumAttempts.set(testFullName, 0)
         testsToBeRetried.add(testFullName)
@@ -1831,12 +1854,23 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           return
         }
 
-        const concurrentTestState = this.concurrentTestStates.get(event.test.fn)
-        let concurrentCtx = concurrentTestState?.ctx
+        const registeredConcurrentCtx = testContexts.get(event.test)
+        const concurrentTestState = this.concurrentTestStates.get(event.test.fn) ||
+          registeredConcurrentCtx?.concurrentTestState
+        let concurrentCtx = concurrentTestState?.ctx || registeredConcurrentCtx
         if (concurrentCtx) {
           this.removeConcurrentTestContext(testName, concurrentCtx)
         } else {
           concurrentCtx = this.getNextConcurrentTestContext(testName)
+        }
+        if (hasConcurrentTestsStartEvent && concurrentCtx?.efdRetryGates) {
+          const retryGate = concurrentCtx.efdRetryGates[concurrentCtx.efdRetryIndex - 1]
+          const shouldRun = await retryGate.promise
+          if (!shouldRun) {
+            concurrentCtx.isDiscardedEfdRetry = true
+            event.test.mode = 'skip'
+            return
+          }
         }
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're retrying tests with the same name

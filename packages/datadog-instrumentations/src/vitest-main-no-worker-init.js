@@ -4,6 +4,7 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -309,6 +310,16 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
   return pool === undefined || isVitestWorkerPool(pool)
 }
 
+/**
+ * @param {object} state
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionActive (state) {
+  return state.isEarlyFlakeDetectionEnabled &&
+    !state.isEarlyFlakeDetectionFaulty &&
+    hasEfdRetries(state.earlyFlakeDetectionRetryPolicy)
+}
+
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
   const { shouldReportTestModule, state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
@@ -330,7 +341,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
       earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
-      isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
+      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
@@ -850,7 +861,7 @@ function createMainProcessReporter (reporterState) {
     return {
       isAttemptToFix,
       isDisabled: testManagementProperties.isDisabled,
-      isEarlyFlakeDetection: (isNew || isModified) && state.isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetection: (isNew || isModified) && isEarlyFlakeDetectionActive(state),
       isFlakyTestRetries,
       isQuarantined: testManagementProperties.isQuarantined,
       isModified,
