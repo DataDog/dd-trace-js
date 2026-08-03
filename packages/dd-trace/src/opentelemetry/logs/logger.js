@@ -1,8 +1,23 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const { context } = require('@opentelemetry/api')
-const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
+const {
+  millisToHrTime,
+  sanitizeAttributes,
+  timeInputToHrTime,
+} = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
+
+function toHrTime (timestamp) {
+  // The vendored OTel version treats every number before timeOrigin as performance.now().
+  // Preserve historical Unix-millisecond inputs as absolute timestamps.
+  if (typeof timestamp === 'number' && timestamp >= performance.timeOrigin / 2) {
+    return millisToHrTime(timestamp)
+  }
+  return timeInputToHrTime(timestamp)
+}
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -62,20 +77,20 @@ class Logger {
       return
     }
 
+    const record = { ...logRecord }
+    const timestamp = logRecord.timestamp === undefined ? Date.now() : logRecord.timestamp
+    record.timestamp = toHrTime(timestamp)
+    record.context = logRecord.context || context.active()
+
+    if (logRecord.observedTimestamp !== undefined) {
+      record.observedTimestamp = toHrTime(logRecord.observedTimestamp)
+    }
+
     if (logRecord.attributes) {
-      logRecord.attributes = sanitizeAttributes(logRecord.attributes)
+      record.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    if (logRecord.timestamp === undefined) {
-      logRecord.timestamp = Date.now()
-    }
-
-    if (!logRecord.context) {
-      // Store span context in the log record context for trace correlation
-      logRecord.context = context.active()
-    }
-
-    this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)
+    this.loggerProvider.processor.onEmit(record, this.#instrumentationScope)
   }
 }
 
