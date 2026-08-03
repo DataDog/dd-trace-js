@@ -36,13 +36,9 @@ class Experiments {
       apiKey: config.DD_API_KEY,
       appKey: config.DD_APP_KEY,
       site: config.site,
-      projectName: this.#projectName,
       apiBase: config.llmobs?.experimentsApiBase,
+      projectName: this.#projectName,
     })
-  }
-
-  _deleteDataset (projectId, datasetId) {
-    return this.#client.deleteDataset(projectId, datasetId)
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.

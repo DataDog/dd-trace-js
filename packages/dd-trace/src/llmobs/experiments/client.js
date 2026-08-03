@@ -66,7 +66,7 @@ class ExperimentsClient {
   #apiBase
   #cachedProjectId
 
-  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000, apiBase } = {}) {
+  constructor ({ apiKey, appKey, site, apiBase, projectName, timeout = 30_000 } = {}) {
     this.#apiKey = apiKey
     this.#appKey = appKey
     this.#site = site
