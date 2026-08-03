@@ -3842,9 +3842,9 @@ declare namespace tracer {
       url: string
     }
 
-    type ExperimentRecorderTimestamp = number | string | Date
+    type ExternalExperimentTimestamp = number | string | Date
 
-    interface ExperimentRecorderDatasetOptions {
+    interface StartExperimentDatasetOptions {
       /** Existing dataset id. When omitted, a placeholder dataset is created. */
       id?: string
       /** Dataset version to associate with the experiment. */
@@ -3855,18 +3855,18 @@ declare namespace tracer {
       description?: string
     }
 
-    interface ExperimentRecorderOptions {
+    interface StartExperimentOptions {
       name: string
       description?: string
       /** Override the configured project name for this external experiment. */
       projectName?: string
-      dataset?: ExperimentRecorderDatasetOptions
+      dataset?: StartExperimentDatasetOptions
       config?: Record<string, JSONType>
       metadata?: Record<string, JSONType>
       tags?: Record<string, string>
     }
 
-    interface ExperimentRecorderSpanInput {
+    interface ExternalExperimentSpanInput {
       id?: string | number
       name?: string
       input?: JSONType
@@ -3874,8 +3874,8 @@ declare namespace tracer {
       expectedOutput?: JSONType
       metadata?: Record<string, JSONType>
       tags?: Record<string, string>
-      startedAt?: ExperimentRecorderTimestamp
-      completedAt?: ExperimentRecorderTimestamp
+      startedAt?: ExternalExperimentTimestamp
+      completedAt?: ExternalExperimentTimestamp
       durationMs?: number
       error?: string | Error | { type?: string, name?: string, message?: string, stack?: string }
       datasetRecordId?: string
@@ -3883,37 +3883,37 @@ declare namespace tracer {
       runIteration?: number
     }
 
-    interface ExperimentRecorderSpan {
+    interface ExternalExperimentSpan {
       experimentId: string
       spanId: string
       traceId: string
       url: string | null
     }
 
-    interface ExperimentRecorderMetric {
+    interface ExternalExperimentMetric {
       label: string
       value?: JSONType
       error?: string | Error
-      timestamp?: ExperimentRecorderTimestamp
+      timestamp?: ExternalExperimentTimestamp
       tags?: Record<string, string>
       source?: string
     }
 
-    interface ExperimentRecorderCloseOptions {
+    interface ExternalExperimentCloseOptions {
       status?: string
       error?: string | Error
     }
 
-    interface ExperimentRecorder {
+    interface ExternalExperiment {
       experimentId (): string | null
       name (): string
       url (): string | null
-      submitSpan (input?: ExperimentRecorderSpanInput): Promise<ExperimentRecorderSpan>
+      submitSpan (input?: ExternalExperimentSpanInput): Promise<ExternalExperimentSpan>
       submitEvaluationMetrics (
         span: { experimentId?: string, spanId: string, traceId?: string },
-        metrics: ExperimentRecorderMetric[]
+        metrics: ExternalExperimentMetric[]
       ): Promise<void>
-      close (options?: ExperimentRecorderCloseOptions): Promise<void>
+      close (options?: ExternalExperimentCloseOptions): Promise<void>
     }
 
     interface DatasetPushResult {
@@ -3957,8 +3957,8 @@ declare namespace tracer {
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
       experiment (options: ExperimentOptions): Experiment
-      /** Start an externally-driven experiment recorder. */
-      startExperiment (options: ExperimentRecorderOptions): Promise<ExperimentRecorder>
+      /** Start an externally-driven experiment. */
+      startExperiment (options: StartExperimentOptions): Promise<ExternalExperiment>
     }
 
     interface LLMObservabilitySpan {
