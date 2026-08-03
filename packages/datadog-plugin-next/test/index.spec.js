@@ -618,17 +618,37 @@ describe('Plugin', function () {
         })
 
         describe('when an error happens', () => {
-          it('should not die', done => {
-            agent
-              .assertSomeTraces(_traces => { })
-              .then(done)
-              .catch(done)
+          it('should attach a Pages API error to the request span', () => {
+            const tracingPromise = agent
+              .assertSomeTraces(traces => {
+                const nextRequestSpans = traces[0].filter(span => span.name === 'next.request')
 
-            axios
-              .get(`http://127.0.0.1:${port}/api/error/boom`)
-              .catch((response) => {
-                assert.deepStrictEqual(response.statusCode, 500)
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assertObjectContains(nextRequestSpans[0], {
+                  resource: 'GET /api/error/[name]',
+                  error: 1,
+                  meta: {
+                    'http.status_code': '500',
+                  },
+                })
+
+                if (satisfies(pkg.version, '>=15.4.1')) {
+                  assertObjectContains(nextRequestSpans[0], {
+                    meta: {
+                      'error.message': 'oh no',
+                      'error.type': 'Error',
+                    },
+                  })
+                  assert.ok(nextRequestSpans[0].meta['error.stack'])
+                }
               })
+
+            return Promise.all([
+              axios
+                .get(`http://127.0.0.1:${port}/api/error/boom`)
+                .catch(error => assert.strictEqual(error.response?.status, 500)),
+              tracingPromise,
+            ])
           })
         })
       })

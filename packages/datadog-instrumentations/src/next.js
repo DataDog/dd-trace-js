@@ -15,6 +15,7 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
+const requestErrors = new WeakMap()
 
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
@@ -213,10 +214,8 @@ function wrapServeStatic (serveStatic) {
 }
 
 function finish (ctx, result, err) {
-  if (err) {
-    ctx.error = err
-    errorChannel.publish(ctx)
-  }
+  publishError(ctx.req, ctx, err)
+  requestErrors.delete(ctx.req)
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
   if (maybeNextRequest) {
@@ -224,6 +223,27 @@ function finish (ctx, result, err) {
   }
 
   finishChannel.publish(ctx)
+}
+
+function publishError (req, ctx, error) {
+  if (!error) return
+
+  req = req.originalRequest || req
+  let errors = requestErrors.get(req)
+  if (errors?.has(error)) return
+
+  if (!errors) {
+    errors = new Set()
+    requestErrors.set(req, errors)
+  }
+  errors.add(error)
+
+  if (ctx) {
+    ctx.error = error
+    errorChannel.publish(ctx)
+  } else {
+    errorChannel.publish({ error })
+  }
 }
 
 // also wrapped in dist/server/future/route-handlers/app-route-route-handler.js
@@ -319,7 +339,14 @@ function wrapPagesApiRender (render) {
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, context.page, false)
 
-      return render.apply(this, arguments)
+      const { onError } = context
+      return render.call(this, req, res, {
+        ...context,
+        onError: function (error) {
+          publishError(req, ctx, error)
+          return onError?.apply(this, arguments)
+        },
+      })
     })
   }
 }
