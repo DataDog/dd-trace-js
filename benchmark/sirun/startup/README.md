@@ -6,7 +6,7 @@ curated toward modules dd-trace instruments. Both fixture entries read the same
 
 - `index.js` loads them with CommonJS `require`, exercising require-in-the-middle.
 - `index.mjs` loads them with ESM `import`; the `with-tracer-everything-esm`
-  variant registers the iitm ESM loader via `--import ../../../register.js`, so
+  variant registers the iitm ESM loader via `--import ../../../initialize.mjs`, so
   this is the variant that measures the synchronous-vs-asynchronous loader cost.
 
 ## Updating the fixture
