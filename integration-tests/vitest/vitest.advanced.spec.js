@@ -46,6 +46,7 @@ const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-vi
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
+const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
 const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
@@ -675,6 +676,66 @@ versions.forEach((version) => {
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
+    })
+
+    context('test impact analysis with user coverage', () => {
+      for (const coverageProvider of ['v8', 'istanbul']) {
+        for (const { description, env } of [
+          { description: 'with isolation', env: {} },
+          { description: 'without isolation', env: { NO_ISOLATE: 'true' } },
+        ]) {
+          it(`preserves aggregate ${coverageProvider} coverage ${description} when TIA runs no skips`, async () => {
+            async function runAndGetCoverage (settings) {
+              receiver.setSettings(settings)
+              testOutput = ''
+              childProcess = exec('./node_modules/.bin/vitest run --coverage', {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                  TEST_DIR: 'ci-visibility/vitest-tests/tia-{first,second}.mjs',
+                  COVERAGE_PROVIDER: coverageProvider,
+                  ...env,
+                },
+              })
+              childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+              childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+              await receiver.gatherPayloadsUntilChildExit(
+                childProcess,
+                ({ url }) => url === '/api/v2/citestcycle' || url === '/api/v2/citestcov',
+                () => {},
+                { hardTimeout: 60_000 }
+              )
+
+              assert.strictEqual(childProcess.exitCode, 0, testOutput)
+              const linePctMatch = testOutput.match(linePctMatchRegex)
+              assert.ok(linePctMatch, testOutput)
+              assert.ok(testOutput.includes('Coverage report from'), testOutput)
+              assert.strictEqual(fs.existsSync(path.join(cwd, 'coverage/lcov.info')), true)
+
+              return Number(linePctMatch[1])
+            }
+
+            const settings = {
+              coverage_report_upload_enabled: false,
+              tests_skipping: false,
+            }
+            const baselineCoverage = await runAndGetCoverage({
+              ...settings,
+              itr_enabled: false,
+              code_coverage: false,
+            })
+            const tiaCoverage = await runAndGetCoverage({
+              ...settings,
+              itr_enabled: true,
+              code_coverage: true,
+            })
+
+            assert.strictEqual(tiaCoverage, baselineCoverage)
+          })
+        }
+      }
     })
 
     // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
