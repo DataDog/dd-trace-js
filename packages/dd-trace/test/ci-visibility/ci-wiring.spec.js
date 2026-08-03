@@ -185,6 +185,24 @@ describe('test optimization validation CI audit', () => {
     )
   })
 
+  it('fails closed when multiple Bun lifecycle scripts invoke the selected runner', () => {
+    framework.framework = 'cypress'
+    framework.id = 'cypress:fixture'
+    writeScripts({
+      pretest: 'cypress run --component',
+      test: 'cypress run --headless',
+    })
+    const bunCommand = 'bun run test'
+    fs.writeFileSync(workflow, workflowSource({ command: bunCommand }))
+    completeReview({ command: bunCommand, initialization: 'not_configured', transport: 'none' })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.match(result.evidence.ciFacts.runnerInvocation.reason, /more than one bounded local package-script path/)
+  })
+
   it('does not interpret a Bun built-in as a package script', () => {
     writeScripts({ test: command })
     fs.writeFileSync(workflow, workflowSource({ command: 'bun test' }))
@@ -298,6 +316,21 @@ describe('test optimization validation CI audit', () => {
     assert.strictEqual(result.status, 'fail')
     assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /^cucumber-js/)
     assert.deepStrictEqual(result.evidence.ciFacts.runnerInvocation.lifecycleScripts, ['pretest'])
+  })
+
+  it('fails closed when multiple npm lifecycle scripts invoke the selected runner', () => {
+    writeScripts({
+      pretest: command,
+      test: command,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.match(result.evidence.ciFacts.runnerInvocation.reason, /more than one bounded local package-script path/)
   })
 
   it('does not assume implicit lifecycle semantics for Yarn', () => {

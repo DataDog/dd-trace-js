@@ -215,6 +215,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   }
 
   const projectFiles = collectProjectFiles(projectRoot)
+  const commandRoots = getRunnerSearchRoots(framework, detection.command, projectRoot, repositoryRoot)
   let runnerContract = getRunnerContract(framework, detection.command, projectRoot, repositoryRoot)
   if (runnerContract.error) {
     return {
@@ -227,7 +228,12 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       ],
     }
   }
-  const implicitConfigFiles = getImplicitConfigFiles(framework, projectRoot, repositoryRoot)
+  const implicitConfigFiles = [...new Set([
+    ...getImplicitConfigFiles(framework, projectRoot, repositoryRoot),
+    ...(framework === 'vitest' && commandRoots[0]
+      ? getImplicitConfigFiles(framework, commandRoots[0], repositoryRoot)
+      : []),
+  ])]
   if (framework === 'cucumber') {
     const expanded = cucumber.expandProfiles({
       configFiles: [...new Set([...runnerContract.inputFiles, ...implicitConfigFiles])],
@@ -289,7 +295,6 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       ],
     }
   }
-  const commandRoots = getRunnerSearchRoots(framework, detection.command, projectRoot, repositoryRoot)
   const representativeRoot = vitestProject?.root ||
     commandRoots[0] ||
     findPreferredRepresentativeRoot(projectRoot, repositoryRoot)

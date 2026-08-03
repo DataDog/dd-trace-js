@@ -90,7 +90,7 @@ describe('test optimization validation execution boundary', () => {
       stdout: [
         'Tests: 274',
         '1) "before all" hook for "should restore focus"',
-        'Error: /dist/sweetalert2.css is not found',
+        `Error: ${path.join(fixture.root, 'dist', 'sweetalert2.css')} is not found`,
       ].join('\n'),
     }, {
       framework: 'cypress',
@@ -107,6 +107,9 @@ describe('test optimization validation execution boundary', () => {
       "Error: Cannot find module '@scope/dependency/dist/index.js'",
       `Error: Cannot find module '${path.join(fixture.root, 'node_modules', 'dependency', 'dist', 'index.js')}'`,
       "Error: Cannot find module '/opt/vendor/dist/index.js'",
+      "Error: Cannot find module '/build/index.js'",
+      "Error: Cannot find module '/dist/index.js'",
+      "Error: Cannot find module '/generated/index.js'",
       "Error: Cannot find module '../vendor/dist/index.js'",
     ]) {
       const blocker = getCommandBlocker({ exitCode: 1, stderr, stdout: '' }, {

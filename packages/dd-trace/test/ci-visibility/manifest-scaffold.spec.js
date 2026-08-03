@@ -388,6 +388,9 @@ describe('test optimization validation manifest scaffold', () => {
       ['@scope/dependency/dist/index.js', false],
       ['./node_modules/dependency/dist/index.js', false],
       ['/opt/vendor/dist/index.js', false],
+      ['/build/app.js', false],
+      ['/dist/app.js', false],
+      ['/generated/app.js', false],
     ]) {
       withRepositoryFixture({ framework: 'mocha', script: 'mocha' }, fixture => {
         fs.writeFileSync(fixture.testFile, [
@@ -982,6 +985,40 @@ describe('test optimization validation manifest scaffold', () => {
     })
   }
 
+  it('binds a Vitest project relative to the retained root', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --root packages/foo --project unit',
+    }, fixture => {
+      const selected = path.join(fixture.root, 'packages', 'foo', 'tests', 'selected.test.ts')
+      const nestedConfig = path.join(fixture.root, 'packages', 'foo', 'vitest.config.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+        "import { defineConfig } from 'vitest/config'",
+        'export default defineConfig({',
+        "  test: { projects: [{ test: { name: 'unit', root: 'outside' } }] },",
+        '})',
+        '',
+      ].join('\n'))
+      fs.writeFileSync(nestedConfig, [
+        "import { defineConfig } from 'vitest/config'",
+        'export default defineConfig({',
+        "  test: { projects: [{ test: { name: 'unit', include: ['tests/**/*.test.ts'] } }] },",
+        '})',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.ok(framework.project.configFiles.includes(nestedConfig))
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--root', 'packages/foo', '--project', 'unit'])
+    })
+  })
+
   it('fails closed when a Vitest project cannot be bound to one static scope', () => {
     withRepositoryFixture({
       framework: 'vitest',
@@ -998,6 +1035,38 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.validation, undefined)
     })
   })
+
+  for (const projectBody of [
+    "      ...shared,\n      test: { name: 'fastly' },",
+    "      test: { ...shared, name: 'fastly' },",
+  ]) {
+    it('fails closed when a selected Vitest project uses spread composition', () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project fastly',
+      }, fixture => {
+        fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+          "import { defineConfig } from 'vitest/config'",
+          'const shared = {}',
+          'export default defineConfig({',
+          '  test: {',
+          '    projects: [{',
+          projectBody,
+          '    }],',
+          '  },',
+          '})',
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+        assert.match(framework.notes.join(' '), /dynamic spread composition/)
+        assert.strictEqual(framework.validation, undefined)
+      })
+    })
+  }
 
   it('ignores Vitest project names inside comments and strings', () => {
     withRepositoryFixture({
@@ -1043,6 +1112,8 @@ describe('test optimization validation manifest scaffold', () => {
         'export default defineConfig({',
         '  test: {',
         '    projects: [{',
+        "      description: 'literal ...shared text',",
+        '      // ...shared',
         '      test: {',
         "        'name': 'fastly',",
         "        'root': 'runtime-tests',",

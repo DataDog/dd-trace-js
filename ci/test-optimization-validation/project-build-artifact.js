@@ -21,11 +21,9 @@ function isProjectBuildArtifactPath (filename, projectRoot, baseDirectory = proj
   if (windowsPath !== windowsRoot && windowsPath) return false
   const pathApi = windowsRoot ? path.win32 : path.posix
   const root = pathApi.resolve(normalizedRoot)
-  const candidate = /^\/(?:build|dist|generated)(?:\/|$)/.test(normalized)
-    ? pathApi.resolve(root, normalized.slice(1))
-    : relativePath
-      ? pathApi.resolve(String(baseDirectory).replaceAll('\\', '/'), normalized)
-      : pathApi.resolve(normalized)
+  const candidate = relativePath
+    ? pathApi.resolve(String(baseDirectory).replaceAll('\\', '/'), normalized)
+    : pathApi.resolve(normalized)
   const relative = pathApi.relative(root, candidate)
   return relative === '' || (!relative.startsWith('..') && !pathApi.isAbsolute(relative))
 }

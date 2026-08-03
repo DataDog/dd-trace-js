@@ -36,7 +36,18 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
   }
 
   const name = projects[0]
-  const selectedConfigs = getSelectedConfigFiles({ configFiles, projectRoot, runnerArgs })
+  const roots = getOptionValues(runnerArgs, '--root')
+  if (roots.length > 1) {
+    return { error: '--project cannot be bound with more than one Vitest root' }
+  }
+  const effectiveRoot = roots.length === 1
+    ? getPhysicalDirectory(path.resolve(projectRoot, roots[0]))
+    : getPhysicalDirectory(projectRoot)
+  if (!effectiveRoot || !isContainedDirectory(projectRoot, effectiveRoot)) {
+    return { error: 'the selected Vitest root is not a project-contained directory' }
+  }
+
+  const selectedConfigs = getSelectedConfigFiles({ configFiles, effectiveRoot, projectRoot, runnerArgs })
   if (selectedConfigs.error) return selectedConfigs
   const bindings = []
   for (const configFile of selectedConfigs.files) {
@@ -49,6 +60,7 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
       const projectName = getLiteralProperty(projectObject, 'name')
       if (projectName.dynamic || projectName.value !== name) continue
       const binding = getBindingFromObject({
+        bindingRoot: effectiveRoot,
         configFile,
         projectFiles,
         projectObject,
@@ -70,7 +82,7 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
   return bindings[0]
 }
 
-function getSelectedConfigFiles ({ configFiles, projectRoot, runnerArgs }) {
+function getSelectedConfigFiles ({ configFiles, effectiveRoot, projectRoot, runnerArgs }) {
   const explicitConfigs = getOptionValues(runnerArgs, '--config')
   if (explicitConfigs.length > 1) {
     return { error: '--project cannot be bound with more than one explicit Vitest config' }
@@ -83,25 +95,28 @@ function getSelectedConfigFiles ({ configFiles, projectRoot, runnerArgs }) {
       : { error: 'the explicit Vitest config is not an approval-bound regular file' }
   }
 
-  const physicalRoot = getPhysicalDirectory(projectRoot)
   return {
     files: configFiles.filter(filename => {
-      return path.dirname(filename) === physicalRoot && CONFIG_PATTERN.test(path.basename(filename))
+      return path.dirname(filename) === effectiveRoot && CONFIG_PATTERN.test(path.basename(filename))
     }),
   }
 }
 
-function getBindingFromObject ({ configFile, projectFiles, projectObject, projectRoot, source }) {
+function getBindingFromObject ({ bindingRoot, configFile, projectFiles, projectObject, projectRoot, source }) {
+  if (/\.\.\./.test(maskJavaScriptNonCode(projectObject))) {
+    return { error: 'the selected Vitest project uses dynamic spread composition' }
+  }
+
   const rootProperty = getLiteralProperty(projectObject, 'root')
   if (rootProperty.dynamic) return { error: 'the selected Vitest project has a dynamic root' }
 
   const standaloneProject = /\bdefineProject\s*\(/.test(maskJavaScriptNonCode(source))
-  const rootBase = standaloneProject ? path.dirname(configFile) : projectRoot
+  const rootBase = standaloneProject ? path.dirname(configFile) : bindingRoot
   const root = rootProperty.value
     ? path.resolve(rootBase, rootProperty.value)
     : standaloneProject
       ? path.dirname(configFile)
-      : projectRoot
+      : bindingRoot
   if (!isContainedDirectory(projectRoot, root)) {
     return { error: 'the selected Vitest project root is not a repository-contained directory' }
   }

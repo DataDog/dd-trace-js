@@ -323,10 +323,10 @@ function getRunnerResolution (command, framework, ci, projectFileSources) {
       status: 'unresolved',
     }
   }
-  const candidate = expansion.terminals.find(terminal => {
+  const candidates = expansion.terminals.filter(terminal => {
     return getDirectRunner(terminal.command, framework.framework)
   })
-  if (!candidate) {
+  if (candidates.length === 0) {
     return {
       lifecycleScripts: expansion.lifecycleScripts,
       reason: 'no bounded local package-script path reaches the selected framework runner',
@@ -334,6 +334,15 @@ function getRunnerResolution (command, framework, ci, projectFileSources) {
       status: 'unresolved',
     }
   }
+  if (candidates.length > 1) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: 'more than one bounded local package-script path reaches the selected framework runner',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const candidate = candidates[0]
   return {
     commandPath: candidate.path,
     lifecycleScripts: expansion.lifecycleScripts,
