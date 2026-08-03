@@ -239,7 +239,7 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
  */
 function addRunnerSearchRoot (roots, value, projectRoot, repositoryRoot, directory) {
   if (typeof value !== 'string' || !value) return
-  const literal = value.split(/[*?{[]/, 1)[0].replace(/[\\/]+$/, '')
+  const literal = value.split(/[*?{[]/, 1)[0].replace(/(?<![\\/])[\\/]+$/, '')
   if (!literal) return
   const candidate = path.resolve(projectRoot, literal)
   const searchRoot = directory || !path.extname(candidate) ? candidate : path.dirname(candidate)

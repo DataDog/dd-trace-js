@@ -675,7 +675,7 @@ describe('vitest no-worker init instrumentation selection', () => {
         '    at /repo/test.mjs:60:13',
         '    at runHelper (/repo/helper.mjs?foo=bar:10:5)',
       ].join('\n'))
-      assert.match(error.stack, /[?]import&browserv=/)
+      assert.match(error.stack, /\?import&browserv=/)
     })
 
     it('preserves Node error URLs for final and repeated attempts', () => {
