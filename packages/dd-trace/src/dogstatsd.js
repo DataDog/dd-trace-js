@@ -62,7 +62,7 @@ class DogStatsDClient {
     this._family = isIP(this._host)
     this._port = options.port
     this._tags = options.tags
-    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this.#tagsPrefix = this._tags.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
     this._buffer = ''
     this._offset = 0
@@ -78,7 +78,7 @@ class DogStatsDClient {
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
-    const tagsPrefix = tags?.length ? `|#${tags.join(',')}` : ''
+    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
 
     this._tags = tags
 
