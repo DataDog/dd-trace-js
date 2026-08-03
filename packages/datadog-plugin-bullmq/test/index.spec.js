@@ -6,6 +6,9 @@ const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helper
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
 
+const CIRCULAR_DATA_ERROR = 'Converting circular structure to JSON\n    --> ' +
+  "starting at object with constructor 'Object'\n    --- property 'self' closes the circle"
+
 const testSetup = new TestSetup()
 
 createIntegrationTestSuite('bullmq', 'bullmq', {
@@ -47,17 +50,16 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
         meta: {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
-          'error.type': 'Error',
-          'error.message': 'Validation error, cannot resolve alias "inv"',
+          'error.type': 'TypeError',
+          'error.message': CIRCULAR_DATA_ERROR,
           'error.stack': ANY_STRING,
         },
       })
 
-      try {
-        await testSetup.queueAddError()
-      } catch (err) {
-        // Expected error
-      }
+      await assert.rejects(testSetup.queueAddError(), {
+        name: 'TypeError',
+        message: CIRCULAR_DATA_ERROR,
+      })
 
       return traceAssertion
     })
@@ -186,17 +188,15 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
           'span.kind': 'producer',
           'messaging.system': 'bullmq',
           'error.type': 'TypeError',
-          'error.message': 'Converting circular structure to JSON\n    --> ' +
-            "starting at object with constructor 'Object'\n    --- property 'self' closes the circle",
+          'error.message': CIRCULAR_DATA_ERROR,
           'error.stack': ANY_STRING,
         },
       })
 
-      try {
-        await testSetup.flowProducerAddError()
-      } catch (err) {
-        // Expected error
-      }
+      await assert.rejects(testSetup.flowProducerAddError(), {
+        name: 'TypeError',
+        message: CIRCULAR_DATA_ERROR,
+      })
 
       return traceAssertion
     })
