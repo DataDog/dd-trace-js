@@ -1,10 +1,7 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
-
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { trace } = require('@opentelemetry/api')
-const { millisToHrTime, timeInputToHrTime } = require('../../../../../vendor/dist/@opentelemetry/core')
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
@@ -44,16 +41,11 @@ const SEVERITY_MAP = {
 const NANOSECONDS_PER_SECOND = 1_000_000_000n
 
 /**
- * Converts an OpenTelemetry TimeInput to an exact OTLP uint64 decimal string.
- * @param {import('@opentelemetry/api').TimeInput} timeInput
+ * Converts an OpenTelemetry HrTime to an exact OTLP uint64 decimal string.
+ * @param {import('@opentelemetry/api').HrTime} hrTime
  * @returns {string}
  */
-function encodeTimeInput (timeInput) {
-  // The vendored OTel version treats every number before timeOrigin as performance.now().
-  // Use the current OTel heuristic so historical Unix-millisecond inputs remain absolute.
-  const hrTime = typeof timeInput === 'number' && timeInput >= performance.timeOrigin / 2
-    ? millisToHrTime(timeInput)
-    : timeInputToHrTime(timeInput)
+function encodeHrTime (hrTime) {
   return (BigInt(hrTime[0]) * NANOSECONDS_PER_SECOND + BigInt(hrTime[1])).toString()
 }
 
@@ -157,13 +149,13 @@ class OtlpTransformer extends OtlpTransformerBase {
     const spanContext = this.#extractSpanContext(logRecord.context)
 
     const result = {
-      timeUnixNano: encodeTimeInput(logRecord.timestamp),
+      timeUnixNano: encodeHrTime(logRecord.timestamp),
       body: this.#transformBody(logRecord.body),
     }
 
     // Add optional fields only if they are set
     if (logRecord.observedTimestamp !== undefined) {
-      result.observedTimeUnixNano = encodeTimeInput(logRecord.observedTimestamp)
+      result.observedTimeUnixNano = encodeHrTime(logRecord.observedTimestamp)
     }
 
     if (logRecord.severityNumber !== undefined) {

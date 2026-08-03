@@ -218,7 +218,27 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const { logs } = setupLogs()
-      logs.getLogger('test').emit({ body: 'Timestamp test' })
+      logs.getLogger('test').emit(Object.freeze({ body: 'Timestamp test' }))
+    })
+
+    it('normalizes timestamps before passing a cloned record to the processor', () => {
+      const { logs, loggerProvider } = setupLogs()
+      const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+      const logRecord = Object.freeze({
+        body: 'Timestamp test',
+        timestamp: 1700000000123,
+        observedTimestamp: new Date('2023-11-14T22:13:20.456Z'),
+        attributes: Object.freeze({ key: 'value' }),
+      })
+
+      logs.getLogger('test').emit(logRecord)
+
+      sinon.assert.calledOnce(onEmit)
+      const emittedRecord = onEmit.firstCall.args[0]
+      assert.notStrictEqual(emittedRecord, logRecord)
+      assert.deepStrictEqual(emittedRecord.timestamp, [1700000000, 123000000])
+      assert.deepStrictEqual(emittedRecord.observedTimestamp, [1700000000, 456000000])
+      assert.deepStrictEqual(emittedRecord.attributes, { key: 'value' })
     })
 
     it('normalizes all OpenTelemetry timestamp input types without losing precision', () => {
@@ -694,7 +714,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})
-      exporter.export([{ body: 'test', severityNumber: 9, timestamp: new Date() }], () => {})
+      exporter.export([{ body: 'test', severityNumber: 9, timestamp: [1700000000, 0] }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
     })
