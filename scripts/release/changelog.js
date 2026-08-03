@@ -14,6 +14,7 @@ const CONVENTIONAL_PATTERN = new RegExp(
 )
 const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
 const REFERENCE_PATTERN = /#([0-9]+)/g
+const MARKDOWN_PUNCTUATION_PATTERN = /[\x21-\x2F\x3A-\x40\x5B-\x60\x7B-\x7E]/g
 const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
 const UNCATEGORIZED_PRODUCT = 'Other'
@@ -81,7 +82,7 @@ const PRODUCTS = [
     'bedrockruntime',
   ], ['llm-observability']],
   ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy'], ['serverless']],
-  ['OpenTelemetry', ['otel', 'opentelemetry']],
+  ['OpenTelemetry', ['otel', 'opentelemetry'], ['open-telemetry']],
   ['Data Streams Monitoring', ['dsm', 'data-streams'], ['datastreams']],
   ['Database', [], ['database']],
   ['Database Monitoring', ['dbm'], ['dbm']],
@@ -490,7 +491,7 @@ function compareContributors (a, b) {
  * @param {Contributor} contributor
  */
 function renderContributor (contributor) {
-  if (!contributor.login) return contributor.name
+  if (!contributor.login) return escapeMarkdown(contributor.name)
 
   const { login, name } = contributor
   return `[<img src="${GITHUB_URL}/${login}.png?size=48" width="24" height="24" ` +
@@ -518,9 +519,16 @@ function renderChange (change) {
  * @returns {string}
  */
 function renderContributorLink (contributor) {
-  if (!contributor.login) return contributor.name
+  if (!contributor.login) return escapeMarkdown(contributor.name)
 
   return `[${contributor.name}](${GITHUB_URL}/${contributor.login})`
+}
+
+/**
+ * @param {string} text
+ */
+function escapeMarkdown (text) {
+  return text.replaceAll(MARKDOWN_PUNCTUATION_PATTERN, String.raw`\$&`)
 }
 
 /**

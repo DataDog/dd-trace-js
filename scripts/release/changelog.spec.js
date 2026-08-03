@@ -347,6 +347,11 @@ describe('release changelog', () => {
         subject: 'feat(ci): add impacted test detection (#9003)',
         labels: ['test-optimization'],
       },
+      {
+        sha: 'abc004',
+        subject: 'fix(core): preserve OpenTelemetry attributes (#9004)',
+        labels: ['open-telemetry'],
+      },
     ])
 
     assert.strictEqual(changelog.markdown, [
@@ -356,6 +361,7 @@ describe('release changelog', () => {
       '### Fixes',
       `- **AppSec / AI Guard:** Block unsafe prompts ${prLink(9001)}`,
       `- **Data Streams Monitoring:** Preserve pathway context ${prLink(9002)}`,
+      `- **OpenTelemetry:** Preserve OpenTelemetry attributes ${prLink(9004)}`,
       '',
     ].join('\n'))
   })
@@ -517,6 +523,27 @@ describe('release changelog', () => {
       '### Contributors',
       '',
       `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')} Jane Doe`,
+      '',
+    ].join('\n'))
+  })
+
+  it('escapes Markdown in contributors without GitHub accounts', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'fix(core): fix thing (#1)',
+        contributors: [{ name: '[Jane](https://example.com)' }],
+      },
+    ])
+
+    const contributor = String.raw`\[Jane\]\(https\:\/\/example\.com\)`
+    assert.strictEqual(changelog.markdown, [
+      '### Fixes',
+      `- **General:** Fix thing ${prLink(1)} — by ${contributor}`,
+      '',
+      '### Contributors',
+      '',
+      contributor,
       '',
     ].join('\n'))
   })
