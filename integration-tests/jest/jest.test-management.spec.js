@@ -1866,6 +1866,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
 
+        // it runs regardless of quarantine status
+        assert.match(stdout, /I am running when quarantined/)
         if (isQuarantining) {
           // even though a test fails, the exit code is 0 because the test is quarantined
           assert.strictEqual(exitCode, 0)
