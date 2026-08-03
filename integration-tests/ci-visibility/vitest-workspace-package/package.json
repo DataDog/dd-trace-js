@@ -1,0 +1,7 @@
+{
+  "name": "tia-workspace-package",
+  "type": "module",
+  "exports": {
+    "./source": "./source.mjs"
+  }
+}

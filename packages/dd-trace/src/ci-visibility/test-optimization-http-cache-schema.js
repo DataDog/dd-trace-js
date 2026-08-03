@@ -26,7 +26,7 @@ const SETTINGS_BOOLEAN_KEYS = [
 ]
 const EARLY_FLAKE_DETECTION_KEYS = ['enabled', 'faulty_session_threshold', 'slow_test_retries']
 const TEST_MANAGEMENT_KEYS = ['attempt_to_fix_retries', 'enabled']
-const RETRY_THRESHOLD_PATTERN = /^\d+(?:ms|s|m|h)$/
+const RETRY_THRESHOLD_PATTERN = /^\d+(?:ms|[smh])$/
 const MAX_VALIDATION_MODULES = 1000
 const MAX_VALIDATION_SUITES = 10_000
 const MAX_VALIDATION_TESTS = 100_000

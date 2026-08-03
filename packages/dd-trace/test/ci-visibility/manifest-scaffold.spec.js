@@ -1903,6 +1903,36 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('ranks test-named workflows ahead of alphabetically earlier ones', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'jest',
+      ciSource: ['jobs:', '  test:', '    steps:', '      - run: npx jest'].join('\n'),
+    })
+    try {
+      const workflows = path.join(fixture.root, '.github', 'workflows')
+      fs.writeFileSync(path.join(workflows, 'audit.yml'), 'jobs:\n  audit:\n    steps: []\n')
+      fs.writeFileSync(path.join(workflows, 'release.yml'), 'jobs:\n  release:\n    steps: []\n')
+
+      const manifest = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      })
+
+      assert.deepStrictEqual(manifest.ciDiscovery.found, [
+        '.github/workflows/audit.yml',
+        '.github/workflows/release.yml',
+        '.github/workflows/test.yml',
+      ])
+      assert.deepStrictEqual(manifest.ciDiscovery.reviewTargets, [
+        '.github/workflows/test.yml',
+        '.github/workflows/audit.yml',
+        '.github/workflows/release.yml',
+      ])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('does not accept a runner that physically resolves outside the repository', () => {
     const fixture = createRepositoryFixture({ framework: 'mocha' })
     const external = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-external-runner-'))

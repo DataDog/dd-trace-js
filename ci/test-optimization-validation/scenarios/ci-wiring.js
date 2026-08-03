@@ -386,7 +386,7 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
   const ignored = []
   const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
   const githubHosted = /[/\\]\.github[/\\]workflows[/\\]/.test(ci.configFile) &&
-    /^\s*runs-on:\s*(?:ubuntu|windows|macos)-/mi.test(jobSource)
+    /^[ \t]*runs-on:[ \t]*(?:ubuntu|windows|macos)-/mi.test(jobSource)
 
   for (const item of unresolved) {
     const isMatrix = /\bmatrix\b/i.test(item)
@@ -394,11 +394,11 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
       resolution.source === 'local_package_script' &&
       /\b(?:bun|lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
     const isAmbientGithubSettings = githubHosted &&
-      /\b(?:repository|organization|environment)[-\s,\w]*\b(?:secrets?|variables?)\b/i.test(item) &&
+      /\b(?:repository|organization|environment)[-\s,\w]+\b(?:secrets?|variables?)\b/i.test(item) &&
       /\b(?:inject|inherit|outside)\b/i.test(item)
     const isOtherJob = /^Other jobs?\b/i.test(item) ||
-      /\bsecond\b.*\bjob\b.*\bonly\b.*\bselected\b/i.test(item) ||
-      /\brelease\b.*\bcontains no test job\b/i.test(item)
+      /\bsecond\b.+\bjob\b.+\bonly\b.+\bselected\b/i.test(item) ||
+      /\brelease\b.+\bcontains no test job\b/i.test(item)
     if ((isMatrix && !matrixRelevant) ||
       isResolvedPackagePath ||
       isAmbientGithubSettings ||
@@ -512,7 +512,7 @@ function getSelectedJobSource (source, ci) {
 
 function getYamlKeyEntry (line, index) {
   if (!line || /^\s*(?:#|$)/.test(line) || /^\s/.test(line) && line.includes('\t')) return
-  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^:#][^:]*)):\s*(?:#.*)?$/.exec(line)
+  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^\s:#][^:]*)):\s*(?:#.*)?$/.exec(line)
   if (!match) return
   return {
     indent: match[1].length,
@@ -596,9 +596,10 @@ function containsExecutionCommand (source, value) {
   const lines = source.replaceAll('\r\n', '\n').split('\n')
   return lines.some((line, index) => {
     if (/^\s*#/.test(line)) return false
-    const match = /^\s*(?:-\s*)?(?:run|script):\s*(.*?)\s*$/.exec(line)
+    const match = /^\s*(?:-\s*)?(?:run|script):(.*)$/.exec(line)
     if (!match) return false
-    if (!/^\|[+-]?$/.test(match[1])) return match[1] === command
+    const scalar = match[1].trim()
+    if (!/^\|[+-]?$/.test(scalar)) return scalar === command
 
     const indicatorIndent = /^\s*/.exec(line)[0].length
     const block = []

@@ -376,7 +376,7 @@ function isOriginAllowed (req, headers) {
 }
 
 function splitHeader (str) {
-  return typeof str === 'string' ? str.split(/\s*,\s*/) : []
+  return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
 }
 
 function addRequestTags (context, spanType) {

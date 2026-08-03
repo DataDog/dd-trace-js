@@ -153,7 +153,7 @@ function normalizeRelativePath (location) {
 
 function parseVersion (rawVersion) {
   if (typeof rawVersion !== 'string') return null
-  const match = rawVersion.match(/\d+\.\d+\.\d+/)
+  const match = rawVersion.match(/(?<!\d)\d+\.\d+\.\d+/)
   return match ? match[0] : null
 }
 

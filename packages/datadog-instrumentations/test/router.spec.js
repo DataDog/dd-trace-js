@@ -198,6 +198,26 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(events.find(e => e.label === 'enter').data.route, undefined)
     })
 
+    it('forwards a multi-pattern matcher failure through next(error)', () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const failure = new Error('matcher failed')
+      const matcher = /users/
+      matcher.test = () => { throw failure }
+      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/users' }))
+      wrappedUse.call(router, [matcher, /products/], function shouldNotRun () {
+        assert.fail('handler should not run')
+      })
+
+      let forwardedError
+      router.stack[0].handle_request({}, {}, (error) => { forwardedError = error })
+
+      assert.strictEqual(forwardedError, failure)
+      assert.strictEqual(events.length, 0)
+    })
+
     it('skips matcher analysis when the host passes a handler with no mount path', () => {
       subscribeAll()
       const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
@@ -391,6 +411,26 @@ describe('createWrapRouterMethod', () => {
       router.stack[0].handle_error(new Error('e'), {}, {}, () => {})
 
       assert.strictEqual(events.find(e => e.label === 'enter').data.route, '/products')
+    })
+
+    it('forwards a multi-pattern matcher failure from an error handler through next(error)', () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const failure = new Error('matcher failed')
+      const matcher = /users/
+      matcher.test = () => { throw failure }
+      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/users' }))
+      wrappedUse.call(router, [matcher, /products/], function shouldNotRun (error, req, res, next) {
+        assert.fail('handler should not run')
+      })
+
+      let forwardedError
+      router.stack[0].handle_error(new Error('upstream'), {}, {}, (error) => { forwardedError = error })
+
+      assert.strictEqual(forwardedError, failure)
+      assert.strictEqual(events.length, 0)
     })
 
     it('skips work when the layer is a 3-arg handler the host would not run as an error handler', () => {
@@ -771,11 +811,8 @@ describe('createWrapRouterMethod', () => {
       this.stack.push({ handle: handler, path: '/foo', regexp: {} })
     }
 
-    // Mirror express <4.6.0's `router.handle`: it runs `layer.handle` itself and,
-    // on a synchronous throw, catches *outside* the layer and calls its own
-    // `next(error)` — never the `next` the layer was handed. The tracer cannot
-    // observe the throw through `wrappedNext`, so the legacy handle wrap has to
-    // catch and publish error/next/finish itself before rethrowing.
+    // Mirror express <4.6.0: catch outside the layer and route the throw through
+    // the host's `next`, not the one passed to the layer.
     function legacyDispatch (layer, { req = {}, res = {}, error } = {}) {
       const hostNext = (nextError) => events.push({ label: 'host-next', error: nextError })
       try {
@@ -813,6 +850,24 @@ describe('createWrapRouterMethod', () => {
       assertObjectContains(events[0].data, { name: 'originalHandler', req, route: '/foo', layer })
     })
 
+    it('captures a multi-pattern route and publishes an error passed by a request handler', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('request-next-error')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, ['/foo', '/bar'], function requestError (req, res, next) {
+        next(failure)
+      })
+
+      legacyDispatch(router.stack[0])
+
+      assert.strictEqual(events.find(event => event.label === 'enter').data.route, '/foo')
+      assert.strictEqual(events.find(event => event.label === 'error').data.error, failure)
+    })
+
     it('preserves error-handler arity (4) so the host still routes errors', () => {
       subscribeAll()
       const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
@@ -833,6 +888,24 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(enterEvent.data.req, req)
     })
 
+    it('captures a multi-pattern route and publishes an error passed by an error handler', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('error-next-error')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, ['/foo', '/bar'], function errorHandler (error, req, res, next) {
+        next(failure)
+      })
+
+      legacyDispatch(router.stack[0], { error: new Error('upstream') })
+
+      assert.strictEqual(events.find(event => event.label === 'enter').data.route, '/foo')
+      assert.strictEqual(events.find(event => event.label === 'error').data.error, failure)
+    })
+
     it('publishes error/next/finish/exit when a request handler throws and rethrows to the host', () => {
       subscribeAll()
       const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
@@ -846,8 +919,6 @@ describe('createWrapRouterMethod', () => {
       const req = {}
       legacyDispatch(router.stack[0], { req })
 
-      // The host catches the rethrown error and routes it through its own next,
-      // but the tracer has already tagged and finished the throwing layer.
       assert.deepStrictEqual(events.map(e => e.label), [
         'enter', 'error', 'next', 'finish', 'exit', 'host-next',
       ])
@@ -875,6 +946,107 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(events[1].data.error, failure)
       assert.strictEqual(events[1].data.req, req)
       assert.strictEqual(events.at(-1).error, failure)
+    })
+
+    it('does not re-publish a finished lifecycle when a request handler calls next before throwing', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('throw-after-next')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function nextThenThrow (req, res, next) {
+        next()
+        throw failure
+      })
+
+      legacyDispatch(router.stack[0])
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'exit', 'host-next',
+      ])
+      assert.strictEqual(events.at(-1).error, failure)
+    })
+
+    it('does not re-publish a finished lifecycle when an error handler calls next before throwing', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('throw-after-next')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function nextThenThrow (error, req, res, next) {
+        next()
+        throw failure
+      })
+
+      legacyDispatch(router.stack[0], { error: new Error('upstream') })
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'exit', 'host-next',
+      ])
+      assert.strictEqual(events.at(-1).error, failure)
+    })
+
+    it('publishes the lifecycle once and surfaces a repeated native request next call', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const lateError = new Error('late')
+      const wrappedUse = wrapMethod(legacyUse)
+      /**
+       * @param {object} req
+       * @param {object} res
+       * @param {Function} next
+       */
+      function doubleNext (req, res, next) {
+        next()
+        next(lateError)
+      }
+      wrappedUse.call(router, '/foo', doubleNext)
+
+      legacyDispatch(router.stack[0])
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
+      ])
+      assert.strictEqual(events[4].data.name, 'doubleNext')
+      assert.strictEqual(events[4].data.error, lateError)
+      assert.strictEqual(events.at(-2).error, lateError)
+    })
+
+    it('publishes the lifecycle once and surfaces a repeated native error next call', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const lateError = new Error('late')
+      const wrappedUse = wrapMethod(legacyUse)
+      /**
+       * @param {Error} error
+       * @param {object} req
+       * @param {object} res
+       * @param {Function} next
+       */
+      function doubleNext (error, req, res, next) {
+        next()
+        next(lateError)
+      }
+      wrappedUse.call(router, '/foo', doubleNext)
+
+      legacyDispatch(router.stack[0], { error: new Error('upstream') })
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
+      ])
+      assert.strictEqual(events[4].data.name, 'doubleNext')
+      assert.strictEqual(events[4].data.error, lateError)
+      assert.strictEqual(events.at(-2).error, lateError)
     })
 
     it('leaves handle pristine when the layer has a prototype dispatch method', () => {
@@ -911,6 +1083,26 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(events.length, 0)
     })
 
+    it('forwards an error handler without tracing when enterChannel has no subscribers', () => {
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      let handlerRan = false
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function (error, req, res, next) {
+        handlerRan = true
+        next()
+      })
+
+      let nextCalled = false
+      router.stack[0].handle(new Error('upstream'), {}, {}, () => { nextCalled = true })
+
+      assert.strictEqual(handlerRan, true)
+      assert.strictEqual(nextCalled, true)
+      assert.strictEqual(events.length, 0)
+    })
+
     it('wraps __handle instead of handle for express-async-errors layers', () => {
       subscribeAll()
       const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
@@ -936,6 +1128,115 @@ describe('createWrapRouterMethod', () => {
 
       assert.ok(events.find(e => e.label === '__handle-called'))
       assert.ok(events.find(e => e.label === 'enter'))
+    })
+
+    it('forwards an express-async-errors __handle without tracing when enterChannel has no subscribers', () => {
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      let handlerRan = false
+      const wrappedUse = wrapMethod(function use (path, handler) {
+        this.stack.push({
+          handle: handler,
+          __handle (req, res, next) {
+            handlerRan = true
+            next()
+          },
+          path: '/foo',
+          regexp: {},
+        })
+      })
+      wrappedUse.call(router, '/foo', () => {})
+
+      let nextCalled = false
+      router.stack[0].__handle({}, {}, () => { nextCalled = true })
+
+      assert.strictEqual(handlerRan, true)
+      assert.strictEqual(nextCalled, true)
+      assert.strictEqual(events.length, 0)
+    })
+
+    it('captures a multi-pattern route and guards an express-async-errors error handler', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('late-error')
+      const wrappedUse = wrapMethod(function use (path, handler) {
+        this.stack.push({
+          handle: handler,
+          __handle (error, req, res, next) {
+            next(failure)
+            next()
+          },
+          path: '/foo',
+          regexp: {},
+        })
+      })
+      wrappedUse.call(router, ['/foo', '/bar'], function errorHandler (error, req, res, next) {})
+
+      router.stack[0].__handle(new Error('upstream'), {}, {}, () => {})
+
+      assert.strictEqual(events.find(event => event.label === 'enter').data.route, '/foo')
+      assert.strictEqual(events.find(event => event.label === 'error').data.error, failure)
+      assert.strictEqual(events.filter(event => event.label === 'finish').length, 1)
+      assert.strictEqual(events.find(event => event.label === 'repeat').data.name, 'errorHandler')
+    })
+
+    it('publishes a synchronous express-async-errors throw before rethrowing', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('express-async-errors-throw')
+      const wrappedUse = wrapMethod(function use (path, handler) {
+        this.stack.push({
+          handle: handler,
+          __handle () {
+            throw failure
+          },
+          path: '/foo',
+          regexp: {},
+        })
+      })
+      wrappedUse.call(router, '/foo', () => {})
+
+      assert.throws(() => router.stack[0].__handle({}, {}, () => {}), error => error === failure)
+      assert.deepStrictEqual(events.map(event => event.label), [
+        'enter', 'error', 'next', 'finish', 'exit',
+      ])
+    })
+
+    it('publishes the lifecycle once and surfaces a repeated express-async-errors next call', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const lateError = new Error('late')
+      const wrappedUse = wrapMethod(function use (path, handler) {
+        this.stack.push({
+          handle: handler,
+          __handle (req, res, next) {
+            next()
+            next(lateError)
+          },
+          path: '/foo',
+          regexp: {},
+        })
+      })
+      wrappedUse.call(router, '/foo', () => {})
+
+      router.stack[0].__handle({}, {}, error => events.push({ label: 'host-next', error }))
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
+      ])
+      assert.strictEqual(events[4].data.error, lateError)
+      assert.strictEqual(events.at(-2).error, lateError)
     })
   })
 

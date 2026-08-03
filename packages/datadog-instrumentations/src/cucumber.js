@@ -21,8 +21,9 @@ const {
   getMaxEfdRetryCount,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -63,6 +64,18 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
+
+/**
+ * Removes Cucumber's generated retry suffix without changing literal scenario names.
+ *
+ * @param {string} testName
+ * @param {boolean} isRetry
+ * @returns {string}
+ */
+function getCucumberTestName (testName, isRetry) {
+  return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
+}
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -282,7 +295,7 @@ function handleDdWorkerMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-      collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
+      collectTestOptimizationSummariesFromTraces(payload, { attemptToFixExecutions })
       workerReportTraceCh.publish(payload)
       return true
     }
@@ -696,7 +709,7 @@ function publishRetriedAttempt (runner, state) {
 
   // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
   if (isFlakyTestRetriesEnabled) {
-    const nameForKey = runner.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+    const nameForKey = getCucumberTestName(runner.pickle.name, currentAttempt > 0)
     const atrKey = `${runner.pickle.uri}:${nameForKey}`
     if (atrStatusesByScenarioKey.has(atrKey)) {
       atrStatusesByScenarioKey.get(atrKey).push('fail')
@@ -802,6 +815,7 @@ function wrapRun (pl, isLatestVersion, version) {
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
+        const testName = getCucumberTestName(this.pickle.name, state.numAttempt > 0)
 
         if (lastStatusByPickleId.has(this.pickle.id)) {
           lastStatusByPickleId.get(this.pickle.id).push(status)
@@ -821,7 +835,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          const testProperties = getTestProperties(testSuitePath, testName)
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
           isAttemptToFix = testProperties.attemptToFix
           isAttemptToFixRetry = isAttemptToFix && numRetries > 0
@@ -889,8 +903,7 @@ function wrapRun (pl, isLatestVersion, version) {
         // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
         // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
         if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
-          const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
-          const atrKey = `${this.pickle.uri}:${nameForKey}`
+          const atrKey = `${this.pickle.uri}:${testName}`
           if (atrStatusesByScenarioKey.has(atrKey)) {
             atrStatusesByScenarioKey.get(atrKey).push(status)
           } else {
@@ -909,10 +922,21 @@ function wrapRun (pl, isLatestVersion, version) {
 
         const error = getErrorFromCucumberResult(result)
 
+        if (!testStartPayload.isParallel) {
+          recordTestManagementExecution({
+            testSuite: testSuitePath,
+            testName,
+            status,
+            isAttemptToFix,
+            isDisabled,
+            isQuarantined,
+          })
+        }
+
         if (isAttemptToFix) {
           recordAttemptToFixExecution(attemptToFixExecutions, {
             testSuite: testSuitePath,
-            testName: this.pickle.name,
+            testName,
             status,
             isDisabled,
             isQuarantined,

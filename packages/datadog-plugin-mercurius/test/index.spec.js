@@ -78,7 +78,7 @@ describe('Plugin', () => {
 
       after(async () => {
         await app?.close()
-        await agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       withNamingSchema(
@@ -407,7 +407,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await plainApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('omits graphql.source unless source is enabled', () => {
@@ -447,7 +447,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await extApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('copies the configured error extension onto the request span error event', () => {
@@ -500,7 +500,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await batchApp?.close()
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
 
         it('opens one graphql.request span per operation in the batch', () => {

@@ -82,9 +82,9 @@ const IMPLICIT_CONFIG_FILENAMES = {
 const TEST_FILE_PATTERN = /^.+[._-](?:test|spec)\.[cm]?[jt]sx?$/
 const BARE_TEST_FILE_PATTERN = /^test\.[cm]?[jt]sx?$/
 const TYPE_ONLY_TEST_PATTERN = /\.(?:test|spec)-d\.[cm]?tsx?$|\.d\.[cm]?ts$/i
-const TYPE_ONLY_DIRECTORY_PATTERN = /(?:^|\/)(?:type[-_]?tests?|typetests?|test-dts?)(?:\/|$)/i
+const TYPE_ONLY_DIRECTORY_PATTERN = /(?:^|\/)(?:type[-_]?tests?|test-dts?)(?:\/|$)/i
 const LOCAL_SOCKET_PATTERN =
-  /(?:\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1|supertest)\b|\bcy\.(?:visit|request)\s*\()/
+  /\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1|supertest)\b|\bcy\.(?:visit|request)\s*\(/
 const IMPORT_SPECIFIER_PATTERN = /(?:from\s+|require\s*\(\s*|import\s*\(\s*)(['"])([^'"]+)\1/g
 const CUCUMBER_BROWSER_SUPPORT_DIRECTORY_PATTERN =
   /(?:^|\/)(?:features?|helpers?|step_definitions|steps?|support)(?:\/|$)/i
@@ -809,7 +809,7 @@ function hasExplicitFrameworkImport (source, framework) {
  */
 function hasFrameworkOwnership (filename, source, framework, packageName) {
   const normalized = filename.replaceAll('\\', '/').toLowerCase()
-  if (framework === 'cucumber') return /^\s*(?:Feature|Rule):/m.test(source)
+  if (framework === 'cucumber') return /^[ \t]*(?:Feature|Rule):/m.test(source)
   if (framework === 'cypress') return /\.cy\./.test(filename) || normalized.includes('/cypress/')
   if (framework === 'playwright') {
     return /@playwright\/test/.test(source) || normalized.includes('/playwright/') ||
@@ -855,7 +855,7 @@ function getTestRank (filename, source, projectRoot) {
   let rank = relative.split('/').length
   if (/(?:^|\/)(?:test|tests|__tests__|spec)\//.test(relative)) rank -= 20
   if (/(?:^|[._/-])unit(?:[._/-]|$)/.test(relative)) rank -= 15
-  if (/(?:e2e|integration|acceptance|browser|conformance|fixtures?)/.test(relative)) rank += 20
+  if (/e2e|integration|acceptance|browser|conformance|fixtures?/.test(relative)) rank += 20
   if (LOCAL_SOCKET_PATTERN.test(source)) rank += 30
   rank += Math.min(getStaticTestCount(source), 50)
   return rank
@@ -1038,9 +1038,9 @@ function getTestExtension (framework, representative) {
   if (framework === 'cucumber') return '.feature'
   if (framework === 'cypress') return cypress.getTestExtension(representative)
   if (framework === 'playwright') return playwright.getTestExtension(representative)
-  const match = /((?:[.-](?:test|spec))\.[cm]?[jt]sx?)$/.exec(representative)
+  const match = /([.-](?:test|spec)\.[cm]?[jt]sx?)$/.exec(representative)
   if (match) return match[1]
-  const moduleExtension = /\.((?:[cm]js|[cm]ts))$/.exec(representative)?.[1]
+  const moduleExtension = /\.([cm]js|[cm]ts)$/.exec(representative)?.[1]
   return moduleExtension ? `.test.${moduleExtension}` : '.test.js'
 }
 
@@ -1114,7 +1114,7 @@ function rankCiReviewTargets (files) {
  */
 function getCiRank (filename) {
   const value = filename.toLowerCase()
-  if (/(?:test|ci|build|unit|integration)/.test(value)) return 0
+  if (/test|ci|build|unit|integration/.test(value)) return 0
   return 10
 }
 

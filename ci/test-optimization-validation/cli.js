@@ -749,7 +749,7 @@ function normalizeScenarioSelection (scenario) {
  * @returns {string} normalized target
  */
 function normalizeFrameworkTarget (target) {
-  const normalized = String(target).trim().replaceAll(/:+$/g, '')
+  const normalized = String(target).trim().replace(/(?<!:):+$/, '')
   if (!normalized) throw new Error('Framework target cannot be empty.')
   return normalized
 }

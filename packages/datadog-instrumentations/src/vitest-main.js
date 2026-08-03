@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
@@ -9,16 +8,21 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   getMaxEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
+  recordTestManagementExecution,
+  recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { getChannelPromise } = require('./helpers/channel')
-const { addHook } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const noWorkerInit = require('./vitest-main-no-worker-init')
 const {
   testStartCh,
@@ -37,8 +41,11 @@ const {
   testManagementTestsCh,
   modifiedFilesCh,
   workerReportTraceCh,
+  workerReportCoverageCh,
   workerReportLogsCh,
+  workerReportTelemetryCh,
   codeCoverageReportCh,
+  realpath,
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
@@ -52,6 +59,8 @@ const workerProcesses = new WeakSet()
 const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
+const runFilesWrappedPrototypes = new WeakSet()
+const activeRunFilesContexts = new WeakSet()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -61,17 +70,35 @@ let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
+let isCodeCoverageEnabled = false
+let isSuitesSkippingEnabled = false
+let isSessionCodeCoverageEnabled = false
+let isSessionSuitesSkippingEnabled = false
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let coverageRootDir
 let requestErrorTags = {}
 let isSessionStarted = false
+let isTestImpactAnalysisDisabled = false
 let isVitestNoWorkerInitActive = false
 let isVitestBrowserModeActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
+let skippableSuites = []
+let skippedSuites = []
+let unskippableSuites = {}
+let forcedToRunSuites = {}
+let hasUnskippableSuites = false
+let hasForcedToRunSuites = false
+let areAllSuitesSkipped = false
+let hasRunnableSuites = false
+let hasSelectedSuites = false
+let itrCorrelationId
+let tiaRepositoryRoot = process.cwd()
 const tinyPoolClassWrappers = new WeakMap()
+const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
+const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
 
 function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
   if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
@@ -202,18 +229,167 @@ function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   return getTestSuitePath(realpath(testSuiteAbsolutePath), realpath(repositoryRoot))
 }
 
+function resetSuiteSkippingRunState () {
+  skippableSuites = []
+  resetAppliedSuiteSkippingState()
+  itrCorrelationId = undefined
+}
+
+function resetAppliedSuiteSkippingState () {
+  unskippableSuites = {}
+  forcedToRunSuites = {}
+}
+
+function resetSessionSuiteSkippingState () {
+  skippedSuites = []
+  hasUnskippableSuites = false
+  hasForcedToRunSuites = false
+  areAllSuitesSkipped = false
+  hasRunnableSuites = false
+  hasSelectedSuites = false
+  isSessionCodeCoverageEnabled = false
+  isSessionSuitesSkippingEnabled = false
+  isTestImpactAnalysisDisabled = false
+}
+
 /**
- * Resolves a path without failing Test Optimization when the path is unavailable.
+ * Returns the file path from Vitest's version-dependent test specification shape.
  *
- * @param {string} filepath
- * @returns {string}
+ * @param {unknown} testSpecification
+ * @returns {string|undefined}
  */
-function realpath (filepath) {
-  try {
-    return fs.realpathSync(filepath)
-  } catch {
-    return filepath
+function getTestSpecificationFilepath (testSpecification) {
+  const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
+  return testFile?.moduleId || testFile?.filepath || (typeof testFile === 'string' ? testFile : undefined)
+}
+
+/**
+ * Returns the normalized suite path and absolute path for a Vitest test specification.
+ *
+ * @param {unknown} testSpecification
+ * @returns {{ testSuite: string, testSuiteAbsolutePath: string }|undefined}
+ */
+function getTestSpecificationSuite (testSpecification) {
+  const testFilepath = getTestSpecificationFilepath(testSpecification)
+  if (!testFilepath) return
+
+  const testSuiteAbsolutePath = path.isAbsolute(testFilepath)
+    ? realpath(testFilepath)
+    : realpath(path.join(tiaRepositoryRoot, testFilepath))
+
+  return {
+    testSuite: getTestSuitePath(testSuiteAbsolutePath, tiaRepositoryRoot),
+    testSuiteAbsolutePath,
   }
+}
+
+/**
+ * Returns suites that Vitest selected for typechecking.
+ *
+ * @param {unknown[]} testSpecifications
+ * @returns {Set<string>}
+ */
+function getTypecheckTestSuites (testSpecifications) {
+  const typecheckTestSuites = new Set()
+
+  for (const testSpecification of testSpecifications) {
+    if (getTestSpecificationPool(testSpecification) !== 'typescript') continue
+
+    const testSuite = getTestSpecificationSuite(testSpecification)?.testSuite
+    if (testSuite) {
+      typecheckTestSuites.add(testSuite)
+    }
+  }
+
+  return typecheckTestSuites
+}
+
+/**
+ * Removes suites selected by TIA and propagates suite metadata to Vitest workers.
+ *
+ * @param {object} ctx
+ * @param {unknown[]} testSpecifications
+ * @param {string} frameworkVersion
+ * @returns {unknown[]}
+ */
+function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
+  if (!Array.isArray(testSpecifications)) {
+    setProvidedContext(ctx, {
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+    }, 'Could not send TIA configuration to workers.')
+    return testSpecifications
+  }
+
+  if (testSpecifications.length > 0) {
+    hasSelectedSuites = true
+  }
+  if (!isSuitesSkippingEnabled) {
+    if (testSpecifications.length > 0) {
+      hasRunnableSuites = true
+    }
+    areAllSuitesSkipped = hasSelectedSuites && !hasRunnableSuites
+    setProvidedContext(ctx, {
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+    }, 'Could not send TIA configuration to workers.')
+    return testSpecifications
+  }
+
+  resetAppliedSuiteSkippingState()
+  const skippableSuiteSet = new Set(skippableSuites.map(testSuite => testSuite.replaceAll('\\', '/')))
+  const typecheckTestSuites = getTypecheckTestSuites(testSpecifications)
+  const currentSkippedSuites = []
+  const testSpecificationsToRun = []
+
+  for (const testSpecification of testSpecifications) {
+    const testSpecificationSuite = getTestSpecificationSuite(testSpecification)
+    if (!testSpecificationSuite) {
+      testSpecificationsToRun.push(testSpecification)
+      continue
+    }
+
+    const { testSuite, testSuiteAbsolutePath } = testSpecificationSuite
+    const shouldSkip = !typecheckTestSuites.has(testSuite) && skippableSuiteSet.has(testSuite)
+    const isUnskippable = isMarkedAsUnskippable({ path: testSuiteAbsolutePath })
+
+    if (isUnskippable) {
+      unskippableSuites[testSuite] = true
+      hasUnskippableSuites = true
+      if (shouldSkip) {
+        forcedToRunSuites[testSuite] = true
+        hasForcedToRunSuites = true
+      }
+    }
+
+    if (shouldSkip && !isUnskippable) {
+      skippedSuites.push(testSuite)
+      currentSkippedSuites.push(testSuite)
+    } else {
+      testSpecificationsToRun.push(testSpecification)
+    }
+  }
+
+  setProvidedContext(ctx, {
+    _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+    _ddItrCorrelationId: itrCorrelationId,
+    _ddUnskippableSuites: unskippableSuites,
+    _ddForcedToRunSuites: forcedToRunSuites,
+  }, 'Could not send TIA configuration to workers.')
+
+  if (currentSkippedSuites.length) {
+    itrSkippedSuitesCh.publish({ skippedSuites: currentSkippedSuites, frameworkVersion })
+  }
+  if (testSpecificationsToRun.length > 0) {
+    hasRunnableSuites = true
+  }
+  areAllSuitesSkipped = hasSelectedSuites && !hasRunnableSuites
+  if (testSpecifications.length > 0 && testSpecificationsToRun.length === 0) {
+    const config = safeConfig(ctx)
+    if (config) {
+      config.passWithNoTests = true
+    }
+  }
+
+  return testSpecificationsToRun
 }
 
 /**
@@ -378,6 +554,8 @@ function resetLibraryConfig () {
   isKnownTestsEnabled = false
   isTestManagementTestsEnabled = false
   isImpactedTestsEnabled = false
+  isCodeCoverageEnabled = false
+  isSuitesSkippingEnabled = false
   testManagementAttemptToFixRetries = 0
 }
 
@@ -393,6 +571,8 @@ function applyLibraryConfig (libraryConfig) {
   isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
   testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
   isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+  isCodeCoverageEnabled = libraryConfig.isItrEnabled && libraryConfig.isCodeCoverageEnabled
+  isSuitesSkippingEnabled = libraryConfig.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
 }
 
 function resetMainProcessProvidedContext (ctx) {
@@ -410,6 +590,10 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsTestManagementTestsEnabled: false,
     _ddTestManagementAttemptToFixRetries: 0,
     _ddTestPropertiesByFilepath: {},
+    _ddIsCodeCoverageEnabled: false,
+    _ddItrCorrelationId: undefined,
+    _ddUnskippableSuites: {},
+    _ddForcedToRunSuites: {},
   }, 'Could not reset Test Optimization context for workers.')
 }
 
@@ -432,13 +616,17 @@ async function runMainProcessSetup (
   frameworkVersion,
   testSpecifications,
   shouldInstallNoWorkerInit,
-  shouldInstallBrowserReporter
+  shouldInstallBrowserReporter,
+  disableTestImpactAnalysis
 ) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
   }
 
+  resetSuiteSkippingRunState()
   isVitestBrowserModeActive ||= shouldInstallBrowserReporter
+  isTestImpactAnalysisDisabled =
+    disableTestImpactAnalysis || shouldInstallNoWorkerInit || isVitestBrowserModeActive
   let repositoryRoot = process.cwd()
   let testSessionConfiguration
   let testFilepaths
@@ -464,6 +652,7 @@ async function runMainProcessSetup (
       requestErrorTags: receivedRequestErrorTags = {},
     } = await getChannelPromise(libraryConfigurationCh, {
       frameworkVersion,
+      disableTestImpactAnalysis: isTestImpactAnalysisDisabled,
       isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || isVitestBrowserModeActive,
     })
     requestErrorTags = receivedRequestErrorTags
@@ -476,6 +665,8 @@ async function runMainProcessSetup (
     requestErrorTags = {}
     resetLibraryConfig()
   }
+  isSessionCodeCoverageEnabled ||= isCodeCoverageEnabled
+  isSessionSuitesSkippingEnabled ||= isSuitesSkippingEnabled
 
   resetMainProcessProvidedContext(ctx)
 
@@ -503,18 +694,32 @@ async function runMainProcessSetup (
       }, 'Could not send test session configuration to workers.')
     }
   }
+  tiaRepositoryRoot = realpath(repositoryRoot)
 
   const {
     knownTestsResponse,
+    skippableSuitesResponse,
     testManagementTestsResponse,
   } = await getTestOptimizationRequestResults({
     isKnownTestsEnabled,
+    isSuitesSkippingEnabled,
     isTestManagementTestsEnabled,
     getKnownTests: () => getChannelPromise(knownTestsCh),
+    getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
   mergeRequestErrorTags(knownTestsResponse)
+  mergeRequestErrorTags(skippableSuitesResponse)
   mergeRequestErrorTags(testManagementTestsResponse)
+
+  if (isSuitesSkippingEnabled) {
+    const currentSkippableSuitesResponse = skippableSuitesResponse ||
+      await getChannelPromise(skippableSuitesCh)
+    if (!currentSkippableSuitesResponse?.err) {
+      skippableSuites = currentSkippableSuitesResponse.skippableSuites || []
+      itrCorrelationId = currentSkippableSuitesResponse.itrCorrelationId
+    }
+  }
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
   if (flakyTestRetriesConfiguration) {
@@ -663,10 +868,20 @@ function getNoWorkerInitState () {
   }
 }
 
-function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
+function ensureMainProcessSetup (
+  ctx,
+  frameworkVersion,
+  testSpecifications,
+  shouldDeactivateOnFallback = false,
+  forceDisableTestImpactAnalysis = false
+) {
   const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
   const shouldInstallBrowserReporter = shouldUseBrowserReporter(frameworkVersion, testSpecifications)
   const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
+  const disableTestImpactAnalysis =
+    forceDisableTestImpactAnalysis ||
+    safeConfig(ctx)?.watch === true ||
+    hasOnlyTypecheckTestSpecifications(testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
   if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
@@ -676,7 +891,8 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shou
     !setupState ||
     setupState.specificationsKey !== specificationsKey ||
     setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit ||
-    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter
+    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter ||
+    setupState.disableTestImpactAnalysis !== disableTestImpactAnalysis
   ) {
     setupState = {
       setupPromise: runMainProcessSetup(
@@ -684,8 +900,10 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shou
         frameworkVersion,
         testSpecifications,
         shouldInstallNoWorkerInit,
-        shouldInstallBrowserReporter
+        shouldInstallBrowserReporter,
+        disableTestImpactAnalysis
       ),
+      disableTestImpactAnalysis,
       shouldInstallBrowserReporter,
       shouldInstallMainReporter,
       shouldInstallNoWorkerInit,
@@ -850,7 +1068,11 @@ function safeWorkspaceProject (ctx) {
 
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
-    await ensureMainProcessSetup(this.ctx, frameworkVersion, arguments[0])
+    if (!activeRunFilesContexts.has(this.ctx)) {
+      const testSpecifications = arguments[0]
+      await ensureMainProcessSetup(this.ctx, frameworkVersion, testSpecifications)
+      arguments[0] = applySuiteSkipping(this.ctx, testSpecifications, frameworkVersion)
+    }
     return sort.apply(this, arguments)
   }
 }
@@ -874,12 +1096,18 @@ function getFinishWrapper (exitOrClose) {
     }
 
     const flushPromise = getChannelPromise(testSessionFinishCh, {
-      status: getSessionStatus(this.state),
+      status: areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state),
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled: isSessionCodeCoverageEnabled,
+      isSuitesSkippingEnabled: isSessionSuitesSkippingEnabled,
+      isSuitesSkipped: skippedSuites.length > 0,
+      numSkippedSuites: skippedSuites.length,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive: isVitestNoWorkerInitActive || isVitestBrowserModeActive,
@@ -905,6 +1133,7 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
         return oldCliOrStartVitest.apply(this, args)
       }
       isSessionStarted = true
+      resetSessionSuiteSkippingState()
       testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
       return oldCliOrStartVitest.apply(this, args)
     }
@@ -951,6 +1180,21 @@ function getTestSpecificationPool (testSpecification) {
   const project = getTestSpecificationProject(testSpecification)
   return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
     testSpecification?.pool
+}
+
+/**
+ * Detect whether Vitest selected only TypeScript typecheck specifications.
+ *
+ * @param {unknown} testSpecifications
+ * @returns {boolean}
+ */
+function hasOnlyTypecheckTestSpecifications (testSpecifications) {
+  if (!Array.isArray(testSpecifications) || testSpecifications.length === 0) return false
+
+  for (const testSpecification of testSpecifications) {
+    if (getTestSpecificationPool(testSpecification) !== 'typescript') return false
+  }
+  return true
 }
 
 function isBrowserTestSpecification (testSpecification) {
@@ -1003,14 +1247,26 @@ function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = fa
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
-  if (!Vitest?.prototype?.runFiles) {
+  if (!Vitest?.prototype?.runFiles || runFilesWrappedPrototypes.has(Vitest.prototype)) {
     return
   }
+  runFilesWrappedPrototypes.add(Vitest.prototype)
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
+    if (activeRunFilesContexts.has(this)) {
+      return runFiles.apply(this, arguments)
+    }
+
     const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications, true)
-    markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
-    return runFiles.apply(this, arguments)
+    const testSpecificationsToRun = applySuiteSkipping(this, testSpecifications, frameworkVersion)
+    arguments[0] = testSpecificationsToRun
+    markVitestWorkerEnv(this, testSpecificationsToRun, shouldSkipWorkerInit)
+    activeRunFilesContexts.add(this)
+    try {
+      return await runFiles.apply(this, arguments)
+    } finally {
+      activeRunFilesContexts.delete(this)
+    }
   })
 
   if (Vitest.prototype.collectTests) {
@@ -1219,12 +1475,32 @@ function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
   const isModified = testProperties.isModified === true
   const isSkippedByTestManagement = !isAttemptToFix && isDisabled
   const status = getTypecheckTaskStatus(task)
+  const summaryStatus = isSkippedByTestManagement ? 'skip' : status
+
+  recordTestManagementExecution({
+    testSuite: testProperties.testSuite,
+    testName,
+    status: summaryStatus,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+  })
+  if (isAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: testProperties.testSuite,
+      testName,
+      status: summaryStatus,
+      isDisabled,
+      isQuarantined,
+    })
+  }
 
   if (status === 'skip' || isSkippedByTestManagement) {
     testSkipCh.publish({
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix,
       isDisabled,
     })
     updateTypecheckTaskResultForTestManagement(task, status, { isAttemptToFix, isDisabled, isQuarantined })
@@ -1272,6 +1548,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
     testCommand: sessionConfiguration.testCommand,
     repositoryRoot: sessionConfiguration.repositoryRoot,
     codeOwnersEntries: sessionConfiguration.codeOwnersEntries,
+    disableTestImpactAnalysis: isTestImpactAnalysisDisabled,
   }
   testSuiteStartCh.runStores(testSuiteCtx, () => {})
 
@@ -1297,8 +1574,18 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
   if (!testSuiteFinishCh.hasSubscribers) return
   if (!Array.isArray(result?.files)) return
 
-  if (ctx) {
-    await ensureMainProcessSetup(ctx, frameworkVersion, result.files)
+  const setupState = ctx && mainProcessSetupStates.get(ctx)
+  if (
+    ctx &&
+    (!setupState || setupState.shouldInstallMainReporter || setupState.disableTestImpactAnalysis)
+  ) {
+    await ensureMainProcessSetup(
+      ctx,
+      frameworkVersion,
+      result.files,
+      false,
+      !setupState || setupState.disableTestImpactAnalysis
+    )
   }
   const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
@@ -1489,8 +1776,18 @@ function handleWorkerReport (interprocessCode, data) {
     return true
   }
 
+  if (interprocessCode === VITEST_WORKER_COVERAGE_PAYLOAD_CODE) {
+    workerReportCoverageCh.publish(data)
+    return true
+  }
+
   if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
     workerReportLogsCh.publish(data)
+    return true
+  }
+
+  if (interprocessCode === VITEST_WORKER_TELEMETRY_PAYLOAD_CODE) {
+    workerReportTelemetryCh.publish(data)
     return true
   }
 
@@ -1557,9 +1854,9 @@ addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.0'],
   filePattern: 'dist/vendor/index.*',
-}, (vitestPackage) => {
+}, (vitestPackage, frameworkVersion) => {
   if (isReporterPackage(vitestPackage)) {
-    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
+    shimmer.wrap(vitestPackage.B.prototype, 'sort', sort => getSortWrapper(sort, frameworkVersion))
   }
 
   return vitestPackage
@@ -1569,9 +1866,9 @@ addHook({
   name: 'vitest',
   versions: ['>=2.0.0 <2.0.5'],
   filePattern: 'dist/vendor/index.*',
-}, (vitestPackage) => {
+}, (vitestPackage, frameworkVersion) => {
   if (isReporterPackageNew(vitestPackage)) {
-    shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
+    shimmer.wrap(vitestPackage.e.prototype, 'sort', sort => getSortWrapper(sort, frameworkVersion))
   }
 
   return vitestPackage
@@ -1581,9 +1878,9 @@ addHook({
   name: 'vitest',
   versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*',
-}, (vitestPackage) => {
+}, (vitestPackage, frameworkVersion) => {
   if (isReporterPackageNewest(vitestPackage)) {
-    shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
+    shimmer.wrap(vitestPackage.h.prototype, 'sort', sort => getSortWrapper(sort, frameworkVersion))
   }
 
   return vitestPackage
@@ -1605,8 +1902,12 @@ addHook({
   name: 'vitest',
   versions: ['>=2.1.0 <3.0.0'],
   filePattern: 'dist/chunks/RandomSequencer.*',
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+}, (randomSequencerPackage, frameworkVersion) => {
+  shimmer.wrap(
+    randomSequencerPackage.B.prototype,
+    'sort',
+    sort => getSortWrapper(sort, frameworkVersion)
+  )
   return randomSequencerPackage
 })
 
@@ -1614,10 +1915,14 @@ addHook({
   name: 'vitest',
   versions: ['>=3.0.9'],
   filePattern: 'dist/chunks/coverage.*',
-}, (coveragePackage) => {
+}, (coveragePackage, frameworkVersion) => {
   const baseSequencer = getBaseSequencerExport(coveragePackage)
   if (baseSequencer) {
-    shimmer.wrap(baseSequencer.value.prototype, 'sort', getSortWrapper)
+    shimmer.wrap(
+      baseSequencer.value.prototype,
+      'sort',
+      sort => getSortWrapper(sort, frameworkVersion)
+    )
   }
   return coveragePackage
 })
@@ -1626,8 +1931,12 @@ addHook({
   name: 'vitest',
   versions: ['>=3.0.0 <3.0.9'],
   filePattern: 'dist/chunks/resolveConfig.*',
-}, (resolveConfigPackage) => {
-  shimmer.wrap(resolveConfigPackage.B.prototype, 'sort', getSortWrapper)
+}, (resolveConfigPackage, frameworkVersion) => {
+  shimmer.wrap(
+    resolveConfigPackage.B.prototype,
+    'sort',
+    sort => getSortWrapper(sort, frameworkVersion)
+  )
   return resolveConfigPackage
 })
 

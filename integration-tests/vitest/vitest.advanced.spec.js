@@ -85,12 +85,8 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
-              assert.ok(
-                !Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS),
-                `Available keys: ${inspect(Object.keys(metadata.test))}`
-              )
-
               assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: '1',
                 [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
                 [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
                 [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
@@ -1483,7 +1479,16 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout?.on('data', data => { testOutput += data.toString() })
+          childProcess.stderr?.on('data', data => { testOutput += data.toString() })
+
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+          // The main process reconstructs this summary from the worker trace payloads.
+          assert.match(
+            testOutput,
+            /Quarantined: 4 tests run; 3 failures did not affect the test session\./
+          )
         })
       }
     })

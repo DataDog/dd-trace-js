@@ -3,7 +3,7 @@
 const { parseLiteralEnvironmentPrefix } = require('./literal-environment')
 
 const MAX_SCRIPT_EXPANSIONS = 16
-const DYNAMIC_VALUE_PATTERN = /[$`]|\r|\n|%[^%\s]+%|![^!\s]+!/
+const DYNAMIC_VALUE_PATTERN = /[$`\r\n]|%[^%\s]+%|![^!\s]+!/
 const RESERVED_PACKAGE_MANAGER_COMMANDS = {
   pnpm: new Set([
     'add', 'audit', 'bin', 'c', 'config', 'create', 'deploy', 'dlx', 'env', 'exec', 'fetch', 'i', 'import', 'init',
