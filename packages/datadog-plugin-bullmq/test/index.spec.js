@@ -13,7 +13,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
   category: 'messaging',
 }, (meta) => {
   const { agent } = meta
-  const queueAddErrorMessage = semver.gte(meta.version, '6.0.0')
+  const queueAddErrorMessage = semver.gte(semver.coerce(meta.version), '6.0.0')
     ? 'Constraint error, got value 0 expected range 1-12'
     : 'Validation error, cannot resolve alias "inv"'
 
