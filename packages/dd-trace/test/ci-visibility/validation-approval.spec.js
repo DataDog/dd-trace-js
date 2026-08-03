@@ -9,7 +9,7 @@ const {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
-  getApprovalProjectFiles,
+  getApprovalProjectSnapshot,
   serializeApprovalMaterial,
 } = require('../../../../ci/test-optimization-validation/approval')
 const {
@@ -102,14 +102,25 @@ describe('test optimization validation approval', () => {
     assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
   })
 
+  it('derives browser capability from retained Vitest browser arguments', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'vitest'
+    framework.validation.runnerArgs = ['--browser']
+    framework.browserRequired = false
+
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+  })
+
   it('refuses to publish approval artifacts when project inputs changed during preflight', () => {
-    const expectedProjectFiles = getApprovalProjectFiles(input.manifest)
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const capturedTestSource = snapshot.sources.get(fixture.testFile).toString('utf8')
     fs.appendFileSync(fixture.testFile, '\n// changed during preflight\n')
 
     assert.throws(
-      () => writeApprovalArtifacts({ ...input, expectedProjectFiles }),
+      () => writeApprovalArtifacts({ ...input, expectedProjectFiles: snapshot.projectFiles }),
       /project inputs changed during plan preflight/
     )
+    assert.doesNotMatch(capturedTestSource, /changed during preflight/)
     assert.strictEqual(fs.existsSync(path.join(input.out, 'approval.json')), false)
     assert.strictEqual(fs.existsSync(path.join(input.out, 'approval-files.sha256')), false)
   })

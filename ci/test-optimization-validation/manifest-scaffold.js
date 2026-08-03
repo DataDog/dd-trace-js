@@ -814,8 +814,8 @@ function hasFrameworkOwnership (filename, source, framework, packageName) {
     return /@playwright\/test/.test(source) || normalized.includes('/playwright/') ||
       normalized.includes('/e2e/')
   }
-  if (framework === 'vitest') return /\bvitest\b/.test(source) || /\b(?:describe|it|test)\s*\(/.test(source)
-  if (framework === 'jest') return /\bjest\b/.test(source) || /\b(?:describe|it|test)\s*\(/.test(source)
+  if (framework === 'vitest') return /\bvitest\b/.test(source) || getStaticTestCount(source) > 0
+  if (framework === 'jest') return /\bjest\b/.test(source) || getStaticTestCount(source) > 0
   if (framework === 'mocha') {
     return /\bmocha\b/.test(source) || /\bdescribe\s*\(/.test(source) ||
       packageName === 'mocha'
@@ -867,9 +867,12 @@ function getTestRank (filename, source, projectRoot) {
  * @returns {number} approximate test declaration count
  */
 function getStaticTestCount (source) {
-  return [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g)]
+  const direct = [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g)]
     .filter(match => !/\.(?:skip|todo)\b/.test(match[1]))
-    .length
+  const parameterized = [...source.matchAll(
+    /\b(?:it|test)((?:\.[A-Za-z]+)*)\.each\s*\([^()]*\)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g
+  )].filter(match => !/\.(?:skip|todo)\b/.test(`${match[1]}${match[2]}`))
+  return direct.length + parameterized.length
 }
 
 /**

@@ -12,6 +12,7 @@ const { sanitizeForReport } = require('./redaction')
 const { getManifestInputFiles } = require('./runner-command')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
+const MAX_CAPTURED_PROJECT_SOURCE_BYTES = 512 * 1024
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
 const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', '.nyc_output', 'node_modules'])
 
@@ -154,6 +155,7 @@ function getRequiredCapabilities ({ manifest, requestedScenario, selectedFramewo
   })
   const capabilities = new Set()
   if (frameworks.some(framework => ['cypress', 'playwright'].includes(framework.framework) ||
+    (framework.framework === 'vitest' && framework.validation?.runnerArgs?.includes('--browser')) ||
     framework.browserRequired === true)) {
     capabilities.add('browser_process')
   }
@@ -173,10 +175,35 @@ function getRequiredCapabilities ({ manifest, requestedScenario, selectedFramewo
  * @returns {Array<{path: string, sha256: string}>} sorted project file identities
  */
 function getApprovalProjectFiles (manifest, { includeLocal = true } = {}) {
-  return getManifestInputFiles(manifest, { includeLocal }).map(filename => ({
-    path: filename,
-    sha256: getFileDigest(filename),
-  }))
+  return getApprovalProjectSnapshot(manifest, { includeLocal }).projectFiles
+}
+
+/**
+ * Captures approval identities and bounded static-analysis sources from the same file reads.
+ *
+ * @param {object} manifest loaded validation manifest
+ * @param {object} [options] file selection options
+ * @param {boolean} [options.includeLocal] include local runner inputs
+ * @returns {{projectFiles: Array<{path: string, sha256: string}>, sources: Map<string, Buffer|undefined>}} snapshot
+ */
+function getApprovalProjectSnapshot (manifest, { includeLocal = true } = {}) {
+  const projectFiles = []
+  const sources = new Map()
+  for (const filename of getManifestInputFiles(manifest, { includeLocal })) {
+    const stat = fs.lstatSync(filename)
+    const contents = fs.readFileSync(filename)
+    projectFiles.push({
+      path: filename,
+      sha256: crypto.createHash('sha256').update(contents).digest('hex'),
+    })
+    sources.set(
+      filename,
+      stat.isFile() && !stat.isSymbolicLink() && contents.length <= MAX_CAPTURED_PROJECT_SOURCE_BYTES
+        ? contents
+        : undefined
+    )
+  }
+  return { projectFiles, sources }
 }
 
 /**
@@ -378,7 +405,7 @@ module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
-  getApprovalProjectFiles,
+  getApprovalProjectSnapshot,
   getRequiredCapabilities,
   serializeApprovalMaterial,
 }

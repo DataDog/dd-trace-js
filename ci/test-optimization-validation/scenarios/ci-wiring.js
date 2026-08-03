@@ -29,9 +29,10 @@ const RUNNER_PATTERNS = {
  * @param {object} input audit inputs
  * @param {object} input.manifest validation manifest
  * @param {object} input.framework framework entry
+ * @param {Map<string, Buffer|undefined>} [input.projectFileSources] approval-bound project sources
  * @returns {object} CI audit result
  */
-function runCiWiring ({ manifest, framework }) {
+function runCiWiring ({ manifest, framework, projectFileSources }) {
   const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
   if (contradiction) {
     return getIncomplete(framework, contradiction.reason, {
@@ -89,7 +90,7 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  const source = readCiSource(ci.configFile)
+  const source = readProjectSource(ci.configFile, projectFileSources)
   if (!source) {
     return getIncomplete(framework, 'The recorded CI configuration file is unavailable or too large to verify.', {
       ...evidence,
@@ -113,7 +114,7 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   const command = ci.command.trim()
-  const resolution = getRunnerResolution(command, framework, ci)
+  const resolution = getRunnerResolution(command, framework, ci, projectFileSources)
   const normalizedSource = jobSource.replaceAll('\\', '/')
   const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
   const matrixRelevant = matrixAffectsCiFacts(jobSource, command)
@@ -282,9 +283,10 @@ function getEffectiveNodeOptionsOverride (commandPath = []) {
  * @param {string} command selected CI command
  * @param {object} framework framework manifest entry
  * @param {object} ci selected CI evidence
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
  * @returns {object} static runner resolution
  */
-function getRunnerResolution (command, framework, ci) {
+function getRunnerResolution (command, framework, ci, projectFileSources) {
   if (getDirectRunner(command, framework.framework)) {
     return {
       commandPath: [command],
@@ -304,7 +306,7 @@ function getRunnerResolution (command, framework, ci) {
       status: 'unresolved',
     }
   }
-  const scripts = readProjectScripts(framework.project.packageJson)
+  const scripts = readProjectScripts(framework.project.packageJson, projectFileSources)
   if (!scripts) {
     return {
       reason: 'the approval-bound project package.json is unavailable or invalid',
@@ -341,11 +343,11 @@ function getRunnerResolution (command, framework, ci) {
   }
 }
 
-function readProjectScripts (filename) {
+function readProjectScripts (filename, projectFileSources) {
   try {
-    const stat = fs.lstatSync(filename)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
-    const packageJson = JSON.parse(fs.readFileSync(filename, 'utf8'))
+    const source = readProjectSource(filename, projectFileSources)
+    if (source === undefined) return
+    const packageJson = JSON.parse(source)
     if (!packageJson.scripts || typeof packageJson.scripts !== 'object' ||
       Array.isArray(packageJson.scripts)) return {}
     return packageJson.scripts
@@ -555,16 +557,23 @@ function getMissingReviewFields (ci) {
 }
 
 /**
- * Reads one bounded regular CI file.
+ * Reads one bounded regular project file or its approval-bound snapshot.
  *
- * @param {string} filename CI file
+ * @param {string} filename project file
+ * @param {Map<string, Buffer|undefined>} [projectFileSources] approval-bound project sources
  * @returns {string|undefined} source
  */
-function readCiSource (filename) {
+function readProjectSource (filename, projectFileSources) {
+  if (typeof filename !== 'string') return
+  const resolved = path.resolve(filename)
+  if (projectFileSources) {
+    if (!projectFileSources.has(resolved)) return
+    return projectFileSources.get(resolved)?.toString('utf8')
+  }
   try {
-    const stat = fs.lstatSync(filename)
+    const stat = fs.lstatSync(resolved)
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
-    return fs.readFileSync(filename, 'utf8')
+    return fs.readFileSync(resolved, 'utf8')
   } catch {}
 }
 

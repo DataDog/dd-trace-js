@@ -386,7 +386,7 @@ function getYamlStringProfileDefinitions (source) {
   const definitions = new Map()
   for (const line of source.split(/\r?\n/)) {
     if (!line.trim() || /^\s*#/.test(line)) continue
-    const match = /^([A-Za-z0-9_-]+):\s*(?:(["'])(.*)\2|([^#\s].*?))\s*$/.exec(line)
+    const match = /^([A-Za-z0-9_-]+):\s*(?:(["'])(.*)\2|([^#\s].*?))(?:\s+#.*)?\s*$/.exec(line)
     if (!match || /^\s/.test(line)) {
       throw new Error('YAML profiles must be literal one-line command strings')
     }

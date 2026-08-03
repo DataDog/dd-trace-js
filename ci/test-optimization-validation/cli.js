@@ -5,7 +5,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { assertApprovalDigest, getApprovalProjectFiles } = require('./approval')
+const { assertApprovalDigest, getApprovalProjectSnapshot } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
 const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
 const { annotateCiDiscovery } = require('./ci-discovery')
@@ -434,13 +434,13 @@ function printPlan (manifest, options) {
       : undefined
     if (packageCheck?.ok === false) throw getInstalledPackageCheckError(packageCheck)
 
-    const expectedProjectFiles = getApprovalProjectFiles(approvalManifest, {
+    const projectSnapshot = getApprovalProjectSnapshot(approvalManifest, {
       includeLocal: options.requestedScenario !== CI_WIRING,
     })
     const ciPreflightResults = options.scenarios.has(CI_WIRING)
       ? new Map(approvalManifest.frameworks.map(framework => [
         framework.id,
-        runCiWiring({ manifest: approvalManifest, framework }),
+        runCiWiring({ manifest: approvalManifest, framework, projectFileSources: projectSnapshot.sources }),
       ]))
       : new Map()
     const { plan } = formatExecutionPlanArtifacts({
@@ -453,7 +453,7 @@ function printPlan (manifest, options) {
       keepTempFiles: options.keepTempFiles,
       packageCheck,
       ciPreflightResults,
-      expectedProjectFiles,
+      expectedProjectFiles: projectSnapshot.projectFiles,
       verbose: options.verbose,
     })
     console.log(sanitizeConsoleText([

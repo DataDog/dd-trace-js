@@ -339,8 +339,9 @@ describe('test optimization validation CLI', () => {
         },
       },
       './scenarios/ci-wiring': {
-        runCiWiring () {
+        runCiWiring ({ projectFileSources }) {
           calls.push('ci-preflight')
+          assert.deepStrictEqual([...projectFileSources], [])
           return { status: 'error' }
         },
       },

@@ -51,6 +51,22 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /Test Optimization is not configured/)
   })
 
+  it('analyzes captured CI bytes when the working tree changes during plan generation', () => {
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const capturedSource = fs.readFileSync(workflow)
+    const projectFileSources = new Map([[workflow, capturedSource]])
+    fs.writeFileSync(workflow, workflowSource({
+      command,
+      env: ['      NODE_OPTIONS: --require=dd-trace/ci/init'],
+    }))
+
+    const result = runCiWiring({ framework, manifest, projectFileSources })
+    fs.writeFileSync(workflow, capturedSource)
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.ciFacts.initialization.status, 'missing')
+  })
+
   for (const wrapped of [
     'npx --no-install mocha test/example.spec.js',
     'pnpm run test:unit',

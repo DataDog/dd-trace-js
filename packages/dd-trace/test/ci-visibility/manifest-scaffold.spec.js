@@ -174,6 +174,33 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('ignores support paths inside unquoted Cucumber YAML profile comments', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile ci',
+    })
+    const supportFile = path.join(fixture.root, 'features', 'steps.js')
+    const staleFile = path.join(fixture.root, 'legacy', 'stale.js')
+    fs.mkdirSync(path.dirname(staleFile), { recursive: true })
+    fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+    fs.writeFileSync(staleFile, 'throw new Error("commented support must not load")\n')
+    fs.writeFileSync(
+      path.join(fixture.root, 'cucumber.yaml'),
+      'ci: --require features/steps.js # --require legacy/stale.js\n'
+    )
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--require', supportFile])
+      assert.strictEqual(framework.validation.runnerArgs.includes(staleFile), false)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('accepts the last bounded Cucumber config and rejects the first oversized config', () => {
     const fixture = createRepositoryFixture({ framework: 'cucumber' })
     const config = path.join(fixture.root, 'cucumber.js')
@@ -962,6 +989,30 @@ describe('test optimization validation manifest scaffold', () => {
       removeFixture(fixture.root)
     }
   })
+
+  for (const [frameworkName, script, declaration] of [
+    ['jest', 'jest', "test.each(cases)('case %s', () => {})"],
+    ['vitest', 'vitest run', "it.concurrent.each(cases)('case %s', () => {})"],
+  ]) {
+    it(`selects a ${frameworkName} test containing only parameterized declarations`, () => {
+      const fixture = createRepositoryFixture({
+        framework: frameworkName,
+        script,
+        testSource: `const cases = [[1]]\n${declaration}\n`,
+      })
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set([frameworkName]),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, fixture.testFile)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
 
   it('marks retained Vitest browser mode as browser-required', () => {
     const fixture = createRepositoryFixture({
