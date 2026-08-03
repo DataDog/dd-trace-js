@@ -36,7 +36,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
             }
             ctx.result = result
 
-            return finishCh.runStores(ctx, cb, this, error, result)
+            return finishCh.runStores(ctx, cb, this, ...arguments)
           })
         } else {
           res.once('end', () => finishCh.publish(ctx))
