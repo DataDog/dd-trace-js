@@ -39,7 +39,7 @@ describe('agentless-ci-visibility-encode', () => {
       '../log': logger,
     }).AgentlessCiVisibilityEncoder
     writer = { flush: sinon.spy() }
-    encoder = new AgentlessCiVisibilityEncoder(writer, {})
+    encoder = new AgentlessCiVisibilityEncoder(writer, { tags: {} })
 
     trace = [{
       trace_id: id('1234abcd1234abcd'),
