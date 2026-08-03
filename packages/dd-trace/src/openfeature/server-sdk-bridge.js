@@ -53,6 +53,38 @@ class DeferredOpenFeatureEventEmitter {
   emit (eventType, details) {
     this.#target()?.emit(eventType, details)
   }
+
+  /**
+   * @param {string} eventType
+   * @param {(details?: unknown) => void} handler
+   */
+  removeHandler (eventType, handler) {
+    this.#target()?.removeHandler(eventType, handler)
+  }
+
+  /**
+   * @param {string} [eventType]
+   */
+  removeAllHandlers (eventType) {
+    this.#target()?.removeAllHandlers(eventType)
+  }
+
+  /**
+   * @param {string} eventType
+   * @returns {((details?: unknown) => void)[]}
+   */
+  getHandlers (eventType) {
+    return this.#target()?.getHandlers(eventType) ?? []
+  }
+
+  /**
+   * @param {import('@openfeature/server-sdk').Logger} logger
+   * @returns {this}
+   */
+  setLogger (logger) {
+    this.#target()?.setLogger(logger)
+    return this
+  }
 }
 
 module.exports = {
