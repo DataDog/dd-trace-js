@@ -1377,13 +1377,28 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
+    /**
+     * @param {CiVisibilityExporter} exporter
+     * @param {(error: Error|null) => void} [callback]
+     */
     function upload (exporter, callback = () => {}) {
       exporter.uploadCoverageReport({
         filePath: '/tmp/coverage.xml',
+        fileDevice: 1n,
+        fileInode: 9_007_199_254_740_993n,
         format: 'cobertura',
         testEnvironmentMetadata: { 'git.commit.sha': 'abc123' },
       }, callback)
     }
+
+    it('forwards the discovered coverage report identity', () => {
+      const exporter = createExporter()
+
+      upload(exporter)
+
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileDevice, 1n)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileInode, 9_007_199_254_740_993n)
+    })
 
     it('reuses exactly 32 coverage report flags for every upload', () => {
       const flags = Array.from({ length: 32 }, (_, index) => `flag-${index}`)
