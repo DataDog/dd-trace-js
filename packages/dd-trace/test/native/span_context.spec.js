@@ -16,6 +16,7 @@ describe('NativeSpanContext', () => {
   // LE form of idBuffer — NativeSpanContext stores spanId as
   // a little-endian Uint8Array (matches the WASM change-buffer wire format).
   let leSpanId
+  let registerExtraService
 
   beforeEach(() => {
     OpCode = {
@@ -48,9 +49,11 @@ describe('NativeSpanContext', () => {
       toBuffer: () => idBuffer,
       _buffer: idBuffer,
     }
+    registerExtraService = sinon.stub()
 
     NativeSpanContext = proxyquire('../../src/native/span_context', {
       './index': { OpCode },
+      '../service-naming/extra-services': { registerExtraService },
     })
   })
 
@@ -124,6 +127,8 @@ describe('NativeSpanContext', () => {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: id,
         spanId: id,
+        tracerService: 'svc',
+        tracerServiceLower: 'svc',
       })
     })
 
@@ -212,6 +217,74 @@ describe('NativeSpanContext', () => {
         meta: {},
         metrics: {},
       })
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
+    })
+
+    it('fast-syncs primitive tags without a formatted snapshot', () => {
+      spanContext._setNameLocal('operation')
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('service.name', 'svc')
+      spanContext._sampling.priority = 1
+      spanContext.setTag('component', 'express')
+      spanContext.setTag('custom.metric', 2)
+      spanContext.setTag('flag', true)
+      spanContext.setTag('http.status_code', 200)
+      spanContext.setTag('span.kind', 'server')
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), true)
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.calledWith(
+        nativeSpans.queueBatchMetaFlat,
+        leSpanId,
+        ['component', 'express', 'http.status_code', '200', 'span.kind', 'server']
+      )
+      sinon.assert.calledWith(
+        nativeSpans.queueBatchMetricsFlat,
+        leSpanId,
+        ['custom.metric', 2, 'flag', 1, '_dd.measured', 1, '_sampling_priority_v1', 1]
+      )
+    })
+
+    it('fast-syncs supported core tag changes', () => {
+      spanContext._setNameLocal('operation')
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('service.name', 'api')
+      spanContext.setTag('resource.name', 'GET /users')
+      spanContext.setTag('span.type', 'web')
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), true)
+
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetResourceName, leSpanId, 'GET /users')
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetServiceName, leSpanId, 'api')
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetType, leSpanId, 'web')
+      sinon.assert.calledOnceWithExactly(registerExtraService, 'api')
+      sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
+    })
+
+    it('falls back without writing for unsupported final tags', () => {
+      spanContext._setNameLocal('operation')
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('object.tag', { nested: true })
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), false)
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
+    })
+
+    it('falls back before DD HTTP tags when OTel remapping is enabled', () => {
+      nativeSpans.otelSemanticsEnabled = true
+      spanContext._setNameLocal('operation')
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('http.method', 'GET')
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), false)
 
       sinon.assert.notCalled(nativeSpans.queueOp)
       sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)

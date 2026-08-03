@@ -136,6 +136,20 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(syncOrder, ['sync', 'export'])
   })
 
+  it('skips span formatting when native fast final sync succeeds', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const context = finishedSpan.context()
+    finishedSpan._tryFastNativeFinalSync = sinon.stub().returns(true)
+
+    processor.process(finishedSpan)
+
+    sinon.assert.calledOnce(finishedSpan._tryFastNativeFinalSync)
+    sinon.assert.notCalled(spanFormat)
+    sinon.assert.notCalled(context.syncFinalTagsToNative)
+    sinon.assert.calledOnceWithExactly(exporter.export, [finishedSpan])
+  })
+
   it('normalizes core fields before syncing them to native storage', () => {
     // The v0.4 encoder runs `normalizeSpan` per span as it encodes, so the JS
     // pipeline never ships an over-long service/name or a missing resource. The

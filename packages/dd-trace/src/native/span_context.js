@@ -1,6 +1,12 @@
 'use strict'
 
 const DatadogSpanContext = require('../opentracing/span_context')
+const tags = require('../../../../ext/tags')
+const {
+  ANALYTICS_KEY,
+  HOSTNAME_KEY,
+  SAMPLING_PRIORITY_KEY,
+} = require('../constants')
 const { IGNORE_OTEL_ERROR } = require('../constants')
 const {
   applyHttpOtelSemantics,
@@ -9,6 +15,18 @@ const {
   OTEL_OUTPUT_META_KEYS,
   OTEL_OUTPUT_METRIC_KEYS,
 } = require('../plugins/util/http-otel-semantics')
+const {
+  MAX_META_KEY_LENGTH,
+  MAX_META_VALUE_LENGTH,
+  MAX_METRIC_KEY_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_SERVICE_LENGTH,
+  MAX_TYPE_LENGTH,
+  MAX_RESOURCE_NAME_LENGTH,
+  DEFAULT_SPAN_NAME,
+  DEFAULT_SERVICE_NAME,
+} = require('../encode/tags-processors')
+const { registerExtraService } = require('../service-naming/extra-services')
 const { OpCode } = require('./index')
 const PROCESS_TAGS_META_KEY = '_dd.tags.process'
 
@@ -24,7 +42,35 @@ const PROCESS_TAGS_META_KEY = '_dd.tags.process'
  * - Has a `_nativeSpanId` (byte buffer) for native operations
  * - `syncFinalTagsToNative()` materializes the final JS wire state into WASM
  */
+const { MEASURED } = tags
 const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
+
+function truncateWithEllipsis (value, max) {
+  return value.length > max ? `${value.slice(0, max)}...` : value
+}
+
+function truncateKey (key, max) {
+  return key.length > max ? `${key.slice(0, max)}...` : key
+}
+
+function normalizeName (name) {
+  name ||= DEFAULT_SPAN_NAME
+  return name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name
+}
+
+function normalizeService (service) {
+  service ||= DEFAULT_SERVICE_NAME
+  return service.length > MAX_SERVICE_LENGTH ? service.slice(0, MAX_SERVICE_LENGTH) : service
+}
+
+function normalizeResource (resource, name) {
+  resource ||= name
+  return resource.length > MAX_RESOURCE_NAME_LENGTH ? resource.slice(0, MAX_RESOURCE_NAME_LENGTH) : resource
+}
+
+function normalizeType (type) {
+  return type && type.length > MAX_TYPE_LENGTH ? type.slice(0, MAX_TYPE_LENGTH) : type
+}
 
 // Symbol keys for internal backing storage — avoids Object.defineProperty deopt
 // while keeping properties non-enumerable to external code.
@@ -60,6 +106,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {object} [props.trace] - Shared trace object
    * @param {object} [props.tracestate] - W3C tracestate
    * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
+   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for extra-service registration
    */
   constructor (nativeSpans, props) {
     // During super(props), the `_name` setter stores the value locally. Native
@@ -82,6 +129,7 @@ class NativeSpanContext extends DatadogSpanContext {
     leId[7] = beBuf[0]
     this._nativeSpanId = leId
     this._tracerService = props.tracerService // Store for BASE_SERVICE check
+    this._tracerServiceLower = props.tracerServiceLower || ''
   }
 
   // Class-level getter/setter for _name — intercepts writes to sync to native.
@@ -161,6 +209,133 @@ class NativeSpanContext extends DatadogSpanContext {
   syncOneTagToNative (key, value) {
     if (this.#exported) return
     if (key === 'error' || ERROR_META_KEYS.has(key)) this.#hasErrorTags = true
+  }
+
+  /**
+   * Try to sync the final span state without building the full formatted span.
+   * Safe only for primitive tags whose formatter mapping is local and reversible;
+   * unsupported values return false so the caller uses syncFinalTagsToNative().
+   *
+   * @returns {boolean} true when the fast sync completed, false for fallback
+   */
+  tryFastFinalTagsToNative () {
+    if (this.#exported) return true
+    if (this.#hasErrorTags || this._spanSampling !== undefined) return false
+
+    const tags = this.getTags()
+    if (this.#hasOtelDeferredTags(tags)) return false
+
+    const metaBatch = []
+    const metricBatch = []
+    const name = normalizeName(String(this._name))
+    let resource
+    let service
+    let type = ''
+    let extraService
+
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      if (key === 'error' || ERROR_META_KEYS.has(key)) return false
+
+      if (key === 'span.kind' && value && value !== 'internal') {
+        metricBatch.push(MEASURED, 1)
+      }
+
+      switch (key) {
+        case 'service.name':
+          if (typeof value !== 'string') return false
+          service = normalizeService(truncateWithEllipsis(value, MAX_META_VALUE_LENGTH))
+          if (value.toLowerCase() !== this._tracerServiceLower) extraService = value
+          break
+        case 'resource.name':
+          if (typeof value !== 'string') return false
+          resource = truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+          break
+        case 'span.type':
+          if (typeof value !== 'string') return false
+          type = normalizeType(truncateWithEllipsis(value, MAX_META_VALUE_LENGTH))
+          break
+        case 'http.status_code': {
+          const stringValue = value && String(value)
+          if (typeof stringValue === 'string') {
+            metaBatch.push(key, truncateWithEllipsis(stringValue, MAX_META_VALUE_LENGTH))
+          }
+          break
+        }
+        case 'analytics.event':
+          metricBatch.push(ANALYTICS_KEY, value === undefined || value ? 1 : 0)
+          break
+        case HOSTNAME_KEY:
+        case MEASURED:
+          metricBatch.push(key, value === undefined || value ? 1 : 0)
+          break
+        default: {
+          const valueType = typeof value
+          if (valueType === 'string') {
+            metaBatch.push(
+              truncateKey(key, MAX_META_KEY_LENGTH),
+              truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+            )
+          } else if (valueType === 'number') {
+            if (!Number.isNaN(value)) metricBatch.push(truncateKey(key, MAX_METRIC_KEY_LENGTH), value)
+          } else if (valueType === 'boolean') {
+            metricBatch.push(truncateKey(key, MAX_METRIC_KEY_LENGTH), value ? 1 : 0)
+          } else if (value != null) {
+            return false
+          }
+        }
+      }
+    }
+
+    if (typeof this._hostname === 'string') {
+      metaBatch.push(HOSTNAME_KEY, truncateWithEllipsis(this._hostname, MAX_META_VALUE_LENGTH))
+    }
+    if (typeof this._sampling.priority === 'number') {
+      metricBatch.push(SAMPLING_PRIORITY_KEY, this._sampling.priority)
+    }
+    resource = normalizeResource(resource, name)
+    if (service === undefined) return false
+    service = normalizeService(service)
+    type = normalizeType(type)
+
+    if (extraService !== undefined) registerExtraService(extraService)
+    this.#syncCoreFields(name, resource, service, type, 0)
+    const spanId = this._nativeSpanId
+    if (metaBatch.length > 0) this.#nativeSpans.queueBatchMetaFlat(spanId, metaBatch)
+    if (metricBatch.length > 0) this.#nativeSpans.queueBatchMetricsFlat(spanId, metricBatch)
+    return true
+  }
+
+  #syncCoreFields (name, resource, service, type, error) {
+    const spanId = this._nativeSpanId
+    if (name !== this.#nativeName) {
+      this.#nativeSpans.queueOp(OpCode.SetName, spanId, name)
+      this.#nativeName = name
+    }
+    if (resource !== this.#nativeResource) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, resource)
+      this.#nativeResource = resource
+    }
+    if (typeof service === 'string' && service !== this.#nativeService) {
+      this.#nativeSpans.queueOp(OpCode.SetServiceName, spanId, service)
+      this.#nativeService = service
+    }
+    if (typeof type === 'string' && type !== this.#nativeType) {
+      this.#nativeSpans.queueOp(OpCode.SetType, spanId, type)
+      this.#nativeType = type
+    }
+    if (error !== this.#nativeError) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', error])
+      this.#nativeError = error
+    }
+  }
+
+  #hasOtelDeferredTags (tags) {
+    if (!this.#nativeSpans.otelSemanticsEnabled) return false
+    for (const key of Object.keys(tags)) {
+      if (DD_HTTP_META_KEYS.has(key) || key === NETWORK_DESTINATION_PORT) return true
+    }
+    return false
   }
 
   /**

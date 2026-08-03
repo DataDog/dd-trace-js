@@ -254,6 +254,7 @@ class NativeDatadogSpan extends DatadogSpan {
     const tracer = this.tracer()
     const propagationBehavior = tracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     const tracerService = tracer?._service
+    const tracerServiceLower = tracer?.serviceLower
 
     let spanContext
     let startTime
@@ -285,6 +286,7 @@ class NativeDatadogSpan extends DatadogSpan {
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
         tracerService,
+        tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -301,6 +303,7 @@ class NativeDatadogSpan extends DatadogSpan {
         trace: parent._trace,
         tracestate: parent._tracestate,
         tracerService,
+        tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -315,6 +318,7 @@ class NativeDatadogSpan extends DatadogSpan {
         traceId: spanId,
         spanId,
         tracerService,
+        tracerServiceLower,
       })
       spanContext._trace.startTime = startTime
 
@@ -511,6 +515,13 @@ class NativeDatadogSpan extends DatadogSpan {
     } finally {
       this._processor?._exporter?._trackSpanFinish?.()
     }
+  }
+
+  _tryFastNativeFinalSync () {
+    if (this._links?.length || this._events?.length) return false
+    const metaStruct = this.meta_struct
+    if (metaStruct && typeof metaStruct === 'object' && Object.keys(metaStruct).length > 0) return false
+    return this._spanContext.tryFastFinalTagsToNative?.() === true
   }
 
   /**
