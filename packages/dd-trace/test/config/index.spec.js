@@ -5475,5 +5475,18 @@ rules:
 
       assert.notStrictEqual(firstRefresh, secondRefresh)
     })
+
+    it('should catch and log an error instead of throwing when uuid generation fails', () => {
+      const error = new Error('boom')
+      const uuid = sinon.stub()
+      uuid.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
+      uuid.onSecondCall().throws(error)
+      const configModule = loadConfigModule({ uuid })
+      const config = configModule()
+
+      channel('datadog:identity:update').publish(config)
+
+      sinon.assert.calledWith(log.error, 'Error refreshing runtime ID', error)
+    })
   })
 })

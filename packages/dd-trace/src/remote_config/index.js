@@ -601,12 +601,16 @@ function getTagsString (config, repositoryUrl, commitSHA) {
  * @param {import('../config/config-base')} config
  */
 function refreshIdentity (config) {
-  clientId = uuid({ disableEntropyCache: true })
-  if (config.tags['_dd.rc.client_id']) {
-    config.tags['_dd.rc.client_id'] = clientId
+  try {
+    clientId = uuid({ disableEntropyCache: true })
+    if (config.tags['_dd.rc.client_id']) {
+      config.tags['_dd.rc.client_id'] = clientId
+    }
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    tagsString = getTagsString(config, repositoryUrl, commitSHA)
+  } catch (e) {
+    log.error('[RC] Error refreshing identity', e)
   }
-  const { commitSHA, repositoryUrl } = getGitMetadata(config)
-  tagsString = getTagsString(config, repositoryUrl, commitSHA)
 }
 
 module.exports = RemoteConfig
