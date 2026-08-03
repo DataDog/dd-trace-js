@@ -704,6 +704,21 @@ describe('attempt to fix summary', () => {
     )
   })
 
+  it('uses the suite and test tuple to deduplicate attempt to fix progress lines', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('a › b', 'c', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('a', 'b › c', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(loggedAttemptToFixTests.size, 2)
+  })
+
   it('combines attempt to fix and dynamic name sections into one session report', () => {
     const executions = new Map()
     const newTestsWithDynamicNames = new Set(['dynamic-suite.js › dynamic test 123'])

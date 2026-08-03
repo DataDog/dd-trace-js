@@ -2004,11 +2004,11 @@ function formatTestOptimizationList (items) {
 function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTests) {
   if (!testName) return
 
-  const name = formatTestOptimizationName(testSuite, testName)
   if (loggedAttemptToFixTests) {
-    if (loggedAttemptToFixTests.has(name)) return
+    const identity = getTestOptimizationIdentity(testSuite, testName)
+    if (loggedAttemptToFixTests.has(identity)) return
 
-    loggedAttemptToFixTests.add(name)
+    loggedAttemptToFixTests.add(identity)
   }
 
   // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
