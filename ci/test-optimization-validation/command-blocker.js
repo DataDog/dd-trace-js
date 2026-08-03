@@ -8,22 +8,22 @@ const CONNECTION_REFUSED_PATTERN = /\bECONNREFUSED\b|\bconnection refused\b/i
 const NO_TESTS_FOUND_PATTERN =
   /\b(?:No test files? found|No tests? found|No test files? were found|0 tests? collected)\b/i
 const MODULE_OR_TRANSFORM_PATTERN =
-  /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath\b[\s\S]*\bnot defined by "exports"|Could not resolve|transform failed)\b/i
+  /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath\b[\s\S]+\bnot defined by "exports"|Could not resolve|transform failed)\b/i
 const CYPRESS_BINARY_PATTERN =
-  /(?:Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress)/i
+  /Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress/i
 const PLAYWRIGHT_BROWSER_PATTERN = new RegExp(
-  String.raw`(?:browserType\.launch: Executable doesn't exist|` +
-  'Please run the following command to download new browsers|playwright install)',
+  String.raw`browserType\.launch: Executable doesn't exist|` +
+  'Please run the following command to download new browsers|playwright install',
   'i'
 )
 const PLAYWRIGHT_BROWSER_LAUNCH_PATTERN =
-  /(?:browserType\.launch: Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous)/i
+  /browserType\.launch: Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous/i
 const PLAYWRIGHT_BROWSER_ABORT_PATTERN =
   /(?:browserType\.launch: Target page, context or browser has been closed|Browser logs:)[\s\S]*?(?:signal=SIGABRT|Received signal 6|Abort trap: 6)/i
 const VITEST_BROWSER_PROVIDER_PATTERN =
-  /(?:Cannot find (?:module|package).*@vitest\/browser|@vitest\/browser-[^\s'"]+.*(?:missing|not (?:found|installed)))/i
+  /Cannot find (?:module|package).*@vitest\/browser|@vitest\/browser-[^\s'"].*(?:missing|not (?:found|installed))/i
 const RUNNER_COMMAND_NOT_FOUND_PATTERN =
-  /(?:command not found|is not recognized as an internal or external command|spawn [^\r\n]+ ENOENT)/i
+  /command not found|is not recognized as an internal or external command|spawn [^\r\n]+ ENOENT/i
 
 /**
  * Identifies toolchain and execution-environment failures that happen before tests start.

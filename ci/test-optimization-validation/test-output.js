@@ -4,7 +4,8 @@ const cypressAdapter = require('./framework-adapters/cypress')
 const cucumberAdapter = require('./framework-adapters/cucumber')
 const playwrightAdapter = require('./framework-adapters/playwright')
 
-const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+const ANSI_PATTERN =
+  new RegExp(`${String.fromCharCode(27)}${String.raw`\[[\u0030-\u003F]*[\u0020-\u002F]*[\u0040-\u007E]`}`, 'g')
 
 /**
  * Extracts the final test count from common JavaScript test-runner summaries.

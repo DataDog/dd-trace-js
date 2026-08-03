@@ -23,7 +23,7 @@ function isTestFile (filename) {
  * @returns {number} declared scenario count
  */
 function getScenarioCount (source) {
-  return [...source.matchAll(/^\s*Scenario(?: Outline)?:\s*\S/gm)].length
+  return [...source.matchAll(/^[ \t]*Scenario(?: Outline)?:[ \t]*\S/gm)].length
 }
 
 /**

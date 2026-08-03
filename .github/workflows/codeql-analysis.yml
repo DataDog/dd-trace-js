@@ -69,7 +69,7 @@ jobs:
         run: |
           # Poll every 10s (30x = 5 min total), matching the official action's
           # timeout but halving the API calls vs its default 5s interval.
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             RESULT=$(curl -sf \
               -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
