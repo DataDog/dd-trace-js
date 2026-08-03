@@ -29,6 +29,10 @@ describe('OpenFeature server-sdk bridge', () => {
 
     emitter.addHandler(bridge.ProviderEvents.Ready, sinon.spy())
     emitter.emit(bridge.ProviderEvents.Ready)
+    emitter.removeHandler(bridge.ProviderEvents.Ready, sinon.spy())
+    emitter.removeAllHandlers(bridge.ProviderEvents.Ready)
+    assert.deepStrictEqual(emitter.getHandlers(bridge.ProviderEvents.Ready), [])
+    assert.strictEqual(emitter.setLogger({}), emitter)
   })
 
   it('forwards addHandler and emit to the real emitter once one is registered', () => {
@@ -50,6 +54,37 @@ describe('OpenFeature server-sdk bridge', () => {
     sinon.assert.calledOnce(RealEventEmitter)
     sinon.assert.calledOnceWithExactly(realEmitterInstance.addHandler, 'PROVIDER_READY', handler)
     sinon.assert.calledOnceWithExactly(handler, { some: 'details' })
+  })
+
+  it('forwards removeHandler, removeAllHandlers, getHandlers, and setLogger to the real emitter', () => {
+    const handlers = [sinon.spy()]
+    const realEmitterInstance = {
+      addHandler: sinon.spy(),
+      emit: sinon.spy(),
+      removeHandler: sinon.spy(),
+      removeAllHandlers: sinon.spy(),
+      getHandlers: sinon.stub().returns(handlers),
+      setLogger: sinon.spy(),
+    }
+    const RealEventEmitter = sinon.stub().returns(realEmitterInstance)
+
+    bridge.setEventEmitter(RealEventEmitter)
+
+    const emitter = new bridge.OpenFeatureEventEmitter()
+    const handler = sinon.spy()
+    const logger = {}
+
+    emitter.removeHandler('PROVIDER_READY', handler)
+    emitter.removeAllHandlers('PROVIDER_READY')
+    const result = emitter.getHandlers('PROVIDER_READY')
+    const returned = emitter.setLogger(logger)
+
+    sinon.assert.calledOnceWithExactly(realEmitterInstance.removeHandler, 'PROVIDER_READY', handler)
+    sinon.assert.calledOnceWithExactly(realEmitterInstance.removeAllHandlers, 'PROVIDER_READY')
+    sinon.assert.calledOnceWithExactly(realEmitterInstance.getHandlers, 'PROVIDER_READY')
+    assert.strictEqual(result, handlers)
+    sinon.assert.calledOnceWithExactly(realEmitterInstance.setLogger, logger)
+    assert.strictEqual(returned, emitter)
   })
 
   it('reuses the same real emitter instance across calls on the same deferred emitter', () => {
