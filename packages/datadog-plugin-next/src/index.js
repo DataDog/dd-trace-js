@@ -8,8 +8,8 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
-const REUSED_NEXT_REQUEST_SPAN = Symbol('reusedNextRequestSpan')
-const NEXT_PARENT_ROUTE = Symbol('nextParentRoute')
+const reusedNextRequestStores = new WeakSet()
+const nextParentRoutes = new WeakMap()
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
@@ -23,7 +23,9 @@ class NextPlugin extends ServerPlugin {
     const store = storage('legacy').getStore()
     const parentSpan = store?.span
     if (parentSpan?._integrationName === this.constructor.id) {
-      return { ...store, span: parentSpan, req, [REUSED_NEXT_REQUEST_SPAN]: true }
+      const reusedStore = { ...store, span: parentSpan, req }
+      reusedNextRequestStores.add(reusedStore)
+      return reusedStore
     }
 
     const childOf = parentSpan || web.extractIncomingServerContext(this.tracer, req.headers)
@@ -69,7 +71,7 @@ class NextPlugin extends ServerPlugin {
     const store = storage('legacy').getStore()
 
     if (!store) return
-    if (store[REUSED_NEXT_REQUEST_SPAN]) return
+    if (reusedNextRequestStores.has(store)) return
 
     const span = store.span
     const error = span.context().getTag('error')
@@ -166,11 +168,11 @@ function setHttpParentRoute (span, method, page, isStatic) {
   const currentRoute = span.context().getTag(HTTP_ROUTE)
 
   // Only refine a route that Next itself set; static resources are fallbacks.
-  if (currentRoute && (span[NEXT_PARENT_ROUTE] !== currentRoute || isStatic)) return
+  if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
   span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
-  span[NEXT_PARENT_ROUTE] = page
+  nextParentRoutes.set(span, page)
 }
 
 function normalizeConfig (config) {
