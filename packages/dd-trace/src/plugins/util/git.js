@@ -119,9 +119,9 @@ function getGitVersion () {
   const gitVersionMatches = /** @type {RegExpMatchArray} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
-      major: Number.parseInt(gitVersionMatches[1]),
-      minor: Number.parseInt(gitVersionMatches[2]),
-      patch: Number.parseInt(gitVersionMatches[3]),
+      major: Number.parseInt(gitVersionMatches[1], 10),
+      minor: Number.parseInt(gitVersionMatches[2], 10),
+      patch: Number.parseInt(gitVersionMatches[3], 10),
     }
   } catch {
     return null

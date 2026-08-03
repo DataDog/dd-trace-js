@@ -53,7 +53,7 @@ describe('Plugin', () => {
           // ignore error if the table already exists
           if (typeof dynamo.createTable === 'function') {
             const createTable = toPromise(dynamo, dynamo.createTable)
-            try { await createTable(getCreateTableParams()) } catch (_) {}
+            try { await createTable(getCreateTableParams()) } catch {}
           }
         })
 

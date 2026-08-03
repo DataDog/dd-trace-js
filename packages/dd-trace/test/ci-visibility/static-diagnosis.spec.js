@@ -829,6 +829,7 @@ describe('test optimization validation static diagnosis', () => {
     }
 
     assert.deepStrictEqual(getStaticBlocker(framework, diagnosis), {
+      blockerCategory: 'UNSUPPORTED_VERSION',
       reason: 'Mocha 7.0.0 is not supported',
       recommendation: 'Upgrade Mocha to >=8.0.0, or use dd-trace v5 for older Mocha versions.',
     })
@@ -858,6 +859,7 @@ describe('test optimization validation static diagnosis', () => {
     }
 
     assert.deepStrictEqual(getStaticBlocker(framework, diagnosis), {
+      blockerCategory: 'UNSUPPORTED_VERSION',
       reason: 'Mocha 7.0.0 is not supported',
       recommendation: 'Upgrade Mocha to >=8.0.0, or use dd-trace v5 for older Mocha versions.',
     })

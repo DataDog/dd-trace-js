@@ -98,7 +98,7 @@ describe('RASP - sql_injection', () => {
 
               try {
                 await axios.get('/?param=\' OR 1 = 1 --')
-              } catch (e) {
+              } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
 
@@ -135,7 +135,7 @@ describe('RASP - sql_injection', () => {
 
               try {
                 await axios.get('/?param=\' OR 1 = 1 --')
-              } catch (e) {
+              } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
 
@@ -180,7 +180,7 @@ describe('RASP - sql_injection', () => {
 
               try {
                 await axios.get('/?param=\' OR 1 = 1 --')
-              } catch (e) {
+              } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
 
@@ -217,7 +217,7 @@ describe('RASP - sql_injection', () => {
 
               try {
                 await axios.get('/?param=\' OR 1 = 1 --')
-              } catch (e) {
+              } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
 

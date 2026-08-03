@@ -8,6 +8,7 @@ const {
   getFrameworkDefinitions,
   runDiagnosis,
 } = require('../diagnose')
+const { BLOCKER_CATEGORIES } = require('./blocker-category')
 const { sanitizeForReport } = require('./redaction')
 const { writeFileSafely } = require('./safe-files')
 
@@ -45,6 +46,7 @@ function runStaticDiagnosis ({ manifest, out }) {
 function getStaticBlocker (framework, diagnosis) {
   if (!SUPPORTED_FRAMEWORKS.has(framework.framework)) {
     return {
+      blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
       reason: `Unsupported test framework detected: ${getUnsupportedFrameworkName(framework)}.`,
       recommendation: 'Choose Jest, Mocha, Cucumber, Cypress, Playwright, or Vitest for live validation.',
     }
@@ -56,6 +58,7 @@ function getStaticBlocker (framework, diagnosis) {
   const version = parseVersion(framework.frameworkVersion)
   if (version && !satisfies(version, definition.supportedRange)) {
     return {
+      blockerCategory: BLOCKER_CATEGORIES.UNSUPPORTED_VERSION,
       reason:
         `${definition.name} ${version} is not supported. Supported range is ${definition.supportedRange}.`,
       recommendation: definition.recommendation,
@@ -65,6 +68,7 @@ function getStaticBlocker (framework, diagnosis) {
   const staticVersionError = findStaticVersionError(definition, diagnosis, framework, version)
   if (staticVersionError) {
     return {
+      blockerCategory: BLOCKER_CATEGORIES.UNSUPPORTED_VERSION,
       reason: staticVersionError.title,
       recommendation: staticVersionError.recommendation || staticVersionError.message,
     }
@@ -149,7 +153,7 @@ function normalizeRelativePath (location) {
 
 function parseVersion (rawVersion) {
   if (typeof rawVersion !== 'string') return null
-  const match = rawVersion.match(/\d+\.\d+\.\d+/)
+  const match = rawVersion.match(/(?<!\d)\d+\.\d+\.\d+/)
   return match ? match[0] : null
 }
 

@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('path')
 
 const { getArtifactId } = require('../artifact-id')
+const { BLOCKER_CATEGORIES } = require('../blocker-category')
 const { buildDatadogEnv, buildOfflineCaptureEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
@@ -19,8 +20,10 @@ const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport, sanitizeString } = require('../redaction')
 const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
+const { getValidationBlockerEvidence } = require('../validation-blocker')
 
-const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+const ANSI_PATTERN =
+  new RegExp(`${String.fromCharCode(27)}${String.raw`\[[\u0030-\u003F]*[\u0020-\u002F]*[\u0040-\u007E]`}`, 'g')
 
 function frameworkOutDir (out, framework, scenario) {
   return path.join(out, 'runs', getArtifactId(framework.id), scenario)
@@ -193,10 +196,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
 function requireGeneratedScenario (framework, scenarioId, scenarioName) {
   const strategy = framework.generatedTestStrategy
   if (strategy?.status === 'not_possible') {
-    return skip(
+    return incomplete(
       framework,
       scenarioName,
-      `Skipped because this advanced feature is not eligible: ${strategy.reason}`,
+      `The validator cannot create a collectible test for this advanced feature: ${strategy.reason} ` +
+        'No conclusion was reached for this advanced feature.',
       getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
     )
   }
@@ -254,9 +258,9 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
     reasonCode = 'generated-test-strategy-not-verified'
   }
 
-  return {
+  const evidence = {
     featureEligibility: {
-      eligible: false,
+      ...(reasonCode === 'generated-test-strategy-not-possible' ? {} : { eligible: false }),
       blockedBy: 'generated-test-strategy',
       reason: strategy?.reason,
       reasonCode,
@@ -265,6 +269,12 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
       requiredGeneratedScenario: scenarioId,
     },
   }
+  if (reasonCode === 'generated-test-strategy-not-possible') {
+    evidence.blockerCategory = BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+    evidence.recommendation = 'Report that the selected runner configuration cannot collect validator-generated ' +
+      'tests to validator engineering. Basic Reporting remains valid; project setup changes are not required.'
+  }
+  return evidence
 }
 
 function basicEventEvidence (events) {
@@ -442,6 +452,8 @@ function copy (target, source, key) {
 
 function summarizeDebugRerun ({ result, events, offline, outDir }) {
   const output = `${result.stdout}\n${result.stderr}`
+  const testEvents = eventsOfType(events, 'test')
+  const sourceFiles = new Set(testEvents.map(test => test.testSourceFile).filter(Boolean))
 
   return {
     ran: true,
@@ -449,8 +461,12 @@ function summarizeDebugRerun ({ result, events, offline, outDir }) {
     commandTimedOut: result.timedOut,
     debugCommandFailed: result.exitCode !== 0 || result.timedOut === true,
     offlineExporterInitialized: offline.initialized,
+    settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
     artifactDirectory: outDir,
     ...basicEventEvidence(events),
+    testEventsWithoutSourceFile: testEvents.length - testEvents.filter(test => test.testSourceFile).length,
+    testSourceFileCount: sourceFiles.size,
+    testSourceFiles: [...sourceFiles].slice(0, 5),
     debugLines: findInterestingLines(output, [
       /dd-trace/i,
       /test optimization/i,
@@ -541,7 +557,15 @@ function inconclusive (framework, scenario, diagnosis, evidence = {}, outDir, ex
 }
 
 function error (framework, scenario, err, outDir = err?.artifactDirectory) {
-  return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
+  const blockerEvidence = getValidationBlockerEvidence(err)
+  return result(
+    framework,
+    scenario,
+    blockerEvidence ? 'blocked' : 'error',
+    blockerEvidence ? err.message : (err && err.stack ? err.stack : String(err)),
+    blockerEvidence || {},
+    outDir
+  )
 }
 
 function result (framework, scenario, status, diagnosis, evidence, outDir, extraArtifacts) {

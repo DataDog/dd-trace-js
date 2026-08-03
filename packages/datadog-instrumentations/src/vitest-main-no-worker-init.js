@@ -12,6 +12,7 @@ const {
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
@@ -1176,6 +1177,23 @@ function reportFinalTestAttempt (testReport) {
   } = testReport
 
   if (status === 'skip') {
+    recordTestManagementExecution({
+      testSuite: testProperties.testSuite,
+      testName,
+      status,
+      isAttemptToFix: testProperties.isAttemptToFix,
+      isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
+    })
+    if (testProperties.isAttemptToFix) {
+      recordAttemptToFixExecution(state.attemptToFixExecutions, {
+        testSuite: testProperties.testSuite,
+        testName,
+        status,
+        isDisabled: testProperties.isDisabled,
+        isQuarantined: testProperties.isQuarantined,
+      })
+    }
     const {
       isRumActive,
       testExecutionId,
@@ -1185,7 +1203,9 @@ function reportFinalTestAttempt (testReport) {
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix: testProperties.isAttemptToFix,
       isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
@@ -1282,6 +1302,14 @@ function reportTestAttempt (testReport, attempt) {
     testStartLine: task.location?.line,
     testExecutionId,
   }
+  recordTestManagementExecution({
+    testSuite: testProperties.testSuite,
+    testName,
+    status,
+    isAttemptToFix: testProperties.isAttemptToFix,
+    isDisabled: testProperties.isDisabled,
+    isQuarantined: testProperties.isQuarantined,
+  })
   if (testProperties.isAttemptToFix) {
     recordAttemptToFixExecution(state.attemptToFixExecutions, {
       testSuite: testProperties.testSuite,

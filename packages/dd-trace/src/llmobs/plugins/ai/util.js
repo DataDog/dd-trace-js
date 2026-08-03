@@ -322,7 +322,7 @@ function getToolNameFromTags (tags) {
   const toolName = tags['ai.toolCall.name']
   if (!toolName) return null
 
-  const parsedToolName = Number.parseInt(toolName)
+  const parsedToolName = Number.parseInt(toolName, 10)
   if (!Number.isNaN(parsedToolName)) return null
 
   return toolName

@@ -131,6 +131,7 @@ addHook({
  * @property {Set<string>} newTestsWithDynamicNames
  * @property {number} nextWorkerId
  * @property {Set<string>} scheduledFiles
+ * @property {Map<string, object>} testManagementExecutions
  * @property {unknown} runError
  * @property {Set<WorkerRecord>} workers
  * @property {Map<object, string>} suiteStatuses
@@ -303,6 +304,7 @@ function getCoordinatorState (localRunner) {
     newTestsWithDynamicNames: new Set(),
     nextWorkerId: 0,
     scheduledFiles: new Set(),
+    testManagementExecutions: new Map(),
     runError: undefined,
     workers: new Set(),
     suiteStatuses: new Map(),
@@ -787,6 +789,7 @@ function handleWorkerMessage (state, workerRecord, message) {
       collectTestOptimizationSummariesFromTraces(payload, {
         attemptToFixExecutions: state.attemptToFixExecutions,
         newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+        testManagementExecutions: state.testManagementExecutions,
       })
       workerReportTraceCh.publish({
         traces: payload,
@@ -957,6 +960,7 @@ function finishCoordinator (state, error, onDone) {
     logTestOptimizationSummary({
       attemptToFixExecutions: state.attemptToFixExecutions,
       newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+      testManagementExecutions: state.testManagementExecutions,
     })
     onDone()
     return
@@ -975,6 +979,7 @@ function finishCoordinator (state, error, onDone) {
   logTestOptimizationSummary({
     attemptToFixExecutions: state.attemptToFixExecutions,
     newTestsWithDynamicNames: state.newTestsWithDynamicNames,
+    testManagementExecutions: state.testManagementExecutions,
   })
 }
 
