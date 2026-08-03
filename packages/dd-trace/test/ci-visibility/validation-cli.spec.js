@@ -17,6 +17,7 @@ const {
 const {
   EXECUTION_LOCK_FILENAME,
 } = require('../../../../ci/test-optimization-validation/execution-lock')
+const { createManifestScaffold } = require('../../../../ci/test-optimization-validation/manifest-scaffold')
 const {
   createRepositoryFixture,
   removeFixture,
@@ -416,6 +417,73 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(frameworkStatus.evidence.blockerCategory, 'UNSUPPORTED_VERSION')
       assert.strictEqual(basicReporting.evidence.blockerCategory, 'UNSUPPORTED_VERSION')
       assert.strictEqual(reportInput.results.some(result => result.evidence.installedPackageIncomplete), false)
+    } finally {
+      process.exitCode = originalExitCode
+      consoleLog.restore()
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('preserves project setup when an approved direct runner becomes unavailable', async () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+    const manifest = createManifestScaffold({ root: fixture.root, frameworks: new Set(['mocha']) })
+    Object.defineProperty(manifest, '__path', {
+      value: path.join(fixture.root, 'dd-test-optimization-validation-manifest.json'),
+    })
+    let reportInput
+    const originalExitCode = process.exitCode
+    const consoleLog = sinon.stub(console, 'log')
+    const isolatedCli = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './approval': { assertApprovalDigest () {} },
+      './approval-artifacts': {
+        loadApprovedPlan: () => ({
+          material: {
+            manifest: { path: manifest.__path },
+            selection: { frameworks: [], scenario: 'efd' },
+            validation: {
+              keepTemporaryFiles: false,
+              offlineFixtureNonce: 'fixture-nonce',
+              outputDirectory: out,
+              verbose: false,
+            },
+          },
+        }),
+      },
+      './ci-discovery': { annotateCiDiscovery () {} },
+      './executable': { getUnavailableExecutable: () => fixture.runner },
+      './execution-lock': {
+        acquireExecutionLock: () => ({ path: path.join(out, EXECUTION_LOCK_FILENAME) }),
+        releaseExecutionLock () {},
+      },
+      './generated-files': {
+        cleanupGeneratedFiles: async () => ({ directoriesRemoved: 0, filesRemoved: 0, status: 'completed' }),
+      },
+      './manifest-loader': { loadManifest: () => manifest },
+      './package-check': { checkInstalledPackage: () => ({ ok: true }) },
+      './report-writer': {
+        writePendingReport () {},
+        async writeReport (input) { reportInput = input },
+      },
+      './safe-files': { ensureSafeDirectory () {} },
+      './static-diagnosis': {
+        getStaticBlocker: () => undefined,
+        runStaticDiagnosis: () => ({ report: {}, reportPath: path.join(out, 'diagnosis.json') }),
+      },
+    })
+    try {
+      await isolatedCli.main([
+        '--run-approved-plan', path.join(out, 'approval.json'),
+        '--sha256', 'a'.repeat(64),
+      ])
+
+      const notReached = reportInput.results.filter(result => {
+        return result.frameworkId === manifest.frameworks[0].id && ['basic-reporting', 'efd'].includes(result.scenario)
+      })
+      assert.deepStrictEqual(notReached.map(result => result.evidence.blockerCategory), [
+        'PROJECT_SETUP_REQUIRED',
+        'PROJECT_SETUP_REQUIRED',
+      ])
     } finally {
       process.exitCode = originalExitCode
       consoleLog.restore()

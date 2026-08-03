@@ -220,6 +220,29 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  it('rejects JavaScript Cucumber profiles mutated after export', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      for (const support of ['active.js', 'actual.js']) {
+        fs.writeFileSync(path.join(fixture.root, 'features', support), 'module.exports = function () {}\n')
+      }
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        "module.exports = { default: '--require features/active.js' }",
+        "module.exports.default = '--require features/actual.js'",
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /code after the exported profile object/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   for (const [description, profile] of [
     ['unquoted', 'ci: --require features/steps.js # --require legacy/stale.js\n'],
     ['quoted', 'ci: "--require features/steps.js" # "--require legacy/stale.js"\n'],
@@ -971,6 +994,7 @@ describe('test optimization validation manifest scaffold', () => {
 
   for (const [frameworkName, script, declaration] of [
     ['jest', 'jest', "test.each(cases)('case %s', () => {})"],
+    ['jest', 'jest', 'test.each`\nvalue\n$' + '{1}\n`("case %s", () => {})'],
     ['vitest', 'vitest run', "it.concurrent.each(cases)('case %s', () => {})"],
   ]) {
     it(`selects a ${frameworkName} test containing only parameterized declarations`, () => {

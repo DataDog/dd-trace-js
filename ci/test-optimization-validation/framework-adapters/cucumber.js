@@ -311,6 +311,9 @@ function getJavascriptProfileDefinitions (source) {
       throw new Error(`profile ${JSON.stringify(name)} must be followed by a comma`)
     }
   }
+  if (!/^[\s;]*$/.test(syntax.slice(objectEnd + 1))) {
+    throw new Error('configuration contains code after the exported profile object')
+  }
   return definitions
 }
 
