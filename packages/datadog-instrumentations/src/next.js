@@ -247,17 +247,8 @@ addHook({
 // From Next 15.4.1, route modules execute through precompiled runtime bundles that bypass the
 // classic server hooks above. Match bundler and experimental filename variants without enumerating
 // them so App Routes, Pages APIs, and App Pages reuse the existing Next request lifecycle.
-const APP_ROUTE_RUNTIME_FILE_PATTERN =
-  String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`
-const PAGES_API_RUNTIME_FILE_PATTERN =
-  String.raw`dist/compiled/next-server/pages-api[\w-]*\.runtime\.(?:dev|prod)\.js$`
-const APP_PAGE_RUNTIME_FILE_PATTERN =
-  String.raw`dist/compiled/next-server/app-page[\w-]*\.runtime\.(?:dev|prod)\.js$`
-
-const patchedAppRouteModules = new WeakSet()
-const patchedPagesApiModules = new WeakSet()
-const patchedAppPageModules = new WeakSet()
-
+const patchedRouteModules = new WeakSet()
+const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
     if (error) {
@@ -280,16 +271,22 @@ function getRoutePage (routeModule, fallbackPage) {
   return { page: fallbackPage, isFilesystemPath: false }
 }
 
+function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
+  if (!ctx || !pageLoadChannel.hasSubscribers) return
+
+  const pageData = getRoutePage(routeModule, fallbackPage)
+  if (pageData.page) {
+    pageLoadChannel.publish(isAppPath ? { ...pageData, isAppPath: true } : pageData)
+  }
+}
+
 function wrapAppRouteHandle (handle) {
   return function (req, context) {
     const res = { statusCode: 500 }
     nodeNextRequestsToNextRequests.set(req, req)
 
     return instrument(req, res, ctx => {
-      const pageData = getRoutePage(this)
-      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
-        pageLoadChannel.publish({ ...pageData, isAppPath: true })
-      }
+      publishRoutePage(ctx, this, undefined, true)
 
       return handle.apply(this, arguments).then(response => {
         if (ctx) ctx.res.statusCode = response?.status || 200
@@ -299,28 +296,28 @@ function wrapAppRouteHandle (handle) {
   }
 }
 
-function instrumentAppRouteRuntime (runtime) {
-  const AppRouteRouteModule = runtime.AppRouteRouteModule
-  const proto = AppRouteRouteModule?.prototype
-  if (proto && !patchedAppRouteModules.has(AppRouteRouteModule)) {
-    patchedAppRouteModules.add(AppRouteRouteModule)
-    if (typeof proto.handle === 'function') {
-      shimmer.wrap(proto, 'handle', wrapAppRouteHandle)
-    }
-    if (typeof proto.onRequestError === 'function') {
-      shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
-    }
+function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
+  const proto = RouteModule?.prototype
+  if (!proto || patchedRouteModules.has(RouteModule)) return
+
+  patchedRouteModules.add(RouteModule)
+  if (typeof proto[method] === 'function') {
+    shimmer.wrap(proto, method, wrapper)
   }
+  if (handleErrors && typeof proto.onRequestError === 'function') {
+    shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+  }
+}
+
+function instrumentAppRouteRuntime (runtime) {
+  instrumentRouteModule(runtime.AppRouteRouteModule, 'handle', wrapAppRouteHandle, true)
   return runtime
 }
 
 function wrapPagesApiRender (render) {
   return function (req, res, context = {}) {
     return instrument(req, res, ctx => {
-      const pageData = getRoutePage(this, context.page)
-      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
-        pageLoadChannel.publish(pageData)
-      }
+      publishRoutePage(ctx, this, context.page, false)
 
       return render.apply(this, arguments)
     })
@@ -329,23 +326,14 @@ function wrapPagesApiRender (render) {
 
 function instrumentPagesApiRuntime (runtime) {
   const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
-  const proto = PagesAPIRouteModule?.prototype
-  if (proto && !patchedPagesApiModules.has(PagesAPIRouteModule)) {
-    patchedPagesApiModules.add(PagesAPIRouteModule)
-    if (typeof proto.render === 'function') {
-      shimmer.wrap(proto, 'render', wrapPagesApiRender)
-    }
-  }
+  instrumentRouteModule(PagesAPIRouteModule, 'render', wrapPagesApiRender, false)
   return runtime
 }
 
 function wrapAppPageRender (render) {
   return function (req, res, context = {}) {
     return instrument(req, res, ctx => {
-      const pageData = getRoutePage(this, context.page)
-      if (ctx && pageLoadChannel.hasSubscribers && pageData.page) {
-        pageLoadChannel.publish({ ...pageData, isAppPath: true })
-      }
+      publishRoutePage(ctx, this, context.page, true)
 
       return render.apply(this, arguments).then(result => {
         const statusCode = result?.metadata?.statusCode
@@ -367,36 +355,21 @@ function wrapAppPageRender (render) {
 
 function instrumentAppPageRuntime (runtime) {
   const AppPageRouteModule = runtime.AppPageRouteModule || runtime.default
-  const proto = AppPageRouteModule?.prototype
-  if (proto && !patchedAppPageModules.has(AppPageRouteModule)) {
-    patchedAppPageModules.add(AppPageRouteModule)
-    if (typeof proto.render === 'function') {
-      shimmer.wrap(proto, 'render', wrapAppPageRender)
-    }
-    if (typeof proto.onRequestError === 'function') {
-      shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
-    }
-  }
+  instrumentRouteModule(AppPageRouteModule, 'render', wrapAppPageRender, true)
   return runtime
 }
 
-addHook({
-  name: 'next',
-  versions: ['>=15.4.1'],
-  filePattern: APP_ROUTE_RUNTIME_FILE_PATTERN,
-}, instrumentAppRouteRuntime)
-
-addHook({
-  name: 'next',
-  versions: ['>=15.4.1'],
-  filePattern: PAGES_API_RUNTIME_FILE_PATTERN,
-}, instrumentPagesApiRuntime)
-
-addHook({
-  name: 'next',
-  versions: ['>=15.4.1'],
-  filePattern: APP_PAGE_RUNTIME_FILE_PATTERN,
-}, instrumentAppPageRuntime)
+for (const [runtime, instrumentRuntime] of [
+  ['app-route', instrumentAppRouteRuntime],
+  ['pages-api', instrumentPagesApiRuntime],
+  ['app-page', instrumentAppPageRuntime],
+]) {
+  addHook({
+    name: 'next',
+    versions: ['>=15.4.1'],
+    filePattern: String.raw`${COMPILED_RUNTIME_PATH}${runtime}[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+  }, instrumentRuntime)
+}
 
 addHook({
   name: 'next',
