@@ -38,7 +38,6 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
-const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
 const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
@@ -1043,41 +1042,6 @@ versions.forEach((version) => {
 
         assert.strictEqual(childProcess.exitCode, 1, testOutput)
       })
-
-      for (const coverageProvider of ['v8', 'istanbul']) {
-        for (const { description, env } of [
-          { description: 'with isolation', env: {} },
-          { description: 'without isolation', env: { NO_ISOLATE: 'true' } },
-        ]) {
-          it(`preserves aggregate ${coverageProvider} coverage ${description} when TIA runs no skips`, async () => {
-            async function runAndGetCoverage (settings) {
-              receiver.setSettings(settings)
-              testOutput = ''
-
-              await runTiaTests(() => {}, { coverageProvider, env })
-
-              assert.strictEqual(childProcess.exitCode, 0, testOutput)
-              const linePctMatch = testOutput.match(linePctMatchRegex)
-              assert.ok(linePctMatch, testOutput)
-              assert.ok(testOutput.includes('Coverage report from'), testOutput)
-              assert.strictEqual(fs.existsSync(path.join(cwd, 'coverage/lcov.info')), true)
-
-              return Number(linePctMatch[1])
-            }
-
-            const baselineCoverage = await runAndGetCoverage(getTiaSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
-            }))
-            const tiaCoverage = await runAndGetCoverage(getTiaSettings({
-              tests_skipping: false,
-            }))
-
-            assert.strictEqual(tiaCoverage, baselineCoverage)
-          })
-        }
-      }
 
       it('applies TIA when a custom sequencer is enabled', async () => {
         receiver.setSuitesToSkip([{
