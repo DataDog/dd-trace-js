@@ -72,11 +72,11 @@ const TEXT_FILE_NAMES = new Set([
 
 const NODE_OPTIONS_RE = /\bNODE_OPTIONS\b/
 const INIT_PRELOAD_TARGET =
-  String.raw`(?:dd-trace\/ci\/init|(?:[^\s'"]*[\/\\])?node_modules[\/\\]dd-trace[\/\\]ci[\/\\]init|\.\/ci\/init)`
+  String.raw`(?:dd-trace/ci/init|(?:[^\s'"]*[/\\])?node_modules[/\\]dd-trace[/\\]ci[/\\]init|\./ci/init)`
 const INIT_PRELOAD_RE =
-  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|\s|["'])`)
+  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|[\s"'])`)
 const REGISTER_PRELOAD_RE =
-  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|\s|["'])/
+  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|[\s"'])/
 const WRONG_INIT_RE = /dd-trace\/(?:init|initialize\.mjs)\b|require\(['"]dd-trace['"]\)\.init\s*\(/
 const DIRECT_CI_INIT_RE = /(?:require\(|import\s+)['"]dd-trace\/ci\/init(?:\.js)?['"]/
 const CI_DISABLED_RE = /DD_CIVISIBILITY_ENABLED["'\s:=]+(?:false|0)\b/i
@@ -86,21 +86,21 @@ const AGENTLESS_ENABLED_RE = /DD_CIVISIBILITY_AGENTLESS_ENABLED["'\s:=]+(?:true|
 const API_KEY_RE = /\b(?:DD_API_KEY|DATADOG_API_KEY)\b/
 const SERVICE_RE = /\bDD_SERVICE\b/
 const OTEL_OTLP_RE = /OTEL_TRACES_EXPORTER["'\s:=]+otlp\b/i
-const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!(?:=false)(?:\s|$))(?:\s|=|$)/
+const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!=false(?:\s|$))(?:\s|=|$)/
 
 const CYPRESS_MANUAL_PLUGIN_RE = /dd-trace\/ci\/cypress\/(?:plugin|after-run|after-spec)\b/
 const CYPRESS_SUPPORT_RE = /dd-trace\/ci\/cypress\/support\b/
 const CYPRESS_SUPPORT_DISABLED_RE = /supportFile\s*:\s*false|"supportFile"\s*:\s*false/
 const CUCUMBER_RUNNER_COMMAND_RE = new RegExp(
   String.raw`(?:^|(?:&&|\|\||[;|])\s*)` +
-  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|` +
-  String.raw`cross-env|env|npx|nyc|c8|npm\s+exec|pnpm\s+exec|yarn\s+exec|--?[^\s;&|]+)\s+)*` +
-  String.raw`(?:(?:[^\s"';&|]+[\/\\])?(?:cucumber-js(?:\.cmd)?|cucumber(?:\.cmd)?)|` +
-  String.raw`node(?:\.exe)?\s+(?:[^\s"';&|]+[\/\\])?bin[\/\\]cucumber\.js)` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"';&|][^\s;&|]*)|` +
+  String.raw`cross-env|env|npx|nyc|c8|npm\s+exec|pnpm\s+exec|yarn\s+exec|-[^\s;&|]+)\s+)*` +
+  String.raw`(?:(?:[^\s"';&|]+[/\\])?(?:cucumber-js(?:\.cmd)?|cucumber(?:\.cmd)?)|` +
+  String.raw`node(?:\.exe)?\s+(?:[^\s"';&|]+[/\\])?bin[/\\]cucumber\.js)` +
   String.raw`(?=$|[\s"';&|])`
 )
 const CUCUMBER_PARALLEL_RE =
-  /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{0,200}\bcucumber(?:-js)?\b/
+  /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{1,200}\bcucumber(?:-js)?\b/
 const JEST_FORCE_EXIT_RE = /\bforceExit\s*:\s*true\b|--forceExit\b|"forceExit"\s*:\s*true/
 const JEST_JASMINE_RE = /jest-jasmine2/
 
@@ -1876,7 +1876,7 @@ function isTestSetupOrCiFile (file) {
   if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
   if (/^\.mocharc\./.test(basename)) return true
   if (basename === 'cypress.json') return true
-  if (/(?:setup|bootstrap)/i.test(basename)) return true
+  if (/setup|bootstrap/i.test(basename)) return true
   if (relativePath.startsWith('cypress/support/')) return true
 
   return false

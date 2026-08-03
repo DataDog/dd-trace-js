@@ -63,7 +63,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {import('../../config/config-base')} config - Tracer configuration object
    */
   constructor (config) {
-    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
+    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/$/, '')
     const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
     const fullEndpoint = `${basePath}/${endpoint}`
 
