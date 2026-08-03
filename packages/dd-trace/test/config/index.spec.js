@@ -5228,7 +5228,7 @@ rules:
       ])
       sinon.assert.calledOnceWithExactly(log.warn, warning)
 
-      config.setRemoteConfig({})
+      config.setRemoteConfigFromLibConfig({})
 
       sinon.assert.calledOnce(log.warn)
       sinon.assert.notCalled(log.error)
