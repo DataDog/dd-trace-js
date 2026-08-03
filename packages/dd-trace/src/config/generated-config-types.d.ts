@@ -579,6 +579,7 @@ export interface GeneratedConfig {
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
     DD_TEST_MANAGEMENT_ENABLED: boolean;
+    DD_TEST_MANAGEMENT_REPORT_ENABLED: boolean | undefined;
   };
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
@@ -821,6 +822,7 @@ export interface GeneratedEnvVarConfig {
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
   DD_TEST_MANAGEMENT_ENABLED: boolean;
+  DD_TEST_MANAGEMENT_REPORT_ENABLED: boolean | undefined;
   DD_TEST_SESSION_NAME: string | undefined;
   DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: boolean;
   DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: boolean;

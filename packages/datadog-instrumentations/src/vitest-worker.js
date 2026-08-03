@@ -57,7 +57,7 @@ const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
-const switchedStatuses = new WeakSet()
+const switchedStatuses = new WeakMap()
 let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
@@ -460,14 +460,14 @@ function wrapVitestTestRunner (VitestTestRunner) {
       if (isAttemptingToFix) {
         const statuses = attemptToFixTaskToStatuses.get(task)
         if (task.result.state === 'pass' && statuses?.includes('fail')) {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
           task.result.state = 'fail'
         }
       }
 
       if (!isAttemptingToFix && isQuarantined) {
         if (task.result.state === 'fail') {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
         }
         task.result.state = 'pass'
       }
@@ -478,7 +478,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       // If the test has passed at least once, we consider it passed
       if (statuses.includes('pass')) {
         if (task.result.state === 'fail') {
-          switchedStatuses.add(task)
+          switchedStatuses.set(task, task.result.state)
         }
         task.result.state = 'pass'
       }
@@ -868,14 +868,15 @@ addHook({
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
-      const isSwitchedStatus = switchedStatuses.has(task)
+      const switchedStatus = switchedStatuses.get(task)
+      const isSwitchedStatus = switchedStatus !== undefined
 
       if (result) {
         const { state, duration, errors } = result
         const testError = getCurrentAttemptTestError(task, errors)
         if (attemptToFixTasks.has(task)) {
-          const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
-          recordFinalAttemptToFixExecution(task, status, providedContext)
+          const attemptToFixStatus = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
+          recordFinalAttemptToFixExecution(task, attemptToFixStatus, providedContext)
         }
 
         if (state === 'skip') { // programmatic skip
@@ -883,6 +884,7 @@ addHook({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
+            isAttemptToFix: attemptToFixTasks.has(task),
             isDisabled: disabledTasks.has(task),
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
@@ -980,6 +982,7 @@ addHook({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
+          isAttemptToFix: attemptToFixTasks.has(task),
           isDisabled: disabledTasks.has(task),
         })
       }
