@@ -2115,18 +2115,6 @@ function instrumentWorkerMainMethods (workerMain) {
     await res
 
     const { status, error, annotations, retry, testId } = testInfo
-    const testEfdKey = getTestEfdKey(test)
-    const isEfdManagedTest = isTestEfdManaged(test)
-    if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
-      const duration = test.results?.at(-1)?.duration > 0
-        ? test.results.at(-1).duration
-        : performance.now() - test._ddStartTime
-      const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
-      setEfdRetryCountForTest(test, retryCount)
-      if (retryCount === 0) {
-        efdSlowAbortedTests.add(testEfdKey)
-      }
-    }
 
     if (!hasDdProperties && process.send) {
       process.send({
