@@ -61,6 +61,10 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'FUNCTIONS_WORKER_RUNTIME',
   'GCP_PROJECT',
   'K_SERVICE',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_PROJECT_ID',
+  'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',

@@ -42,7 +42,27 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
+/**
+ * Adds Vercel runtime metadata without replacing user-provided tags.
+ *
+ * @param {Record<string, string>} tags
+ */
+function addVercelSpanTags (tags) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return
+
+  const metadata = {
+    'vercel.project_id': getEnvironmentVariable('VERCEL_PROJECT_ID'),
+    'vercel.environment': getEnvironmentVariable('VERCEL_ENV'),
+    'vercel.region': getEnvironmentVariable('VERCEL_REGION'),
+  }
+
+  for (const [name, value] of Object.entries(metadata)) {
+    if (value) tags[name] ??= value
+  }
+}
+
 module.exports = {
+  addVercelSpanTags,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,

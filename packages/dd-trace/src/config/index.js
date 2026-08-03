@@ -14,6 +14,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  addVercelSpanTags,
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
@@ -586,6 +587,7 @@ class Config extends ConfigBase {
       this.tags.version = this.version
     }
     this.tags['runtime-id'] = RUNTIME_ID
+    addVercelSpanTags(this.tags)
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
