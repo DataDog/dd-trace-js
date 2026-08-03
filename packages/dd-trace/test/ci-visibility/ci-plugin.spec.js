@@ -40,16 +40,25 @@ const {
 
 describe('CiPlugin', () => {
   let CiPlugin
+  let distributionMetric
   let getCodeOwnersFileEntries
   let getRepositoryRoot
   let getTestEnvironmentMetadata
+  let incrementCountMetric
 
   beforeEach(() => {
+    distributionMetric = sinon.stub()
     getCodeOwnersFileEntries = sinon.stub()
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
+    incrementCountMetric = sinon.stub()
 
     CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
+      '../ci-visibility/telemetry': {
+        ...require('../../src/ci-visibility/telemetry'),
+        distributionMetric,
+        incrementCountMetric,
+      },
       './util/git': {
         getRepositoryRoot,
       },
@@ -242,7 +251,6 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.libraryConfig, {
       ...libraryConfig,
       isCodeCoverageEnabled: false,
-      isCoverageReportUploadEnabled: false,
       isItrEnabled: false,
       isSuitesSkippingEnabled: false,
     })
@@ -274,6 +282,43 @@ describe('CiPlugin', () => {
 
     assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
     assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
+  it('consumes worker telemetry for every test framework', () => {
+    const plugin = createPlugin('vitest_worker', true)
+
+    dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
+      {
+        type: 'ciVisEvent',
+        name: 'code_coverage_started',
+        testLevel: 'suite',
+        testFramework: 'vitest',
+        isUnsupportedCIProvider: false,
+        tags: { library: 'v8' },
+      },
+      {
+        type: 'count',
+        name: 'itr_unskippable',
+        tags: { testLevel: 'suite' },
+        value: 2,
+      },
+      {
+        type: 'distribution',
+        name: 'code_coverage.files',
+        tags: {},
+        measure: 3,
+      },
+    ]))
+    plugin.configure(false)
+
+    sinon.assert.calledWith(incrementCountMetric, 'code_coverage_started', {
+      testLevel: 'suite',
+      testFramework: 'vitest',
+      isUnsupportedCIProvider: false,
+      library: 'v8',
+    })
+    sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
+    sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
