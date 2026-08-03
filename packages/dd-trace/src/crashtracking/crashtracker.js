@@ -6,9 +6,12 @@ const { EOL, platform } = require('node:os')
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class Crashtracker {
   #started = false
@@ -135,4 +138,10 @@ class Crashtracker {
   }
 }
 
-module.exports = new Crashtracker()
+const crashtracker = new Crashtracker()
+
+// No start()/stop() to tie a subscribe/unsubscribe pair to, so just subscribe once here,
+// same as dogstatsd.js. configure() is a no-op until start() has run.
+identityRefreshChannel.subscribe((config) => crashtracker.configure(config))
+
+module.exports = crashtracker
