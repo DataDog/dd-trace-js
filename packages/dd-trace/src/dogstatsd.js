@@ -51,10 +51,6 @@ class DogStatsDClient {
   #lookup
   #tagsPrefix
   #serverlessDeliveryTracker
-  #tags
-  #queue
-  #buffer
-  #offset
 
   constructor (options) {
     this.#lookup = options.lookup
@@ -69,12 +65,12 @@ class DogStatsDClient {
     this._host = options.host
     this._family = isIP(this._host)
     this._port = options.port
-    this.#tags = options.tags
-    this.#tagsPrefix = this.#tags?.length ? `|#${this.#tags.join(',')}` : ''
-    this.#queue = []
+    this._tags = options.tags
+    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this._queue = []
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
-    this.#buffer = ''
-    this.#offset = 0
+    this._buffer = ''
+    this._offset = 0
     this._udp4 = this._socket('udp4')
     this._udp6 = this._socket('udp6')
   }
@@ -89,14 +85,14 @@ class DogStatsDClient {
   updateTags (tags) {
     const tagsPrefix = tags?.length ? `|#${tags.join(',')}` : ''
 
-    this.#tags = tags
+    this._tags = tags
 
     if (tagsPrefix === this.#tagsPrefix) return
 
     this.#tagsPrefix = tagsPrefix
-    this.#queue = []
-    this.#buffer = ''
-    this.#offset = 0
+    this._queue = []
+    this._buffer = ''
+    this._offset = 0
   }
 
   increment (stat, value, tags) {
@@ -129,7 +125,7 @@ class DogStatsDClient {
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
-    this.#queue = []
+    this._queue = []
 
     const send = complete => {
       if (this._httpOptions) this._sendHttp(queue, complete)
@@ -218,22 +214,22 @@ class DogStatsDClient {
   _write (message) {
     const offset = Buffer.byteLength(message)
 
-    if (this.#offset + offset > MAX_BUFFER_SIZE) {
+    if (this._offset + offset > MAX_BUFFER_SIZE) {
       this._enqueue()
     }
 
-    this.#offset += offset
-    this.#buffer += message
+    this._offset += offset
+    this._buffer += message
   }
 
   _enqueue () {
-    if (this.#offset > 0) {
-      this.#queue.push(Buffer.from(this.#buffer))
-      this.#buffer = ''
-      this.#offset = 0
+    if (this._offset > 0) {
+      this._queue.push(Buffer.from(this._buffer))
+      this._buffer = ''
+      this._offset = 0
     }
 
-    return this.#queue
+    return this._queue
   }
 
   _socket (type) {

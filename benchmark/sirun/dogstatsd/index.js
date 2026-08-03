@@ -15,12 +15,9 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // tree that runtime metrics build before flushing. The UDP socket is stubbed so
 // nothing leaves the process — the bench measures the in-process formatting and
 // buffering only.
-let sent
 class BenchClient extends DogStatsDClient {
-  // Fakes just enough of dgram.Socket for on()/unref() at construction and send() at flush -
-  // send() only needs the buffer, so the rest of its dgram args go unused.
   _socket () {
-    return { send (message) { sent = message }, on () {}, unref () {} }
+    return { send () {}, on () {}, unref () {} }
   }
 }
 
@@ -38,10 +35,11 @@ for (let i = 0; i < 12; i++) MANY_TAGS.push(`dim_${i}:value_${i}`)
 
 function preflight () {
   client._add(NAME, 42, 'g', FEW_TAGS)
-  // flush() also clears the buffer/offset/queue, so the run below starts clean.
-  client.flush()
-  assert.ok(sent?.toString().includes(NAME) && sent.toString().includes('env:bench'),
+  assert.ok(client._buffer.includes(NAME) && client._buffer.includes('env:bench'),
     '_add did not format the metric line with global tags')
+  client._buffer = ''
+  client._offset = 0
+  client._queue = []
 }
 preflight()
 
@@ -61,9 +59,8 @@ if (VARIANT === 'aggregated') {
   const type = VARIANT === 'no-tags' ? 'c' : 'g'
   for (let i = 0; i < OPERATIONS; i++) {
     client._add(NAME, i, type, tags)
-    // _enqueue() returns the live queue array; truncating it drains memory in O(1) without
-    // flush()'s send-path overhead.
-    if ((i & 0x7FF) === 0) client._enqueue().length = 0
+    // Drain the datagram queue without sending so memory stays flat.
+    if ((i & 0x7FF) === 0) client._queue.length = 0
   }
 }
 guard.done()
