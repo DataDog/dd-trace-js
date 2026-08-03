@@ -1185,6 +1185,15 @@ function reportFinalTestAttempt (testReport) {
       isDisabled: testProperties.isDisabled,
       isQuarantined: testProperties.isQuarantined,
     })
+    if (testProperties.isAttemptToFix) {
+      recordAttemptToFixExecution(state.attemptToFixExecutions, {
+        testSuite: testProperties.testSuite,
+        testName,
+        status,
+        isDisabled: testProperties.isDisabled,
+        isQuarantined: testProperties.isQuarantined,
+      })
+    }
     const {
       isRumActive,
       testExecutionId,

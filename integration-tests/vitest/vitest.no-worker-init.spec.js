@@ -1247,6 +1247,20 @@ SUPPORTED_VERSIONS.forEach((version) => {
                 },
               },
             },
+            'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs': {
+              tests: {
+                'attempt to fix skip tests can statically skip': {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+                'attempt to fix skip tests can programmatically skip': {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+              },
+            },
           },
         },
       })
@@ -1255,8 +1269,8 @@ SUPPORTED_VERSIONS.forEach((version) => {
         assertEventCounts(events, {
           test_session_end: 1,
           test_module_end: 1,
-          test_suite_end: 3,
-          test: 7,
+          test_suite_end: 4,
+          test: 9,
         })
 
         const tests = getEventContents(events, 'test')
@@ -1298,18 +1312,31 @@ SUPPORTED_VERSIONS.forEach((version) => {
         assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
         assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
         assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+
+        for (const testName of [
+          'attempt to fix skip tests can statically skip',
+          'attempt to fix skip tests can programmatically skip',
+        ]) {
+          const skippedAttemptToFixTest = getTestByName(tests, testName)
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        }
       })
 
       const exitCode = await Promise.all([
         runVitest({
           POOL_CONFIG: 'forks',
-          TEST_DIR: 'ci-visibility/vitest-tests/test-{disabled,quarantine,attempt-to-fix}.mjs',
+          TEST_DIR: 'ci-visibility/vitest-tests/test-{disabled,quarantine,attempt-to-fix,attempt-to-fix-skip}.mjs',
         }),
         payloadsPromise,
       ]).then(([exitCode]) => exitCode)
 
       assert.strictEqual(exitCode, 1, testOutput)
       assert.match(testOutput, /Disabled: 1 test skipped\./)
+      assert.match(
+        testOutput,
+        /Attempt to fix failed: 3 of 5 execution\(s\) failed across 1 of 3 test\(s\)\./
+      )
     })
 
     it('does not skip disabled attempt-to-fix tests in no-worker mode', async () => {
