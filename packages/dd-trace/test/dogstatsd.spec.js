@@ -376,6 +376,19 @@ describe('dogstatsd', () => {
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.fresh:2|g|#baz:qux\n')
   })
 
+  it('should preserve already buffered lines when updateTags is called with an unchanged tag prefix', () => {
+    client = createDogStatsDClient({ tags: ['foo:bar'] })
+
+    // Buffered synchronously (bypasses aggregation), e.g. before a MicroVM clone resume.
+    client.distribution('test.buffered', 1)
+    client.updateTags(['foo:bar'])
+    client.gauge('test.fresh', 2)
+    client.flush()
+
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#foo:bar\ntest.fresh:2|g|#foo:bar\n')
+  })
+
   const udsIt = os.platform() === 'win32' ? it.skip : it
   udsIt('should support HTTP via unix domain socket', (done) => {
     assertData = () => {
