@@ -1205,6 +1205,7 @@ function reportFinalTestAttempt (testReport) {
       isNew: testProperties.isNew,
       isAttemptToFix: testProperties.isAttemptToFix,
       isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
