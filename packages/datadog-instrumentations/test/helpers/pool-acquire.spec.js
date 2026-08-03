@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
 const { performance } = require('node:perf_hooks')
 
 const { afterEach, describe, it } = require('mocha')
@@ -59,9 +60,9 @@ describe('helpers/pool-acquire', () => {
         method => wrapPoolQueryMethod(method, inactiveChannel),
         method => wrapPoolQueryMethod(method, inactiveChannel, true),
         method => wrapPoolAcquireCarrier(noop, method, inactiveChannel, true),
-        method => wrapPoolClusterQueryMethod(method, inactiveChannel),
+        method => wrapPoolClusterQueryMethod(method, inactiveChannels),
         method => wrapPoolClusterMethod(method, inactiveChannel),
-        method => wrapPoolClusterGetConnection(method, inactiveChannel),
+        method => wrapPoolClusterGetConnection(method, inactiveChannels),
         method => wrapPoolGetConnection(method, inactiveChannels),
         method => wrapPoolGetConnection(method, inactiveChannels, true),
       ]
@@ -70,29 +71,39 @@ describe('helpers/pool-acquire', () => {
     })
   })
 
-  it('preserves the getConnection callback arguments and receiver', () => {
+  it('preserves the getConnection callback contract and reports internal errors', () => {
     const callbackReceiver = {}
     const connection = {}
     const error = new Error('acquire failed')
     const thirdArgument = {}
+    const now = sinon.stub(performance, 'now')
+    now.onFirstCall().returns(100)
+    now.onSecondCall().returns(125)
 
-    for (const [expectedArguments, internal] of [
-      [[error], false],
-      [[undefined, connection, thirdArgument], false],
-      [[], true],
+    for (const [expectedArguments, internal, reportsError] of [
+      [[error], false, false],
+      [[undefined, connection, thirdArgument], false, false],
+      [[], true, false],
+      [[error, undefined, thirdArgument], true, true],
     ]) {
       const expectedReturn = {}
-      const connectionStartCh = { hasSubscribers: true, publish: noop }
+      const contexts = []
+      const channels = activeChannels()
+      if (reportsError) {
+        channels.acquireStartCh = {
+          hasSubscribers: true,
+          publish: ctx => contexts.push(ctx),
+        }
+        channels.acquireFinishCh = { publish: ctx => contexts.push(ctx) }
+      }
       const wrapped = wrapPoolGetConnection(function (callback) {
         return callback.apply(callbackReceiver, expectedArguments)
-      }, {
-        connectionStartCh,
-        connectionFinishCh: { runStores },
-        acquireStartCh: inactiveChannel,
-        acquireFinishCh: inactiveChannel,
-      })
+      }, channels)
 
-      const pool = { config: { connectionConfig: {} } }
+      const pool = {
+        config: { connectionConfig: {} },
+        _freeConnections: reportsError ? [] : [{}],
+      }
       const invoke = () => wrapped.call(pool, function () {
         assert.strictEqual(this, callbackReceiver)
         assert.strictEqual(arguments.length, expectedArguments.length)
@@ -101,31 +112,50 @@ describe('helpers/pool-acquire', () => {
         }
         return expectedReturn
       })
-      const actualReturn = internal ? wrapPoolQueryMethod(invoke, connectionStartCh)() : invoke()
+      const actualReturn = internal ? wrapPoolQueryMethod(invoke, channels.connectionStartCh)() : invoke()
 
       assert.strictEqual(actualReturn, expectedReturn)
+      assert.strictEqual(contexts.length, reportsError ? 2 : 0)
+      if (reportsError) {
+        assert.strictEqual(contexts[0], contexts[1])
+        assert.strictEqual(contexts[0].error, error)
+        assert.strictEqual(contexts[0].poolWaitTime, 25)
+        assert.strictEqual(contexts[0].startTime, performance.timeOrigin + 100)
+      }
     }
   })
 
-  it('does not classify a different acquire in an internal error callback as part of the query', () => {
+  it('does not finish an explicit acquire twice when its callback throws', () => {
+    const failure = new Error('callback failed')
+    const channels = activeChannels()
+    channels.acquireStartCh = { hasSubscribers: true, publish: noop }
+    channels.acquireFinishCh = { publish: sinon.stub() }
+    const pool = { config: { connectionConfig: {} } }
+    const getConnection = wrapPoolGetConnection(callback => callback(), channels)
+
+    assert.throws(() => getConnection.call(pool, () => { throw failure }), failure)
+    sinon.assert.calledOnce(channels.acquireFinishCh.publish)
+    assert.strictEqual(channels.acquireFinishCh.publish.firstCall.args[0].error, undefined)
+  })
+
+  it('does not retain cluster state in unrelated acquires or final callbacks', () => {
     const error = new Error('acquire failed')
-    const connectionStartCh = { hasSubscribers: true, publish: noop }
-    const connectionFinishCh = { runStores }
+    const callbackReceiver = {}
+    const thirdArgument = {}
+    const expectedReturn = {}
+    const channels = activeChannels()
     let acquireStarts = 0
-    const acquireStartCh = {
+    channels.acquireStartCh = {
       hasSubscribers: true,
       publish: () => { acquireStarts++ },
     }
-    const acquireFinishCh = { publish: noop }
+    channels.acquireFinishCh = { publish: noop }
     const pool = { config: { connectionConfig: {} } }
+    const fallbackPool = { config: { connectionConfig: {} } }
     const poolGetConnection = wrapPoolGetConnection(function (callback) {
       return callback(error)
-    }, {
-      connectionStartCh,
-      connectionFinishCh,
-      acquireStartCh,
-      acquireFinishCh,
-    })
+    }, channels)
+    const fallbackGetConnection = wrapPoolGetConnection(callback => callback(undefined, {}), channels)
     let insideNestedAcquire = false
 
     /**
@@ -137,15 +167,37 @@ describe('helpers/pool-acquire', () => {
         if (insideNestedAcquire) return callback(error)
 
         insideNestedAcquire = true
-        return namespaceGetConnection(() => {})
+        retryingNamespaceGetConnection(() => {})
+        return fallbackGetConnection.call(fallbackPool, noop)
       })
     }
-    const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, connectionStartCh)
-    const query = wrapPoolClusterMethod(() => namespaceGetConnection(() => {}), connectionStartCh)
+    const retryingNamespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels)
+    const query = wrapPoolClusterMethod(
+      () => retryingNamespaceGetConnection(() => {}),
+      channels.connectionStartCh
+    )
 
     query()
 
-    assert.strictEqual(acquireStarts, 1)
+    assert.strictEqual(acquireStarts, 2)
+
+    const finalNamespaceGetConnection = wrapPoolClusterGetConnection(function (callback) {
+      return callback.call(callbackReceiver, error, undefined, thirdArgument)
+    }, channels)
+    const finalQuery = wrapPoolClusterMethod(() => {
+      return finalNamespaceGetConnection(function () {
+        assert.strictEqual(this, callbackReceiver)
+        assert.strictEqual(arguments.length, 3)
+        assert.strictEqual(arguments[0], error)
+        assert.strictEqual(arguments[2], thirdArgument)
+        fallbackGetConnection.call(fallbackPool, noop)
+        return expectedReturn
+      })
+    }, channels.connectionStartCh)
+
+    assert.strictEqual(finalQuery(), expectedReturn)
+
+    assert.strictEqual(acquireStarts, 4)
   })
 
   it('keeps concurrent mysql2 cluster query acquires isolated', async () => {
@@ -173,7 +225,7 @@ describe('helpers/pool-acquire', () => {
         callback(undefined, connection)
       })
     }
-    const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels.connectionStartCh)
+    const namespaceGetConnection = wrapPoolClusterGetConnection(getConnection, channels)
     const query = wrapPoolClusterMethod(
       callback => namespaceGetConnection(callback),
       channels.connectionStartCh
@@ -201,6 +253,65 @@ describe('helpers/pool-acquire', () => {
     await Promise.all([first, second])
 
     assert.deepStrictEqual(waits, [600, 50])
+  })
+
+  it('does not report a query execution error as a cluster acquire error', () => {
+    const channels = activeChannels()
+    let acquireStarts = 0
+    channels.acquireStartCh = {
+      hasSubscribers: true,
+      publish: () => { acquireStarts++ },
+    }
+    channels.acquireFinishCh = { publish: noop }
+    for (const usesCallback of [true, false]) {
+      const pool = { config: { connectionConfig: {} } }
+      let physicalCallback
+      const poolGetConnection = wrapPoolGetConnection(callback => {
+        physicalCallback = callback
+      }, channels)
+      const queryResult = new EventEmitter()
+      queryResult.once('error', noop)
+      if (usesCallback) queryResult._callback = noop
+      const query = wrapPoolClusterQueryMethod(function () {
+        poolGetConnection.call(pool, noop)
+        return queryResult
+      }, channels)
+
+      query()
+      physicalCallback(undefined, {})
+      const error = new Error('invalid query')
+      if (usesCallback) queryResult._callback(error)
+      else queryResult.emit('error', error)
+    }
+
+    assert.strictEqual(acquireStarts, 0)
+  })
+
+  it('skips idle clock reads and transfers waits only when consumed', () => {
+    const now = sinon.stub(performance, 'now')
+    const channels = activeChannels()
+    const connection = {}
+    const pool = { config: { connectionConfig: {} }, _freeConnections: [connection] }
+    let consumeWait = false
+    let waitTime
+    const getConnection = wrapPoolGetConnection(callback => callback(undefined, connection), channels)
+    const query = wrapPoolQueryMethod(() => getConnection.call(pool, (error, connection) => {
+      assert.strictEqual(error, undefined)
+      if (consumeWait) waitTime = takePoolWaitTime(connection)
+    }), channels.connectionStartCh)
+
+    query()
+    sinon.assert.notCalled(now)
+
+    pool._freeConnections.length = 0
+    now.returns(100)
+    query()
+    assert.strictEqual(typeof takePoolWaitTime(connection), 'number')
+    query()
+    consumeWait = true
+    query()
+
+    assert.strictEqual(typeof waitTime, 'number')
   })
 
   it('classifies only the deferred pool query acquire as internal', async () => {

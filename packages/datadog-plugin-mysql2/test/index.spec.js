@@ -523,7 +523,7 @@ describe('Plugin', () => {
           await tracePromise
         })
 
-        it('records an error on the acquire span when an explicit acquire fails', async () => {
+        it('records an error on explicit and pooled-query acquire failures', async () => {
           const failingPool = mysql2.createPool({
             host: '127.0.0.1',
             port: await getClosedPort(),
@@ -533,17 +533,23 @@ describe('Plugin', () => {
           failingPool.on('error', () => {})
 
           try {
-            await Promise.all([
-              agent.assertSomeTraces(traces => {
-                const acquireSpan = traces[0].find(span => span.name === 'mysql2.pool.acquire')
+            for (const acquire of [
+              callback => failingPool.getConnection(callback),
+              callback => failingPool.query('SELECT 15 AS acquire_failure', callback),
+              callback => failingPool.execute('SELECT 16 AS execute_acquire_failure', [], callback),
+            ]) {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = traces[0].find(span => span.name === 'mysql2.pool.acquire')
 
-                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
-                assert.strictEqual(acquireSpan.error, 1)
-              }),
-              new Promise((resolve, reject) => {
-                failingPool.getConnection(error => error ? resolve() : reject(new Error('expected acquire error')))
-              }),
-            ])
+                  assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                  assert.strictEqual(acquireSpan.error, 1)
+                }),
+                new Promise((resolve, reject) => {
+                  acquire(error => error ? resolve() : reject(new Error('expected acquire error')))
+                }),
+              ])
+            }
           } finally {
             await new Promise(resolve => failingPool.end(resolve))
           }
@@ -670,7 +676,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('surfaces the acquire error when every pool-cluster node fails', async function () {
+        it('records the acquire error when every pool-cluster node fails', async function () {
           const cluster = mysql2.createPoolCluster({ removeNodeErrorCount: 1 })
           cluster.add('dead', {
             host: '127.0.0.1',
@@ -686,12 +692,24 @@ describe('Plugin', () => {
             return this.skip()
           }
 
-          const error = await new Promise(resolve => {
-            namespace.query('SELECT 12 AS all_nodes_down', resolve)
-          })
-          await new Promise(resolve => cluster.end(resolve))
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const acquireSpan = traces[0].find(span => span.name === 'mysql2.pool.acquire')
 
-          assert.ok(error, 'expected the exhausted failover to surface an error')
+                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                assert.strictEqual(acquireSpan.error, 1)
+                assert.strictEqual(typeof acquireSpan.metrics['mysql2.pool.wait_time'], 'number')
+              }),
+              new Promise((resolve, reject) => {
+                namespace.query('SELECT 12 AS all_nodes_down', error => {
+                  return error ? resolve() : reject(new Error('expected acquire error'))
+                })
+              }),
+            ])
+          } finally {
+            await new Promise(resolve => cluster.end(resolve))
+          }
         })
       })
       describe('with DBM propagation enabled with service using plugin configurations', () => {

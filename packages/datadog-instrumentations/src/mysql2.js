@@ -24,6 +24,12 @@ const connectionStartCh = channel('apm:mysql2:connection:start')
 const connectionFinishCh = channel('apm:mysql2:connection:finish')
 const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
 const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+const poolAcquireChannels = {
+  connectionStartCh,
+  connectionFinishCh,
+  acquireStartCh,
+  acquireFinishCh,
+}
 
 /**
  * Bracket a pool-cluster namespace's internal acquires and key retry state by its stable callback.
@@ -43,7 +49,7 @@ function flagWrapNamespace (poolNamespace) {
     shimmer.wrap(
       poolNamespace,
       'getConnection',
-      getConnection => wrapPoolClusterGetConnection(getConnection, connectionStartCh)
+      getConnection => wrapPoolClusterGetConnection(getConnection, poolAcquireChannels)
     )
   }
 }
@@ -260,12 +266,11 @@ function wrapConnection (Connection, version) {
  * @returns {Function}
  */
 function wrapGetConnection (Pool, deferredPoolAcquire) {
-  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => wrapPoolGetConnection(getConnection, {
-    connectionStartCh,
-    connectionFinishCh,
-    acquireStartCh,
-    acquireFinishCh,
-  }, deferredPoolAcquire))
+  shimmer.wrap(
+    Pool.prototype,
+    'getConnection',
+    getConnection => wrapPoolGetConnection(getConnection, poolAcquireChannels, deferredPoolAcquire)
+  )
 
   return Pool
 }

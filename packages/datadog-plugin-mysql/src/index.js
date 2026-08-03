@@ -31,6 +31,7 @@ class MySQLPlugin extends DatabasePlugin {
       ctx.acquireSpan = this.startSpan(operation, {
         service: this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system }),
         resource: operation,
+        startTime: ctx.startTime,
         type: 'sql',
         kind: 'client',
         meta: {

@@ -13,6 +13,7 @@ const {
   dispatchesAcquireSynchronously,
   isPoolQueryAcquire,
   runOutsidePoolQueryAcquire,
+  runPoolAcquireError,
   runWithPoolWait,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
@@ -31,6 +32,11 @@ const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
 
 const poolAcquireStartCh = channel('apm:pg:pool:acquire:start')
 const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
+const poolAcquireChannels = {
+  connectionFinishCh: poolConnectFinishCh,
+  acquireStartCh: poolAcquireStartCh,
+  acquireFinishCh: poolAcquireFinishCh,
+}
 
 // Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
@@ -90,6 +96,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       }
 
       const ctx = {}
+      const poolOptions = this.options
       const start = acquireStart(this)
       const poolQueryAcquire = isPoolQueryAcquire()
       let acquireCtx
@@ -104,6 +111,18 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
               client,
               waitTime,
               poolConnectFinishCh,
+              ctx,
+              callback,
+              this,
+              args
+            )
+          }
+          if (args[0] && poolAcquireStartCh.hasSubscribers) {
+            return runPoolAcquireError(
+              start,
+              args[0],
+              { poolOptions },
+              poolAcquireChannels,
               ctx,
               callback,
               this,

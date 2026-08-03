@@ -123,8 +123,13 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 // A `canRetry` failover re-invokes `query` with the same Query object. Key the acquire state by that
 // object so a retry remains part of the query even if a future mysql version defers it.
 addHook({ name: 'mysql', file: 'lib/PoolNamespace.js', versions: ['>=2'] }, PoolNamespace => {
-  const connectionStartCh = channel('apm:mysql:connection:start')
-  shimmer.wrap(PoolNamespace.prototype, 'query', query => wrapPoolClusterQueryMethod(query, connectionStartCh))
+  const channels = {
+    connectionStartCh: channel('apm:mysql:connection:start'),
+    connectionFinishCh: channel('apm:mysql:connection:finish'),
+    acquireStartCh: channel('apm:mysql:pool:acquire:start'),
+    acquireFinishCh: channel('apm:mysql:pool:acquire:finish'),
+  }
+  shimmer.wrap(PoolNamespace.prototype, 'query', query => wrapPoolClusterQueryMethod(query, channels))
 
   return PoolNamespace
 })

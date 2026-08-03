@@ -394,6 +394,40 @@ describe('mysql2 instrumentation', () => {
         })
       }
 
+      it('finishes callback and promise acquires when the stream factory throws synchronously', async () => {
+        const failure = new Error('stream factory failed')
+        const connectionStartCh = channel('apm:mysql2:connection:start')
+        const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+        const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+        const acquireStart = sinon.stub()
+        const acquireFinish = sinon.stub()
+        const throwingPool = mysql2.createPool({
+          ...config,
+          stream: () => { throw failure },
+        })
+        connectionStartCh.subscribe(noop)
+        acquireStartCh.subscribe(acquireStart)
+        acquireFinishCh.subscribe(acquireFinish)
+
+        try {
+          assert.throws(() => throwingPool.getConnection(noop), failure)
+
+          if (typeof throwingPool.promise === 'function') {
+            await assert.rejects(throwingPool.promise().getConnection(), failure)
+          }
+
+          const expectedAcquires = typeof throwingPool.promise === 'function' ? 2 : 1
+          sinon.assert.callCount(acquireStart, expectedAcquires)
+          sinon.assert.callCount(acquireFinish, expectedAcquires)
+          for (const call of acquireFinish.getCalls()) assert.strictEqual(call.args[0].error, failure)
+        } finally {
+          connectionStartCh.unsubscribe(noop)
+          acquireStartCh.unsubscribe(acquireStart)
+          acquireFinishCh.unsubscribe(acquireFinish)
+          await new Promise(resolve => throwingPool.end(resolve))
+        }
+      })
+
       describe('Pool.prototype.query', () => {
         it('does not transfer an aborted query wait to the next connection user', async function () {
           if (!semver.satisfies(mysql2Version, '>=3.11.5')) return this.skip()
