@@ -630,6 +630,8 @@ versions.forEach((version) => {
 
             const [[exitCode]] = await Promise.all([
               once(childProcess, 'exit'),
+              once(childProcess.stdout, 'end'),
+              once(childProcess.stderr, 'end'),
               eventsPromise,
             ])
 
@@ -795,6 +797,65 @@ versions.forEach((version) => {
               isDisabling: true,
               shouldAlwaysPass: true,
             })
+          })
+
+          it('preserves attempt to fix for programmatically skipped disabled tests', async () => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs': {
+                    tests: {
+                      'other context can programmatic skip': {
+                        properties: {
+                          attempt_to_fix: true,
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_NAME] === 'other context can programmatic skip')
+
+                assert.strictEqual(tests.length, 1)
+                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            childProcess.stdout?.on('data', data => { stdout += data })
+            childProcess.stderr?.on('data', data => { stdout += data })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              eventsPromise,
+            ])
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Attempt to fix passed/)
+            assert.doesNotMatch(stdout, /Disabled:/)
           })
         })
 

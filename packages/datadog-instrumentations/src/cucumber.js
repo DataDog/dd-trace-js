@@ -23,7 +23,7 @@ const {
   getTestCoverageLinesPercentage,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -295,7 +295,7 @@ function handleDdWorkerMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-      collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
+      collectTestOptimizationSummariesFromTraces(payload, { attemptToFixExecutions })
       workerReportTraceCh.publish(payload)
       return true
     }

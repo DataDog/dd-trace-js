@@ -1194,6 +1194,7 @@ function reportFinalTestAttempt (testReport) {
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix: testProperties.isAttemptToFix,
       isDisabled: testProperties.isDisabled,
       isRumActive,
       isTestFrameworkWorker: true,

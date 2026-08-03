@@ -687,6 +687,7 @@ addHook({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
+            isAttemptToFix: attemptToFixTasks.has(task),
             isDisabled: disabledTasks.has(task),
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
@@ -784,6 +785,7 @@ addHook({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
+          isAttemptToFix: attemptToFixTasks.has(task),
           isDisabled: disabledTasks.has(task),
         })
       }

@@ -1225,6 +1225,7 @@ function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
+      isAttemptToFix,
       isDisabled,
     })
     updateTypecheckTaskResultForTestManagement(task, status, { isAttemptToFix, isDisabled, isQuarantined })
