@@ -1854,10 +1854,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           return
         }
 
-        const registeredConcurrentCtx = testContexts.get(event.test)
+        const registeredConcurrentTestState = testContexts.get(event.test)?.concurrentTestState
         const concurrentTestState = this.concurrentTestStates.get(event.test.fn) ||
-          registeredConcurrentCtx?.concurrentTestState
-        let concurrentCtx = concurrentTestState?.ctx || registeredConcurrentCtx
+          registeredConcurrentTestState
+        let concurrentCtx = concurrentTestState?.ctx
         if (concurrentCtx) {
           this.removeConcurrentTestContext(testName, concurrentCtx)
         } else {
