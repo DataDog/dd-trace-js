@@ -39,9 +39,11 @@ const {
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   collectTestOptimizationSummariesFromTraces,
+  formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -682,6 +684,248 @@ describe('attempt to fix summary', () => {
     assert.strictEqual(newTestsWithDynamicNames.size, 0)
     assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
     assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
+  })
+})
+
+describe('test management summary', () => {
+  it('does not read report configuration for unmanaged tests', () => {
+    const getValueFromEnvSources = sinon.stub()
+    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+      '../../../src/plugins/util/test',
+      {
+        '../../config/helper': {
+          getValueFromEnvSources,
+        },
+      }
+    )
+    const executions = new Map()
+
+    recordExecution({
+      testSuite: 'unmanaged.spec.js',
+      testName: 'passes',
+      status: 'pass',
+    }, executions)
+
+    assert.strictEqual(getValueFromEnvSources.callCount, 0)
+    assert.strictEqual(executions.size, 0)
+  })
+
+  it('reports effective disabled and quarantined actions once per test', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'disabled.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'attempt-to-fix.spec.js',
+      testName: 'takes precedence',
+      status: 'fail',
+      isAttemptToFix: true,
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Disabled: 1 test skipped.\n' +
+      '  Quarantined: 1 test run; 1 failure did not affect the test session.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [disabled] disabled.spec.js › is skipped\n' +
+      '  • [quarantined, failed] quarantined.spec.js › does not fail the session'
+    )
+  })
+
+  it('collects disabled and quarantined actions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'disabled.spec.js',
+            'test.name': 'is skipped',
+            'test.status': 'skip',
+          },
+        },
+        {
+          meta: {
+            'test.test_management.is_quarantined': 'true',
+            'test.suite': 'quarantined.spec.js',
+            'test.name': 'fails',
+            'test.status': 'fail',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, { testManagementExecutions: executions })
+
+    assert.match(formatTestManagementSummary(executions), /Disabled: 1 test skipped\./)
+    assert.match(
+      formatTestManagementSummary(executions),
+      /Quarantined: 1 test run; 1 failure did not affect the test session\./
+    )
+  })
+
+  it('reports when every quarantined test passes', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'passes',
+      status: 'pass',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Quarantined: 1 test run; all passed.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [quarantined, passed] quarantined.spec.js › passes'
+    )
+  })
+
+  it('does not report quarantined tests that did not run', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is pending',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(formatTestManagementSummary(executions), '')
+  })
+
+  it('omits names when more than five tests are affected', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    for (let index = 0; index < 6; index++) {
+      recordTestManagementExecution({
+        testSuite: 'suite.js',
+        testName: `disabled ${index}`,
+        status: 'skip',
+        isDisabled: true,
+      }, executions)
+    }
+
+    try {
+      logTestOptimizationSummary({ testManagementExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Disabled: 6 tests skipped\./)
+    assert.match(consoleWarn.firstCall.args[0], /Individual test names omitted because 6 tests were affected\./)
+    assert.doesNotMatch(consoleWarn.firstCall.args[0], /disabled 0/)
+    assert.match(consoleWarn.firstCall.args[0], /DD_TEST_MANAGEMENT_REPORT_ENABLED=false/)
+  })
+
+  it('keeps every displayed test on one bounded line', () => {
+    const executions = new Map()
+    const longSuite = `packages/${'nested/'.repeat(30)}long.spec.js`
+    const longName = `outer context ${'middle '.repeat(30)}\nunique suffix`
+
+    recordTestManagementExecution({
+      testSuite: longSuite,
+      testName: longName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.ok(detailLine)
+    assert.ok(detailLine.length <= 177, `Got line with ${detailLine.length} characters: ${detailLine}`)
+    assert.ok(!detailLine.includes('\n'))
+    assert.match(detailLine, /…/)
+    assert.match(detailLine, /unique suffix/)
+  })
+
+  it('strips terminal control sequences from displayed test names', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: '\x1b[2Jsuite.js',
+      testName: '\x1b]8;;https://example.com\x07linked\x1b]8;;\x07 \x07name',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, '  • [disabled] suite.js › linked name')
+  })
+
+  it('can disable the end-of-session report without retaining results', () => {
+    const executions = new Map()
+    const attemptToFixExecutions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const consoleWarn = sinon.stub(console, 'warn')
+    process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+
+    recordTestManagementExecution({
+      testSuite: 'suite.js',
+      testName: 'disabled',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    assert.strictEqual(executions.size, 0)
+
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: 'suite.js',
+      testName: 'attempt to fix',
+      status: 'pass',
+    })
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+
+    try {
+      logTestOptimizationSummary({
+        attemptToFixExecutions,
+        newTestsWithDynamicNames,
+        testManagementExecutions: executions,
+      })
+    } finally {
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 0)
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.strictEqual(executions.size, 0)
   })
 })
 

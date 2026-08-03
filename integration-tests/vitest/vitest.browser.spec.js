@@ -837,6 +837,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)
+    assert.match(testOutput, /Disabled: 1 test skipped\./)
   })
 })
 
