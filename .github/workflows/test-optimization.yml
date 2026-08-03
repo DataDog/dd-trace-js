@@ -56,8 +56,12 @@ jobs:
       - name: Get Playwright version from versions package.json
         id: playwright-version
         run: |
-          PLAYWRIGHT_VERSION=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies['@playwright/test']")
-          echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+          PLAYWRIGHT_VERSION=$(node -p \
+            "const versions = require('./integration-tests/playwright/versions'); \
+            versions.getLatestPlaywrightSpecifier() === 'latest' \
+              ? versions.latest \
+              : versions.latestSupportedByNode18")
+          echo "version=$PLAYWRIGHT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -73,14 +77,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        playwright-version: [oldest, latest]
+        playwright-version: [oldest, latest, latest-node18]
     name: Ensure Playwright Docker image (${{ matrix.playwright-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
-      # Both matrix jobs set this to the same value, so the last-writer-wins
+      # All matrix jobs set this to the same value, so the last-writer-wins
       # behaviour of matrix outputs is safe here.
       images: ${{ steps.versions.outputs.images }}
     steps:
@@ -89,19 +93,37 @@ jobs:
         id: versions
         run: |
           LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
+          LATEST_NODE18=$(node -p "require('./integration-tests/playwright/versions').latestSupportedByNode18")
           OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
           DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
           LATEST_TAG="${LATEST}-${DOCKER_HASH}"
+          LATEST_NODE18_TAG="${LATEST_NODE18}-${DOCKER_HASH}"
           OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
-          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
-          PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
-          IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
-          echo "images=$IMAGES" >> $GITHUB_OUTPUT
-          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
-          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          IMAGES=$(printf \
+            '{"latest":{"latest":"%s:%s","oldest":"%s:%s"},"oldest":{"latest":"%s:%s","oldest":"%s:%s"}}' \
+            "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG" "$BASE" "$LATEST_NODE18_TAG" "$BASE" "$OLDEST_TAG")
+          case "${{ matrix.playwright-version }}" in
+            latest)
+              PW_VERSION="$LATEST"
+              IMAGE_TAG="$LATEST_TAG"
+              ;;
+            latest-node18)
+              PW_VERSION="$LATEST_NODE18"
+              IMAGE_TAG="$LATEST_NODE18_TAG"
+              ;;
+            *)
+              PW_VERSION="$OLDEST"
+              IMAGE_TAG="$OLDEST_TAG"
+              ;;
+          esac
+          {
+            echo "images=$IMAGES"
+            echo "pw-version=$PW_VERSION"
+            echo "image-tag=$IMAGE_TAG"
+          } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -140,7 +162,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.node-version][matrix.playwright-version] }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -214,12 +236,12 @@ jobs:
     name: integration-webdriverio (${{ matrix.webdriverio-version }}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: npm run test:instrumentations
+      - run: npm run test:instrumentations:ci
         env:
           PLUGINS: webdriverio
       - run: npm run test:integration:webdriverio:coverage
@@ -279,6 +301,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
 
+  dependency-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+      - uses: ./.github/actions/install
+      - run: npm run test:integration:test-optimization:helpers
+
   integration-cucumber:
     strategy:
       fail-fast: false
@@ -324,9 +354,9 @@ jobs:
         run: |
           DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
           IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -444,7 +474,7 @@ jobs:
           else
             RESOLVED="${{ matrix.cypress-version }}"
           fi
-          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
       - name: Cache Cypress binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -499,3 +529,45 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
+
+  integration-vitest-browser:
+    needs: playwright-image
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, latest]
+    name: integration-vitest-browser (node-${{ matrix.version }})
+    container:
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.version].latest }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      OPTIONS_OVERRIDE: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+        continue-on-error: true
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: npm run test:instrumentations
+        env:
+          PLUGINS: vitest-main
+      - run: npm run test:integration:vitest:coverage
+        env:
+          NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: vitest.browser
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-vitest-browser-${{ matrix.version }}

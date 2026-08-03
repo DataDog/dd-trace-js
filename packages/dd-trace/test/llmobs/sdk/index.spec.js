@@ -90,6 +90,13 @@ describe('sdk', () => {
     }
   })
 
+  describe('experiments', () => {
+    it('exposes dataset operations only through the experiments facade', () => {
+      assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+      assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
+    })
+  })
+
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
       const config = getConfigFresh({})
@@ -110,6 +117,29 @@ describe('sdk', () => {
       assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
       sinon.assert.called(llmobsModule.enable)
+
+      disabledLLMObs.disable() // unsubscribe
+    })
+
+    it('recreates experiments after enabling llmobs', () => {
+      const config = getConfigFresh({})
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+      const llmobsModule = {
+        enable: sinon.stub(),
+        disable () {},
+      }
+
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.strictEqual(disabledLLMObs.experiments.createDataset('d').name(), 'd')
+
+      disabledLLMObs.enable({
+        mlApp: 'mlApp',
+      })
+
+      assert.strictEqual(typeof disabledLLMObs.experiments.createDataset('d').addRecord, 'function')
 
       disabledLLMObs.disable() // unsubscribe
     })
@@ -159,6 +189,31 @@ describe('sdk', () => {
       enabledLLMObs.disable()
 
       assert.strictEqual(enabledLLMObs.enabled, false)
+      sinon.assert.called(llmobsModule.disable)
+    })
+
+    it('recreates experiments after disabling llmobs', () => {
+      const llmobsModule = {
+        disable: sinon.stub(),
+      }
+
+      const config = getConfigFresh({
+        llmobs: {
+          agentlessEnabled: false,
+          mlApp: 'mlApp',
+        },
+      })
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.strictEqual(typeof enabledLLMObs.experiments.createDataset('d').addRecord, 'function')
+
+      enabledLLMObs.disable()
+
+      assert.strictEqual(enabledLLMObs.experiments.createDataset('d').name(), 'd')
       sinon.assert.called(llmobsModule.disable)
     })
 

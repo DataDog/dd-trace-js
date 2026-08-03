@@ -51,6 +51,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getBabelDependencies } = require('./babel-dependencies')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedCoverageFiles = [
@@ -98,8 +99,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
-    '@babel/core',
-    '@babel/preset-typescript',
+    ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -735,7 +735,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('works with multi project setup and test skipping', (done) => {
+    it('works with multi project setup and test skipping', async () => {
       const projects = ['standard', 'node'].map(displayName => ({
         displayName,
         rootDir: 'ci-visibility/test',
@@ -762,24 +762,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         'ci-visibility/test/ci-visibility-test.js': getLinesBitmapBase64(1, 20),
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          // suites for both projects in the multi-project config are reported as skipped
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-
-          const skippedSuites = testSuites.filter(
-            suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
-          )
-          assert.strictEqual(skippedSuites.length, 2)
-
-          skippedSuites.forEach(skippedSuite => {
-            assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
-          })
-        })
-
       childProcess = exec(
         'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
@@ -791,11 +773,29 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            // suites for both projects in the multi-project config are reported as skipped
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+            const skippedSuites = testSuites.filter(
+              suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+            )
+            assert.strictEqual(skippedSuites.length, 2)
+
+            skippedSuites.forEach(skippedSuite => {
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+            })
+          }
+        )
+
+      assert.strictEqual(childProcess.exitCode, 0)
     })
 
     it('does not run coverage reporters when TIA forces coverage collection', async () => {
@@ -4042,7 +4042,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('known tests without early flake detection', () => {
-    it('detects new tests without retrying them', (done) => {
+    it('detects new tests without retrying them', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -4057,8 +4057,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
+        }
+      )
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
@@ -4084,21 +4094,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           // no test has been retried
           assert.strictEqual(retriedTests.length, 0)
-        })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
         }
       )
-
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
     })
 
     // Regression test: without the fix, _ddKnownTests is not injected after worker restart,
@@ -4117,8 +4114,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
+            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
+            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
+            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
+            RUN_IN_PARALLEL: 'true',
+            MAX_WORKERS: '1',
+            WORKER_IDLE_MEMORY_LIMIT: '0',
+          },
+        }
+      )
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -4142,29 +4158,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
-        })
-
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
-            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
-            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
-            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
-            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
-            RUN_IN_PARALLEL: 'true',
-            MAX_WORKERS: '1',
-            WORKER_IDLE_MEMORY_LIMIT: '0',
-          },
         }
       )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        eventsPromise,
-      ])
     })
   })
 })

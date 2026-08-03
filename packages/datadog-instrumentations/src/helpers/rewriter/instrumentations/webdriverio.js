@@ -3,6 +3,19 @@
 module.exports = [
   {
     module: {
+      name: '@wdio/cli',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      className: 'Launcher',
+      methodName: '_startInstance',
+      kind: 'Async',
+    },
+    channelName: 'Launcher_startInstance',
+  },
+  {
+    module: {
       name: '@wdio/local-runner',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',

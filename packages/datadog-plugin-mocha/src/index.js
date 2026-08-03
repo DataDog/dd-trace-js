@@ -60,6 +60,12 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
+    this.addSub('ci:mocha:worker:configuration', ({ libraryConfig, repositoryRoot, testFramework }) => {
+      this.libraryConfig = libraryConfig
+      this.testFramework = testFramework
+      this._setRepositoryRoot(repositoryRoot)
+    })
+
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
@@ -216,8 +222,8 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:worker:finish', () => {
-      this.tracer._exporter.flush()
+    this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:mocha:test:finish', ({

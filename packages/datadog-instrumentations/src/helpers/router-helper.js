@@ -7,6 +7,17 @@ const routerMountPaths = new WeakMap() // to track mount paths for router instan
 const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resolved name + route matchers)
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
 
+/**
+ * @typedef {object} LayerMeta
+ * @property {string} [name]
+ * @property {string} [captureRoute]
+ * @property {boolean} [needMultiMatch]
+ * @property {Array<{ path?: string, regex?: RegExp }> & {
+ *   hasStarPath?: boolean,
+ *   hasSlashPath?: boolean
+ * }} [matchers]
+ */
+
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 
 const routeAddedChannel = channel('apm:express:route:added')
@@ -121,10 +132,19 @@ function getRouterMountPaths (router) {
   return [...paths]
 }
 
+/**
+ * @param {object} layer
+ * @param {LayerMeta} meta
+ * @returns {void}
+ */
 function setLayerMeta (layer, meta) {
   layerMeta.set(layer, meta)
 }
 
+/**
+ * @param {object} layer
+ * @returns {LayerMeta | undefined}
+ */
 function getLayerMeta (layer) {
   return layerMeta.get(layer)
 }

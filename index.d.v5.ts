@@ -3931,29 +3931,74 @@ declare namespace tracer {
       flush (): void
     }
 
+    /** JSON-serializable value accepted by LLMObs Experiments. */
+    type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
     /**
      * A task run over each dataset record during an experiment.
      */
-    type ExperimentTask = (input: any, config: Record<string, any>) => any | Promise<any>
+    type ExperimentTask = (
+      input: JSONType,
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
+    ) => JSONType | Promise<JSONType>
 
     /**
      * Scores a single task output. The return type selects the metric:
-     * `boolean` -> boolean, `number` -> score, anything else -> categorical.
+     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
      */
-    type ExperimentEvaluator = (input: any, output: any, expectedOutput: any) => any | Promise<any>
+    type ExperimentEvaluator = (
+      input: JSONType,
+      output: JSONType,
+      expectedOutput: JSONType
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
+
+    interface CreateDatasetOptions {
+      description?: string
+      records?: Array<{
+        id?: string,
+        inputData: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>
+      }>
+    }
 
     interface ExperimentOptions {
       name: string
       dataset: Dataset
       task: ExperimentTask
-      /** Evaluators keyed by metric label. */
-      evaluators?: Record<string, ExperimentEvaluator>
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
-      config?: Record<string, any>
+      config?: Record<string, JSONType>
       tags?: Record<string, string>
     }
 
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      throwOnErrors?: boolean
+    }
+
     interface PullDatasetOptions {
+      /** Dataset version to pull. Defaults to latest. */
+      version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
       expectedRecordCount?: number
       /** Maximum total time to wait, in ms. Default 30000. */
@@ -3966,19 +4011,30 @@ declare namespace tracer {
       traceId: string
       startNs: number
       durationNs: number
-      input: any
-      output: any
-      expectedOutput: any
+      input: JSONType
+      output: JSONType
+      expectedOutput: JSONType
       readonly isError: boolean
       errorType: string | null
       errorMessage: string | null
-      evaluations: Record<string, any>
+      evaluations: Record<string, JSONType>
       evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
 
     interface ExperimentResult {
       experimentId: string
       rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string
     }
@@ -3991,13 +4047,20 @@ declare namespace tracer {
     }
 
     interface Dataset {
-      addRecord (input: any, expectedOutput?: any, metadata?: Record<string, any>): Dataset
+      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
       id (): string | null
       projectId (): string | null
-      records (): Array<{ input: any, expectedOutput: any, metadata: Record<string, any> }>
+      version (): number | null
+      latestVersion (): number | null
+      records (): Array<{
+        id: string | null,
+        input: JSONType,
+        expectedOutput: JSONType,
+        metadata: Record<string, JSONType>
+      }>
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
@@ -4006,12 +4069,13 @@ declare namespace tracer {
       name (): string
       experimentId (): string | null
       url (): string | null
-      run (): Promise<ExperimentResult>
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
     }
 
     interface Experiments {
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
       /** Pull an existing dataset (with records) by name. */
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
