@@ -215,6 +215,57 @@ describe('rewriter loader', () => {
     })
   })
 
+  it('does not rewrite twice when the compile hook is installed before the sync loader', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-preloaded-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    writeCompileCapture(root)
+    writeFileSync(join(root, 'main.js'), `
+      const Module = require('node:module')
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = require('ai').getTracer()
+      console.log(JSON.stringify({
+        compileChanged: Module.prototype._compile !== originalCompile,
+        starts,
+        value,
+      }))
+    `)
+
+    const result = runFixture(root, 'main.js', {
+      NODE_OPTIONS: [
+        `--require ${join(root, 'capture-compile.cjs')}`,
+        `--require ${join(
+          repositoryRoot,
+          'packages',
+          'datadog-instrumentations',
+          'src',
+          'helpers',
+          'rewriter',
+          'loader'
+        )}`,
+        `--import ${join(repositoryRoot, 'register.js')}`,
+      ].join(' '),
+    })
+
+    assert.deepStrictEqual(result, {
+      compileChanged: true,
+      starts: 1,
+      value: 'tracer',
+    })
+  })
+
   it('rewrites CommonJS entrypoint loads in the sync loader hook', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
