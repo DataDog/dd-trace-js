@@ -16,10 +16,13 @@ const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const { ERROR_MESSAGE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_NAME,
+  TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_OWNERS,
   TEST_FINAL_STATUS,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_IS_RUM_ACTIVE,
@@ -32,6 +35,7 @@ const {
   TEST_PARAMETERS,
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
+  TEST_SKIPPED_BY_ITR,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
@@ -483,32 +487,65 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
   })
 
   it('reports mixed Node and browser projects without duplicate events', async () => {
-    const payloadsPromise = gatherEvents(events => {
-      assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
-      assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
-      assert.strictEqual(getEventContents(events, 'test_suite_end').length, 2)
-
-      const tests = getEventContents(events, 'test')
-      assert.strictEqual(tests.length, 3)
-
-      const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
-      assert.strictEqual(nodeTest.meta[TEST_STATUS], 'pass')
-      assert.strictEqual(nodeTest.meta[TEST_TYPE], 'test')
-      assert.ok(!(TEST_BROWSER_NAME in nodeTest.meta))
-
-      const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
-      assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
-      assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
-      assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], 'chromium')
+    const nodeSuite = 'ci-visibility/vitest-browser-tests/mixed-node.mjs'
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: true,
+      coverage_report_upload_enabled: false,
+      tests_skipping: true,
     })
+    receiver.setSuitesToSkip([{
+      type: 'suite',
+      attributes: { suite: nodeSuite },
+    }])
 
-    const [exitCode] = await Promise.all([
-      runVitest(undefined, {
-        VITEST_BROWSER_MODE: undefined,
-        VITEST_MIXED_BROWSER_MODE: '1',
-      }),
-      payloadsPromise,
-    ])
+    const runPromise = runVitest(undefined, {
+      VITEST_BROWSER_MODE: undefined,
+      VITEST_MIXED_BROWSER_MODE: '1',
+    })
+    const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) =>
+        url === '/api/v2/citestcycle' ||
+        url === '/api/v2/citestcov' ||
+        url === '/api/v2/ci/tests/skippable',
+      payloads => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadata = cyclePayloads.flatMap(({ payload }) => payload.metadata)
+        for (const metadataEntry of metadata) {
+          assert.ok(!(DD_CAPABILITIES_TEST_IMPACT_ANALYSIS in metadataEntry.test))
+        }
+
+        const events = getEvents(cyclePayloads)
+        assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_suite_end').length, 2)
+
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 3)
+
+        const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
+        assert.strictEqual(nodeTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(nodeTest.meta[TEST_TYPE], 'test')
+        assert.ok(!(TEST_BROWSER_NAME in nodeTest.meta))
+        assert.ok(!(TEST_SKIPPED_BY_ITR in nodeTest.meta))
+
+        const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+        assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
+        assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], 'chromium')
+
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+      },
+      { hardTimeout: 60_000 }
+    )
+
+    const [exitCode] = await Promise.all([runPromise, payloadsPromise])
 
     assert.strictEqual(exitCode, 0, testOutput)
   })
