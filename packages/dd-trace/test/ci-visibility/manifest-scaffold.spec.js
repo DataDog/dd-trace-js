@@ -170,6 +170,56 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  it('expands a literal JavaScript Cucumber object profile', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      const supportFile = path.join(fixture.root, 'features', 'steps', 'example.js')
+      fs.mkdirSync(path.dirname(supportFile), { recursive: true })
+      fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        'module.exports = {',
+        '  default: {',
+        "    require: ['features/steps/**/*.js'],",
+        '    failFast: true,',
+        "    worldParameters: { browser: 'chrome', retries: 2 },",
+        '  },',
+        '}',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.validation.runnerArgs, [
+        '--require', supportFile,
+        '--fail-fast',
+        '--world-parameters', '{"browser":"chrome","retries":2}',
+      ])
+    })
+  })
+
+  it('rejects spread-composed JavaScript Cucumber object profiles', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        "const shared = { require: ['features/steps/**/*.js'] }",
+        'module.exports = { default: { ...shared } }',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /must be a literal string or object/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   for (const [description, profile] of [
     ['unquoted', 'ci: --require features/steps.js # --require legacy/stale.js\n'],
     ['quoted', 'ci: "--require features/steps.js" # "--require legacy/stale.js"\n'],
@@ -1016,6 +1066,39 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.validation.testFile, selected)
       assert.ok(framework.project.configFiles.includes(nestedConfig))
       assert.deepStrictEqual(framework.validation.runnerArgs, ['--root', 'packages/foo', '--project', 'unit'])
+    })
+  })
+
+  it('binds one direct named Vitest project among literal siblings', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project unit',
+    }, fixture => {
+      const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+      const outside = path.join(fixture.root, 'e2e', 'outside.test.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.mkdirSync(path.dirname(outside), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(outside, "test('outside', () => {})\n")
+      fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+        "import { defineConfig } from 'vitest/config'",
+        'export default defineConfig({',
+        '  test: {',
+        '    projects: [',
+        "      { name: 'unit', root: 'unit', include: ['**/*.test.ts'] },",
+        "      { name: 'e2e', root: 'e2e', include: ['**/*.test.ts'] },",
+        '    ],',
+        '  },',
+        '})',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
     })
   })
 

@@ -263,10 +263,10 @@ function readProfileDefinitions (filename) {
   if (extension === '.yaml' || extension === '.yml') {
     return getYamlStringProfileDefinitions(source)
   }
-  return getJavascriptStringProfileDefinitions(source)
+  return getJavascriptProfileDefinitions(source)
 }
 
-function getJavascriptStringProfileDefinitions (source) {
+function getJavascriptProfileDefinitions (source) {
   const syntax = maskJavascriptCommentsAndStrings(source)
   const exports = [...syntax.matchAll(/^\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gm)]
   if (exports.length === 0) return new Map()
@@ -300,8 +300,11 @@ function getJavascriptStringProfileDefinitions (source) {
     index = skipWhitespace(syntax, index)
     if (syntax[index] !== ':') throw new Error(`profile ${JSON.stringify(name)} must have a literal value`)
     index = skipWhitespace(syntax, index + 1)
-    const definition = readQuotedString(source, index)
-    if (!definition) throw new Error(`profile ${JSON.stringify(name)} must be a literal string`)
+    const definition = readJavascriptLiteral(source, syntax, index)
+    if (!definition || (typeof definition.value !== 'string' &&
+      (!definition.value || typeof definition.value !== 'object' || Array.isArray(definition.value)))) {
+      throw new Error(`profile ${JSON.stringify(name)} must be a literal string or object`)
+    }
     definitions.set(name, definition.value)
     index = skipWhitespace(syntax, definition.end)
     if (index < objectEnd && syntax[index] !== ',') {
@@ -369,6 +372,80 @@ function skipWhitespace (source, start) {
   let index = start
   while (/\s/.test(source[index] || '')) index++
   return index
+}
+
+/**
+ * Reads a bounded JSON-shaped JavaScript literal without evaluating customer code.
+ *
+ * @param {string} source original JavaScript source
+ * @param {string} syntax source with comments and string contents masked
+ * @param {number} start literal start offset
+ * @param {number} [depth] current literal nesting depth
+ * @returns {{end: number, value: unknown}|undefined} parsed literal and ending offset
+ */
+function readJavascriptLiteral (source, syntax, start, depth = 0) {
+  if (depth > 16) return
+  let index = skipWhitespace(syntax, start)
+  const quoted = readQuotedString(source, index)
+  if (quoted) return quoted
+
+  const primitive = /^(true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)(?![\w$.])/.exec(
+    syntax.slice(index)
+  )
+  if (primitive) {
+    const values = { false: false, null: null, true: true }
+    return {
+      end: index + primitive[0].length,
+      value: Object.hasOwn(values, primitive[1]) ? values[primitive[1]] : Number(primitive[1]),
+    }
+  }
+
+  const open = syntax[index]
+  if (open !== '[' && open !== '{') return
+  const close = open === '[' ? ']' : '}'
+  const value = open === '[' ? [] : Object.create(null)
+  index++
+  while (index < syntax.length) {
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] === close) return { end: index + 1, value }
+
+    let item
+    if (open === '[') {
+      item = readJavascriptLiteral(source, syntax, index, depth + 1)
+      if (!item) return
+      value.push(item.value)
+    } else {
+      const property = readJavascriptPropertyName(source, syntax, index)
+      if (!property || Object.hasOwn(value, property.value)) return
+      index = skipWhitespace(syntax, property.end)
+      if (syntax[index] !== ':') return
+      item = readJavascriptLiteral(source, syntax, index + 1, depth + 1)
+      if (!item) return
+      value[property.value] = item.value
+    }
+    index = item.end
+
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] === close) return { end: index + 1, value }
+    if (syntax[index] !== ',') return
+    index++
+  }
+}
+
+/**
+ * Reads one static quoted or identifier JavaScript object property name.
+ *
+ * @param {string} source original JavaScript source
+ * @param {string} syntax source with comments and string contents masked
+ * @param {number} start property start offset
+ * @returns {{end: number, value: string}|undefined} property name and ending offset
+ */
+function readJavascriptPropertyName (source, syntax, start) {
+  const index = skipWhitespace(syntax, start)
+  const quoted = readQuotedString(source, index)
+  if (quoted) return quoted
+  const identifier = /^[A-Za-z_$][\w$]*/.exec(syntax.slice(index))
+  if (identifier) return { end: index + identifier[0].length, value: identifier[0] }
 }
 
 function getDataProfileDefinitions (value) {

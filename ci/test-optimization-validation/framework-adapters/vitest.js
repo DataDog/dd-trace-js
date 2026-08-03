@@ -155,7 +155,12 @@ function getProjectObject (source, nameIndex) {
     .sort((left, right) => (left.end - left.start) - (right.end - right.start))
   if (ranges.length === 0) return
 
-  const selected = ranges[1] || ranges[0]
+  // Vitest accepts both `{ name }` and `{ test: { name } }` project entries.
+  const inner = ranges[0]
+  const parent = ranges[1]
+  const parentPrefix = parent && maskJavaScriptComments(source.slice(parent.start + 1, inner.start))
+  const nestedTestObject = /(?:^|,)\s*(?:test|(["'])test\1)\s*:\s*$/.test(parentPrefix || '')
+  const selected = nestedTestObject ? parent : inner
   return source.slice(selected.start + 1, selected.end)
 }
 
