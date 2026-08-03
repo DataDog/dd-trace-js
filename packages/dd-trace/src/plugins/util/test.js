@@ -1881,6 +1881,17 @@ function getModifiedFilesFromDiff (diff) {
  */
 
 /**
+ * Returns a collision-free identity for a test's suite and name.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @returns {string}
+ */
+function getTestOptimizationIdentity (testSuite, testName) {
+  return JSON.stringify([testSuite, testName])
+}
+
+/**
  * Formats a test name for user-facing Test Optimization summaries.
  *
  * @param {string | undefined} testSuite
@@ -1912,7 +1923,12 @@ function sanitizeTestOptimizationName (value) {
  * @returns {string}
  */
 function truncateTestOptimizationNameStart (value, maxLength) {
-  return value.length <= maxLength ? value : `…${value.slice(-(maxLength - 1))}`
+  if (value.length <= maxLength) return value
+
+  let start = value.length - maxLength + 1
+  const code = value.charCodeAt(start)
+  if (code >= 0xDC_00 && code <= 0xDF_FF) start++
+  return `…${value.slice(start)}`
 }
 
 /**
@@ -1925,8 +1941,12 @@ function truncateTestOptimizationNameStart (value, maxLength) {
 function truncateTestOptimizationNameMiddle (value, maxLength) {
   if (value.length <= maxLength) return value
 
-  const prefixLength = Math.ceil((maxLength - 1) / 2)
-  const suffixLength = maxLength - prefixLength - 1
+  let prefixLength = Math.ceil((maxLength - 1) / 2)
+  let suffixLength = maxLength - prefixLength - 1
+  const prefixCode = value.charCodeAt(prefixLength - 1)
+  if (prefixCode >= 0xD8_00 && prefixCode <= 0xDB_FF) prefixLength--
+  const suffixCode = value.charCodeAt(value.length - suffixLength)
+  if (suffixCode >= 0xDC_00 && suffixCode <= 0xDF_FF) suffixLength--
   return `${value.slice(0, prefixLength)}…${value.slice(-suffixLength)}`
 }
 
@@ -2029,8 +2049,9 @@ function recordTestManagementExecution (execution, executions = testManagementEx
   if (action === 'quarantined' && execution.status !== 'pass' && execution.status !== 'fail') return
   if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
+  const identity = getTestOptimizationIdentity(execution.testSuite, execution.testName)
   const name = formatTestOptimizationName(execution.testSuite, execution.testName)
-  let result = executions.get(name)
+  let result = executions.get(identity)
 
   if (!result) {
     result = {
@@ -2038,7 +2059,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
       action,
       failed: false,
     }
-    executions.set(name, result)
+    executions.set(identity, result)
   } else if (action === 'disabled') {
     result.action = action
   }
@@ -2063,8 +2084,9 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
+  const identity = getTestOptimizationIdentity(testSuite, testName)
   const name = formatTestOptimizationName(testSuite, testName)
-  let result = attemptToFixExecutions.get(name)
+  let result = attemptToFixExecutions.get(identity)
 
   if (!result) {
     result = {
@@ -2074,7 +2096,7 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
       isDisabled: false,
       isQuarantined: false,
     }
-    attemptToFixExecutions.set(name, result)
+    attemptToFixExecutions.set(identity, result)
   }
 
   result.executions++

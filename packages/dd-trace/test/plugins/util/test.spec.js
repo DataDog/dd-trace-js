@@ -540,6 +540,29 @@ describe('attempt to fix summary', () => {
     assert.doesNotMatch(summary, /execution \d+:/)
   })
 
+  it('keeps colliding suite and test display names as separate attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
+  })
+
   it('collects attempt to fix executions from worker traces', () => {
     const executions = new Map()
     const payload = JSON.stringify([
@@ -636,6 +659,25 @@ describe('attempt to fix summary', () => {
     assert.strictEqual(
       consoleWarn.firstCall.args[0],
       'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+  })
+
+  it('does not split Unicode test names when truncating the start', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const suite = `a😀${'b'.repeat(58)}`
+    const testName = 'c'.repeat(100)
+
+    try {
+      logAttemptToFixTestExecution(suite, testName)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      `Datadog Test Optimization: attempting to fix …${'b'.repeat(58)} › ` +
+      `${'c'.repeat(48)}…${'c'.repeat(48)}`
     )
   })
 
@@ -752,6 +794,30 @@ describe('test management summary', () => {
       '  • [disabled] disabled.spec.js › is skipped\n' +
       '  • [quarantined, failed] quarantined.spec.js › does not fail the session'
     )
+  })
+
+  it('keeps colliding suite and test display names as separate managed tests', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Disabled: 1 test skipped\./)
+    assert.match(summary, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
   })
 
   it('collects disabled and quarantined actions from worker traces', () => {
@@ -871,6 +937,22 @@ describe('test management summary', () => {
     assert.ok(!detailLine.includes('\n'))
     assert.match(detailLine, /…/)
     assert.match(detailLine, /unique suffix/)
+  })
+
+  it('does not split Unicode test names when truncating the middle', () => {
+    const executions = new Map()
+    const testName = `${'a'.repeat(79)}😀${'b'.repeat(80)}`
+
+    recordTestManagementExecution({
+      testName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, `  • [disabled] ${'a'.repeat(79)}…${'b'.repeat(79)}`)
   })
 
   it('strips terminal control sequences from displayed test names', () => {

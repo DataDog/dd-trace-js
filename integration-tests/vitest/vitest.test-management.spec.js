@@ -857,6 +857,74 @@ versions.forEach((version) => {
             assert.match(stdout, /Attempt to fix passed/)
             assert.doesNotMatch(stdout, /Disabled:/)
           })
+
+          it('preserves quarantine for skipped attempt to fix tests', async () => {
+            const testNames = [
+              'attempt to fix skip tests can statically skip',
+              'attempt to fix skip tests can programmatically skip',
+            ]
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs': {
+                    tests: Object.fromEntries(testNames.map(testName => [testName, {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    }])),
+                  },
+                },
+              },
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+
+                assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), testNames.sort())
+                for (const test of tests) {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                }
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            childProcess.stdout?.on('data', data => { stdout += data })
+            childProcess.stderr?.on('data', data => { stdout += data })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              once(childProcess.stdout, 'end'),
+              once(childProcess.stderr, 'end'),
+              eventsPromise,
+            ])
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
+            assert.strictEqual(
+              (stdout.match(/Test was marked as quarantined but was not quarantined because it is attempt to fix\./g) || [])
+                .length,
+              2
+            )
+          })
         })
 
         context('disabled', () => {

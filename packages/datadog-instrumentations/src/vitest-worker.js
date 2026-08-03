@@ -886,6 +886,7 @@ addHook({
             isNew: newTasks.has(task),
             isAttemptToFix: attemptToFixTasks.has(task),
             isDisabled: disabledTasks.has(task),
+            isQuarantined: quarantinedTasks.has(task),
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
@@ -984,6 +985,7 @@ addHook({
           isNew: newTasks.has(task),
           isAttemptToFix: attemptToFixTasks.has(task),
           isDisabled: disabledTasks.has(task),
+          isQuarantined: quarantinedTasks.has(task),
         })
       }
     }
