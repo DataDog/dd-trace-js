@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -319,6 +322,272 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('uploads regular coverage reports from canonical paths', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const coverageDir = path.join(rootDir, 'coverage')
+    const nestedReportPath = path.join(coverageDir, 'lcov.info')
+    const rootReportPath = path.join(rootDir, 'lcov.info')
+
+    fs.mkdirSync(coverageDir)
+    fs.writeFileSync(nestedReportPath, 'nested coverage')
+    fs.writeFileSync(rootReportPath, 'root coverage')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const nestedReportStats = fs.lstatSync(nestedReportPath, { bigint: true })
+      const rootReportStats = fs.lstatSync(rootReportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: path.relative(process.cwd(), rootDir) })
+
+      sinon.assert.calledTwice(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(nestedReportPath),
+        fileDevice: nestedReportStats.dev,
+        fileInode: nestedReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+      assert.deepStrictEqual(uploadCoverageReport.secondCall.args[0], {
+        filePath: fs.realpathSync(rootReportPath),
+        fileDevice: rootReportStats.dev,
+        fileInode: rootReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uploads coverage reports through a symlinked root ancestor from canonical paths', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const workspaceDir = path.join(fixtureDir, 'workspace')
+    const rootDir = path.join(workspaceDir, 'root')
+    const linkedWorkspaceDir = path.join(fixtureDir, 'linked-workspace')
+    const linkedRootDir = path.join(linkedWorkspaceDir, 'root')
+    const reportPath = path.join(rootDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir, { recursive: true })
+    fs.writeFileSync(reportPath, 'regular coverage')
+    fs.symlinkSync(workspaceDir, linkedWorkspaceDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const reportStats = fs.lstatSync(reportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.calledOnce(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(reportPath),
+        fileDevice: reportStats.dev,
+        fileInode: reportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores invalid coverage report roots', () => {
+    const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.rmSync(invalidRoot, { recursive: true })
+
+    const plugin = createPlugin('jest_worker')
+    const uploadCoverageReport = sinon.stub().yields()
+    plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+    try {
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      fs.writeFileSync(invalidRoot, 'not a directory')
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      plugin.uploadCoverageReports({ rootDir: Symbol('invalid-root') })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(invalidRoot, { force: true })
+    }
+  })
+
+  it('ignores roots that change while their canonical path is resolved', () => {
+    const lstatSync = sinon.stub()
+    lstatSync.onCall(0).returns({
+      dev: 1,
+      ino: 1,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+    })
+    lstatSync.onCall(1).returns({ dev: 1, ino: 2 })
+    lstatSync.onCall(2).returns({ isSymbolicLink: () => false })
+    lstatSync.onCall(3).returns({
+      dev: 1,
+      ino: 3,
+      isFile: () => true,
+      isSymbolicLink: () => false,
+    })
+    const { discoverCoverageReports } = proxyquire(
+      '../../src/ci-visibility/coverage-report-discovery',
+      {
+        'node:fs': {
+          lstatSync,
+          realpathSync: sinon.stub().returns('/resolved-root'),
+        },
+      }
+    )
+
+    assert.deepStrictEqual(discoverCoverageReports('/root'), [])
+  })
+
+  it('ignores coverage report paths with non-directory components', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.writeFileSync(path.join(rootDir, 'coverage'), 'not a directory')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes coverage reports reached through linked directories', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideDir = path.join(fixtureDir, 'outside')
+    const linkedRootDir = path.join(fixtureDir, 'linked-root')
+    const outsideReportPath = path.join(outsideDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir)
+    fs.mkdirSync(outsideDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideDir, path.join(rootDir, 'coverage'), directoryLinkType)
+    fs.symlinkSync(outsideDir, linkedRootDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  for (const directoryName of ['root', 'nested']) {
+    it(`excludes coverage reports when the ${directoryName} directory becomes a symlink during discovery`, () => {
+      const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+      const rootDir = path.join(fixtureDir, 'root')
+      const coverageDir = path.join(rootDir, 'coverage')
+      const outsideDir = path.join(fixtureDir, 'root-outside')
+      const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+      fs.mkdirSync(coverageDir, { recursive: true })
+      fs.mkdirSync(path.join(outsideDir, 'coverage'), { recursive: true })
+      fs.writeFileSync(path.join(coverageDir, 'lcov.info'), 'regular coverage')
+      fs.writeFileSync(path.join(outsideDir, 'lcov.info'), 'outside coverage')
+      fs.writeFileSync(path.join(outsideDir, 'coverage', 'lcov.info'), 'outside coverage')
+
+      const canonicalRootDir = fs.realpathSync(rootDir)
+      const swapPath = directoryName === 'root' ? canonicalRootDir : path.join(canonicalRootDir, 'coverage')
+      const swapOnCall = directoryName === 'root' && canonicalRootDir === path.resolve(rootDir) ? 2 : 1
+      const displacedPath = `${swapPath}-displaced`
+      const originalLstatSync = fs.lstatSync
+      let matchingCalls = 0
+      let swapped = false
+      const lstatSync = sinon.stub(fs, 'lstatSync').callsFake(
+        /**
+         * @param {import('node:fs').PathLike} checkedPath
+         * @param {import('node:fs').StatSyncOptions} [options]
+         */
+        (checkedPath, options) => {
+          const stats = originalLstatSync(checkedPath, options)
+          if (checkedPath === swapPath && ++matchingCalls === swapOnCall) {
+            fs.renameSync(swapPath, displacedPath)
+            fs.symlinkSync(outsideDir, swapPath, directoryLinkType)
+            swapped = true
+          }
+          return stats
+        }
+      )
+
+      try {
+        const plugin = createPlugin('jest_worker')
+        const uploadCoverageReport = sinon.stub().yields()
+        plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+        plugin.uploadCoverageReports({ rootDir })
+
+        assert.strictEqual(swapped, true)
+        sinon.assert.notCalled(uploadCoverageReport)
+      } finally {
+        lstatSync.restore()
+        fs.rmSync(fixtureDir, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('excludes symlinked coverage report files', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes hard-linked coverage report files', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.linkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
