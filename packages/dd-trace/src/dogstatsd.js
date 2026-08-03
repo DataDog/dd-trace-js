@@ -80,16 +80,20 @@ class DogStatsDClient {
   }
 
   /**
-   * Recomputes the cached tags and tag-prefix string (mirrors the constructor) so a later
-   * `config.tags` change (e.g. a MicroVM clone resume) is reflected without recreating the client.
-   * Drops any buffered-but-unsent lines: `distribution()` (and a mid-write overflow in `_write()`)
-   * serialize lines synchronously ahead of the next scheduled `flush()`, so anything already
-   * written has the previous tags baked in and would ship stale identity if kept.
+   * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
+   * change, e.g. a MicroVM clone resume. Lines already buffered have the old prefix baked in
+   * (`distribution()`, and mid-write overflow in `_write()`, serialize synchronously ahead of the
+   * next `flush()`), so they're only dropped if the prefix actually changed.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
+    const tagsPrefix = tags?.length ? `|#${tags.join(',')}` : ''
+
     this.#tags = tags
-    this.#tagsPrefix = this.#tags?.length ? `|#${this.#tags.join(',')}` : ''
+
+    if (tagsPrefix === this.#tagsPrefix) return
+
+    this.#tagsPrefix = tagsPrefix
     this.#queue = []
     this.#buffer = ''
     this.#offset = 0
