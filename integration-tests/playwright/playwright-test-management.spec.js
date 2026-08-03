@@ -679,8 +679,52 @@ versions.forEach((version) => {
           ])
 
           assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+          assert.match(testOutput, /Attempt to fix passed: all 4 execution\(s\) passed for 1 test\(s\)\./)
           assert.doesNotMatch(testOutput, /Disabled:/)
           assert.strictEqual(exitCode, 0, testOutput)
+        })
+
+        it('reports an attempt to fix test skipped by a failed project dependency', async (receiver, run) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'did-not-run.js': {
+                  tests: {
+                    'did not run because of early bail': {
+                      properties: { attempt_to_fix: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 0 },
+          })
+
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-did-not-run',
+                ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
+              },
+            }
+          )
+          let testOutput = ''
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([
+            once(proc, 'exit'),
+            once(proc.stdout, 'end'),
+            once(proc.stderr, 'end'),
+          ])
+
+          assert.match(testOutput, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+          assert.strictEqual(exitCode, 1, testOutput)
         })
 
         it('--retries is disabled for an attempt to fix test', async (receiver) => {
