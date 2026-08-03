@@ -22,7 +22,9 @@ function recordIdFromCreatedRecord (record) {
 
 function versionFromCreatedRecords (records) {
   const versions = records
-    .map(record => Number(record.version))
+    .map(record => record.version)
+    .filter(version => version != null)
+    .map(Number)
     .filter(Number.isFinite)
   if (versions.length === 0) return null
   return Math.max(...versions)

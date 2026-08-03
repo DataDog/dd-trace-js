@@ -33,6 +33,8 @@ describe('LLMObs Experiments facade', () => {
     `dd-trace-js-experiments-${backendTestId}`
   const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
   const backendExperimentName = `${backendProjectName}-experiment`
+  const backendRichExperimentDatasetName = `${backendProjectName}-rich-experiment-dataset`
+  const backendRichExperimentName = `${backendProjectName}-rich-experiment`
 
   function backendExperiments () {
     return createExperiments(enabledConfig({
@@ -175,6 +177,62 @@ describe('LLMObs Experiments facade', () => {
   })
 
   describe('experiment run', () => {
+    it('runs a multi-row experiment and returns rows, ids, metric values, and dashboard URLs', async function () {
+      this.timeout(60_000)
+
+      const exp = backendExperiments()
+      const dataset = trackBackendDataset(exp, exp.createDataset(backendRichExperimentDatasetName, {
+        description: 'created by a dd-trace-js experiments rich VCR test',
+        records: [
+          { inputData: { q: 'apple' }, expectedOutput: 'APPLE', metadata: { row: 0 } },
+          { inputData: { q: 'car' }, expectedOutput: 'CAR', metadata: { row: 1 } },
+        ],
+      }))
+
+      const result = await exp.experiment({
+        name: backendRichExperimentName,
+        description: 'created by a dd-trace-js experiments rich VCR test',
+        dataset,
+        task: (input) => ({ answer: input.q.toUpperCase() }),
+        evaluators: {
+          nonempty: (_input, output) => output.answer.length > 0,
+          len: (_input, output) => output.answer.length,
+          label: (_input, output, expected) => (output.answer === expected ? 'match' : 'miss'),
+          details: (_input, output, expected) => ({ actual: output.answer, expected }),
+        },
+        config: { temperature: 0 },
+        tags: { source: 'rich-vcr-test' },
+      }).run()
+
+      assert.match(result.experimentId, /\S+/)
+      assert.match(result.url, /^https:\/\//)
+      assert.equal(result.rows.length, 2)
+      assert.equal(result.runs.length, 1)
+      assert.equal(result.runs[0].rows, result.rows)
+      assert.match(dataset.id(), /\S+/)
+      assert.match(dataset.url(), /^https:\/\//)
+      assert.equal(dataset.recordIds().length, 2)
+      for (const row of result.rows) {
+        assert.match(row.spanId, /^[a-f0-9]{16}$/)
+        assert.match(row.traceId, /^[a-f0-9]{32}$/)
+      }
+      assert.deepEqual(result.rows.map(row => row.output), [{ answer: 'APPLE' }, { answer: 'CAR' }])
+      assert.deepEqual(result.rows[0].evaluations, {
+        nonempty: true,
+        len: 5,
+        label: 'match',
+        details: { actual: 'APPLE', expected: 'APPLE' },
+      })
+      assert.deepEqual(result.rows[1].evaluations, {
+        nonempty: true,
+        len: 3,
+        label: 'match',
+        details: { actual: 'CAR', expected: 'CAR' },
+      })
+      // eslint-disable-next-line no-console
+      console.log(`Datadog rich experiment URL: ${result.url}`)
+    })
+
     it('creates an experiment, submits row events, and marks the experiment completed', async function () {
       this.timeout(60_000)
 
