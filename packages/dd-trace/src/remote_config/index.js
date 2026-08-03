@@ -601,7 +601,7 @@ function getTagsString (config, repositoryUrl, commitSHA) {
  * @param {import('../config/config-base')} config
  */
 function refreshIdentity (config) {
-  clientId = uuid()
+  clientId = uuid({ disableEntropyCache: true })
   if (config.tags['_dd.rc.client_id']) {
     config.tags['_dd.rc.client_id'] = clientId
   }

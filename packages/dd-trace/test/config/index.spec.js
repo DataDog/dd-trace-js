@@ -5431,6 +5431,8 @@ rules:
 
       // once at module load for the initial runtimeId, once on refresh
       sinon.assert.calledTwice(uuid)
+      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
+      assert.deepStrictEqual(uuid.secondCall.args, [{ disableEntropyCache: true }])
     })
 
     it('should store new value that differs from original runtimeId', () => {
