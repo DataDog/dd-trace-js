@@ -659,10 +659,15 @@ versions.forEach((version) => {
 
       const [[code]] = await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         eventsPromise,
       ])
 
       assert.strictEqual(code, 0, testOutput)
+      assert.match(testOutput, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+      assert.match(testOutput, /Disabled: 2 tests skipped\./)
+      assert.match(testOutput, /Quarantined: 1 test run; all passed\./)
     })
 
     typecheckIt('does not fail the typecheck run for Test Management managed failures', async () => {

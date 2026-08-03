@@ -16,6 +16,8 @@ const {
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
+  recordTestManagementExecution,
+  recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
 const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
@@ -1219,6 +1221,25 @@ function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
   const isModified = testProperties.isModified === true
   const isSkippedByTestManagement = !isAttemptToFix && isDisabled
   const status = getTypecheckTaskStatus(task)
+  const summaryStatus = isSkippedByTestManagement ? 'skip' : status
+
+  recordTestManagementExecution({
+    testSuite: testProperties.testSuite,
+    testName,
+    status: summaryStatus,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+  })
+  if (isAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: testProperties.testSuite,
+      testName,
+      status: summaryStatus,
+      isDisabled,
+      isQuarantined,
+    })
+  }
 
   if (status === 'skip' || isSkippedByTestManagement) {
     testSkipCh.publish({
