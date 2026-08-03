@@ -21,10 +21,13 @@ describe('LLMObs Experiments facade', () => {
   const backendDatasets = []
 
   afterEach(async () => {
-    for (const { dataset, exp } of backendDatasets.splice(0).reverse()) {
-      const projectId = dataset.projectId()
-      const datasetId = dataset.id()
-      if (projectId !== null && datasetId !== null) await exp._deleteDataset(projectId, datasetId)
+    if (backendDatasets.length > 0) {
+      const client = backendClient()
+      for (const dataset of backendDatasets.splice(0).reverse()) {
+        const projectId = dataset.projectId()
+        const datasetId = dataset.id()
+        if (projectId !== null && datasetId !== null) await client.deleteDataset(projectId, datasetId)
+      }
     }
     sinon.restore()
   })
@@ -37,22 +40,37 @@ describe('LLMObs Experiments facade', () => {
   const backendRichExperimentDatasetName = `${backendProjectName}-rich-experiment-dataset`
   const backendRichExperimentName = `${backendProjectName}-rich-experiment`
 
-  function backendExperiments () {
-    return createExperiments(enabledConfig({
+  function backendClientOptions () {
+    return {
+      apiKey: process.env.DD_API_KEY ?? 'test-api-key',
+      appKey: process.env.DD_APP_KEY ?? 'test-app-key',
       site: process.env.DD_SITE ?? 'datadoghq.com',
-      DD_API_KEY: process.env.DD_API_KEY ?? 'test-api-key',
-      DD_APP_KEY: process.env.DD_APP_KEY ?? 'test-app-key',
+      apiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
+        'http://127.0.0.1:9126/vcr/datadog-experiments',
+      projectName: backendProjectName,
+    }
+  }
+
+  function backendClient () {
+    return new ExperimentsClient(backendClientOptions())
+  }
+
+  function backendExperiments () {
+    const options = backendClientOptions()
+    return createExperiments(enabledConfig({
+      site: options.site,
+      DD_API_KEY: options.apiKey,
+      DD_APP_KEY: options.appKey,
       llmobs: {
         DD_LLMOBS_ENABLED: true,
-        experimentsApiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
-          'http://127.0.0.1:9126/vcr/datadog-experiments',
-        mlApp: backendProjectName,
+        experimentsApiBase: options.apiBase,
+        mlApp: options.projectName,
       },
     }))
   }
 
-  function trackBackendDataset (exp, dataset) {
-    backendDatasets.push({ exp, dataset })
+  function trackBackendDataset (dataset) {
+    backendDatasets.push(dataset)
     return dataset
   }
 
@@ -296,7 +314,7 @@ describe('LLMObs Experiments facade', () => {
       this.timeout(60_000)
 
       const exp = backendExperiments()
-      const dataset = trackBackendDataset(exp, exp.createDataset(backendRichExperimentDatasetName, {
+      const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
         records: [
           { inputData: { q: 'apple' }, expectedOutput: 'APPLE', metadata: { row: 0 } },
@@ -352,7 +370,7 @@ describe('LLMObs Experiments facade', () => {
       this.timeout(60_000)
 
       const exp = backendExperiments()
-      const dataset = trackBackendDataset(exp, exp.createDataset(backendExperimentDatasetName, {
+      const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
         records: [{ inputData: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'backend-test' } }],
       }))

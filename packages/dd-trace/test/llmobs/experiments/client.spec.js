@@ -46,9 +46,9 @@ describe('LLMObs Experiments control-plane client', () => {
       apiKey: process.env.DD_API_KEY ?? 'test-api-key',
       appKey: process.env.DD_APP_KEY ?? 'test-app-key',
       site: process.env.DD_SITE ?? 'datadoghq.com',
-      projectName: backendProjectName,
       apiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
         'http://127.0.0.1:9126/vcr/datadog-experiments',
+      projectName: backendProjectName,
     })
   }
 
