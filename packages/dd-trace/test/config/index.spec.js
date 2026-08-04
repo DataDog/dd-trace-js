@@ -3259,6 +3259,38 @@ describe('Config', () => {
     })
   })
 
+  describe('http error status env vars', () => {
+    it('keeps the raw range string, with the client range unset by default', () => {
+      const config = getConfig()
+
+      // The value stays the raw spec so telemetry reports what the user set; the
+      // use site (plugins/util/http-error-statuses.js) parses it. The client range
+      // has no default here so that use site can widen it under OTel semantics.
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, undefined)
+    })
+
+    it('reads the server and client ranges from the environment', () => {
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599,404'
+      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '429'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599,404')
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '429')
+    })
+
+    it('accepts the DD_HTTP_* aliases', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '500-503'
+      process.env.DD_HTTP_CLIENT_ERROR_STATUSES = '400-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-503')
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-599')
+    })
+  })
+
   describe('flushInterval in Lambda', () => {
     afterEach(() => {
       existsSyncReturn = undefined
