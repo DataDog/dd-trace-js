@@ -259,6 +259,7 @@ module.exports = class CiPlugin extends Plugin {
         {
           ...this.testConfiguration,
           isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
+          isLineCoverageSupported: this.constructor.id !== 'vitest',
         },
         (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
           if (err) {
