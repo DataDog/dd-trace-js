@@ -30,6 +30,15 @@ function getLogSubmissionUrl (config) {
 }
 
 /**
+ * @param {string} source
+ * @param {string} service
+ * @returns {string}
+ */
+function getLogSubmissionPath (source, service) {
+  return `/api/v2/logs?ddsource=${source}&service=${encodeURIComponent(service)}`
+}
+
+/**
  * @param {import('../../config/config-base')} config
  * @param {URL} url
  * @returns {object}
@@ -37,7 +46,7 @@ function getLogSubmissionUrl (config) {
 function getWinstonLogSubmissionParameters (config, url) {
   const parameters = {
     host: url.hostname,
-    path: `/api/v2/logs?ddsource=winston&service=${config.service}`,
+    path: getLogSubmissionPath('winston', config.service),
     ssl: url.protocol === 'https:',
     headers: {
       'DD-API-KEY': config.DD_API_KEY,
@@ -119,7 +128,7 @@ class LogSubmissionPlugin extends Plugin {
     if (serializedMessage === undefined) return
 
     const options = {
-      path: `/api/v2/logs?ddsource=${source}&service=${this.config.service}`,
+      path: getLogSubmissionPath(source, this.config.service),
       method: 'POST',
       headers: {
         'DD-API-KEY': this.config.DD_API_KEY,

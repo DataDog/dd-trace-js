@@ -62,6 +62,19 @@ describe('LogSubmissionPlugin', () => {
     })
   })
 
+  it('encodes service names in submitted log paths', () => {
+    plugin.configure({
+      enabled: true,
+      DD_API_KEY: 'api-key',
+      service: 'my service&prod',
+      site: 'datadoghq.com',
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my%20service%26prod')
+  })
+
   it('safely serializes a circular bunyan record', () => {
     const record = { level: 30, msg: 'hello' }
     Object.assign(record, { circular: record })
@@ -194,5 +207,27 @@ describe('LogSubmissionPlugin', () => {
         'DD-API-KEY': 'api-key',
       },
     })
+  })
+
+  it('encodes service names in winston transport paths', () => {
+    class HttpTransport {
+      constructor (options) {
+        this.options = options
+      }
+    }
+
+    plugin.configure({
+      enabled: true,
+      DD_API_KEY: 'api-key',
+      service: 'my service&prod',
+      site: 'datadoghq.com',
+    })
+
+    const logger = { add: sinon.spy() }
+    configureCh.publish(HttpTransport)
+    addTransportCh.publish(logger)
+
+    const [{ options }] = logger.add.firstCall.args
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my%20service%26prod')
   })
 })
