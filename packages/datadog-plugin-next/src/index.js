@@ -54,7 +54,7 @@ class NextPlugin extends ServerPlugin {
 
     const isHttpParent = parentSpan?._integrationName === 'http'
     const httpParentSpan = isHttpParent ? parentSpan : undefined
-    const httpParentReq = isHttpParent ? store.req : undefined
+    const httpParentReq = isHttpParent ? web.getRequest(parentSpan) : undefined
     return { ...store, span, req, httpParentSpan, httpParentReq }
   }
 

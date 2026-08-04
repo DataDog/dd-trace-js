@@ -18,6 +18,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 require('../../datadog-instrumentations/src/next')
+const web = require('../../dd-trace/src/plugins/util/web')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
@@ -1021,10 +1022,7 @@ describe('compiled Next runtimes', () => {
     let tracer
 
     before(async () => {
-      tracer = await agent.load(
-        ['next', 'http'],
-        [{ resourceRenamingEnabled: false }, { client: false, resourceRenamingEnabled: true }]
-      )
+      tracer = await agent.load('next')
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
@@ -1090,32 +1088,30 @@ describe('compiled Next runtimes', () => {
       getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
 
       const routeModule = new AppRouteRouteModule()
-      const routeServer = http.createServer(async (req, res) => {
-        const request = new Request(`http://127.0.0.1${req.url}`, {
-          headers: req.headers,
-          method: req.method,
-        })
-        const response = await routeModule.handle(request, {})
-        res.writeHead(response.status)
-        res.end()
-      })
-      await new Promise(resolve => routeServer.listen(0, '127.0.0.1', resolve))
-      const routePort = routeServer.address().port
-      const trace = agent.assertSomeTraces(traces => {
-        const httpSpan = traces[0].find(span => span.name === 'web.request')
-        assert.ok(httpSpan)
-        assert.strictEqual(httpSpan.resource, 'GET /api/users/[id]')
-        assert.strictEqual(httpSpan.meta['http.route'], '/api/users/[id]')
-        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/users/{param:int}')
+      const nodeRequest = { headers: {}, method: 'GET', url: '/api/users/123' }
+      const nodeResponse = {
+        getHeader: () => undefined,
+        getHeaders: () => ({}),
+        statusCode: 200,
+      }
+      const httpParentSpan = web.startSpan(
+        tracer,
+        web.normalizeConfig({ resourceRenamingEnabled: true }),
+        nodeRequest,
+        nodeResponse,
+        'web.request'
+      )
+      httpParentSpan._integrationName = 'http'
+
+      await storage('legacy').run({ span: httpParentSpan }, () => {
+        const request = new Request('http://127.0.0.1/api/users/123', { method: 'GET' })
+        return routeModule.handle(request, {})
       })
 
-      try {
-        const response = await axios.get(`http://127.0.0.1:${routePort}/api/users/123`)
-        assert.strictEqual(response.status, 200)
-        await trace
-      } finally {
-        await new Promise(resolve => routeServer.close(resolve))
-      }
+      assert.strictEqual(httpParentSpan.context().getTag('resource.name'), 'GET /api/users/[id]')
+      assert.strictEqual(httpParentSpan.context().getTag('http.route'), '/api/users/[id]')
+      assert.strictEqual(httpParentSpan.context().getTag('http.endpoint'), '/api/users/{param:int}')
+      web.finishAll(web.getContext(nodeRequest))
     })
 
     it('records Pages API errors and status without an existing request store', async () => {
