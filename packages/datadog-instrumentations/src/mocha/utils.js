@@ -4,10 +4,13 @@ const { performance } = require('node:perf_hooks')
 
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -136,19 +139,28 @@ function isNewTest (test, knownTests) {
   return !testsForSuite.includes(testName)
 }
 
-function setEfdRetryCountForTest (test, duration, slowTestRetries) {
+/**
+ * @param {import('mocha').Test} test
+ * @param {number} duration
+ * @param {import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy} retryPolicy
+ */
+function setEfdRetryCountForTest (test, duration, retryPolicy) {
   const testName = getTestFullName(test)
   if (efdRetryCountByTestFullName.has(testName)) {
     return
   }
-  const retryCount = getEfdRetryCount(duration, slowTestRetries || {})
+  const retryCount = getEfdRetryCountForDuration(duration, retryPolicy)
   efdRetryCountByTestFullName.set(testName, retryCount)
   if (retryCount === 0) {
     efdSlowAbortedTests.add(testName)
   }
 }
 
-function wrapOriginalEfdTest (test, slowTestRetries) {
+/**
+ * @param {import('mocha').Test} test
+ * @param {import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy} retryPolicy
+ */
+function wrapOriginalEfdTest (test, retryPolicy) {
   if (test._ddEfdDurationWrapped || typeof test.fn !== 'function') {
     return
   }
@@ -157,7 +169,7 @@ function wrapOriginalEfdTest (test, slowTestRetries) {
   test.fn = shimmer.wrapFunction(originalFn, originalFn => function () {
     const start = performance.now()
     const recordDuration = () => {
-      setEfdRetryCountForTest(test, performance.now() - start, slowTestRetries)
+      setEfdRetryCountForTest(test, performance.now() - start, retryPolicy)
     }
 
     if (originalFn.length > 0) {
@@ -208,13 +220,14 @@ function disableMochaRetries (test) {
  *   _ddIsModified?: boolean,
  *   _ddIsNew?: boolean
  * }} test
- * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @param {{
+ *   isEarlyFlakeDetectionEnabled?: boolean,
+ *   earlyFlakeDetectionRetryPolicy?: import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy
+ * }} config
  * @returns {boolean}
  */
 function isDatadogManagedRetryTest (test, config) {
-  return test._ddIsAttemptToFix ||
-    test._ddIsEfdRetry ||
-    (config.isEarlyFlakeDetectionEnabled && (test._ddIsNew || test._ddIsModified))
+  return test._ddIsAttemptToFix || isEarlyFlakeDetectionTest(test, config)
 }
 
 /**
@@ -226,22 +239,32 @@ function isDatadogManagedRetryTest (test, config) {
  *   _ddIsModified?: boolean,
  *   _ddIsNew?: boolean
  * }} test
- * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @param {{
+ *   isEarlyFlakeDetectionEnabled?: boolean,
+ *   earlyFlakeDetectionRetryPolicy?: import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy
+ * }} config
  * @returns {boolean}
  */
 function isEarlyFlakeDetectionTest (test, config) {
   return !test._ddIsAttemptToFix &&
     !test._ddIsDisabled &&
     config.isEarlyFlakeDetectionEnabled &&
+    hasEfdRetries(config.earlyFlakeDetectionRetryPolicy) &&
     (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
 }
 
-function retryTest (test, numRetries, tags, slowTestRetries) {
+/**
+ * @param {import('mocha').Test} test
+ * @param {number} numRetries
+ * @param {string[]} tags
+ * @param {import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy} retryPolicy
+ */
+function retryTest (test, numRetries, tags, retryPolicy) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
   disableMochaRetries(test)
   if (isEfdRetry) {
-    wrapOriginalEfdTest(test, slowTestRetries)
+    wrapOriginalEfdTest(test, retryPolicy)
   }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
@@ -253,7 +276,7 @@ function retryTest (test, numRetries, tags, slowTestRetries) {
       if (typeof originalFn === 'function') {
         clonedTest.fn = shimmer.wrapFunction(originalFn, originalFn => function (...args) {
           const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(clonedTest))
-          if (efdRetryCount !== undefined && clonedTest._ddEfdRetryIndex > efdRetryCount) {
+          if (shouldSkipEfdRetry(clonedTest._ddEfdRetryIndex, efdRetryCount)) {
             clonedTest._ddShouldSkipEfdRetry = true
             this.skip()
           }
@@ -267,14 +290,6 @@ function retryTest (test, numRetries, tags, slowTestRetries) {
       }
     }
   }
-}
-
-function getConfiguredEfdRetryCount (config) {
-  const { earlyFlakeDetectionSlowTestRetries } = config
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return config.earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
 }
 
 function getSuitesByTestFile (root) {
@@ -465,7 +480,7 @@ function getOnTestHandler (isMain) {
 
     if (isEfdRetry) {
       const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(test))
-      if (efdRetryCount !== undefined && test._ddEfdRetryIndex > efdRetryCount) {
+      if (shouldSkipEfdRetry(test._ddEfdRetryIndex, efdRetryCount)) {
         test.pending = true
         test._ddShouldSkipEfdRetry = true
         return
@@ -579,7 +594,7 @@ function getTestFinishInfo (test, status, config, error) {
     !efdRetryCountByTestFullName.has(testName)
   ) {
     const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
-    setEfdRetryCountForTest(test, duration, config.earlyFlakeDetectionSlowTestRetries)
+    setEfdRetryCountForTest(test, duration, config.earlyFlakeDetectionRetryPolicy)
   }
 
   if (testsStatuses.get(testName)) {
@@ -590,7 +605,8 @@ function getTestFinishInfo (test, status, config, error) {
   const testStatuses = testsStatuses.get(testName)
 
   const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(config)
+  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ??
+    config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
   const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
   const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
 
@@ -1018,17 +1034,12 @@ function getRunTestsWrapper (runTests, config) {
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
-              if (
-                !test.isPending() &&
-                !test._ddIsDisabled &&
-                !test._ddIsAttemptToFix &&
-                config.isEarlyFlakeDetectionEnabled
-              ) {
+              if (!test.isPending() && isEarlyFlakeDetectionTest(test, config)) {
                 retryTest(
                   test,
-                  getConfiguredEfdRetryCount(config),
+                  config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
                   ['_ddIsModified', '_ddIsEfdRetry'],
-                  config.earlyFlakeDetectionSlowTestRetries
+                  config.earlyFlakeDetectionRetryPolicy
                 )
               }
             }
@@ -1042,17 +1053,12 @@ function getRunTestsWrapper (runTests, config) {
       suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (
-            config.isEarlyFlakeDetectionEnabled &&
-            !test._ddIsDisabled &&
-            !test._ddIsAttemptToFix &&
-            !test._ddIsModified
-          ) {
+          if (!test._ddIsModified && isEarlyFlakeDetectionTest(test, config)) {
             retryTest(
               test,
-              getConfiguredEfdRetryCount(config),
+              config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
               ['_ddIsNew', '_ddIsEfdRetry'],
-              config.earlyFlakeDetectionSlowTestRetries
+              config.earlyFlakeDetectionRetryPolicy
             )
           }
         }

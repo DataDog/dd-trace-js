@@ -6,12 +6,12 @@ const { MessagePort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
-  getMaxEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -64,8 +64,7 @@ const activeRunFilesContexts = new WeakSet()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
@@ -99,13 +98,6 @@ let tiaRepositoryRoot = process.cwd()
 const tinyPoolClassWrappers = new WeakMap()
 const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
 const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
-
-function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
-  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
-    return fallbackRetryCount
-  }
-  return getMaxEfdRetryCount(slowTestRetries)
-}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`
@@ -547,8 +539,7 @@ function resetLibraryConfig () {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
-  earlyFlakeDetectionNumRetries = 0
-  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   isEarlyFlakeDetectionFaulty = false
   isDiEnabled = false
   isKnownTestsEnabled = false
@@ -563,8 +554,7 @@ function applyLibraryConfig (libraryConfig) {
   isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-  earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-  earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+  earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   isEarlyFlakeDetectionFaulty = false
   isDiEnabled = libraryConfig.isDiEnabled
   isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
@@ -579,8 +569,7 @@ function resetMainProcessProvidedContext (ctx) {
   setProvidedContext(ctx, {
     _ddIsDiEnabled: false,
     _ddIsEarlyFlakeDetectionEnabled: false,
-    _ddEarlyFlakeDetectionNumRetries: 0,
-    _ddEarlyFlakeDetectionSlowTestRetries: {},
+    _ddEarlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -757,9 +746,7 @@ async function runMainProcessSetup (
             setProvidedContext(ctx, {
               _ddIsKnownTestsEnabled: isKnownTestsEnabled,
               _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-              _ddEarlyFlakeDetectionNumRetries:
-                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
-              _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
+              _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
             }, 'Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
@@ -842,7 +829,6 @@ async function runMainProcessSetup (
       testPropertiesByFilepath: testPropertiesByFilepath || {},
       testSessionConfiguration,
     }, {
-      getConfiguredEfdRetryCount,
       shouldReportTestModule: shouldInstallBrowserReporter ? isBrowserTestModule : undefined,
       state: getNoWorkerInitState(),
     })
@@ -856,8 +842,7 @@ async function runMainProcessSetup (
 function getNoWorkerInitState () {
   return {
     attemptToFixExecutions,
-    earlyFlakeDetectionNumRetries,
-    earlyFlakeDetectionSlowTestRetries,
+    earlyFlakeDetectionRetryPolicy,
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
