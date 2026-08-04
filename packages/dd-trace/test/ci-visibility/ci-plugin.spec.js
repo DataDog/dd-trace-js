@@ -148,6 +148,22 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('does not consider line coverage for Vitest skippable suites', () => {
+    const getSkippableSuites = sinon.stub().callsArgWith(1, null, [])
+    const onDone = sinon.stub()
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.tracer._exporter.getSkippableSuites = getSkippableSuites
+    plugin.libraryConfig = { isCoverageReportUploadEnabled: true }
+
+    dc.channel('ci:vitest:test-suite:skippable').publish({ onDone })
+    plugin.configure(false)
+
+    sinon.assert.calledOnce(getSkippableSuites)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isCoverageReportUploadEnabled, true)
+    assert.strictEqual(getSkippableSuites.firstCall.args[0].isLineCoverageSupported, false)
+    sinon.assert.calledOnce(onDone)
+  })
+
   it('replaces frozen policy snapshots when dependent requests fail', () => {
     const plugin = createPlugin('vitest_worker', true)
     plugin.libraryConfig = Object.freeze({

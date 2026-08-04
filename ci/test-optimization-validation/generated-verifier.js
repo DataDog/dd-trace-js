@@ -209,14 +209,16 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, resul
 function getGeneratedRuntimeFileStatus (strategy) {
   const generatedFiles = new Set((strategy.files || []).map(file => path.resolve(file.path)))
   let expectsRuntimeFile = false
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const filename = path.resolve(cleanupPath)
-    if (generatedFiles.has(filename)) continue
-    expectsRuntimeFile = true
-    try {
-      const stat = fs.lstatSync(filename)
-      if (!stat.isSymbolicLink() && stat.isFile()) return true
-    } catch {}
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const filename = path.resolve(cleanupPath)
+      if (generatedFiles.has(filename)) continue
+      expectsRuntimeFile = true
+      try {
+        const stat = fs.lstatSync(filename)
+        if (!stat.isSymbolicLink() && stat.isFile()) return true
+      } catch {}
+    }
   }
   return expectsRuntimeFile ? false : undefined
 }

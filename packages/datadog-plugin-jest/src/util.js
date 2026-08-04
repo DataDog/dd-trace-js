@@ -15,6 +15,8 @@ const log = require('../../dd-trace/src/log')
  * [[1, 2, 3], [2, 3, 5]]
  * 2. An array of objects, e.g.
  * [{ a: 1, b: 2, expected: 3 }, { a: 2, b: 3, expected: 5}]
+ *
+ * @param {unknown[]} testParameters `test.each` arguments
  */
 function getFormattedJestTestParameters (testParameters) {
   if (!testParameters || !testParameters.length) {

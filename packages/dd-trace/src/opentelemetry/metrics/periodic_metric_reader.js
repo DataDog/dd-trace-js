@@ -109,7 +109,7 @@ class PeriodicMetricReader {
   /**
    * Creates a new PeriodicMetricReader instance.
    *
-   * @param {OtlpHttpMetricExporter} exporter - Metric exporter for sending to Datadog Agent
+   * @param {import('./otlp_http_metric_exporter')} exporter - Metric exporter for sending to Datadog Agent
    * @param {number} exportInterval - Export interval in milliseconds
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
    * @param {number} maxBatchedQueueSize - Maximum number of measurements to queue before dropping

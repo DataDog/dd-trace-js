@@ -16,9 +16,11 @@ const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const { DogStatsDClient } = require('../src/dogstatsd')
 
 // On Node versions that support `monitorEventLoopDelay({ samplePerIteration })`
-// (landed in v26.5.0) the runtime metrics module unconditionally skips the
+// (available in v24.19.0 and v26.5.0) the runtime metrics module unconditionally skips the
 // @datadog/native-metrics path, so the "with native metrics" variant is unreachable.
-const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
+  (NODE_MAJOR === 26 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 19)
 const NATIVE_METRICS_VARIANTS = SAMPLE_PER_ITERATION_AVAILABLE ? [false] : [true, false]
 // Only runs on a real runtime that actually supports the per-iteration sampler.
 const describeSamplePerIteration = SAMPLE_PER_ITERATION_AVAILABLE ? describe : describe.skip
@@ -568,7 +570,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             './client': proxyquire('../src/runtime_metrics/client', {
               '../dogstatsd': { DogStatsDClient: LocalClient },
             }),
-            '../../../../version': { NODE_MAJOR: 26, NODE_MINOR: 5 },
+            '../../../../version': { NODE_MAJOR: 24, NODE_MINOR: 19 },
             '@datadog/native-metrics': {
               start () {
                 throw new Error('Native metrics should not even be required')
@@ -943,7 +945,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
   })
 })
 
-describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node >= 26.5.0)', () => {
+describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node 24.19+ or >= 26.5)', () => {
   let clock
   let localClient
   let nativeMetricsStart

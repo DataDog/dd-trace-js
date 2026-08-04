@@ -4,12 +4,12 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
   recordTestManagementExecution,
@@ -310,8 +310,18 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
   return pool === undefined || isVitestWorkerPool(pool)
 }
 
+/**
+ * @param {object} state
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionActive (state) {
+  return state.isEarlyFlakeDetectionEnabled &&
+    !state.isEarlyFlakeDetectionFaulty &&
+    hasEfdRetries(state.earlyFlakeDetectionRetryPolicy)
+}
+
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
-  const { getConfiguredEfdRetryCount, shouldReportTestModule, state } = options
+  const { shouldReportTestModule, state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
   addVitestBrowserSetupFileAccess(testSpecifications)
 
@@ -330,13 +340,8 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
-      earlyFlakeDetectionRetries: getConfiguredEfdRetryCount(
-        state.earlyFlakeDetectionSlowTestRetries,
-        state.earlyFlakeDetectionNumRetries
-      ),
-      earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-      earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
-      isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
+      earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
+      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
@@ -856,7 +861,7 @@ function createMainProcessReporter (reporterState) {
     return {
       isAttemptToFix,
       isDisabled: testManagementProperties.isDisabled,
-      isEarlyFlakeDetection: (isNew || isModified) && state.isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetection: (isNew || isModified) && isEarlyFlakeDetectionActive(state),
       isFlakyTestRetries,
       isQuarantined: testManagementProperties.isQuarantined,
       isModified,
