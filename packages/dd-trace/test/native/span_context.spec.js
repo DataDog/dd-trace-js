@@ -267,6 +267,19 @@ describe('NativeSpanContext', () => {
       sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
     })
 
+    it('preserves resource names longer than the agent normalization threshold', () => {
+      const resource = 'r'.repeat(5_001)
+
+      spanContext._name = 'operation'
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('service.name', 'svc')
+      spanContext.setTag('resource.name', resource)
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), true)
+
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetResourceName, leSpanId, resource)
+    })
+
     it('falls back without writing for unsupported final tags', () => {
       spanContext._name = 'operation'
       spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
