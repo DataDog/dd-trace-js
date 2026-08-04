@@ -49,21 +49,99 @@ function findErrorInCauseChain (error, targetErrorType) {
 /**
  * @param {(value?: unknown) => void} resolve
  * @param {(reason?: unknown) => void} reject
+ * @param {() => void} [onEnd]
  * @returns {object}
  */
-function createDispatchHandler (resolve, reject) {
+function createDispatchHandler (resolve, reject, onEnd) {
+  function finish () {
+    onEnd?.()
+    resolve()
+  }
+
   return {
     onConnect: () => {},
     onError: reject,
     onHeaders: () => true,
     onData: () => {},
-    onComplete: resolve,
+    onComplete: finish,
     onRequestStart: () => {},
     onResponseError: (_controller, error) => reject(error),
     onResponseStart: controller => controller.resume(),
     onResponseData: () => {},
-    onResponseEnd: () => resolve(),
+    onResponseEnd: finish,
   }
+}
+
+/**
+ * @param {(value?: unknown) => void} resolve
+ * @param {(reason?: unknown) => void} reject
+ * @param {() => void} onError
+ * @returns {object}
+ */
+function createErrorDispatchHandler (resolve, reject, onError) {
+  const handler = createDispatchHandler(resolve, reject)
+
+  /**
+   * @param {Error} error
+   */
+  function fail (error) {
+    onError()
+    reject(error)
+  }
+
+  /**
+   * @param {unknown} _controller
+   * @param {Error} error
+   */
+  function failModern (_controller, error) {
+    fail(error)
+  }
+
+  handler.onError = fail
+  handler.onResponseError = failModern
+  return handler
+}
+
+/**
+ * @param {(value?: unknown) => void} resolve
+ * @param {(reason?: unknown) => void} reject
+ * @param {() => void} onUpgrade
+ * @returns {object}
+ */
+function createUpgradeDispatchHandler (resolve, reject, onUpgrade) {
+  const handler = createDispatchHandler(resolve, reject)
+
+  /**
+   * @param {import('node:net').Socket} socket
+   */
+  function finishUpgrade (socket) {
+    onUpgrade()
+    socket.destroy()
+    resolve()
+  }
+
+  /**
+   * @param {number} _statusCode
+   * @param {unknown} _headers
+   * @param {import('node:net').Socket} socket
+   */
+  function finishLegacyUpgrade (_statusCode, _headers, socket) {
+    finishUpgrade(socket)
+  }
+
+  /**
+   * @param {unknown} _controller
+   * @param {number} _statusCode
+   * @param {unknown} _headers
+   * @param {import('node:net').Socket} socket
+   */
+  function finishModernUpgrade (_controller, _statusCode, _headers, socket) {
+    finishUpgrade(socket)
+  }
+
+  handler.onUpgrade = finishLegacyUpgrade
+  handler.onRequestUpgrade = finishModernUpgrade
+  return handler
 }
 
 /**
@@ -106,6 +184,15 @@ describe('Plugin', () => {
   it('finishes CONNECT through the preexisting global dispatcher', async function () {
     this.timeout(30000)
     await runDefaultDispatcherRetentionFixture({ CONNECT_GLOBAL_DISPATCHER: 'true' })
+  })
+
+  it('records rejected CONNECT responses through an immutable preexisting dispatcher', async function () {
+    this.timeout(30000)
+    await runDefaultDispatcherRetentionFixture({
+      CONNECT_GLOBAL_DISPATCHER: 'true',
+      CONNECT_STATUS_CODE: '407',
+      FROZEN_GLOBAL_DISPATCHER: 'true',
+    })
   })
 
   it('keeps foreign dispatcher instrumentation disabled without subscribers', async function () {
@@ -644,6 +731,101 @@ describe('Plugin', () => {
             parent.finish()
             await tracesPromise
             assert.strictEqual(scope.active(), null)
+          })
+
+          it('restores the caller context before direct dispatch completion handlers', async function () {
+            this.timeout(30000)
+            const app = express()
+            app.get('/user', respondOk)
+            const port = await listen(app)
+            const client = new fetch.Client(`http://localhost:${port}`)
+            const parent = tracer.startSpan('parent')
+            const parentSpanId = parent.context().toSpanId()
+            const scope = tracer.scope()
+            const completionSpanIds = []
+
+            await scope.activate(parent, async () => {
+              for (let requestIndex = 0; requestIndex < 2; requestIndex++) {
+                await new Promise((resolve, reject) => {
+                  client.dispatch({ method: 'GET', path: '/user' }, createDispatchHandler(resolve, reject, () => {
+                    completionSpanIds.push(scope.active()?.context().toSpanId())
+                  }))
+                })
+              }
+            })
+
+            parent.finish()
+            await client.close()
+
+            assert.strictEqual(completionSpanIds.length, 2)
+            for (const completionSpanId of completionSpanIds) {
+              assert.strictEqual(completionSpanId, parentSpanId)
+            }
+          })
+
+          it('restores the caller context before direct dispatch error handlers', async function () {
+            this.timeout(30000)
+            const app = express()
+            /** @param {import('node:http').IncomingMessage} request */
+            app.get('/error', request => request.socket.destroy())
+            const port = await listen(app)
+            const client = new fetch.Client(`http://localhost:${port}`)
+            const parent = tracer.startSpan('parent')
+            const parentSpanId = parent.context().toSpanId()
+            const scope = tracer.scope()
+            let errorSpanId
+
+            await scope.activate(parent, () => assert.rejects(
+              new Promise((resolve, reject) => {
+                client.dispatch({ method: 'GET', path: '/error' }, createErrorDispatchHandler(resolve, reject, () => {
+                  errorSpanId = scope.active()?.context().toSpanId()
+                }))
+              }),
+              { code: 'UND_ERR_SOCKET' }
+            ))
+
+            parent.finish()
+            await client.close()
+
+            assert.strictEqual(errorSpanId, parentSpanId)
+          })
+
+          it('restores the caller context before direct dispatch upgrade handlers', async function () {
+            this.timeout(30000)
+            const app = express()
+            const port = await listen(app)
+            /**
+             * @param {import('node:http').IncomingMessage} _request
+             * @param {import('node:net').Socket} socket
+             */
+            const respondUpgrade = (_request, socket) => {
+              socket.write(
+                'HTTP/1.1 101 Switching Protocols\r\n' +
+                'Connection: Upgrade\r\n' +
+                'Upgrade: test\r\n' +
+                '\r\n'
+              )
+            }
+            appListener.once('upgrade', respondUpgrade)
+            const client = new fetch.Client(`http://localhost:${port}`)
+            const parent = tracer.startSpan('parent')
+            const parentSpanId = parent.context().toSpanId()
+            const scope = tracer.scope()
+            let upgradeSpanId
+
+            await scope.activate(parent, () => new Promise((resolve, reject) => {
+              client.dispatch(
+                { method: 'GET', path: '/', upgrade: 'test' },
+                createUpgradeDispatchHandler(resolve, reject, () => {
+                  upgradeSpanId = scope.active()?.context().toSpanId()
+                })
+              )
+            }))
+
+            parent.finish()
+            await client.close()
+
+            assert.strictEqual(upgradeSpanId, parentSpanId)
           })
 
           it('keeps context cleared across sequential root requests', async () => {
