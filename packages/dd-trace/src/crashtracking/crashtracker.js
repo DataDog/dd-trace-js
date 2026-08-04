@@ -16,6 +16,10 @@ const identityRefreshChannel = channel('datadog:identity:refresh')
 class Crashtracker {
   #started = false
 
+  constructor () {
+    identityRefreshChannel.subscribe((config) => this.configure(config))
+  }
+
   configure (config) {
     if (!this.#started) return
 
@@ -138,10 +142,8 @@ class Crashtracker {
   }
 }
 
+// No start()/stop() to tie a subscribe/unsubscribe pair to, so the constructor subscribes
+// unconditionally. configure() is a no-op until start() has run.
 const crashtracker = new Crashtracker()
-
-// No start()/stop() to tie a subscribe/unsubscribe pair to, so just subscribe once here,
-// same as dogstatsd.js. configure() is a no-op until start() has run.
-identityRefreshChannel.subscribe((config) => crashtracker.configure(config))
 
 module.exports = crashtracker
