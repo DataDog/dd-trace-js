@@ -329,7 +329,7 @@ class Experiment {
     for (const metric of metrics) {
       validateEvaluatorName(metric.label)
       const metricError = errorMessage(metric.error)
-      if (metric.value === undefined && metricError === null) {
+      if (metric.value == null && metricError == null) {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
