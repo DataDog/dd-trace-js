@@ -108,12 +108,13 @@ describe('telemetry', () => {
       bar2: { _enabled: false },
     }
     /**
-     * @type {object} CircularObject
-     * @property {string} field
-     * @property {object} child
-     * @property {string} child.field
-     * @property {CircularObject | null} child.parent
+     * @typedef {{
+     *   field: string,
+     *   child: { field: string, parent: CircularObject | null },
+     * }} CircularObject
      */
+
+    /** @type {CircularObject} */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value',

@@ -281,6 +281,7 @@ const finish = (ctx) => {
  *   error?: unknown,
  *   poolWaitTime?: number
  * }} AcquireContext
+ * @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike
  */
 
 // pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
@@ -312,7 +313,7 @@ function latestPoolConnectionParameters (pool) {
 /**
  * @param {Function} connect
  * @param {InstrumentedPool} pool
- * @param {IArguments} args
+ * @param {ArgumentsLike} args
  * @param {AcquireContext} acquireCtx
  * @param {number | undefined} start
  */

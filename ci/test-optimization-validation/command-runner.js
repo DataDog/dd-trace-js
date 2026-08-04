@@ -522,7 +522,7 @@ function buildOfflineCaptureEnv ({ fixture, outputRoot }) {
  * @param {object} input offline validation inputs
  * @param {{manifestPath: string}} input.fixture authoritative cache fixture
  * @param {string} input.outputRoot pre-created payload output root
- * @returns {NodeJS.ProcessEnv} validation transport environment
+ * @returns {typeof process.env} validation transport environment
  */
 function buildOfflineValidationEnv ({ fixture, outputRoot }) {
   return {
@@ -551,7 +551,7 @@ function buildOfflineValidationEnv ({ fixture, outputRoot }) {
  * Rejects command-local assignments that can bypass validator-controlled offline routing.
  *
  * @param {object} command command to execute
- * @param {NodeJS.ProcessEnv} env validator environment overrides
+ * @param {typeof process.env} env validator environment overrides
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
   if (!env[VALIDATION_MODE_ENV]) return
