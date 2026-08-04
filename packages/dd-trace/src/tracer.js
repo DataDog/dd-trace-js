@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const {
@@ -23,6 +24,13 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one tracer is active at a time in practice; each new instance replaces the previous
+// subscription so restarts (e.g. across tests constructing multiple tracers) don't accumulate
+// listeners reacting on behalf of an instance that's no longer in use.
+let unsubscribeIdentityRefresh = null
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
@@ -50,11 +58,32 @@ class DatadogTracer extends Tracer {
       }
       this._inmem_cfg = metadata
     }
+
+    unsubscribeIdentityRefresh?.()
+    const onIdentityRefresh = (refreshedConfig) => this.#refreshMetadata(refreshedConfig)
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
   }
 
   configure (config) {
     const { env, sampler } = config
     this._prioritySampler.configure(env, sampler, config)
+  }
+
+  /**
+   * Re-serializes the process-discovery metadata file after a MicroVM clone resume, so it reflects the
+   * clone's refreshed identity instead of the snapshot's. No-ops if process-discovery metadata was never
+   * stored (e.g. serverless) or if storeConfig() fails to produce a new handle.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #refreshMetadata (config) {
+    if (this._inmem_cfg === undefined) return
+    const storeConfig = require('./tracer_metadata')
+    const metadata = storeConfig(config)
+    if (metadata !== undefined) {
+      this._inmem_cfg = metadata
+    }
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.

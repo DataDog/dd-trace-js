@@ -2,6 +2,7 @@
 
 const os = require('os')
 
+const { channel } = require('dc-polyfill')
 const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
@@ -9,6 +10,14 @@ const processTags = require('../../process-tags')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one general-metrics exporter and one span-stats exporter are active at a time; each
+// `initializeOpenTelemetryMetrics`/`createOtlpSpanStatsExporter` call replaces the previous
+// subscription so restarts don't accumulate listeners.
+let unsubscribeMetricsIdentityRefresh = null
+let unsubscribeSpanStatsIdentityRefresh = null
 
 /**
  * @typedef {import('../../config')} Config
@@ -37,10 +46,13 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
  */
 
 /**
- * Initializes OpenTelemetry Metrics support
+ * Builds the resource attributes for the general OTel metrics exporter (service/version/env,
+ * `config.tags` minus those three, and hostname when enabled). Shared by
+ * `initializeOpenTelemetryMetrics()` and its identity-refresh handler so they can't drift apart.
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {object} Resource attributes
  */
-function initializeOpenTelemetryMetrics (config) {
+function buildGeneralResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
@@ -59,12 +71,20 @@ function initializeOpenTelemetryMetrics (config) {
     resourceAttributes['host.name'] = os.hostname()
   }
 
+  return resourceAttributes
+}
+
+/**
+ * Initializes OpenTelemetry Metrics support
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
+ */
+function initializeOpenTelemetryMetrics (config) {
   const exporter = new OtlpHttpMetricExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
     config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
-    resourceAttributes
+    buildGeneralResourceAttributes(config)
   )
 
   const reader = new PeriodicMetricReader(
@@ -76,6 +96,11 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+
+  unsubscribeMetricsIdentityRefresh?.()
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeMetricsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
 
 function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
@@ -104,22 +129,29 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
 function createOtlpSpanStatsExporter (config) {
   const { OtlpStatsExporter } = require('./otlp_span_stats_exporter')
   const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
-  const resourceAttributes = buildResourceAttributes(config.tags, {
+  const buildSpanStatsResourceAttributes = () => buildResourceAttributes(config.tags, {
     reportHostname: config.reportHostname,
     otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     service: config.service,
     env: config.env,
     serviceVersion: config.version,
   })
-  return new OtlpStatsExporter(
+  const exporter = new OtlpStatsExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     protocol,
-    resourceAttributes,
+    buildSpanStatsResourceAttributes(),
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     config.service,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )
+
+  unsubscribeSpanStatsIdentityRefresh?.()
+  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildSpanStatsResourceAttributes())
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeSpanStatsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+
+  return exporter
 }
 
 module.exports = {

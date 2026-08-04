@@ -908,6 +908,35 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
 
+    it('should rebuild client_tracer.tags to reflect the refreshed _dd.rc.client_id', () => {
+      // client_tracer.tags is a live getter (like state.client.id) — the existing instance
+      // reflects the refreshed _dd.rc.client_id without being recreated, instead of serializing
+      // a snapshot built once at construction time.
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old-client-id' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.deepStrictEqual(rcInstance.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:old-client-id',
+      ])
+
+      channel('datadog:identity:update').publish(rcConfig)
+
+      // Other RemoteConfig instances accumulated on the shared channel by earlier tests also
+      // react to this publish, so we can't pin the exact winning uuid here — only that this
+      // instance's tags getter picked up a fresh value instead of the stale snapshot.
+      const refreshedTags = rcInstance.state.client.client_tracer.tags
+      assert.strictEqual(refreshedTags[0], 'runtime-id:runtimeId')
+      assert.notStrictEqual(refreshedTags[1], '_dd.rc.client_id:old-client-id')
+      assert.match(refreshedTags[1], /^_dd\.rc\.client_id:/)
+    })
+
     it('should set clientId to the value returned by uuid', () => {
       const rcConfig = {
         url: new URL('http://127.0.0.1:1337'),

@@ -19,9 +19,8 @@ const {
 class Writer extends BaseWriter {
   constructor ({ url, tags, evpProxyPrefix = '' }) {
     super(...arguments)
-    const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
     this._evpProxyPrefix = evpProxyPrefix
   }
 

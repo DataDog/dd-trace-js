@@ -4,11 +4,14 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -24,6 +27,12 @@ let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+let onIdentityRefresh = null
+// Incremented on every start(); lets a pending detectDebuggerEndpoint() callback tell whether it
+// still belongs to the session that started it, or whether a stop()+start() cycle has superseded
+// it while it was in flight (configChannel would be non-null again by then, so that check alone
+// can't tell the two apart).
+let generation = 0
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -36,12 +45,13 @@ module.exports = {
 }
 
 /**
- * Check if the Debugger worker is currently running
+ * Whether a debugger session is running or still starting (waiting on detectDebuggerEndpoint()).
+ * Must cover the pending window too, or proxy.js#updateDebugger never calls stop() for it.
  *
- * @returns {boolean} True if the worker is started, false otherwise
+ * @returns {boolean} True if start() has been called and cleanup() hasn't run since.
  */
 function isStarted () {
-  return worker !== null
+  return configChannel !== null
 }
 
 /**
@@ -54,7 +64,10 @@ function isStarted () {
  * @param {RemoteConfig} rcInstance - The RemoteConfig instance
  */
 function start (config, rcInstance) {
-  if (worker !== null) return
+  // configChannel lives from here until cleanup(), covering the async gap before worker exists.
+  if (worker !== null || configChannel !== null) return
+
+  const myGeneration = ++generation
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
@@ -63,6 +76,11 @@ function start (config, rcInstance) {
   const probeChannel = new MessageChannel()
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
+
+  // Reuses the existing hot-reload path (`configure()` posts the current config over
+  // `configChannel`) instead of proxy.js reaching into the debugger directly.
+  onIdentityRefresh = () => configure(config)
+  identityRefreshChannel.subscribe(onIdentityRefresh)
 
   globalThis[Symbol.for('dd-trace')].utilTypes = types
 
@@ -99,6 +117,13 @@ function start (config, rcInstance) {
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
   detectDebuggerEndpoint(config, (_inputPath) => {
+    // stop() may have already run cleanup() while this was in flight - don't start a worker for a
+    // session that's been told to stop. A generation mismatch means a stop()+start() cycle already
+    // superseded this callback - configChannel is non-null again by then (the new session's), so
+    // that check alone can't catch it; building a worker here would mix this session's probe/log
+    // ports with the new session's config port and detach a port already transferred elsewhere.
+    if (configChannel === null || myGeneration !== generation) return
+
     inputPath = _inputPath
 
     worker = new Worker(
@@ -163,9 +188,18 @@ function configure (config) {
  * Safe to call even if the worker is not started.
  */
 function stop () {
-  if (worker === null) return
+  // Also checks configChannel for a pending start (no worker yet) - otherwise stop() here would
+  // skip cleanup() and leak the identity-refresh subscription.
+  if (worker === null && configChannel === null) return
 
   log.debug('[debugger] Stopping Dynamic Instrumentation client...')
+
+  if (worker === null) {
+    // Still waiting on detectDebuggerEndpoint() - no worker to terminate, but start()'s
+    // subscriptions and remote-config handler still need cleanup.
+    cleanup()
+    return
+  }
 
   try {
     worker.terminate()
@@ -183,6 +217,10 @@ function stop () {
  * @param {Error} [error] - Optional error to pass to pending ack callbacks (for unexpected exits)
  */
 function cleanup (error) {
+  if (onIdentityRefresh) {
+    identityRefreshChannel.unsubscribe(onIdentityRefresh)
+    onIdentityRefresh = null
+  }
   if (rc) {
     rc.removeProductHandler('LIVE_DEBUGGING')
     rc = null

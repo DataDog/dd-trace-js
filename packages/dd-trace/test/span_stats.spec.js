@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')

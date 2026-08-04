@@ -6,12 +6,19 @@ const { EOL, platform } = require('node:os')
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
 class Crashtracker {
   #started = false
+
+  constructor () {
+    identityRefreshChannel.subscribe((config) => this.configure(config))
+  }
 
   configure (config) {
     if (!this.#started) return
@@ -135,4 +142,8 @@ class Crashtracker {
   }
 }
 
-module.exports = new Crashtracker()
+// No start()/stop() to tie a subscribe/unsubscribe pair to, so the constructor subscribes
+// unconditionally. configure() is a no-op until start() has run.
+const crashtracker = new Crashtracker()
+
+module.exports = crashtracker

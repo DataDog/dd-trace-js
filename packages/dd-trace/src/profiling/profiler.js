@@ -4,13 +4,14 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const { buildProfilingRuntime } = require('./config')
+const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
+const identityRefreshChannel = dc.channel('datadog:identity:refresh')
 
 function findWebSpan (startedSpans, spanId) {
   for (let i = startedSpans.length; --i >= 0;) {
@@ -59,6 +60,7 @@ class Profiler extends EventEmitter {
   #endpointCounts = new Map()
   #exporters
   #flushInterval
+  #identityRefreshListener
   #lastStart
   #profileSeq = 0
   #profilers
@@ -181,6 +183,25 @@ class Profiler extends EventEmitter {
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
 
+    // Recompute tags after a MicroVM clone resume, so profiles upload under the clone's
+    // identity instead of the snapshot's. Also push the refreshed tags to sub-profilers that
+    // bake them into state of their own, e.g. NativeSpaceProfiler's OOM export command.
+    this.#identityRefreshListener = () => {
+      this.#tags = getProfilingTags(config)
+      for (const profiler of this.#profilers) {
+        // A refresh failure (e.g. NativeSpaceProfiler re-registering its native OOM handler) must not
+        // propagate: this runs synchronously off the diagnostic channel publish, which the MicroVM
+        // /run HTTP hook fires from inside request handling, and channel.publish() does not catch
+        // subscriber errors.
+        try {
+          profiler.refreshTags?.(this.#tags)
+        } catch (error) {
+          log.error(error)
+        }
+      }
+    }
+    identityRefreshChannel.subscribe(this.#identityRefreshListener)
+
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
@@ -265,6 +286,11 @@ class Profiler extends EventEmitter {
     if (this.#spanFinishListener !== undefined) {
       spanFinishedChannel.unsubscribe(this.#spanFinishListener)
       this.#spanFinishListener = undefined
+    }
+
+    if (this.#identityRefreshListener !== undefined) {
+      identityRefreshChannel.unsubscribe(this.#identityRefreshListener)
+      this.#identityRefreshListener = undefined
     }
 
     for (const profiler of this.#profilers) {
