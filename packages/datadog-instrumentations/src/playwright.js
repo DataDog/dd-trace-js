@@ -9,13 +9,17 @@ const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
 const {
+  EMPTY_EFD_RETRY_POLICY,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -91,8 +95,7 @@ const STATUS_TO_TEST_STATUS = {
 let remainingTestsByFile = {}
 let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
@@ -208,16 +211,8 @@ function getTestEfdKey (test) {
   return [projectKey, repeatEachKey, testFqn].filter(Boolean).join(' ')
 }
 
-function getConfiguredEfdRetryCount () {
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-}
-
 function markEfdManagedTest (test) {
   test._ddIsEfdManagedTest = true
-  test._ddEfdSlowTestRetries = earlyFlakeDetectionSlowTestRetries
   efdManagedTestKeys.add(getTestEfdKey(test))
 }
 
@@ -240,15 +235,18 @@ function registerEfdRetryTest (test) {
   })
 }
 
-function getTestEfdSlowTestRetries (test) {
-  return test._ddEfdSlowTestRetries || earlyFlakeDetectionSlowTestRetries
+/**
+ * @returns {boolean}
+ */
+function shouldRunEarlyFlakeDetection () {
+  return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
 
 function isTestEfdManaged (test) {
   return !!test._ddIsEfdManagedTest || (
     (test._ddIsNew || test._ddIsModified) &&
     !test._ddIsAttemptToFix &&
-    isEarlyFlakeDetectionEnabled
+    shouldRunEarlyFlakeDetection()
   )
 }
 
@@ -264,7 +262,8 @@ function getEfdRetryRepeatEachIndex (fileSuite, projectSuite, retryIndex, retryC
 }
 
 function getEfdRetryCountForTest (test) {
-  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? getConfiguredEfdRetryCount()
+  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ??
+    earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 }
 
 function setEfdRetryCountForTest (test, retryCount) {
@@ -398,12 +397,12 @@ function waitForEfdRetryCount (test) {
   })
 }
 
-function shouldSkipEfdRetry (test) {
+function shouldSkipEfdRetryTest (test) {
   if (!test._ddIsEfdRetry) {
     return false
   }
   const retryCount = test._ddEfdRetryCount ?? efdRetryCountByTestKey.get(getTestEfdKey(test))
-  return retryCount !== undefined && test._ddEfdRetryIndex > retryCount
+  return shouldSkipEfdRetry(test._ddEfdRetryIndex, retryCount)
 }
 
 function getTestProperties (test) {
@@ -685,7 +684,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
-  if (shouldSkipEfdRetry(test)) {
+  if (shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     return
   }
@@ -830,7 +829,7 @@ function testEndHandler ({
     return
   }
 
-  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetry(test)) {
+  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(currentTest => currentTest !== test)
@@ -856,7 +855,7 @@ function testEndHandler ({
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
-    const retryCount = getEfdRetryCount(duration, getTestEfdSlowTestRetries(test))
+    const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
     setEfdRetryCountForTest(test, retryCount)
     if (retryCount === 0) {
       efdSlowAbortedTests.add(testEfdKey)
@@ -1050,7 +1049,7 @@ function prepareDispatcherRun (dispatcher, args) {
     testGroups = testGroups.filter(group => group.tests.length > 0)
   }
 
-  if (isEarlyFlakeDetectionEnabled) {
+  if (shouldRunEarlyFlakeDetection()) {
     testGroups = deferEfdRetryGroups(testGroups)
   }
 
@@ -1271,8 +1270,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       if (!err) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+        earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
@@ -1760,7 +1758,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
+      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
         markEfdManagedTest(impactedTest)
         const fileSuite = getSuiteType(impactedTest, 'file')
         if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {
@@ -1777,7 +1775,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
       ],
-      getConfiguredEfdRetryCount(),
+      earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
       (copiedTest, originalTest, retryIndex) => {
         markEfdRetryTest(copiedTest, retryIndex, originalTest)
         markEfdManagedTest(copiedTest)
@@ -1803,8 +1801,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
-          // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+          // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
           markEfdManagedTest(newTest)
           const fileSuite = getSuiteType(newTest, 'file')
@@ -1818,7 +1816,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         fileSuitesWithNewTestsToProjects,
         isNewTest,
         ['_ddIsNew', '_ddIsEfdRetry'],
-        getConfiguredEfdRetryCount(),
+        earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
           markEfdManagedTest(copiedTest)
@@ -2006,7 +2004,7 @@ function instrumentWorkerMainMethods (workerMain) {
       test.expectedStatus = 'skipped'
     }
     await waitForEfdRetryCount(test)
-    if (shouldSkipEfdRetry(test)) {
+    if (shouldSkipEfdRetryTest(test)) {
       test._ddShouldSkipEfdRetry = true
       test.expectedStatus = 'skipped'
     }
@@ -2118,21 +2116,6 @@ function instrumentWorkerMainMethods (workerMain) {
     await res
 
     const { status, error, annotations, retry, testId } = testInfo
-    const testEfdKey = getTestEfdKey(test)
-    const isEfdManagedTest = isTestEfdManaged(test)
-    if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
-      const duration = test.results?.at(-1)?.duration > 0
-        ? test.results.at(-1).duration
-        : performance.now() - test._ddStartTime
-      const retryCount = getEfdRetryCount(
-        duration,
-        getTestEfdSlowTestRetries(test)
-      )
-      setEfdRetryCountForTest(test, retryCount)
-      if (retryCount === 0) {
-        efdSlowAbortedTests.add(testEfdKey)
-      }
-    }
 
     if (!hasDdProperties && process.send) {
       process.send({
