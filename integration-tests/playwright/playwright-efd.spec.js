@@ -369,6 +369,7 @@ versions.forEach((version) => {
             for (const repeatedTest of repeatedTests) {
               assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
               assert.ok(!(TEST_IS_RETRY in repeatedTest.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in repeatedTest.meta))
               assert.ok(!(TEST_RETRY_REASON in repeatedTest.meta))
             }
           }, 45_000)
