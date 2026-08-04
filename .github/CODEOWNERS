@@ -290,7 +290,9 @@
 /supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
+/integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/integration-tests/webpack/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
@@ -335,8 +337,11 @@
 
 # Language Platform
 /* @DataDog/lang-platform-js
+/openfeature.d.ts @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /benchmark/* @DataDog/lang-platform-js
+/benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/* @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
