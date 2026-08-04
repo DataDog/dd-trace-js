@@ -191,6 +191,7 @@ class CiVisibilityExporter extends BufferingExporter {
     const cachedSkippableSuites = this._testOptimizationHttpCache.readSkippableSuites({
       testLevel: requestConfiguration.testLevel,
       isCoverageReportUploadEnabled: requestConfiguration.isCoverageReportUploadEnabled,
+      isLineCoverageSupported: requestConfiguration.isLineCoverageSupported,
     })
     if (cachedSkippableSuites !== CACHE_MISS) {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites

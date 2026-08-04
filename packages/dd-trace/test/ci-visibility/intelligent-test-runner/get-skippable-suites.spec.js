@@ -114,7 +114,7 @@ function cacheKeyForParams (params) {
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
     params.runtimeName, params.runtimeVersion, params.testLevel, params.custom,
-    params.isCoverageReportUploadEnabled || false,
+    Boolean(params.isCoverageReportUploadEnabled && params.isLineCoverageSupported !== false),
   ])
 }
 
@@ -269,6 +269,36 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(log.debug, 'Number of received skippable %ss: %d', 'suite', 2)
+      sinon.assert.neverCalledWith(
+        log.debug,
+        'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+        sinon.match.any,
+        sinon.match.any,
+        sinon.match.any,
+        sinon.match.any
+      )
+      sinon.assert.notCalled(log.warn)
+      done()
+    })
+  })
+
+  it('should keep suites with missing line coverage when line coverage is unsupported', (done) => {
+    const params = {
+      ...DEFAULT_PARAMS,
+      isCoverageReportUploadEnabled: true,
+      isLineCoverageSupported: false,
+    }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(log.debug, 'Number of received skippable %ss: %d', 'suite', 2)
+      sinon.assert.notCalled(log.warn)
       done()
     })
   })
@@ -388,6 +418,18 @@ describe('parseSkippableSuitesResponse', () => {
     assert.deepStrictEqual(result.skippableSuites, ['suite2.spec.js'])
     assert.strictEqual(result.numReceivedSkippableItems, 2)
     assert.strictEqual(result.numExcludedByMissingLineCoverage, 1)
+  })
+
+  it('keeps missing line coverage when line coverage is unsupported', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE), {
+      testLevel: 'suite',
+      isCoverageReportUploadEnabled: true,
+      isLineCoverageSupported: false,
+    })
+
+    assert.deepStrictEqual(result.skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+    assert.strictEqual(result.numReceivedSkippableItems, 2)
+    assert.strictEqual(result.numExcludedByMissingLineCoverage, 0)
   })
 
   it('validates skippable tests response shape when requested', () => {
