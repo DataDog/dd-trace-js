@@ -18,10 +18,10 @@ import { isMainThread } from 'worker_threads'
 
 // This file must support Node.js 14.13.1 syntax
 
-const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
+const NODE_VERSION = process.versions.node
 
-const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
-const isNode20LoaderWorker = !isMainThread && NODE_MAJOR === 20 && NODE_MINOR === 0
+const brokenLoaders = NODE_VERSION.startsWith('18.0')
+const isNode20LoaderWorker = !isMainThread && NODE_VERSION.startsWith('20.0')
 const useDefaultLoader = brokenLoaders || isNode20LoaderWorker
 // Avoid CommonJS in the loader worker on Node 20.0: https://github.com/nodejs/node/issues/47566
 const loaderHook = useDefaultLoader ? undefined : await import('./loader-hook.mjs?initialize')
