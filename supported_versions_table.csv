@@ -42,6 +42,7 @@ avsc,avsc,5.0.0,5.7.9,True
 aws-sdk,aws-sdk,2.1.35,2.1693.0,True
 bullmq,bullmq,5.66.0,5.80.9,True
 bunyan,bunyan,1.0.0,2.0.5,True
+browser-bunyan,browser-bunyan,1.0.0,1.8.0,True
 cassandra-driver,cassandra-driver,3.0.0,4.9.0,True
 child_process,child_process,22.0.0,26.4.0,True
 connect,connect,2.2.2,3.7.0,True
