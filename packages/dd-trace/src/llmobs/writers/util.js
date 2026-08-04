@@ -7,6 +7,8 @@ const { fetchAgentInfo } = require('../../agent/info')
 
 /**
  * @param {import('../../config/config-base')} config
+ * @param {(agentless: boolean) => void} setWritersAgentlessValue
+ * @returns {void}
  */
 function setAgentStrategy (config, setWritersAgentlessValue) {
   const agentlessEnabled = config.llmobs.agentlessEnabled

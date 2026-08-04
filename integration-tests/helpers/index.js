@@ -182,8 +182,8 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 /**
  * @typedef {childProcess.ChildProcess & {
  *   url: string,
- *   stdout: NodeJS.ReadableStream,
- *   stderr: NodeJS.ReadableStream
+ *   stdout: import('node:stream').Readable,
+ *   stderr: import('node:stream').Readable
  * }} SpawnedProcess
  */
 
@@ -277,7 +277,8 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
- * @param {NodeJS.Signals} [options.signal] - Signal to send before escalating. Defaults to `SIGTERM`.
+ * @param {keyof import('node:os').SignalConstants} [options.signal] - Signal to send before escalating.
+ *   Defaults to `SIGTERM`.
  * @param {number} [options.timeoutMs] - Max wait per signal in milliseconds. Defaults to the stop-proc timeout.
  * @returns {Promise<void>}
  */
@@ -456,7 +457,7 @@ async function execHelperAsync (command, options) {
 
 /**
  * @param {string} tarballPath
- * @param {NodeJS.ProcessEnv} env
+ * @param {typeof process.env} env
  * @returns {Promise<void>}
  */
 async function packTarball (tarballPath, env) {
@@ -485,7 +486,7 @@ async function copyIntegrationTests (integrationTestsPaths, folder) {
  * Only one worker will pack the tarball, others will wait for it to be ready.
  *
  * @param {string} tarballPath - The path where the tarball should be created
- * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
+ * @param {typeof process.env} env - The environment to use for the pack command
  * @returns {Promise<void>}
  */
 async function packTarballWithLock (tarballPath, env) {
@@ -881,7 +882,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 /**
  * @param {number} port
- * @returns {NodeJS.ProcessEnv}
+ * @returns {typeof process.env}
  */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
@@ -899,7 +900,7 @@ function getCiVisAgentlessConfig (port) {
 
 /**
  * @param {number} port
- * @returns {NodeJS.ProcessEnv}
+ * @returns {typeof process.env}
  */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js

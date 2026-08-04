@@ -369,7 +369,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
-    let envVars = /** @type {NodeJS.ProcessEnv} */ ({})
+    let envVars = /** @type {typeof process.env} */ ({})
     context(`(${reportingOption}) can run and report`, () => {
       beforeEach(() => {
         if (reportingOption === 'agentless') {

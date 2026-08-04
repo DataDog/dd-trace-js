@@ -1,10 +1,12 @@
 'use strict'
 
+/** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
+
 var version = require('./package.json').version
 // @ts-expect-error
-var /** @type {RegExpMatchArray} */ ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
+var /** @type {RegExpMatch} */ ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
 // @ts-expect-error
-var /** @type {RegExpMatchArray} */ nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+var /** @type {RegExpMatch} */ nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
   VERSION: version,

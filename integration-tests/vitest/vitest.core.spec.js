@@ -470,7 +470,7 @@ versions.forEach((version) => {
     /**
      * Runs Vitest typechecking with TIA settings and gathers all TIA payloads.
      *
-     * @param {{ suitesToSkip: string[], testFilter?: string, env?: NodeJS.ProcessEnv }} options
+     * @param {{ suitesToSkip: string[], testFilter?: string, env?: typeof process.env }} options
      * @param {(payloads: object[]) => void} assertPayloads
      * @returns {Promise<void>}
      */

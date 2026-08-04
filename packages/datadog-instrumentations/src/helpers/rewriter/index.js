@@ -87,10 +87,12 @@ function rewrite (content, filename, format, target) {
   return content
 }
 
+/** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
+
 /**
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
- * @param {string | ArrayBuffer | ArrayBufferView} source
+ * @param {string | ArrayBuffer | BufferView} source
  * @returns {string}
  */
 function getSourceText (source) {
