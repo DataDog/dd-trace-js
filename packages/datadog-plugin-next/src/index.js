@@ -5,7 +5,7 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { HTTP_ENDPOINT, HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
@@ -136,7 +136,8 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
-    setHttpParentRoute(httpParentSpan, req.method, page, isStatic, this.config.resourceRenamingEnabled)
+    web.setRouteOrEndpointTag(req)
+    setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
     web.setRoute(req, page)
   }
 
@@ -163,7 +164,7 @@ function normalizeAppPath (page) {
   return page
 }
 
-function setHttpParentRoute (span, method, page, isStatic, resourceRenamingEnabled) {
+function setHttpParentRoute (span, method, page, isStatic) {
   if (!span) return
   const currentRoute = span.context().getTag(HTTP_ROUTE)
 
@@ -171,7 +172,6 @@ function setHttpParentRoute (span, method, page, isStatic, resourceRenamingEnabl
   if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
-  if (resourceRenamingEnabled) span.setTag(HTTP_ENDPOINT, page)
   span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
   nextParentRoutes.set(span, page)
 }

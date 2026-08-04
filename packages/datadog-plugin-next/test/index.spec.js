@@ -1076,9 +1076,12 @@ describe('compiled Next runtimes', () => {
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
     })
 
-    it('does not add an HTTP endpoint when resource renaming is disabled', async () => {
+    it('uses HTTP resource renaming for dynamic App Routes', async () => {
+      agent.reload('next', { resourceRenamingEnabled: false })
+      agent.reload('http', { client: false, resourceRenamingEnabled: true })
+
       class AppRouteRouteModule {
-        definition = { pathname: '/api/http-parent' }
+        definition = { pathname: '/api/users/[id]' }
 
         handle () {
           return Promise.resolve({ status: 200 })
@@ -1086,56 +1089,29 @@ describe('compiled Next runtimes', () => {
       }
       getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
 
-      const httpParentSpan = tracer.startSpan('web.request', {
-        integrationName: 'http',
-        tags: { 'http.method': 'GET' },
+      const routeModule = new AppRouteRouteModule()
+      const routeServer = http.createServer(async (req, res) => {
+        const response = await routeModule.handle(req, {})
+        res.writeHead(response.status)
+        res.end()
       })
+      await new Promise(resolve => routeServer.listen(0, '127.0.0.1', resolve))
+      const routePort = routeServer.address().port
       const trace = agent.assertSomeTraces(traces => {
         const httpSpan = traces[0].find(span => span.name === 'web.request')
         assert.ok(httpSpan)
-        assert.strictEqual(httpSpan.resource, 'GET /api/http-parent')
-        assert.strictEqual(httpSpan.meta['http.route'], '/api/http-parent')
-        assert.strictEqual(httpSpan.meta['http.endpoint'], undefined)
+        assert.strictEqual(httpSpan.resource, 'GET /api/users/[id]')
+        assert.strictEqual(httpSpan.meta['http.route'], '/api/users/[id]')
+        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/users/{param:int}')
       })
 
-      await storage('legacy').run(
-        { span: httpParentSpan },
-        () => new AppRouteRouteModule().handle({ headers: {}, method: 'GET', url: '/api/http-parent' }, {})
-      )
-      httpParentSpan.finish()
-      await trace
-    })
-
-    it('preserves the HTTP endpoint when resource renaming is enabled', async () => {
-      agent.reload('next', { resourceRenamingEnabled: true })
-
-      class AppRouteRouteModule {
-        definition = { pathname: '/api/http-parent-enabled' }
-
-        handle () {
-          return Promise.resolve({ status: 200 })
-        }
+      try {
+        const response = await axios.get(`http://127.0.0.1:${routePort}/api/users/123`)
+        assert.strictEqual(response.status, 200)
+        await trace
+      } finally {
+        await new Promise(resolve => routeServer.close(resolve))
       }
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
-
-      const httpParentSpan = tracer.startSpan('web.request', {
-        integrationName: 'http',
-        tags: { 'http.method': 'GET' },
-      })
-      const trace = agent.assertSomeTraces(traces => {
-        const httpSpan = traces[0].find(span => span.name === 'web.request')
-        assert.ok(httpSpan)
-        assert.strictEqual(httpSpan.resource, 'GET /api/http-parent-enabled')
-        assert.strictEqual(httpSpan.meta['http.route'], '/api/http-parent-enabled')
-        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/http-parent-enabled')
-      })
-
-      await storage('legacy').run(
-        { span: httpParentSpan },
-        () => new AppRouteRouteModule().handle({ headers: {}, method: 'GET', url: '/api/http-parent-enabled' }, {})
-      )
-      httpParentSpan.finish()
-      await trace
     })
 
     it('records Pages API errors and status without an existing request store', async () => {
