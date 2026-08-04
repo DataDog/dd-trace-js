@@ -280,7 +280,21 @@ describe('LogSubmissionPlugin', () => {
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
     clock.tick(batchFlushInterval)
 
-    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my%20service%26prod')
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my+service%26prod')
+  })
+
+  it('encodes malformed Unicode in service names', () => {
+    plugin.configure({
+      enabled: true,
+      DD_API_KEY: 'api-key',
+      service: 'my\uD800service',
+      site: 'datadoghq.com',
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+    clock.tick(batchFlushInterval)
+
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my%EF%BF%BDservice')
   })
 
   it('flushes pending logs before applying new configuration', () => {
@@ -415,6 +429,37 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(request.firstCall.args[1].url.href, 'https://http-intake.logs.datadoghq.eu/')
   })
 
+  it('uses a valid configured URL when the site is invalid', () => {
+    plugin.configure({
+      enabled: true,
+      DD_AGENTLESS_LOG_SUBMISSION_URL: 'http://localhost:8126',
+      DD_API_KEY: 'api-key',
+      service: 'my-service',
+      site: 'invalid site',
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+    clock.tick(batchFlushInterval)
+
+    assert.strictEqual(request.firstCall.args[1].url.href, 'http://localhost:8126/')
+  })
+
+  it('stays disabled when no valid intake URL can be resolved', () => {
+    plugin.configure(false)
+    plugin.configure({
+      enabled: true,
+      DD_API_KEY: 'api-key',
+      service: 'my-service',
+      site: 'invalid site',
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+    clock.tick(batchFlushInterval)
+
+    sinon.assert.notCalled(request)
+    sinon.assert.calledWithExactly(errorLog, 'Could not parse automatic log submission site: %s', 'invalid site')
+  })
+
   it('logs request errors', () => {
     const error = new Error('boom')
     request.callsFake((data, options, callback) => callback(error))
@@ -479,6 +524,6 @@ describe('LogSubmissionPlugin', () => {
     addTransportCh.publish(logger)
 
     const [{ options }] = logger.add.firstCall.args
-    assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my%20service%26prod')
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service%26prod')
   })
 })

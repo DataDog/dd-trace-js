@@ -22,24 +22,25 @@ const BATCH_FLUSH_INTERVAL = 1000
 
 /**
  * @param {import('../../config/config-base')} config
- * @returns {URL}
+ * @returns {URL | undefined}
  */
 function getLogSubmissionUrl (config) {
-  const defaultUrl = new URL(`https://http-intake.logs.${config.site}`)
+  if (config.DD_AGENTLESS_LOG_SUBMISSION_URL) {
+    try {
+      const url = new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
+      if (url.protocol === 'http:' || url.protocol === 'https:') return url
 
-  if (!config.DD_AGENTLESS_LOG_SUBMISSION_URL) {
-    return defaultUrl
+      log.error('Unsupported automatic log submission URL protocol: %s', url.protocol)
+    } catch {
+      log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
+    }
   }
 
   try {
-    const url = new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
-    if (url.protocol === 'http:' || url.protocol === 'https:') return url
-
-    log.error('Unsupported automatic log submission URL protocol: %s', url.protocol)
+    return new URL(`https://http-intake.logs.${config.site}`)
   } catch {
-    log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
+    log.error('Could not parse automatic log submission site: %s', config.site)
   }
-  return defaultUrl
 }
 
 /**
@@ -48,7 +49,7 @@ function getLogSubmissionUrl (config) {
  * @returns {string}
  */
 function getLogSubmissionPath (source, service) {
-  return `/api/v2/logs?ddsource=${source}&service=${encodeURIComponent(service)}`
+  return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service })}`
 }
 
 /**
@@ -133,14 +134,15 @@ class LogSubmissionPlugin extends Plugin {
       this.#flush()
     }
 
-    super.configure(config)
+    const isEnabled = typeof config === 'boolean' ? config : config.enabled
+    const logSubmissionUrl = isEnabled && typeof config !== 'boolean' ? getLogSubmissionUrl(config) : undefined
+    this.#logSubmissionUrl = logSubmissionUrl
+    super.configure(isEnabled && !logSubmissionUrl ? false : config)
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     if (this._enabled) {
-      this.#logSubmissionUrl = getLogSubmissionUrl(this.config)
       beforeExitHandlers.add(this.#beforeExitHandler)
     } else {
-      this.#logSubmissionUrl = undefined
       beforeExitHandlers.delete(this.#beforeExitHandler)
     }
   }

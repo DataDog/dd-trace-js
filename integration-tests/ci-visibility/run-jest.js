@@ -110,6 +110,10 @@ if (process.env.JEST_BAIL) {
   options.bail = true
 }
 
+if (process.env.TEST_SEQUENCER) {
+  options.testSequencer = process.env.TEST_SEQUENCER
+}
+
 if (process.env.USE_JEST_RUN) {
   jest.run(getJestRunArgs(options)).catch((error) => {
     // eslint-disable-next-line no-console

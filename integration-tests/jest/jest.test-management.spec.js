@@ -3162,6 +3162,57 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
       })
     }
+
+    it(`should instrument ${loggerName} after another suite mocks it`, async () => {
+      let testOutput = ''
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), (payloads) => {
+          assert.strictEqual(payloads.length, 1, testOutput)
+
+          const [{ headers, logMessage, url }] = payloads
+          assert.strictEqual(headers['content-type'], 'application/json')
+          assert.strictEqual(headers['dd-api-key'], 'api-key')
+          assert.strictEqual(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
+          assert.strictEqual(logMessage.length, 1)
+
+          const [{ dd, msg }] = logMessage
+          assert.strictEqual(msg, 'real logger after mock')
+          assert.strictEqual(dd.service, 'my-service')
+          assert.match(dd.trace_id, /^\d+$/)
+          assert.match(dd.span_id, /^\d+$/)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+            DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+            DD_API_KEY: 'api-key',
+            DD_SERVICE: 'my-service',
+            TEST_LOGGER: loggerName,
+            TEST_MOCK_METHOD: 'doMock',
+            TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
+            TESTS_TO_RUN: 'jest-mock-bypass-require/(runtime-mock|z-real-logger)-test',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+      ])
+
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
   }
 
   context('seed suffix normalization', () => {

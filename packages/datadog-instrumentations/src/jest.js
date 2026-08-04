@@ -3068,10 +3068,23 @@ function recordMockedFile (suiteFilePath, moduleName) {
   if (!suiteFilePath || typeof moduleName !== 'string') return
 
   const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-  const suiteDir = path.dirname(suiteFilePath)
-  const mockPath = path.resolve(suiteDir, moduleName)
+  const mockPath = path.resolve(path.dirname(suiteFilePath), moduleName)
   existingMockedFiles.push(mockPath)
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
+}
+
+/**
+ * @param {string} suiteFilePath
+ * @param {string} moduleName
+ * @returns {boolean}
+ */
+function isMockedFile (suiteFilePath, moduleName) {
+  if (!suiteFilePath || typeof moduleName !== 'string') return false
+
+  const mockedFiles = testSuiteMockedFiles.get(suiteFilePath)
+  if (!mockedFiles) return false
+
+  return mockedFiles.includes(path.resolve(path.dirname(suiteFilePath), moduleName))
 }
 
 const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|setMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
@@ -3113,8 +3126,6 @@ function wrapJestObject (jestObject, suiteFilePath) {
 
   for (const methodName of JEST_CJS_MOCK_METHODS) {
     shimmer.wrap(jestObject, methodName, mockMethod => function (moduleName) {
-      // If the library is explicitly mocked, we don't want to bypass jest's own require engine.
-      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
       recordMockedFile(suiteFilePath, moduleName)
       return mockMethod.apply(this, arguments)
     })
@@ -3254,7 +3265,10 @@ addHook({
     }
     try {
       // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+      if (
+        LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName) &&
+        !isMockedFile(this._testPath || from, moduleName)
+      ) {
         // To bypass jest's own require engine
         return requireOutsideJestRequireEngine(this, moduleName)
       }
