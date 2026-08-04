@@ -591,13 +591,14 @@ class OpenAIAgentsIntegration {
 
   /**
    * Release a structural parent and iteratively prune any ended, childless
-   * ancestors. The walk is bounded for the same reason as ancestry lookup.
+   * ancestors. Each iteration deletes one node, so even a cyclic parent chain
+   * terminates when it reaches the first node it already removed.
    *
    * @param {string | undefined | null} parentId
    */
   #releaseUntracedParent (parentId) {
     let currentId = parentId
-    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+    while (currentId != null) {
       const info = this.#untracedSpans.get(currentId)
       if (!info || info.activeChildCount === 0) return
 
