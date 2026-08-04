@@ -58,12 +58,17 @@ function getWinstonLogSubmissionParameters (config, url) {
 function serializeLogMessage (message) {
   if (typeof message === 'string') return message
 
-  const seen = new WeakSet()
-  return JSON.stringify(message, (key, value) => {
+  const ancestors = []
+  return JSON.stringify(message, function (key, value) {
     if (value === null || typeof value !== 'object') return value
-    if (seen.has(value)) return '[Circular]'
 
-    seen.add(value)
+    while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+      ancestors.pop()
+    }
+
+    if (ancestors.includes(value)) return '[Circular]'
+
+    ancestors.push(value)
     return value
   })
 }

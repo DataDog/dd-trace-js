@@ -77,6 +77,26 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=bunyan&service=my-service')
   })
 
+  it('preserves repeated non-circular bunyan objects', () => {
+    const shared = { id: 7 }
+    const record = {
+      level: 30,
+      msg: 'hello',
+      left: shared,
+      right: shared,
+    }
+
+    logSubmissionCh.publish({ source: 'bunyan', message: record })
+
+    sinon.assert.calledOnce(request)
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [{
+      level: 30,
+      msg: 'hello',
+      left: { id: 7 },
+      right: { id: 7 },
+    }])
+  })
+
   it('uses the configured intake URL', () => {
     plugin.configure({
       enabled: true,
