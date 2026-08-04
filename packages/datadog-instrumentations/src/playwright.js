@@ -1638,6 +1638,30 @@ addHook({
 })
 
 /**
+ * @typedef {Record<string, unknown>} PlaywrightTest
+ */
+
+/**
+ * @typedef {Record<string, unknown>} PlaywrightSuite
+ */
+
+/**
+ * @typedef {{ _fullProject: unknown, _addSuite: (suite: unknown) => void }} PlaywrightProjectSuite
+ */
+
+/**
+ * @typedef {(
+ *   copiedTest: PlaywrightTest, originalTest: PlaywrightTest, repeatEachIndex: number
+ * ) => void} ConfigureCopiedTest
+ */
+
+/**
+ * @typedef {(
+ *   fileSuite: PlaywrightSuite, projectSuite: PlaywrightProjectSuite, repeatEachIndex: number, numRetries: number
+ * ) => number} GetRetryRepeatEachIndex
+ */
+
+/**
  * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
  * as playwright could change it at any time.
  *
@@ -1650,6 +1674,13 @@ addHook({
  * - we clone each of these file suites for each repeat index
  * - we execute `applyRepeatEachIndex` for each of these cloned file suites
  * - we add the cloned file suites to the project suite
+ *
+ * @param {Map<PlaywrightSuite, PlaywrightProjectSuite>} fileSuitesWithTestsToRetry
+ * @param {(test: PlaywrightTest) => unknown} filterTest
+ * @param {Array<string | ((test: PlaywrightTest) => unknown)>} tagsToApply
+ * @param {number} numRetries
+ * @param {ConfigureCopiedTest} [configureCopiedTest]
+ * @param {GetRetryRepeatEachIndex} [getRetryRepeatEachIndex]
  */
 function applyRetriesToTests (
   fileSuitesWithTestsToRetry,

@@ -211,9 +211,23 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 /**
+ * @typedef {{
+ *   methodName: string,
+ *   args: unknown[],
+ *   basePath?: string,
+ *   result?: Record<string, unknown>,
+ *   error?: unknown,
+ * }} OpenAiContext
+ */
+
+/**
  * For streamed responses, we need to accumulate all of the content in
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
+ *
+ * @param {{ headers: unknown, url: string }} response
+ * @param {{ method: string }} options
+ * @param {OpenAiContext} ctx
  */
 function wrapStreamIterator (response, options, ctx) {
   return function (itr) {
