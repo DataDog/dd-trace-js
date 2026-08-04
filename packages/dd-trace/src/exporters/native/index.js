@@ -10,6 +10,9 @@ const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+// The JS encoder flushes at 8 MiB; libdatadog exposes no pre-serialization byte
+// count. Bound the full span objects retained during the batching window instead.
+const MAX_PENDING_SPANS = 2000
 
 // Mirrors the legacy AgentWriter so operators see the same tracer-health
 // metrics on the native export path. The native `sendPreparedChunk` does not
@@ -309,7 +312,7 @@ class NativeExporter {
 
     const { flushInterval } = this._config
 
-    if (flushInterval === 0) {
+    if (flushInterval === 0 || this._pendingSpans.length >= MAX_PENDING_SPANS) {
       this.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
@@ -385,12 +388,15 @@ class NativeExporter {
   }
 
   #finishSend () {
-    if (this._pendingSpanChunks.length > 0) {
-      this.flush()
-    } else {
+    if (this._pendingSpanChunks.length === 0) {
       this.#finishFlushCallbacks()
       this.#finishUrlUpdateCallbacks()
+      return
     }
+
+    // Explicit and elapsed flushes clear the timer. Ordinary traffic keeps its
+    // existing timer so a send completion does not bypass the batching window.
+    if (this.#timer === undefined) this.flush()
   }
 
   #handleSendError (err) {
@@ -520,9 +526,8 @@ class NativeExporter {
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        // Drain any spans that arrived while the send was in flight. Flush
-        // callbacks wait until the exporter is idle so explicit flush endpoints
-        // only acknowledge once all queued sends have reached the agent.
+        // Flush callbacks wait until the exporter is idle so explicit flush
+        // endpoints only acknowledge once all queued sends have reached the agent.
         this.#finishSend()
       }, (err) => {
         this.#handleSendError(err)

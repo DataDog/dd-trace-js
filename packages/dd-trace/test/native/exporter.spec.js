@@ -306,6 +306,17 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
     })
 
+    it('flushes when the pending span cap is reached', () => {
+      const spans = []
+      for (let i = 1; i < 2000; i++) spans.push(createMockSpan(BigInt(i)))
+
+      exporter.export(spans)
+      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
+
+      exporter.export([createMockSpan(2000n)])
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+    })
+
     it('resets native state immediately when explicitly requested while idle', () => {
       exporter._resetNativeStateWhenIdle()
 
@@ -607,8 +618,7 @@ describe('NativeExporter', () => {
       resolveSend('unchanged')
     })
 
-    it('should re-flush queued spans after in-flight settles', async () => {
-      // Spans queued during a send should drain on settle, not stay buffered.
+    it('waits for the scheduled flush when an in-flight send settles before the interval', async () => {
       let resolveSend
       nativeSpans.flushSpansGrouped
         .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
@@ -617,12 +627,36 @@ describe('NativeExporter', () => {
       exporter.export([createMockSpan(1n)])
       exporter.flush()
       exporter.export([createMockSpan(2n)])
-      exporter.flush()
       assert.strictEqual(exporter._pendingSpans.length, 1)
 
       resolveSend('unchanged')
-      // Drain the .then chain on the first send and the chained re-flush.
       await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      assert.strictEqual(exporter._pendingSpans.length, 1)
+
+      await clock.tickAsync(config.flushInterval)
+
+      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
+      assert.strictEqual(exporter._pendingSpans.length, 0)
+    })
+
+    it('re-flushes queued spans when their scheduled interval elapsed during an in-flight send', async () => {
+      let resolveSend
+      nativeSpans.flushSpansGrouped
+        .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
+        .onSecondCall().resolves('unchanged')
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      exporter.export([createMockSpan(2n)])
+
+      await clock.tickAsync(config.flushInterval)
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      assert.strictEqual(exporter._pendingSpans.length, 1)
+
+      resolveSend('unchanged')
       await clock.tickAsync(0)
 
       sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
