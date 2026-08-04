@@ -428,6 +428,10 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
 
     // We remove the suites that we skip through ITR
+    // Mocha normally applies exclusivity after this asynchronous configuration step.
+    if (runner.suite.hasOnly()) {
+      runner.suite.filterOnly()
+    }
     const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
@@ -1054,7 +1058,7 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
+  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -1100,11 +1104,11 @@ addHook({
           }
         }
         isSuitesSkipped = skippedFiles.length > 0
-        areAllSuitesSkipped = files.length > 0 && filteredFiles.length === 0
+        areAllSuitesSkipped = options.grep === undefined && files.length > 0 && filteredFiles.length === 0
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
-        run.apply(this, [onRunDone, { files: filteredFiles }])
+        run.apply(this, [onRunDone, { files: filteredFiles, options }])
       } else {
         run.apply(this, arguments)
       }

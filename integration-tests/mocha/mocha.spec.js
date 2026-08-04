@@ -2376,6 +2376,109 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
     })
 
+    it('says TIA skipped all tests when it skips the exclusive suite', async () => {
+      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-only.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: suiteFile },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
+    })
+
+    for (const { name, grepArgument, expectedMessageCount } of [
+      {
+        name: 'says TIA skipped all tests in parallel mode without grep',
+        grepArgument: '',
+        expectedMessageCount: 1,
+      },
+      {
+        name: 'does not say TIA skipped all tests in parallel mode when grep selects no tests',
+        grepArgument: " --grep 'does not match'",
+        expectedMessageCount: 0,
+      },
+    ]) {
+      onlyLatestIt(name, async () => {
+        const suiteFiles = [
+          'ci-visibility/test/ci-visibility-test.js',
+          'ci-visibility/test/ci-visibility-test-2.js',
+        ]
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: false,
+          tests_skipping: true,
+        })
+        receiver.setSuitesToSkip(suiteFiles.map(suite => ({
+          type: 'suite',
+          attributes: { suite },
+        })))
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test')
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(tests.length, 0)
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+          grepArgument +
+          ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const [, [exitCode]] = await Promise.all([
+          eventsPromise,
+          once(childProcess, 'close'),
+        ])
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.strictEqual(
+          testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+          expectedMessageCount,
+          testOutput
+        )
+      })
+    }
+
     it('does not skip tests if git metadata upload fails', (done) => {
       receiver.setSuitesToSkip([{
         type: 'suite',
