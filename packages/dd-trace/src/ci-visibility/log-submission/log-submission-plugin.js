@@ -102,6 +102,9 @@ class LogSubmissionPlugin extends Plugin {
   #batches = new Map()
   #beforeExitHandler = () => this.#flush()
   #logSubmissionUrl
+  /** @type {Array<() => void>} */
+  #requestCompletions = []
+  #pendingRequests = 0
   #timer
 
   constructor (...args) {
@@ -116,7 +119,9 @@ class LogSubmissionPlugin extends Plugin {
     })
 
     this.addSub('ci:log-submission:log', (payload) => this.#enqueueLog(payload))
-    this.addSub('ci:playwright:test:finish', () => this.#flush())
+    this.addSub('ci:playwright:test:finish', ({ registerCompletion } = {}) => {
+      this.#flush(registerCompletion)
+    })
   }
 
   /**
@@ -189,14 +194,20 @@ class LogSubmissionPlugin extends Plugin {
   /**
    * Flushes every source-specific batch.
    *
+   * @param {(() => (() => void)) | undefined} registerCompletion
    * @returns {void}
    */
-  #flush () {
+  #flush (registerCompletion) {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
     const batches = this.#batches
     this.#batches = new Map()
+
+    this.#pendingRequests += batches.size
+    if (registerCompletion && this.#pendingRequests > 0) {
+      this.#requestCompletions.push(registerCompletion())
+    }
 
     for (const [source, batch] of batches) {
       const options = {
@@ -209,11 +220,33 @@ class LogSubmissionPlugin extends Plugin {
         url: this.#logSubmissionUrl,
       }
 
-      request(`[${batch.messages.join(',')}]`, options, (error) => {
-        if (error) {
-          log.error('Error submitting %s logs', source, error)
-        }
-      })
+      try {
+        request(`[${batch.messages.join(',')}]`, options, error => this.#finishRequest(source, error))
+      } catch (error) {
+        this.#finishRequest(source, error)
+      }
+    }
+  }
+
+  /**
+   * Records a completed request and releases Playwright when every pending request has settled.
+   *
+   * @param {string} source
+   * @param {Error | null | undefined} error
+   * @returns {void}
+   */
+  #finishRequest (source, error) {
+    if (error) {
+      log.error('Error submitting %s logs', source, error)
+    }
+
+    this.#pendingRequests--
+    if (this.#pendingRequests !== 0) return
+
+    const requestCompletions = this.#requestCompletions
+    this.#requestCompletions = []
+    for (const complete of requestCompletions) {
+      complete()
     }
   }
 }

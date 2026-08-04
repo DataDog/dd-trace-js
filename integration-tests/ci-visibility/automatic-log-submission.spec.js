@@ -7,7 +7,6 @@ const { once } = require('events')
 const {
   sandboxCwd,
   useSandbox,
-  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
@@ -15,13 +14,12 @@ const {
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
-const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
 
 describe('test optimization automatic log submission', () => {
-  let cwd, receiver, childProcess, webAppPort
+  let cwd, receiver, childProcess
   let testOutput = ''
 
   useSandbox([
@@ -34,24 +32,8 @@ describe('test optimization automatic log submission', () => {
     playwrightDependency,
   ], true)
 
-  before(async () => {
+  before(() => {
     cwd = sandboxCwd()
-    installPlaywrightChromium(cwd)
-    await new Promise((resolve, reject) => {
-      webAppServer.listen(0, () => {
-        const address = webAppServer.address()
-        if (!address || typeof address === 'string') {
-          reject(new Error('Failed to determine web app server port'))
-          return
-        }
-        webAppPort = address.port
-        resolve()
-      })
-    })
-  })
-
-  after(async () => {
-    await new Promise(resolve => webAppServer.close(resolve))
   })
 
   beforeEach(async function () {
@@ -81,7 +63,6 @@ describe('test optimization automatic log submission', () => {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
       getExtraEnvVars: () => ({
-        PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
         DD_TRACE_DEBUG: '1',
       }),

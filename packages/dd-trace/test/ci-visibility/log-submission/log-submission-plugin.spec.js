@@ -183,14 +183,90 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(beforeExitHandlers.has(beforeExitHandler), false)
   })
 
-  it('flushes pending batches when a Playwright test finishes', () => {
+  it('waits for pending batches to finish when a Playwright test finishes', async () => {
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => {
+      Promise.resolve().then(() => callback(null))
+    })
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
     sinon.assert.notCalled(request)
 
-    playwrightTestFinishCh.publish({})
+    playwrightTestFinishCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
 
     sinon.assert.calledOnce(request)
     assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [{ msg: 'hello' }])
+    assert.strictEqual(hasCompleted, false)
+
+    await Promise.resolve()
+    assert.strictEqual(hasCompleted, true)
+  })
+
+  it('waits for batches already in flight when a Playwright test finishes', () => {
+    const finishRequests = []
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => {
+      finishRequests.push(callback)
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"first"}\n' })
+    clock.tick(batchFlushInterval)
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
+
+    playwrightTestFinishCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    sinon.assert.calledTwice(request)
+    assert.strictEqual(hasCompleted, false)
+
+    finishRequests[0](null)
+    assert.strictEqual(hasCompleted, false)
+
+    finishRequests[1](null)
+    assert.strictEqual(hasCompleted, true)
+  })
+
+  it('completes a Playwright test when log submission fails', async () => {
+    const error = new Error('boom')
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => {
+      Promise.resolve().then(() => callback(error))
+    })
+    logSubmissionCh.publish({ source: 'bunyan', message: { msg: 'hello' } })
+
+    playwrightTestFinishCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    assert.strictEqual(hasCompleted, false)
+    await Promise.resolve()
+
+    assert.strictEqual(hasCompleted, true)
+    sinon.assert.calledWithExactly(errorLog, 'Error submitting %s logs', 'bunyan', error)
+  })
+
+  it('completes a Playwright test when starting log submission throws', () => {
+    const error = new Error('boom')
+    let hasCompleted = false
+    request.throws(error)
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+
+    playwrightTestFinishCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    assert.strictEqual(hasCompleted, true)
+    sinon.assert.calledWithExactly(errorLog, 'Error submitting %s logs', 'pino', error)
   })
 
   it('encodes service names in submitted log paths', () => {

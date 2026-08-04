@@ -30,7 +30,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
-const { getChannelPromise } = require('./helpers/channel')
+const { getChannelBarrierPromise, getChannelPromise } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -2176,7 +2176,7 @@ function instrumentWorkerMainMethods (workerMain) {
       testStatus: STATUS_TO_TEST_STATUS[status],
     })
 
-    await getChannelPromise(testFinishCh, {
+    await getChannelBarrierPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
       error,
