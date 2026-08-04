@@ -7,6 +7,14 @@ const { matchesLiteralGlob } = require('../literal-glob')
 const { maskJavaScriptComments, maskJavaScriptNonCode } = require('../source-text')
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
+const WORKSPACE_CONFIG_PATTERN = /^vitest\.workspace\.[cm]?[jt]s$/
+const DIRECT_EXPORT_PATTERN = /(?:export\s+default|module\s*\.\s*exports\s*=)\s*$/
+const CONFIG_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineConfig\s*\(\s*$/
+const WORKSPACE_ARRAY_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineWorkspace\s*\(\s*$/
+const PROJECT_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineProject\s*\(\s*$/
 const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
 
 /**
@@ -55,17 +63,22 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
     if (source === undefined) continue
     for (const property of getLiteralStringProperties(source, 'name')) {
       if (property.value !== name) continue
-      const projectObject = getProjectObject(source, property.index)
-      if (!projectObject) continue
-      const projectName = getLiteralProperty(projectObject, 'name')
+      const project = getProjectObject(
+        source,
+        property.index,
+        WORKSPACE_CONFIG_PATTERN.test(path.basename(configFile))
+      )
+      if (!project) continue
+      const projectName = getLiteralProperty(project.source, 'name')
       if (projectName.dynamic || projectName.value !== name) continue
       const binding = getBindingFromObject({
         bindingRoot: effectiveRoot,
         configFile,
         projectFiles,
-        projectObject,
+        projectEntry: project.entrySource,
+        projectObject: project.source,
         projectRoot,
-        source,
+        standaloneProject: project.standalone,
       })
       if (binding.error) return binding
       bindings.push(binding)
@@ -102,15 +115,22 @@ function getSelectedConfigFiles ({ configFiles, effectiveRoot, projectRoot, runn
   }
 }
 
-function getBindingFromObject ({ bindingRoot, configFile, projectFiles, projectObject, projectRoot, source }) {
-  if (/\.\.\./.test(maskJavaScriptNonCode(projectObject))) {
+function getBindingFromObject ({
+  bindingRoot,
+  configFile,
+  projectFiles,
+  projectEntry,
+  projectObject,
+  projectRoot,
+  standaloneProject,
+}) {
+  if (/\.\.\./.test(maskJavaScriptNonCode(projectEntry))) {
     return { error: 'the selected Vitest project uses dynamic spread composition' }
   }
 
   const rootProperty = getLiteralProperty(projectObject, 'root')
   if (rootProperty.dynamic) return { error: 'the selected Vitest project has a dynamic root' }
 
-  const standaloneProject = /\bdefineProject\s*\(/.test(maskJavaScriptNonCode(source))
   const rootBase = standaloneProject ? path.dirname(configFile) : bindingRoot
   const root = rootProperty.value
     ? path.resolve(rootBase, rootProperty.value)
@@ -149,17 +169,157 @@ function matchesProjectFile (project, filename) {
   return included && !project.excludePatterns.some(pattern => matchesLiteralGlob(normalized, pattern))
 }
 
-function getProjectObject (source, nameIndex) {
-  const ranges = getObjectRanges(source)
+/**
+ * Returns the literal project object that owns a matching name property.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {number} nameIndex matching name property offset
+ * @param {boolean} workspaceConfig whether the source is a Vitest workspace config
+ * @returns {{entrySource: string, source: string, standalone: boolean}|undefined} bounded project object
+ */
+function getProjectObject (source, nameIndex, workspaceConfig) {
+  const objectRanges = getObjectRanges(source)
+  const ranges = objectRanges
     .filter(range => range.start < nameIndex && range.end > nameIndex)
     .sort((left, right) => (left.end - left.start) - (right.end - right.start))
   if (ranges.length === 0) return
 
-  const selected = ranges[1] || ranges[0]
-  return source.slice(selected.start + 1, selected.end)
+  // Vitest accepts both `{ name }` and `{ test: { name } }` project entries.
+  const inner = ranges[0]
+  const parent = ranges[1]
+  const parentPrefix = parent && maskJavaScriptComments(source.slice(parent.start + 1, inner.start))
+  const nestedTestObject = /(?:^|,)\s*(?:test|(["'])test\1)\s*:\s*$/.test(parentPrefix || '')
+  if (nestedTestObject &&
+    getDirectPropertyPositions(source.slice(parent.start + 1, parent.end), 'test').length !== 1) return
+  const selected = nestedTestObject ? parent : inner
+  const standalone = isStandaloneProjectObject(source, selected)
+  if (!standalone &&
+    !isTestProjectsEntry(source, selected, objectRanges) &&
+    !(workspaceConfig && isWorkspaceProjectEntry(source, selected))) return
+  return {
+    entrySource: source.slice(selected.start + 1, selected.end),
+    source: source.slice(inner.start + 1, inner.end),
+    standalone,
+  }
 }
 
+/**
+ * Reports whether an object is the direct literal argument to defineProject.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {boolean} whether the object is a standalone project
+ */
+function isStandaloneProjectObject (source, range) {
+  const before = maskJavaScriptNonCode(source.slice(0, range.start))
+  const after = maskJavaScriptNonCode(source.slice(range.end + 1))
+  return PROJECT_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after)
+}
+
+/**
+ * Reports whether an object is a direct entry in a literal test.projects array.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @param {{end: number, start: number}[]} objectRanges source object ranges
+ * @returns {boolean} whether the object is a bounded project entry
+ */
+function isTestProjectsEntry (source, range, objectRanges) {
+  const projectsArray = getDirectContainingArray(source, range)
+  if (!projectsArray) return false
+
+  const containers = objectRanges
+    .filter(object => object.start < projectsArray.start && object.end > projectsArray.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
+  const testObject = containers[0]
+  const configObject = containers[1]
+  if (!testObject || !configObject) return false
+
+  const projectsPrefix = maskJavaScriptComments(source.slice(testObject.start + 1, projectsArray.start))
+  if (!/(?:^|,)\s*(?:projects|"projects"|'projects')\s*:\s*$/.test(projectsPrefix) ||
+    getDirectPropertyPositions(
+      source.slice(testObject.start + 1, testObject.end),
+      'projects'
+    ).length !== 1) return false
+
+  const testPrefix = maskJavaScriptComments(source.slice(configObject.start + 1, testObject.start))
+  return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix) &&
+    getDirectPropertyPositions(source.slice(configObject.start + 1, configObject.end), 'test').length === 1 &&
+    isExportedConfigObject(source, configObject)
+}
+
+/**
+ * Reports whether an object is the direct exported config or defineConfig argument.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate config object range
+ * @returns {boolean} whether the object belongs to the exported configuration
+ */
+function isExportedConfigObject (source, range) {
+  const before = maskJavaScriptNonCode(source.slice(0, range.start))
+  const after = maskJavaScriptNonCode(source.slice(range.end + 1))
+  return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
+    (CONFIG_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
+}
+
+/**
+ * Reports whether an object is a direct entry in the exported array of a Vitest workspace config.
+ *
+ * @param {string} source Vitest workspace configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {boolean} whether the object is a bounded workspace project entry
+ */
+function isWorkspaceProjectEntry (source, range) {
+  const workspaceArray = getDirectContainingArray(source, range)
+  if (!workspaceArray) return false
+
+  const before = maskJavaScriptNonCode(source.slice(0, workspaceArray.start))
+  const after = maskJavaScriptNonCode(source.slice(workspaceArray.end + 1))
+  return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
+    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
+}
+
+/**
+ * Returns the smallest array containing an object as a direct entry.
+ *
+ * @param {string} source JavaScript-like source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {{end: number, start: number}|undefined} containing direct array
+ */
+function getDirectContainingArray (source, range) {
+  const arrays = getDelimitedRanges(source, '[', ']')
+    .filter(array => array.start < range.start && array.end > range.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
+  const directArray = arrays[0]
+  if (!directArray) return
+
+  const entryPrefix = maskJavaScriptComments(source.slice(directArray.start, range.start)).trimEnd()
+  const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, directArray.end + 1)).trimStart()
+  if (['[', ','].includes(entryPrefix.at(-1)) && [']', ','].includes(entrySuffix[0])) return directArray
+  if (/(?:^|\[|,)\s*defineProject\s*\(\s*$/.test(entryPrefix) && /^,?\s*\)\s*[\],]/.test(entrySuffix)) {
+    return directArray
+  }
+}
+
+/**
+ * Finds balanced object ranges while ignoring comments and strings.
+ *
+ * @param {string} source JavaScript-like source
+ * @returns {{end: number, start: number}[]} object ranges
+ */
 function getObjectRanges (source) {
+  return getDelimitedRanges(source, '{', '}')
+}
+
+/**
+ * Finds balanced delimiter ranges while ignoring comments and strings.
+ *
+ * @param {string} source JavaScript-like source
+ * @param {string} open opening delimiter
+ * @param {string} close closing delimiter
+ * @returns {{end: number, start: number}[]} delimiter ranges
+ */
+function getDelimitedRanges (source, open, close) {
   const ranges = []
   const stack = []
   let quote
@@ -192,9 +352,9 @@ function getObjectRanges (source) {
       index++
     } else if (character === '"' || character === "'" || character === '`') {
       quote = character
-    } else if (character === '{') {
+    } else if (character === open) {
       stack.push(index)
-    } else if (character === '}') {
+    } else if (character === close) {
       const start = stack.pop()
       if (start !== undefined) ranges.push({ end: index, start })
     }
@@ -276,7 +436,7 @@ function getPropertyPositions (source, property) {
 }
 
 function getLiteralProperty (source, property) {
-  const properties = getPropertyPositions(source, property)
+  const properties = getDirectPropertyPositions(source, property)
   if (properties.length === 0) return {}
   if (properties.length !== 1) return { dynamic: true }
   const literal = /^(["'])([^"'\\]+)\1/.exec(source.slice(properties[0].valueStart))
@@ -285,7 +445,7 @@ function getLiteralProperty (source, property) {
 }
 
 function getLiteralStringArray (source, property) {
-  const properties = getPropertyPositions(source, property)
+  const properties = getDirectPropertyPositions(source, property)
   if (properties.length === 0) return { values: [] }
   if (properties.length !== 1) return { dynamic: true, values: [] }
   const arrayMatch = /^\[([\s\S]{0,8192}?)\]/.exec(source.slice(properties[0].valueStart))
@@ -294,6 +454,20 @@ function getLiteralStringArray (source, property) {
   const values = [...syntax.matchAll(/(["'])([^"'\\]+)\1/g)].map(match => match[2])
   const residue = syntax.replaceAll(/(["'])([^"'\\]+)\1/g, '').replaceAll(',', '').trim()
   return residue ? { dynamic: true, values: [] } : { values }
+}
+
+/**
+ * Returns matching properties that are not nested inside another object.
+ *
+ * @param {string} source JavaScript object contents
+ * @param {string} property property name
+ * @returns {{index: number, valueStart: number}[]} direct property positions
+ */
+function getDirectPropertyPositions (source, property) {
+  const nestedObjects = getObjectRanges(source)
+  return getPropertyPositions(source, property).filter(position => {
+    return !nestedObjects.some(object => object.start < position.index && object.end > position.index)
+  })
 }
 
 function getOptionValues (args, expected) {
