@@ -1023,10 +1023,8 @@ describe('compiled Next runtimes', () => {
   })
 
   describe('as the first tracing entrypoint', () => {
-    let tracer
-
     before(async () => {
-      tracer = await agent.load('next')
+      await agent.load('next')
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
