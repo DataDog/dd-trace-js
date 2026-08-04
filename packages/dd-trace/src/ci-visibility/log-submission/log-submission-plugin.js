@@ -4,10 +4,20 @@ const request = require('../../exporters/common/request')
 const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
 
+const MAX_BATCH_BYTES = 5 * 1024 * 1024
+const MAX_BATCH_LOGS = 1000
+const BATCH_FLUSH_INTERVAL = 1000
+
 /**
  * @typedef {object} LogSubmissionPayload
  * @property {string} source
  * @property {string | Record<string, unknown>} message
+ */
+
+/**
+ * @typedef {object} LogBatch
+ * @property {string[]} messages
+ * @property {number} byteLength
  */
 
 /**
@@ -85,7 +95,11 @@ function serializeLogMessage (message) {
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
+  /** @type {Map<string, LogBatch>} */
+  #batches = new Map()
+  #beforeExitHandler = () => this.#flush()
   #logSubmissionUrl
+  #timer
 
   constructor (...args) {
     super(...args)
@@ -98,7 +112,7 @@ class LogSubmissionPlugin extends Plugin {
       logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config, this.#logSubmissionUrl)))
     })
 
-    this.addSub('ci:log-submission:log', (payload) => this.#submitLog(payload))
+    this.addSub('ci:log-submission:log', (payload) => this.#enqueueLog(payload))
   }
 
   /**
@@ -106,17 +120,27 @@ class LogSubmissionPlugin extends Plugin {
    * @returns {void}
    */
   configure (config) {
+    if (this._enabled) {
+      this.#flush()
+    }
+
     super.configure(config)
-    this.#logSubmissionUrl = config !== null && typeof config === 'object' && config.enabled
-      ? getLogSubmissionUrl(config)
-      : undefined
+
+    const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+    if (this._enabled) {
+      this.#logSubmissionUrl = getLogSubmissionUrl(this.config)
+      beforeExitHandlers.add(this.#beforeExitHandler)
+    } else {
+      this.#logSubmissionUrl = undefined
+      beforeExitHandlers.delete(this.#beforeExitHandler)
+    }
   }
 
   /**
    * @param {LogSubmissionPayload} payload
    * @returns {void}
    */
-  #submitLog ({ source, message }) {
+  #enqueueLog ({ source, message }) {
     let serializedMessage
     try {
       serializedMessage = serializeLogMessage(message)
@@ -127,21 +151,66 @@ class LogSubmissionPlugin extends Plugin {
 
     if (serializedMessage === undefined) return
 
-    const options = {
-      path: getLogSubmissionPath(source, this.config.service),
-      method: 'POST',
-      headers: {
-        'DD-API-KEY': this.config.DD_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      url: this.#logSubmissionUrl,
+    const messageBytes = Buffer.byteLength(serializedMessage)
+    if (messageBytes + 2 > MAX_BATCH_BYTES) {
+      log.error('Could not submit %s log because it exceeds the %d byte payload limit', source, MAX_BATCH_BYTES)
+      return
     }
 
-    request(`[${serializedMessage}]`, options, (error) => {
-      if (error) {
-        log.error('Error submitting %s log', source, error)
+    let batch = this.#batches.get(source)
+    if (batch !== undefined && batch.byteLength + messageBytes + 1 > MAX_BATCH_BYTES) {
+      this.#flush()
+      batch = undefined
+    }
+
+    if (batch === undefined) {
+      batch = { messages: [], byteLength: 2 }
+      this.#batches.set(source, batch)
+    }
+
+    if (batch.messages.length > 0) {
+      batch.byteLength++
+    }
+    batch.messages.push(serializedMessage)
+    batch.byteLength += messageBytes
+
+    if (batch.messages.length === MAX_BATCH_LOGS || batch.byteLength === MAX_BATCH_BYTES) {
+      this.#flush()
+    } else if (this.#timer === undefined) {
+      this.#timer = setTimeout(() => this.#flush(), BATCH_FLUSH_INTERVAL)
+      this.#timer.unref?.()
+    }
+  }
+
+  /**
+   * Flushes every source-specific batch.
+   *
+   * @returns {void}
+   */
+  #flush () {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
+
+    const batches = this.#batches
+    this.#batches = new Map()
+
+    for (const [source, batch] of batches) {
+      const options = {
+        path: getLogSubmissionPath(source, this.config.service),
+        method: 'POST',
+        headers: {
+          'DD-API-KEY': this.config.DD_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        url: this.#logSubmissionUrl,
       }
-    })
+
+      request(`[${batch.messages.join(',')}]`, options, (error) => {
+        if (error) {
+          log.error('Error submitting %s logs', source, error)
+        }
+      })
+    }
   }
 }
 
