@@ -144,8 +144,8 @@ cases:
     files:
       - .agents/skills/apm-integrations/SKILL.md
     input: |
-      A diagnostic channel has a tracing subscriber that deduplicates paths and an IAST subscriber that must inspect
-      every call's args. Can its only publish move behind a seen-path gate? Answer in at most 3 bullets.
+      We want to move a diagnostic channel's only publish behind a seen-path gate to reduce duplicate tracing work.
+      Is that safe? Explain what must be checked and how the notifications should be structured. Answer in at most 3 bullets.
     expected_criteria:
       - Says the only per-call publish cannot move behind the gate because repeated calls would disappear from IAST.
       - Requires finding every subscriber and deciding the cardinality each one needs before moving the publish.
