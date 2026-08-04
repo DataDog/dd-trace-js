@@ -457,15 +457,17 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
 
 function getImplicitConfigFiles (framework, projectRoot, repositoryRoot) {
   const files = []
-  for (const basename of IMPLICIT_CONFIG_FILENAMES[framework] || []) {
-    const filename = path.join(projectRoot, basename)
-    try {
-      const stat = fs.lstatSync(filename)
-      const physical = fs.realpathSync(filename)
-      if (stat.isFile() && !stat.isSymbolicLink() &&
-        fs.statSync(physical).isFile() &&
-        isPathInside(fs.realpathSync(repositoryRoot), physical)) files.push(physical)
-    } catch {}
+  if (IMPLICIT_CONFIG_FILENAMES[framework]) {
+    for (const basename of IMPLICIT_CONFIG_FILENAMES[framework]) {
+      const filename = path.join(projectRoot, basename)
+      try {
+        const stat = fs.lstatSync(filename)
+        const physical = fs.realpathSync(filename)
+        if (stat.isFile() && !stat.isSymbolicLink() &&
+          fs.statSync(physical).isFile() &&
+          isPathInside(fs.realpathSync(repositoryRoot), physical)) files.push(physical)
+      } catch {}
+    }
   }
   return files
 }
@@ -1135,9 +1137,11 @@ function getFrameworkPackageJson (repositoryRoot, detection) {
   if (preciseLocation) return findOwningPackageJson(repositoryRoot, preciseLocation)
 
   const owners = new Map()
-  for (const location of detection.locations || []) {
-    const owner = findOwningPackageJson(repositoryRoot, location)
-    if (owner) owners.set(owner.path, owner)
+  if (detection.locations) {
+    for (const location of detection.locations) {
+      const owner = findOwningPackageJson(repositoryRoot, location)
+      if (owner) owners.set(owner.path, owner)
+    }
   }
   if (owners.size === 1) return [...owners.values()][0]
 }

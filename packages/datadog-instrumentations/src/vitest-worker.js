@@ -137,8 +137,8 @@ function isFileInRepository (filename, repositoryRoot) {
 }
 
 function isV8ScriptCovered (scriptCoverage) {
-  for (const functionCoverage of scriptCoverage.functions || []) {
-    for (const range of functionCoverage.ranges || []) {
+  for (const functionCoverage of scriptCoverage.functions) {
+    for (const range of functionCoverage.ranges) {
       if (range.count > 0) return true
     }
   }
@@ -147,15 +147,18 @@ function isV8ScriptCovered (scriptCoverage) {
 
 function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
   const coveredFiles = []
-  for (const scriptCoverage of coverage?.result || []) {
-    if (!isV8ScriptCovered(scriptCoverage)) continue
+  const scriptCoverageResults = coverage?.result
+  if (scriptCoverageResults) {
+    for (const scriptCoverage of scriptCoverageResults) {
+      if (!isV8ScriptCovered(scriptCoverage)) continue
 
-    const coverageFilename = getCoverageFilename(scriptCoverage.url)
-    if (!coverageFilename) continue
+      const coverageFilename = getCoverageFilename(scriptCoverage.url)
+      if (!coverageFilename) continue
 
-    const filename = realpath(coverageFilename)
-    if (isFileInRepository(filename, repositoryRoot)) {
-      coveredFiles.push(filename)
+      const filename = realpath(coverageFilename)
+      if (isFileInRepository(filename, repositoryRoot)) {
+        coveredFiles.push(filename)
+      }
     }
   }
   return coveredFiles

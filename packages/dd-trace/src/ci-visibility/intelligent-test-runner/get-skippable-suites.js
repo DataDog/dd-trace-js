@@ -34,8 +34,11 @@ function parseSkippableSuitesResponse (
     validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
   const coverage = {}
-  for (const [filename, bitmap] of Object.entries(parsedResponse.meta?.coverage || {})) {
-    coverage[filename.replaceAll('\\', '/')] = bitmap
+  const coverageByFilename = parsedResponse.meta?.coverage
+  if (coverageByFilename) {
+    for (const [filename, bitmap] of Object.entries(coverageByFilename)) {
+      coverage[filename.replaceAll('\\', '/')] = bitmap
+    }
   }
 
   const skippableItems = parsedResponse

@@ -767,7 +767,7 @@ class MochaPlugin extends CiPlugin {
     const state = this._webdriverioJasmineState
     const results = []
     const reportedFiles = new Set()
-    for (const [file, status] of state?.suiteStatuses || []) {
+    for (const [file, status] of state.suiteStatuses) {
       const error = state.suiteErrors.get(file)
       const result = { file, status }
       if (error) {
@@ -779,7 +779,7 @@ class MochaPlugin extends CiPlugin {
       results.push(result)
       reportedFiles.add(file)
     }
-    for (const spec of state?.specs || []) {
+    for (const spec of state.specs) {
       const file = normalizeJasmineFile(spec)
       if (!reportedFiles.has(file)) {
         results.push({ file, status: 'skip' })

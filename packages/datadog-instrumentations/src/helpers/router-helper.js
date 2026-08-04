@@ -68,12 +68,14 @@ function collectRoutesFromRouter (router, prefix) {
       const fullPaths = getRouteFullPaths(route, prefix)
 
       for (const fullPath of fullPaths) {
-        for (const [method, enabled] of Object.entries(route.methods || {})) {
-          if (!enabled) continue
-          routeAddedChannel.publish({
-            method: normalizeMethodName(method),
-            path: fullPath,
-          })
+        if (route.methods) {
+          for (const [method, enabled] of Object.entries(route.methods)) {
+            if (!enabled) continue
+            routeAddedChannel.publish({
+              method: normalizeMethodName(method),
+              path: fullPath,
+            })
+          }
         }
       }
     } else if (layer.handle?.stack?.length) {
