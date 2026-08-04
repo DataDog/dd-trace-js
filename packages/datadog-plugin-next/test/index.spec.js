@@ -1021,7 +1021,10 @@ describe('compiled Next runtimes', () => {
     let tracer
 
     before(async () => {
-      tracer = await agent.load('next')
+      tracer = await agent.load(
+        ['next', 'http'],
+        [{ resourceRenamingEnabled: false }, { client: false, resourceRenamingEnabled: true }]
+      )
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
@@ -1077,9 +1080,6 @@ describe('compiled Next runtimes', () => {
     })
 
     it('uses HTTP resource renaming for dynamic App Routes', async () => {
-      agent.reload('next', { resourceRenamingEnabled: false })
-      agent.reload('http', { client: false, resourceRenamingEnabled: true })
-
       class AppRouteRouteModule {
         definition = { pathname: '/api/users/[id]' }
 
@@ -1091,7 +1091,11 @@ describe('compiled Next runtimes', () => {
 
       const routeModule = new AppRouteRouteModule()
       const routeServer = http.createServer(async (req, res) => {
-        const response = await routeModule.handle(req, {})
+        const request = new Request(`http://127.0.0.1${req.url}`, {
+          headers: req.headers,
+          method: req.method,
+        })
+        const response = await routeModule.handle(request, {})
         res.writeHead(response.status)
         res.end()
       })
