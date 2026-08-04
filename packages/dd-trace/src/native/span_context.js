@@ -22,7 +22,6 @@ const {
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_TYPE_LENGTH,
-  MAX_RESOURCE_NAME_LENGTH,
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('../encode/tags-processors')
@@ -56,8 +55,7 @@ function normalizeService (service) {
 }
 
 function normalizeResource (resource, name) {
-  resource ||= name
-  return resource.length > MAX_RESOURCE_NAME_LENGTH ? resource.slice(0, MAX_RESOURCE_NAME_LENGTH) : resource
+  return resource || name
 }
 
 function normalizeType (type) {
