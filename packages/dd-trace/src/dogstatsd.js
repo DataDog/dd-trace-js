@@ -38,7 +38,7 @@ identityRefreshChannel.subscribe(() => {
       customMetricsClients.delete(ref)
       continue
     }
-    client.refreshTags()
+    client._refreshTags()
   }
 })
 
@@ -457,7 +457,7 @@ class CustomMetrics {
    * resume) and pushes them into the wrapped client.
    * @returns {void}
    */
-  refreshTags () {
+  _refreshTags () {
     this.#client.updateTags(DogStatsDClient.generateClientConfig(this.#config).tags)
   }
 
