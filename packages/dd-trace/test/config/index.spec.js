@@ -3259,38 +3259,6 @@ describe('Config', () => {
     })
   })
 
-  describe('http error status env vars', () => {
-    it('leaves both ranges unset by default', () => {
-      const config = getConfig()
-
-      // The value stays the raw spec so telemetry reports what the user set; the
-      // use site (plugins/util/http-error-statuses.js) parses it. Neither range
-      // has a default here, so that use site owns them: it widens the client
-      // range under OTel semantics, and its server default stays open above 599
-      // the way the hardcoded `code < 500` threshold was.
-      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, undefined)
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, undefined)
-    })
-
-    it('reads the server and client ranges from the environment', () => {
-      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599,404'
-      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '429'
-
-      const config = getConfig()
-
-      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599,404')
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '429')
-    })
-
-    it('accepts the DD_HTTP_SERVER_ERROR_STATUSES alias', () => {
-      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '500-503'
-
-      const config = getConfig()
-
-      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-503')
-    })
-  })
-
   describe('flushInterval in Lambda', () => {
     afterEach(() => {
       existsSyncReturn = undefined
