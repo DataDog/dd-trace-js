@@ -3141,6 +3141,29 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   }
 
+  for (const loggerName of ['pino', 'bunyan']) {
+    for (const mockMethod of ['doMock', 'setMock']) {
+      it(`should allow ${loggerName} to be mocked with jest.${mockMethod}`, async () => {
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_LOGGER: loggerName,
+              TEST_MOCK_METHOD: mockMethod,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/runtime-mock-test',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
+      })
+    }
+  }
+
   context('seed suffix normalization', () => {
     onlyLatestIt('should remove seed suffix from reported test names', async () => {
       const eventsPromise = receiver

@@ -32,11 +32,14 @@ function getLogSubmissionUrl (config) {
   }
 
   try {
-    return new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
+    const url = new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url
+
+    log.error('Unsupported automatic log submission URL protocol: %s', url.protocol)
   } catch {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
-    return defaultUrl
   }
+  return defaultUrl
 }
 
 /**

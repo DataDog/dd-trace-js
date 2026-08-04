@@ -323,6 +323,22 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(request.firstCall.args[1].url.href, 'https://http-intake.logs.datadoghq.eu/')
   })
 
+  it('falls back to the site intake when the configured URL protocol is unsupported', () => {
+    plugin.configure({
+      enabled: true,
+      DD_AGENTLESS_LOG_SUBMISSION_URL: 'ftp://localhost:8126',
+      DD_API_KEY: 'api-key',
+      service: 'my-service',
+      site: 'datadoghq.eu',
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+    clock.tick(batchFlushInterval)
+
+    sinon.assert.calledWithExactly(errorLog, 'Unsupported automatic log submission URL protocol: %s', 'ftp:')
+    assert.strictEqual(request.firstCall.args[1].url.href, 'https://http-intake.logs.datadoghq.eu/')
+  })
+
   it('logs request errors', () => {
     const error = new Error('boom')
     request.callsFake((data, options, callback) => callback(error))

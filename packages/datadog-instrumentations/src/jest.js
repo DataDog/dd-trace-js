@@ -3074,7 +3074,8 @@ function recordMockedFile (suiteFilePath, moduleName) {
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
 }
 
-const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|setMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_CJS_MOCK_METHODS = ['mock', 'doMock', 'setMock']
 
 function getStaticMockedFiles (suiteFilePath) {
   if (!suiteFilePath) return []
@@ -3110,12 +3111,14 @@ function wrapJestObject (jestObject, suiteFilePath) {
   testSuiteJestObjects.set(suiteFilePath, jestObject)
   wrappedJestObjects.add(jestObject)
 
-  shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    recordMockedFile(suiteFilePath, moduleName)
-    return mock.apply(this, arguments)
-  })
+  for (const methodName of JEST_CJS_MOCK_METHODS) {
+    shimmer.wrap(jestObject, methodName, mockMethod => function (moduleName) {
+      // If the library is explicitly mocked, we don't want to bypass jest's own require engine.
+      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
+      recordMockedFile(suiteFilePath, moduleName)
+      return mockMethod.apply(this, arguments)
+    })
+  }
 }
 
 function wrapJestGlobalsForRuntime (runtime) {
