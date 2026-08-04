@@ -15,11 +15,13 @@ if (typeof gc !== 'function') {
 
 const REQUEST_COUNT = 32
 const RETAINED_SPAN_LIMIT = 10
+const finishedParentSpans = []
 const finishedSpans = []
 const requestSpanIds = new Set()
 const tcpParentIds = []
 let fetchSpanCount = 0
 let undiciSpanCount = 0
+let lastUndiciSpan
 
 channel('dd-trace:span:finish').subscribe(span => {
   const component = span.context().getTag('component')
@@ -27,6 +29,7 @@ channel('dd-trace:span:finish').subscribe(span => {
     fetchSpanCount++
   } else if (component === 'undici') {
     undiciSpanCount++
+    lastUndiciSpan = span
     finishedSpans.push(new WeakRef(span))
     requestSpanIds.add(span.context()._spanId.toString(10))
   } else if (span._name === 'tcp.connect') {
@@ -98,6 +101,16 @@ async function requestAndConsume (url) {
 }
 
 /**
+ * @param {string} url
+ */
+async function requestUnderParent (url) {
+  const parent = tracer.startSpan('parent')
+  finishedParentSpans.push(new WeakRef(parent))
+  await tracer.scope().activate(parent, () => requestAndConsume(url))
+  parent.finish()
+}
+
+/**
  * @returns {import('undici')}
  */
 function loadCompatibleUndici () {
@@ -114,6 +127,21 @@ function loadCompatibleUndici () {
 }
 
 /**
+ * @param {WeakRef<object>[]} spanReferences
+ * @param {string} spanType
+ */
+function assertReferenceLimit (spanReferences, spanType) {
+  let retainedSpanCount = 0
+  for (const spanReference of spanReferences) {
+    if (spanReference.deref()) retainedSpanCount++
+  }
+  assert.ok(
+    retainedSpanCount <= RETAINED_SPAN_LIMIT,
+    `${retainedSpanCount} of ${spanReferences.length} finished ${spanType} spans remain reachable`
+  )
+}
+
+/**
  * @returns {Promise<void>}
  */
 async function assertRetainedSpanLimit () {
@@ -122,42 +150,42 @@ async function assertRetainedSpanLimit () {
     await new Promise(resolve => setImmediate(resolve))
   }
 
-  let retainedSpanCount = 0
-  for (const spanReference of finishedSpans) {
-    if (spanReference.deref()) retainedSpanCount++
-  }
-  assert.ok(
-    retainedSpanCount <= RETAINED_SPAN_LIMIT,
-    `${retainedSpanCount} of ${finishedSpans.length} finished Undici spans remain reachable`
-  )
+  assertReferenceLimit(finishedSpans, 'Undici')
+  assertReferenceLimit(finishedParentSpans, 'parent')
 }
 
 async function main () {
   if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') return
 
-  if (process.env.CONNECT_GLOBAL_DISPATCHER === 'true') {
-    server.on('connect', (_request, socket) => {
-      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-    })
-  }
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const port = (/** @type {import('node:net').AddressInfo} */ (server.address())).port
   const url = `http://127.0.0.1:${port}/`
 
   if (process.env.CONNECT_GLOBAL_DISPATCHER === 'true') {
-    const { socket } = await undici.connect(url, { path: '/example.com:443' })
-    assert.strictEqual(undiciSpanCount, 1)
-    socket.destroy()
+    const connectStatusCode = Number.parseInt(process.env.CONNECT_STATUS_CODE ?? '200', 10)
+    const statusMessage = connectStatusCode === 200 ? 'Connection Established' : 'Proxy Authentication Required'
+    const responsePromise = (async () => {
+      const [, socket] = await once(server, 'connect')
+      socket.write(`HTTP/1.1 ${connectStatusCode} ${statusMessage}\r\nContent-Length: 0\r\n\r\n`)
+    })()
+    const [result] = await Promise.all([
+      undici.connect(url, { path: '/example.com:443' }),
+      responsePromise,
+    ])
+    const spanStatusCode = lastUndiciSpan?.context().getTag('http.status_code')
+    result.socket.destroy()
     await undici.getGlobalDispatcher().close()
     await promisify(server.close.bind(server))()
+
+    assert.strictEqual(result.statusCode, connectStatusCode)
+    assert.strictEqual(undiciSpanCount, 1)
+    assert.strictEqual(spanStatusCode, connectStatusCode)
     return
   }
 
   if (process.env.FROZEN_GLOBAL_DISPATCHER === 'true') {
-    const parent = tracer.startSpan('parent')
-    await tracer.scope().activate(parent, () => requestAndConsume(url))
-    parent.finish()
+    await requestUnderParent(url)
   } else {
     await requestAndConsume(url)
   }
@@ -166,7 +194,7 @@ async function main () {
   await globalResponse.arrayBuffer()
 
   for (let requestIndex = 0; requestIndex < REQUEST_COUNT; requestIndex++) {
-    await requestAndConsume(url)
+    await requestUnderParent(url)
     assert.strictEqual(tracer.scope().active(), null)
   }
 

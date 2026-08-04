@@ -41,6 +41,7 @@ const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
  * @property {unknown} [headers]
  * @property {(name: string, value: unknown) => void} [addHeader]
  * @typedef {object} RequestContext
+ * @property {Store} [callerStore]
  * @property {boolean} finished
  * @property {boolean} hasUpgradeHook
  * @property {NativeRequest} request
@@ -237,6 +238,7 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     const requestContext = {
+      callerStore: dispatchContext?.currentStore,
       finished: false,
       hasUpgradeHook: dispatchContext?.hasUpgradeHook === true,
       request,
@@ -329,13 +331,16 @@ class UndiciPlugin extends HttpClientPlugin {
     if (ctx.finished) return
     ctx.finished = true
 
-    const { span } = ctx
+    const { callerStore, span } = ctx
     const errorName = /** @type {{ name?: string } | undefined} */ (error)?.name
 
     if (error && errorName !== 'AbortError') {
       span.setTag('error', error)
     }
 
+    if (callerStore) {
+      legacyStorage.enterWith(callerStore)
+    }
     this.config.hooks.request(span, null, null)
     span.finish()
   }
