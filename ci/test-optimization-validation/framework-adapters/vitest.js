@@ -7,6 +7,12 @@ const { matchesLiteralGlob } = require('../literal-glob')
 const { maskJavaScriptComments, maskJavaScriptNonCode } = require('../source-text')
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
+const WORKSPACE_CONFIG_PATTERN = /^vitest\.workspace\.[cm]?[jt]s$/
+const WORKSPACE_ARRAY_EXPORT_PATTERN = /(?:export\s+default|module\s*\.\s*exports\s*=)\s*$/
+const WORKSPACE_ARRAY_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineWorkspace\s*\(\s*$/
+const PROJECT_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineProject\s*\(\s*$/
 const LITERAL_PROJECT_PATTERN = /^[A-Za-z0-9_.:@/-]+$/
 
 /**
@@ -55,7 +61,11 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
     if (source === undefined) continue
     for (const property of getLiteralStringProperties(source, 'name')) {
       if (property.value !== name) continue
-      const project = getProjectObject(source, property.index)
+      const project = getProjectObject(
+        source,
+        property.index,
+        WORKSPACE_CONFIG_PATTERN.test(path.basename(configFile))
+      )
       if (!project) continue
       const projectName = getLiteralProperty(project.source, 'name')
       if (projectName.dynamic || projectName.value !== name) continue
@@ -160,9 +170,10 @@ function matchesProjectFile (project, filename) {
  *
  * @param {string} source Vitest configuration source
  * @param {number} nameIndex matching name property offset
+ * @param {boolean} workspaceConfig whether the source is a Vitest workspace config
  * @returns {{source: string, standalone: boolean}|undefined} bounded project object
  */
-function getProjectObject (source, nameIndex) {
+function getProjectObject (source, nameIndex, workspaceConfig) {
   const objectRanges = getObjectRanges(source)
   const ranges = objectRanges
     .filter(range => range.start < nameIndex && range.end > nameIndex)
@@ -176,7 +187,9 @@ function getProjectObject (source, nameIndex) {
   const nestedTestObject = /(?:^|,)\s*(?:test|(["'])test\1)\s*:\s*$/.test(parentPrefix || '')
   const selected = nestedTestObject ? parent : inner
   const standalone = isStandaloneProjectObject(source, selected)
-  if (!standalone && !isTestProjectsEntry(source, selected, objectRanges)) return
+  if (!standalone &&
+    !isTestProjectsEntry(source, selected, objectRanges) &&
+    !(workspaceConfig && isWorkspaceProjectEntry(source, selected))) return
   return { source: source.slice(selected.start + 1, selected.end), standalone }
 }
 
@@ -190,7 +203,7 @@ function getProjectObject (source, nameIndex) {
 function isStandaloneProjectObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
-  return /(?:^|[^\w$.])defineProject\s*\(\s*$/.test(before) && /^\s*\)/.test(after)
+  return PROJECT_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after)
 }
 
 /**
@@ -202,15 +215,8 @@ function isStandaloneProjectObject (source, range) {
  * @returns {boolean} whether the object is a bounded project entry
  */
 function isTestProjectsEntry (source, range, objectRanges) {
-  const arrays = getDelimitedRanges(source, '[', ']')
-    .filter(array => array.start < range.start && array.end > range.end)
-    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
-  const projectsArray = arrays[0]
+  const projectsArray = getDirectContainingArray(source, range)
   if (!projectsArray) return false
-
-  const entryPrefix = maskJavaScriptComments(source.slice(projectsArray.start, range.start)).trimEnd()
-  const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, projectsArray.end + 1)).trimStart()
-  if (!['[', ','].includes(entryPrefix.at(-1)) || ![']', ','].includes(entrySuffix[0])) return false
 
   const containers = objectRanges
     .filter(object => object.start < projectsArray.start && object.end > projectsArray.end)
@@ -224,6 +230,42 @@ function isTestProjectsEntry (source, range, objectRanges) {
 
   const testPrefix = maskJavaScriptComments(source.slice(configObject.start + 1, testObject.start))
   return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix)
+}
+
+/**
+ * Reports whether an object is a direct entry in the exported array of a Vitest workspace config.
+ *
+ * @param {string} source Vitest workspace configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {boolean} whether the object is a bounded workspace project entry
+ */
+function isWorkspaceProjectEntry (source, range) {
+  const workspaceArray = getDirectContainingArray(source, range)
+  if (!workspaceArray) return false
+
+  const before = maskJavaScriptNonCode(source.slice(0, workspaceArray.start))
+  const after = maskJavaScriptNonCode(source.slice(workspaceArray.end + 1))
+  return (WORKSPACE_ARRAY_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
+    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after))
+}
+
+/**
+ * Returns the smallest array containing an object as a direct entry.
+ *
+ * @param {string} source JavaScript-like source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {{end: number, start: number}|undefined} containing direct array
+ */
+function getDirectContainingArray (source, range) {
+  const arrays = getDelimitedRanges(source, '[', ']')
+    .filter(array => array.start < range.start && array.end > range.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
+  const directArray = arrays[0]
+  if (!directArray) return
+
+  const entryPrefix = maskJavaScriptComments(source.slice(directArray.start, range.start)).trimEnd()
+  const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, directArray.end + 1)).trimStart()
+  if (['[', ','].includes(entryPrefix.at(-1)) && [']', ','].includes(entrySuffix[0])) return directArray
 }
 
 /**

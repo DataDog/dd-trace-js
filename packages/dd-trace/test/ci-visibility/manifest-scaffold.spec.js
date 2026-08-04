@@ -1272,6 +1272,63 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  for (const [description, opening, closing] of [
+    ['exported array', 'export default [', ']'],
+    ['defineWorkspace array', 'export default defineWorkspace([', '])'],
+  ]) {
+    it(`binds a direct project entry in a literal Vitest workspace ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project unit',
+      }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(path.join(fixture.root, 'vitest.workspace.ts'), [
+          "import { defineWorkspace } from 'vitest/config'",
+          opening,
+          '  {',
+          '    test: {',
+          "      name: 'unit',",
+          "      root: 'unit',",
+          "      include: ['**/*.test.ts'],",
+          '    },',
+          '  },',
+          closing,
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, selected)
+        assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
+      })
+    })
+  }
+
+  it('does not bind a project from a transformed Vitest workspace array', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project unit',
+    }, fixture => {
+      fs.writeFileSync(path.join(fixture.root, 'vitest.workspace.ts'), [
+        'export default [',
+        "  { test: { name: 'unit', root: 'unit' } },",
+        '].map(project => project)',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   it('fails closed when a Vitest project cannot be bound to one static scope', () => {
     withRepositoryFixture({
       framework: 'vitest',
