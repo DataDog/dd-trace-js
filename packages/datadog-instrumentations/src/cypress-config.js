@@ -671,7 +671,7 @@ function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
   if (configExt !== '.ts' && configExt !== '.cts' && configExt !== '.mts') return () => {}
   if (!isTypeScript6OrNewer(projectRoot)) return () => {}
 
-  /* eslint-disable eslint-rules/eslint-process-env */
+  // ts-node reads this option from the live process environment while loading the Cypress config.
   const previousCompilerOptions = process.env.TS_NODE_COMPILER_OPTIONS
   let compilerOptions = {}
   if (previousCompilerOptions) {
@@ -694,7 +694,6 @@ function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
       process.env.TS_NODE_COMPILER_OPTIONS = previousCompilerOptions
     }
   }
-  /* eslint-enable eslint-rules/eslint-process-env */
 }
 
 /**

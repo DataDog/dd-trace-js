@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
+const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
@@ -34,6 +36,21 @@ function captureOnResolve () {
 }
 
 describe('datadog-esbuild plugin', () => {
+  it('enables IAST from DD_IAST_ENABLED', () => {
+    const banner = execFileSync(process.execPath, ['-e', `
+      process.env.DD_IAST_ENABLED = 'true'
+      const plugin = require('./packages/datadog-esbuild')
+      const initialOptions = {}
+      plugin.setup({ initialOptions, onLoad () {}, onResolve () {} })
+      process.stdout.write(initialOptions.banner.js)
+    `], {
+      cwd: path.resolve(__dirname, '../../..'),
+      encoding: 'utf8',
+    })
+
+    assert.match(banner, /__DD_ESBUILD_IAST_WITH_NO_SM/)
+  })
+
   it('ignores builtins without a package path', () => {
     const onResolve = captureOnResolve()
 

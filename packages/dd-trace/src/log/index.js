@@ -2,7 +2,7 @@
 
 const { inspect } = require('util')
 
-const { getValueFromEnvSources } = require('../config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
 // Eager require restores the original startup module-load order: pulling `config/defaults` here
 // also installs the instrumented `dns` it transitively loads before the tracer/agent connects.
 // `config/defaults` defers its own `dns` require until after it exports, so this no longer hits
@@ -80,8 +80,8 @@ const log = {
         defaults?.logLevel
     const enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
-      // eslint-disable-next-line eslint-rules/eslint-process-env
-      (process.env.OTEL_LOG_LEVEL === 'debug' || defaults?.DD_TRACE_DEBUG)
+      // eslint-disable-next-line eslint-rules/eslint-env-aliases -- This fallback must read OTEL_LOG_LEVEL itself.
+      (getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || defaults?.DD_TRACE_DEBUG)
     logWriter.configure(enabled, logLevel, logger)
 
     return enabled

@@ -413,4 +413,5 @@
 
 # Multiple teams
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
+/eslint-suppressions.json @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
 /eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js

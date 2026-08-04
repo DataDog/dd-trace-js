@@ -32,7 +32,7 @@ function setupSettingsCachePath () {
 
   const cacheFilePath = path.join(tmpdir(), `dd-test-optimization-${randomUUID()}.json`)
 
-  // eslint-disable-next-line eslint-rules/eslint-process-env
+  // Child test processes inherit the cache path from the environment.
   process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = cacheFilePath
 
   return cacheFilePath

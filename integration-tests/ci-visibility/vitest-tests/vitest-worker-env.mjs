@@ -13,11 +13,11 @@ describe('vitest worker env', () => {
     expect(process.env.DD_VITEST_WORKER).toBe('1')
 
     if (process.env.EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE) {
-      expect(process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBe('1')
+      expect(process.env._DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBe('1')
     }
 
     if (process.env.EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_INACTIVE) {
-      expect(process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBeUndefined()
+      expect(process.env._DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBeUndefined()
     }
 
     if (process.env.EXPECT_NO_DD_TRACE_INIT) {

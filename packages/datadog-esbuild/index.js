@@ -13,6 +13,7 @@ const {
   matchesOptionalPeerFile,
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
+const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
@@ -62,8 +63,7 @@ for (const builtin of builtinModules) {
   builtins.add(`node:${builtin}`)
 }
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
-const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+const DD_IAST_ENABLED = getValueFromEnvSources('DD_IAST_ENABLED')
 
 module.exports.name = 'datadog-esbuild'
 

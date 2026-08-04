@@ -16,7 +16,9 @@ export default {
     const report = (node) => {
       context.report({
         node,
-        message: 'Usage of process.env is only allowed in config/helper.js',
+        message: 'Use getValueFromEnvSources() for registered tracer configuration or getEnvironmentVariable() only ' +
+          'for raw internal/runtime values from packages/dd-trace/src/config/helper.js. Ask in the guild channel ' +
+          'before disabling this rule.',
       })
     }
 

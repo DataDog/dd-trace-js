@@ -8,7 +8,7 @@ const { isFalse, isTrue } = require('../packages/dd-trace/src/util')
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
-const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = '_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
@@ -121,6 +121,5 @@ function shouldSkipVitestWorkerInit () {
 }
 
 function isVitestNoWorkerInitActive () {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  return isTrue(process.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV])
+  return isTrue(getEnvironmentVariable(VITEST_NO_WORKER_INIT_ACTIVE_ENV))
 }

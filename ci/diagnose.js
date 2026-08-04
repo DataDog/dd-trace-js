@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable eslint-rules/eslint-process-env */
-
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -235,6 +233,7 @@ const UNSUPPORTED_FRAMEWORKS = [
 function runDiagnosis (options = {}) {
   const root = path.resolve(options.root || process.cwd())
   const physicalRoot = getPhysicalRoot(root)
+  // Preserve the caller's environment object; diagnostics inspect CI-provider variables beyond tracer configuration.
   const env = options.env || process.env
   const execFile = options.execFile || execFileSync
   const maxFiles = options.maxFiles || MAX_SCANNED_FILES

@@ -820,14 +820,14 @@ describe('vitest no-worker init instrumentation selection', () => {
       }, true)
 
       assert.strictEqual(noWorkerEnv.NODE_OPTIONS, '--no-warnings')
-      assert.strictEqual(noWorkerEnv.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
+      assert.strictEqual(noWorkerEnv._DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
 
       const workerEnv = noWorkerInit.configureWorkerEnv({
         NODE_OPTIONS: noWorkerEnv.NODE_OPTIONS,
       })
 
       assert.strictEqual(workerEnv.NODE_OPTIONS, DEFAULT_NODE_OPTIONS)
-      assert.ok(!('DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE' in workerEnv))
+      assert.ok(!('_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE' in workerEnv))
     })
   })
 })

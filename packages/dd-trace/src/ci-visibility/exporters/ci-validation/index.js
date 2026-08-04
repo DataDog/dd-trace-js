@@ -1,7 +1,6 @@
 'use strict'
 
-/* eslint-disable eslint-rules/eslint-process-env */
-
+const { getEnvironmentVariable } = require('../../../config/helper')
 const TestOptimizationHttpCache = require('../../test-optimization-http-cache').TestOptimizationHttpCache
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const { CiValidationSink } = require('./sink')
@@ -18,8 +17,8 @@ class CiValidationExporter extends CiVisibilityExporter {
    * @param {object} config tracer configuration
    */
   constructor (config) {
-    const validationManifestPath = process.env[VALIDATION_MANIFEST_ENV]
-    const validationOutputRoot = process.env[VALIDATION_OUTPUT_ENV]
+    const validationManifestPath = getEnvironmentVariable(VALIDATION_MANIFEST_ENV)
+    const validationOutputRoot = getEnvironmentVariable(VALIDATION_OUTPUT_ENV)
     if (!validationManifestPath) {
       throw new Error('Offline Test Optimization validation requires an explicit private manifest path.')
     }
@@ -32,7 +31,7 @@ class CiValidationExporter extends CiVisibilityExporter {
     super(config, { cacheOnly: true, testOptimizationHttpCache: cache })
 
     this._sink = new CiValidationSink(validationOutputRoot, {
-      captureMode: process.env[VALIDATION_CAPTURE_MODE_ENV] || 'strict',
+      captureMode: getEnvironmentVariable(VALIDATION_CAPTURE_MODE_ENV) || 'strict',
     })
     this._writer = new CiValidationWriter({ sink: this._sink, tags: config.tags })
     this._isInitialized = true

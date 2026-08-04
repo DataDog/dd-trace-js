@@ -1,0 +1,52 @@
+{
+  "ci/diagnose.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 1
+    }
+  },
+  "ci/test-optimization-validation/command-runner.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 9
+    }
+  },
+  "ci/vitest-no-worker-init-setup.mjs": {
+    "eslint-rules/eslint-process-env": {
+      "count": 2
+    }
+  },
+  "packages/datadog-instrumentations/src/cypress-config.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 8
+    }
+  },
+  "packages/dd-trace/src/ci-visibility/test-optimization-cache.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 2
+    }
+  },
+  "packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 1
+    }
+  },
+  "packages/dd-trace/src/config/index.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 3
+    }
+  },
+  "packages/dd-trace/src/config/stable.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 2
+    }
+  },
+  "packages/dd-trace/src/debugger/index.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 2
+    }
+  },
+  "packages/dd-trace/src/telemetry/session-propagation.js": {
+    "eslint-rules/eslint-process-env": {
+      "count": 1
+    }
+  }
+}

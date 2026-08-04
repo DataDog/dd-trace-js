@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
-const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = '_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
@@ -699,7 +699,7 @@ function normalizePath (filepath) {
 
 function getIsNoWorkerInitActive () {
   try {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
+    // This setup also runs without dd-trace instrumentation in Vitest Browser Mode.
     const value = process.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
     return value === '1' || value === 'true'
   } catch {

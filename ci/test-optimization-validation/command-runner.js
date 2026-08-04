@@ -1,6 +1,6 @@
 'use strict'
 
-/* eslint-disable no-console, eslint-rules/eslint-process-env */
+/* eslint-disable no-console */
 
 const fs = require('node:fs')
 const path = require('path')
@@ -427,6 +427,7 @@ function shouldUseProcessGroup () {
 function getWindowsTaskkillPath () {
   if (process.platform !== 'win32') return
 
+  // Windows environment variable names are case-insensitive, so the original environment must remain available.
   const systemRoot = getEnvironmentValue(process.env, 'SystemRoot') ||
     getEnvironmentValue(process.env, 'WINDIR')
   if (!systemRoot || !path.win32.isAbsolute(systemRoot)) return
@@ -468,6 +469,7 @@ function signalChild (child, signal, useProcessGroup, windowsTaskkillPath) {
 }
 
 function getBaseEnv (envMode, requiredEnvVars = []) {
+  // Inherit mode deliberately passes the complete ambient environment to the child process.
   if (envMode !== 'clean') return process.env
 
   const cleanEnv = {}

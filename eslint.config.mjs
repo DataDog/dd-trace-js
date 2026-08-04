@@ -45,6 +45,27 @@ const SRC_FILES = [
   'packages/*/src/**/*.mjs',
 ]
 
+const PRODUCTION_FILES = [
+  'ci/**/*.js',
+  'ci/**/*.mjs',
+  'esbuild.js',
+  'ext/**/*.js',
+  'ext/**/*.mjs',
+  'index.electron.js',
+  'index.js',
+  'init.js',
+  'initialize.mjs',
+  'loader-hook.mjs',
+  'openfeature.js',
+  'packages/*/*.js',
+  'packages/*/*.mjs',
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+  'register.js',
+  'version.js',
+  'webpack.js',
+]
+
 const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
@@ -598,13 +619,27 @@ export default [
     },
   },
   {
+    name: 'dd-trace/production/environment',
+    files: PRODUCTION_FILES,
+    rules: {
+      'eslint-rules/eslint-process-env': 'error',
+      'no-warning-comments': ['error', {
+        terms: [
+          'eslint-disable eslint-rules/eslint-process-env',
+          'eslint-disable-line eslint-rules/eslint-process-env',
+          'eslint-disable-next-line eslint-rules/eslint-process-env',
+        ],
+        location: 'anywhere',
+      }],
+    },
+  },
+  {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     plugins: {
       unicorn: eslintPluginUnicorn,
     },
     rules: {
-      'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
@@ -771,13 +806,21 @@ export default [
     },
   },
   {
+    name: 'dd-trace/config/environment-owner',
+    files: [
+      'packages/dd-trace/src/config/helper.js',
+    ],
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+    },
+  },
+  {
     name: 'dd-trace/scripts',
     files: [
       'scripts/**/*.js',
       'scripts/**/*.mjs',
     ],
     rules: {
-      'eslint-rules/eslint-process-env': 'off',
       // Scripts are CLI/dev tooling where process.exit and shebangs are acceptable.
       'n/hashbang': 'off',
       'n/no-process-exit': 'off',

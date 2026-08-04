@@ -25,7 +25,7 @@ let rcAckCallbacks = null
 let rc = null
 let inputPath = null
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
+// The worker must inherit every ambient variable except NODE_OPTIONS.
 const { NODE_OPTIONS, ...env } = process.env
 
 module.exports = {

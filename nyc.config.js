@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable eslint-rules/eslint-process-env */
-
 // Include the current npm script name (when available) so coverage artifacts are attributable.
 let event = process.env.npm_lifecycle_event ?? ''
 

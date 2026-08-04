@@ -2,9 +2,9 @@
 
 const { format } = require('util')
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
-const DD_TRACE_DEBUG = (process.env.DD_TRACE_DEBUG || '').trim().toLowerCase()
-const DEBUG = DD_TRACE_DEBUG === 'true' || DD_TRACE_DEBUG === '1'
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+
+const DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const noop = () => {}
 

@@ -11,7 +11,7 @@ function isOptionsObject (value) {
 }
 
 function getEnvWithRuntimeId (env) {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
+  // Child processes must inherit every ambient variable when no explicit environment is provided.
   return { ...(env ?? process.env), DD_ROOT_JS_SESSION_ID: runtimeId }
 }
 

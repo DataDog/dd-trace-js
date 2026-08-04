@@ -68,8 +68,7 @@ class TestOptimizationHttpCache {
     maxFileBytes = DEFAULT_VALIDATION_MAX_FILE_BYTES,
   } = {}) {
     this._cwd = cwd
-    // This cache intentionally consumes env vars that are not tracer config keys. (??)
-    // eslint-disable-next-line eslint-rules/eslint-process-env
+    // Preserve Bazel runfiles variables as-is; they are not tracer configuration.
     this._env = env ?? process.env
     this._validationManifestPath = validationManifestPath
     this._maxFileBytes = maxFileBytes

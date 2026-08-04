@@ -738,7 +738,7 @@ function warnWrongOtelSettings () {
     ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
     ['OTEL_LOGS_EXPORTER'],
   ]) {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
+    // Read exact names because canonical Datadog variables fall back to their OpenTelemetry aliases in the helper.
     const envs = process.env
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
     const otelEnvValue = envs[otelEnvVar]

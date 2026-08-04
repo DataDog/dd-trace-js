@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable eslint-rules/eslint-process-env */
-
 /**
  * @typedef {object} SupportedConfigurationEntry
  * @property {string} implementation
