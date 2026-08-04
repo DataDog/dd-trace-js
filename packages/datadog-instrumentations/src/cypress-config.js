@@ -5,6 +5,11 @@ const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
 
+const {
+  deleteEnvironmentVariable,
+  getEnvironmentVariable,
+  setEnvironmentVariable,
+} = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const { getSegment } = require('../../dd-trace/src/util')
 const { channel } = require('./helpers/instrument')
@@ -14,6 +19,7 @@ const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
   'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
+const TS_NODE_COMPILER_OPTIONS_ENV = 'TS_NODE_COMPILER_OPTIONS'
 const generatedFilesForExitCleanup = new Set()
 let exitCleanupRegistered = false
 
@@ -671,8 +677,7 @@ function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
   if (configExt !== '.ts' && configExt !== '.cts' && configExt !== '.mts') return () => {}
   if (!isTypeScript6OrNewer(projectRoot)) return () => {}
 
-  // ts-node reads this option from the live process environment while loading the Cypress config.
-  const previousCompilerOptions = process.env.TS_NODE_COMPILER_OPTIONS
+  const previousCompilerOptions = getEnvironmentVariable(TS_NODE_COMPILER_OPTIONS_ENV)
   let compilerOptions = {}
   if (previousCompilerOptions) {
     try {
@@ -682,16 +687,16 @@ function configureTsNodeForTypeScript6 (projectRoot, configFilePath) {
     }
   }
 
-  process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({
+  setEnvironmentVariable(TS_NODE_COMPILER_OPTIONS_ENV, JSON.stringify({
     ...compilerOptions,
     ignoreDeprecations: '6.0',
-  })
+  }))
 
   return () => {
     if (previousCompilerOptions === undefined) {
-      delete process.env.TS_NODE_COMPILER_OPTIONS
+      deleteEnvironmentVariable(TS_NODE_COMPILER_OPTIONS_ENV)
     } else {
-      process.env.TS_NODE_COMPILER_OPTIONS = previousCompilerOptions
+      setEnvironmentVariable(TS_NODE_COMPILER_OPTIONS_ENV, previousCompilerOptions)
     }
   }
 }

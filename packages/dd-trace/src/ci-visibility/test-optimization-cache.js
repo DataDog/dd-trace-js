@@ -5,7 +5,7 @@ const { tmpdir } = require('node:os')
 const { randomUUID } = require('node:crypto')
 const path = require('node:path')
 
-const { getValueFromEnvSources } = require('../config/helper')
+const { getValueFromEnvSources, setEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
 
 const COVERAGE_BACKFILL_KEY = '_ddCoverageBackfill'
@@ -32,8 +32,7 @@ function setupSettingsCachePath () {
 
   const cacheFilePath = path.join(tmpdir(), `dd-test-optimization-${randomUUID()}.json`)
 
-  // Child test processes inherit the cache path from the environment.
-  process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = cacheFilePath
+  setEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE', cacheFilePath)
 
   return cacheFilePath
 }

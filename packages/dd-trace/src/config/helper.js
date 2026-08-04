@@ -343,6 +343,29 @@ module.exports = {
   },
 
   /**
+   * Sets an environment variable after validating registered tracer configuration names.
+   *
+   * @param {string} name Environment variable name
+   * @param {string} value Environment variable value
+   * @returns {void}
+   */
+  setEnvironmentVariable (name, value) {
+    validateAccess(name)
+    process.env[name] = value
+  },
+
+  /**
+   * Deletes an environment variable after validating registered tracer configuration names.
+   *
+   * @param {string} name Environment variable name
+   * @returns {void}
+   */
+  deleteEnvironmentVariable (name) {
+    validateAccess(name)
+    delete process.env[name]
+  },
+
+  /**
    * Returns the actual environment variable name used for a supported configuration
    * from a specific environment-based source.
    *

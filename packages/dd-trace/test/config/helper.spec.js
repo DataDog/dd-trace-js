@@ -83,6 +83,8 @@ describe('config-helper env resolution', () => {
   let getValueFromEnvSources
   let getConfiguredEnvName
   let getEnvironmentVariable
+  let setEnvironmentVariable
+  let deleteEnvironmentVariable
   let resetModule
   let originalEnv
 
@@ -92,6 +94,8 @@ describe('config-helper env resolution', () => {
     getValueFromEnvSources = mod.getValueFromEnvSources
     getConfiguredEnvName = mod.getConfiguredEnvName
     getEnvironmentVariable = mod.getEnvironmentVariable
+    setEnvironmentVariable = mod.setEnvironmentVariable
+    deleteEnvironmentVariable = mod.deleteEnvironmentVariable
     resetModule = () => {}
   }
 
@@ -201,6 +205,27 @@ describe('config-helper env resolution', () => {
       () => getEnvironmentVariable('OTEL_UNSUPPORTED_CONFIG'),
       /Missing OTEL_UNSUPPORTED_CONFIG env\/configuration in "supported-configurations\.json" file\./
     )
+  })
+
+  it('sets and deletes live environment variables', () => {
+    setEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE', '/tmp/settings-cache')
+    setEnvironmentVariable('TS_NODE_COMPILER_OPTIONS', '{}')
+
+    assert.strictEqual(process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE, '/tmp/settings-cache')
+    assert.strictEqual(process.env.TS_NODE_COMPILER_OPTIONS, '{}')
+
+    deleteEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE')
+    deleteEnvironmentVariable('TS_NODE_COMPILER_OPTIONS')
+
+    assert.strictEqual(process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE, undefined)
+    assert.strictEqual(process.env.TS_NODE_COMPILER_OPTIONS, undefined)
+  })
+
+  it('throws when mutating unsupported DD_ configuration', () => {
+    const expected = /Missing DD_UNSUPPORTED_CONFIG env\/configuration in "supported-configurations\.json" file\./
+
+    assert.throws(() => setEnvironmentVariable('DD_UNSUPPORTED_CONFIG', 'value'), expected)
+    assert.throws(() => deleteEnvironmentVariable('DD_UNSUPPORTED_CONFIG'), expected)
   })
 
   it('throws for a non-DD/OTEL environment variable without a configuration entry', () => {

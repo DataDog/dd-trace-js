@@ -12,9 +12,9 @@ const ruleTester = new RuleTester({
   },
 })
 
-const message = 'Use getValueFromEnvSources() for registered tracer configuration or getEnvironmentVariable() only ' +
-  'for raw internal/runtime values from packages/dd-trace/src/config/helper.js. Ask in the guild channel before ' +
-  'disabling this rule.'
+const message = 'Use getValueFromEnvSources() for registered tracer configuration, getEnvironmentVariable() for raw ' +
+  'values, or setEnvironmentVariable()/deleteEnvironmentVariable() for mutations from ' +
+  'packages/dd-trace/src/config/helper.js. Ask in the guild channel before disabling this rule.'
 
 ruleTester.run('eslint-process-env', rule, {
   valid: [

@@ -14,16 +14,6 @@
       "count": 2
     }
   },
-  "packages/datadog-instrumentations/src/cypress-config.js": {
-    "eslint-rules/eslint-process-env": {
-      "count": 8
-    }
-  },
-  "packages/dd-trace/src/ci-visibility/test-optimization-cache.js": {
-    "eslint-rules/eslint-process-env": {
-      "count": 2
-    }
-  },
   "packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js": {
     "eslint-rules/eslint-process-env": {
       "count": 1
