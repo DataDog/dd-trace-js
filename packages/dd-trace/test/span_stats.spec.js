@@ -105,24 +105,24 @@ describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,,true')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
     assert.strictEqual(
-      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,')
+      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,,true')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
     assert.strictEqual(
-      key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,')
+      key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,,true')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,,true`)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -136,7 +136,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,true')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
@@ -151,7 +151,7 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(
       key.toString(),
-      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,')
+      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,,true')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
@@ -166,7 +166,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,true')
   })
 
   it('should include service source in aggregation key', () => {
@@ -179,28 +179,36 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,,true')
   })
 
   it('should include span kind in aggregation key', () => {
     const span = { ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,,true')
   })
 
   it('should normalize gRPC status name to numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5,true')
   })
 
   it('should keep numeric gRPC status code as numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14,true')
+  })
+
+  it('should mark isTraceRoot false when parent_id is a non-zero Identifier', () => {
+    const span = { ...basicSpan, parent_id: { toString: (radix) => (123).toString(radix) } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.isTraceRoot, false)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,,false')
   })
 
   it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {

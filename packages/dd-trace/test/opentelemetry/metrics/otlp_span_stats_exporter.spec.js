@@ -11,6 +11,7 @@ const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_s
 const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
+const processTags = require('../../../src/process-tags')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
@@ -58,6 +59,13 @@ describe('buildResourceAttributes', () => {
   it('omits dd.* attributes when otelSemanticsEnabled is true', () => {
     const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: true })
     assert.ok(!Object.keys(attrs).some(k => k.startsWith('datadog.')))
+  })
+
+  it('includes datadog.process_tags as a single array attribute when otelSemanticsEnabled is false', () => {
+    processTags.initialize()
+    const attrs = buildResourceAttributes({}, { otelSemanticsEnabled: false })
+    assert.ok(Array.isArray(attrs['datadog.process_tags']))
+    assert.ok(!('datadog.entrypoint.type' in attrs))
   })
 })
 

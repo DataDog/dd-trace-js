@@ -110,15 +110,17 @@ describe('OtlpStatsTransformer', () => {
 
       assert.deepStrictEqual(attrMapOf(dataPointsOf(payload)[0]), {
         'span.name': 'GET /foo',
-        'span.kind': 'server',
+        'span.kind': 'SPAN_KIND_SERVER',
         'http.response.status_code': 404,
         'http.request.method': 'POST',
         'http.route': '/users/:id',
         'rpc.response.status_code': 'OK',
+        'status.code': 'STATUS_CODE_OK',
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
         'datadog.origin': 'synthetics',
         'datadog.span.top_level': false,
+        'datadog.is_trace_root': true,
       })
     })
 
@@ -162,14 +164,14 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dp.bucketCounts.filter(c => c > 0).length, 2)
     })
 
-    it('marks error data points with status.code=ERROR and ok data points without it', () => {
+    it('marks error data points with status.code=STATUS_CODE_ERROR and ok data points with STATUS_CODE_OK', () => {
       const spans = [makeTopLevelSpan(), makeTopLevelSpan({ error: 1 })]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
-      const ok = points.find(dp => attrMapOf(dp)['datadog.span.top_level'] === true && !attrMapOf(dp)['status.code'])
-      const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
-      assert.ok(ok, 'ok data point should carry no status.code')
+      const ok = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_OK')
+      const err = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_ERROR')
+      assert.ok(ok, 'ok data point should carry status.code=STATUS_CODE_OK')
       assert.strictEqual(attrMapOf(err)['datadog.span.top_level'], true)
     })
 
@@ -179,8 +181,8 @@ describe('OtlpStatsTransformer', () => {
       const points = dataPointsOf(payload)
 
       assert.strictEqual(points.length, 2)
-      const ok = points.find(dp => !attrMapOf(dp)['status.code'])
-      const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
+      const ok = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_OK')
+      const err = points.find(dp => attrMapOf(dp)['status.code'] === 'STATUS_CODE_ERROR')
       assert.strictEqual(ok.count, 2)
       assert.strictEqual(err.count, 1)
       assert.strictEqual(attrMapOf(ok)['datadog.span.top_level'], true)
@@ -279,7 +281,7 @@ describe('OtlpStatsTransformer', () => {
       )
       assert.deepStrictEqual(
         { name: attrs['span.name'], method: attrs['http.request.method'], status: attrs['status.code'] },
-        { name: 'GET /foo', method: 'GET', status: 2 }
+        { name: 'GET /foo', method: 'GET', status: 'STATUS_CODE_ERROR' }
       )
     })
   })
@@ -310,10 +312,10 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(metric.histogram.aggregationTemporality, delta)
       const okNotTopLevel = metric.histogram.dataPoints.find(dp =>
         dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === false) &&
-        !dp.attributes.some(a => a.key === 'status.code')
+        dp.attributes.some(a => a.key === 'status.code' && a.value.stringValue === 'STATUS_CODE_OK')
       )
       const errTopLevel = metric.histogram.dataPoints.find(dp =>
-        dp.attributes.some(a => a.key === 'status.code' && Number(a.value.intValue) === 2) &&
+        dp.attributes.some(a => a.key === 'status.code' && a.value.stringValue === 'STATUS_CODE_ERROR') &&
         dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === true)
       )
       assert.ok(okNotTopLevel, 'should have ok not-top-level data point')

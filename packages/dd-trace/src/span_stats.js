@@ -130,6 +130,9 @@ class SpanAggKey {
     } else {
       this.rpcStatusCode = ''
     }
+
+    this.isTraceRoot = !span.parent_id || span.parent_id.toString(10) === '0'
+    // peer_tags isn't aggregated in the legacy v0.6/stats export here either; mirror it in both once added.
   }
 
   toString () {
@@ -145,6 +148,7 @@ class SpanAggKey {
       this.srvSrc,
       this.spanKind,
       this.rpcStatusCode,
+      this.isTraceRoot,
     ].join(',')
   }
 }

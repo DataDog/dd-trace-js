@@ -91,11 +91,10 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
 
   if (!otelSemanticsEnabled) {
     if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-    const processTagsObject = processTags.tagsObject
-    if (processTagsObject) {
-      for (const key of Object.keys(processTagsObject)) {
-        attrs[`datadog.${key}`] = processTagsObject[key]
-      }
+    // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
+    const processTagsArray = processTags.tagsArray
+    if (processTagsArray?.length) {
+      attrs['datadog.process_tags'] = processTagsArray
     }
   }
   return attrs
