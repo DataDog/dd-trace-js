@@ -2259,16 +2259,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.#efdRetryGatesByName = undefined
         this.#detachedEfdRetryQueue = undefined
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
-      }
-      if (event.name === 'test_skip' || event.name === 'test_todo') {
+      } else if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
         const retryGates = this.#efdRetryGatesByName?.get(testName)
-        if (retryGates && efdRetryMetadataByTest.has(event.test)) {
-          this.#discardedEfdRetryTests ??= new Set()
-          this.#discardedEfdRetryTests.add(event.test)
-          return
-        }
         if (retryGates) {
+          if (efdRetryMetadataByTest.has(event.test)) {
+            this.#discardedEfdRetryTests ??= new Set()
+            this.#discardedEfdRetryTests.add(event.test)
+            return
+          }
           for (const gate of retryGates) {
             gate.resolve(false)
           }

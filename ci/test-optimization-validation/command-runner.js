@@ -555,11 +555,13 @@ function buildOfflineValidationEnv ({ fixture, outputRoot }) {
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
   if (!env[VALIDATION_MODE_ENV]) return
-  for (const name of Object.keys(command.env || {})) {
-    const normalized = process.platform === 'win32' ? name.toUpperCase() : name
-    if (VALIDATION_RESERVED_ENV_NAMES.some(reserved => environmentNamesEqual(reserved, name)) ||
-      isDatadogEnvironmentName(name) || normalized.startsWith('OTEL_')) {
-      throw new Error(`Direct-runner adapter must not override validator-controlled environment variable ${name}.`)
+  if (command.env) {
+    for (const name of Object.keys(command.env)) {
+      const normalized = process.platform === 'win32' ? name.toUpperCase() : name
+      if (VALIDATION_RESERVED_ENV_NAMES.some(reserved => environmentNamesEqual(reserved, name)) ||
+        isDatadogEnvironmentName(name) || normalized.startsWith('OTEL_')) {
+        throw new Error(`Direct-runner adapter must not override validator-controlled environment variable ${name}.`)
+      }
     }
   }
 }
