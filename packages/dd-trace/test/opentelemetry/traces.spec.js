@@ -615,6 +615,59 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(attrs['http.status_code'], 200)
       })
 
+      // The OTel HTTP semantic conventions type http.response.status_code and
+      // server.port as ints. The Datadog agent protocol carries every attribute as a
+      // string, so the export-time rename writes them into `meta`; OTLP is typed, so
+      // the exporter promotes them back to intValue from its own allowlist.
+      it('promotes int-typed OTel HTTP attributes from meta strings to intValue', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: {
+            'http.request.method': 'GET',
+            'http.response.status_code': '503',
+            'server.port': '8080',
+            'server.address': 'localhost',
+          },
+          metrics: {},
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const byKey = Object.fromEntries(attributes.map(({ key, value }) => [key, value]))
+
+        assert.deepStrictEqual(byKey['http.response.status_code'], { intValue: 503 })
+        assert.deepStrictEqual(byKey['server.port'], { intValue: 8080 })
+        // Everything else stays a string.
+        assert.deepStrictEqual(byKey['http.request.method'], { stringValue: 'GET' })
+        assert.deepStrictEqual(byKey['server.address'], { stringValue: 'localhost' })
+      })
+
+      it('leaves a non-numeric int-typed attribute as a string rather than emitting NaN', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: { 'http.response.status_code': 'bogus' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        assert.deepStrictEqual(
+          attributes.find(({ key }) => key === 'http.response.status_code').value,
+          { stringValue: 'bogus' }
+        )
+      })
+
+      it('does not promote the int-typed keys when OTel semantics are disabled', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({ meta: { 'server.port': '8080' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        assert.deepStrictEqual(
+          attributes.find(({ key }) => key === 'server.port').value,
+          { stringValue: '8080' }
+        )
+      })
+
       it('excludes error.message from attributes but still populates OTLP status', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({
