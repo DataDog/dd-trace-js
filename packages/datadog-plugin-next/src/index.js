@@ -5,7 +5,7 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const { HTTP_ENDPOINT, HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
@@ -171,6 +171,7 @@ function setHttpParentRoute (span, method, page, isStatic) {
   if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
+  span.setTag(HTTP_ENDPOINT, page)
   span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
   nextParentRoutes.set(span, page)
 }
