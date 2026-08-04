@@ -1241,6 +1241,37 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  it('does not bind a Vitest project from an unexported test.projects helper', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project unit',
+    }, fixture => {
+      const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+        "import { defineConfig } from 'vitest/config'",
+        'const helper = {',
+        '  test: {',
+        "    projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }],",
+        '  },',
+        '}',
+        'export default defineConfig({',
+        "  test: { projects: [{ name: 'integration', root: 'integration' }] },",
+        '})',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   it('binds a standalone literal Vitest defineProject configuration', () => {
     withRepositoryFixture({
       framework: 'vitest',
@@ -1304,6 +1335,41 @@ describe('test optimization validation manifest scaffold', () => {
         assert.strictEqual(framework.status, 'runnable')
         assert.strictEqual(framework.validation.testFile, selected)
         assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
+      })
+    })
+  }
+
+  for (const [description, include] of [
+    ['keeps a direct include separate from coverage include', "      include: ['tests/**/*.test.ts'],"],
+    ['ignores coverage include when test include is absent', undefined],
+  ]) {
+    it(`${description} in a nested Vitest workspace test object`, () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project unit',
+      }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'tests', 'selected.test.ts')
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(path.join(fixture.root, 'vitest.workspace.ts'), [
+          'export default [',
+          '  {',
+          '    test: {',
+          "      name: 'unit',",
+          "      root: 'unit',",
+          include,
+          "      coverage: { include: ['src/**'] },",
+          '    },',
+          '  },',
+          ']',
+          '',
+        ].filter(line => line !== undefined).join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, selected)
       })
     })
   }

@@ -8,7 +8,9 @@ const { maskJavaScriptComments, maskJavaScriptNonCode } = require('../source-tex
 
 const CONFIG_PATTERN = /^(?:vite\.config|vitest\.(?:config|workspace))\.[cm]?[jt]s$/
 const WORKSPACE_CONFIG_PATTERN = /^vitest\.workspace\.[cm]?[jt]s$/
-const WORKSPACE_ARRAY_EXPORT_PATTERN = /(?:export\s+default|module\s*\.\s*exports\s*=)\s*$/
+const DIRECT_EXPORT_PATTERN = /(?:export\s+default|module\s*\.\s*exports\s*=)\s*$/
+const CONFIG_CALL_PATTERN =
+  /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineConfig\s*\(\s*$/
 const WORKSPACE_ARRAY_CALL_PATTERN =
   /(?:export\s+default|module\s*\.\s*exports\s*=)\s*defineWorkspace\s*\(\s*$/
 const PROJECT_CALL_PATTERN =
@@ -73,6 +75,7 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
         bindingRoot: effectiveRoot,
         configFile,
         projectFiles,
+        projectEntry: project.entrySource,
         projectObject: project.source,
         projectRoot,
         standaloneProject: project.standalone,
@@ -116,11 +119,12 @@ function getBindingFromObject ({
   bindingRoot,
   configFile,
   projectFiles,
+  projectEntry,
   projectObject,
   projectRoot,
   standaloneProject,
 }) {
-  if (/\.\.\./.test(maskJavaScriptNonCode(projectObject))) {
+  if (/\.\.\./.test(maskJavaScriptNonCode(projectEntry))) {
     return { error: 'the selected Vitest project uses dynamic spread composition' }
   }
 
@@ -171,7 +175,7 @@ function matchesProjectFile (project, filename) {
  * @param {string} source Vitest configuration source
  * @param {number} nameIndex matching name property offset
  * @param {boolean} workspaceConfig whether the source is a Vitest workspace config
- * @returns {{source: string, standalone: boolean}|undefined} bounded project object
+ * @returns {{entrySource: string, source: string, standalone: boolean}|undefined} bounded project object
  */
 function getProjectObject (source, nameIndex, workspaceConfig) {
   const objectRanges = getObjectRanges(source)
@@ -190,7 +194,11 @@ function getProjectObject (source, nameIndex, workspaceConfig) {
   if (!standalone &&
     !isTestProjectsEntry(source, selected, objectRanges) &&
     !(workspaceConfig && isWorkspaceProjectEntry(source, selected))) return
-  return { source: source.slice(selected.start + 1, selected.end), standalone }
+  return {
+    entrySource: source.slice(selected.start + 1, selected.end),
+    source: source.slice(inner.start + 1, inner.end),
+    standalone,
+  }
 }
 
 /**
@@ -229,7 +237,21 @@ function isTestProjectsEntry (source, range, objectRanges) {
   if (!/(?:^|,)\s*(?:projects|"projects"|'projects')\s*:\s*$/.test(projectsPrefix)) return false
 
   const testPrefix = maskJavaScriptComments(source.slice(configObject.start + 1, testObject.start))
-  return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix)
+  return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix) &&
+    isExportedConfigObject(source, configObject)
+}
+
+/**
+ * Reports whether an object is the direct exported config or defineConfig argument.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate config object range
+ * @returns {boolean} whether the object belongs to the exported configuration
+ */
+function isExportedConfigObject (source, range) {
+  const before = maskJavaScriptNonCode(source.slice(0, range.start))
+  const after = maskJavaScriptNonCode(source.slice(range.end + 1))
+  return DIRECT_EXPORT_PATTERN.test(before) || (CONFIG_CALL_PATTERN.test(before) && /^\s*\)/.test(after))
 }
 
 /**
@@ -245,7 +267,7 @@ function isWorkspaceProjectEntry (source, range) {
 
   const before = maskJavaScriptNonCode(source.slice(0, workspaceArray.start))
   const after = maskJavaScriptNonCode(source.slice(workspaceArray.end + 1))
-  return (WORKSPACE_ARRAY_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
+  return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
     (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after))
 }
 
@@ -403,7 +425,7 @@ function getPropertyPositions (source, property) {
 }
 
 function getLiteralProperty (source, property) {
-  const properties = getPropertyPositions(source, property)
+  const properties = getDirectPropertyPositions(source, property)
   if (properties.length === 0) return {}
   if (properties.length !== 1) return { dynamic: true }
   const literal = /^(["'])([^"'\\]+)\1/.exec(source.slice(properties[0].valueStart))
@@ -412,7 +434,7 @@ function getLiteralProperty (source, property) {
 }
 
 function getLiteralStringArray (source, property) {
-  const properties = getPropertyPositions(source, property)
+  const properties = getDirectPropertyPositions(source, property)
   if (properties.length === 0) return { values: [] }
   if (properties.length !== 1) return { dynamic: true, values: [] }
   const arrayMatch = /^\[([\s\S]{0,8192}?)\]/.exec(source.slice(properties[0].valueStart))
@@ -421,6 +443,20 @@ function getLiteralStringArray (source, property) {
   const values = [...syntax.matchAll(/(["'])([^"'\\]+)\1/g)].map(match => match[2])
   const residue = syntax.replaceAll(/(["'])([^"'\\]+)\1/g, '').replaceAll(',', '').trim()
   return residue ? { dynamic: true, values: [] } : { values }
+}
+
+/**
+ * Returns matching properties that are not nested inside another object.
+ *
+ * @param {string} source JavaScript object contents
+ * @param {string} property property name
+ * @returns {{index: number, valueStart: number}[]} direct property positions
+ */
+function getDirectPropertyPositions (source, property) {
+  const nestedObjects = getObjectRanges(source)
+  return getPropertyPositions(source, property).filter(position => {
+    return !nestedObjects.some(object => object.start < position.index && object.end > position.index)
+  })
 }
 
 function getOptionValues (args, expected) {
