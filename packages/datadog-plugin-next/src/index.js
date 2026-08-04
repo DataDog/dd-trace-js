@@ -136,7 +136,7 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
-    setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
+    setHttpParentRoute(httpParentSpan, req.method, page, isStatic, this.config.resourceRenamingEnabled)
     web.setRoute(req, page)
   }
 
@@ -163,7 +163,7 @@ function normalizeAppPath (page) {
   return page
 }
 
-function setHttpParentRoute (span, method, page, isStatic) {
+function setHttpParentRoute (span, method, page, isStatic, resourceRenamingEnabled) {
   if (!span) return
   const currentRoute = span.context().getTag(HTTP_ROUTE)
 
@@ -171,7 +171,7 @@ function setHttpParentRoute (span, method, page, isStatic) {
   if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
-  span.setTag(HTTP_ENDPOINT, page)
+  if (resourceRenamingEnabled) span.setTag(HTTP_ENDPOINT, page)
   span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
   nextParentRoutes.set(span, page)
 }

@@ -1076,7 +1076,7 @@ describe('compiled Next runtimes', () => {
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
     })
 
-    it('preserves the HTTP endpoint when an App Route resolves an HTTP parent', async () => {
+    it('does not add an HTTP endpoint when resource renaming is disabled', async () => {
       class AppRouteRouteModule {
         definition = { pathname: '/api/http-parent' }
 
@@ -1095,12 +1095,44 @@ describe('compiled Next runtimes', () => {
         assert.ok(httpSpan)
         assert.strictEqual(httpSpan.resource, 'GET /api/http-parent')
         assert.strictEqual(httpSpan.meta['http.route'], '/api/http-parent')
-        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/http-parent')
+        assert.strictEqual(httpSpan.meta['http.endpoint'], undefined)
       })
 
       await storage('legacy').run(
         { span: httpParentSpan },
         () => new AppRouteRouteModule().handle({ headers: {}, method: 'GET', url: '/api/http-parent' }, {})
+      )
+      httpParentSpan.finish()
+      await trace
+    })
+
+    it('preserves the HTTP endpoint when resource renaming is enabled', async () => {
+      agent.reload('next', { resourceRenamingEnabled: true })
+
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/http-parent-enabled' }
+
+        handle () {
+          return Promise.resolve({ status: 200 })
+        }
+      }
+      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+
+      const httpParentSpan = tracer.startSpan('web.request', {
+        integrationName: 'http',
+        tags: { 'http.method': 'GET' },
+      })
+      const trace = agent.assertSomeTraces(traces => {
+        const httpSpan = traces[0].find(span => span.name === 'web.request')
+        assert.ok(httpSpan)
+        assert.strictEqual(httpSpan.resource, 'GET /api/http-parent-enabled')
+        assert.strictEqual(httpSpan.meta['http.route'], '/api/http-parent-enabled')
+        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/http-parent-enabled')
+      })
+
+      await storage('legacy').run(
+        { span: httpParentSpan },
+        () => new AppRouteRouteModule().handle({ headers: {}, method: 'GET', url: '/api/http-parent-enabled' }, {})
       )
       httpParentSpan.finish()
       await trace
