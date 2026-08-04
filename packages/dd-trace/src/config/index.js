@@ -606,7 +606,7 @@ class Config extends ConfigBase {
 
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
-    if (getEnvironmentVariable('JEST_WORKER_ID') || isTestOptimizationWorker) {
+    if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 

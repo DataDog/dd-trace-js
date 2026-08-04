@@ -3799,15 +3799,6 @@ describe('Config', () => {
         assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
     })
-
-    it('unconditionally disables telemetry inside a Jest worker', () => {
-      process.env.JEST_WORKER_ID = '1'
-      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
-
-      const config = getConfig(options)
-
-      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
-    })
   })
 
   context('llmobs config', () => {
