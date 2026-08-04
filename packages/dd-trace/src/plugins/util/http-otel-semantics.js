@@ -262,8 +262,10 @@ function applyHttpOtelSemantics (formattedSpan) {
   // flipping `error` here would make the span and its stats disagree. The
   // configured error-status ranges therefore apply, and they take precedence over
   // the OTel defaults.
-  // No-clobber: an exception already put its class name here.
-  if (status !== undefined && formattedSpan.error && newMeta[ERROR_TYPE] === undefined) {
+  // No-clobber: an exception already put its class name here. Bounded below at 400
+  // so a span that errored for some other reason (a `setTag('error', true)` on a
+  // 200) does not end up describing its error as a success status.
+  if (status !== undefined && formattedSpan.error && newMeta[ERROR_TYPE] === undefined && Number(status) >= 400) {
     newMeta[ERROR_TYPE] = status
   }
 

@@ -1,14 +1,19 @@
 'use strict'
 
 const log = require('../../log')
+const kinds = require('../../../../../ext/kinds')
 
 // Defaults per the OTel HTTP semantic conventions RFC: server spans error on 5xx
 // regardless of the flag, client spans error on 4xx by default and on 4xx-5xx
 // when OTel semantics are enabled (OTel treats a client 5xx as an error, Datadog
 // historically did not).
-const SERVER_DEFAULT = '500-599'
-const CLIENT_DEFAULT = '400-499'
-const CLIENT_OTEL_DEFAULT = '400-599'
+//
+// The server range is open above 599 on purpose. The hardcoded default it replaces
+// was `code < 500`, so a synthetic status some proxies report (600, 999) was an
+// error; capping at 599 would silently stop marking those.
+const SERVER_DEFAULT_RANGES = [[500, Number.POSITIVE_INFINITY]]
+const CLIENT_DEFAULT_RANGES = [[400, 499]]
+const CLIENT_OTEL_DEFAULT_RANGES = [[400, 599]]
 
 /**
  * Parse a status-code range specification (`"400-499,503"`) into inclusive
@@ -19,8 +24,11 @@ const CLIENT_OTEL_DEFAULT = '400-599'
  * expands the same syntax into a flat array of codes. HTTP ranges span hundreds
  * of codes, so ranges are kept as bounds here instead of being expanded.
  *
+ * Entries that do not parse are dropped and reported, rather than taking the
+ * whole spec down with them.
+ *
  * @param {string} spec
- * @param {string} optionName name reported when the spec is unusable
+ * @param {string} optionName name reported when an entry is unusable
  * @returns {Array<[number, number]> | undefined} undefined when nothing parsed
  */
 function parseStatusRanges (spec, optionName) {
@@ -33,13 +41,21 @@ function parseStatusRanges (spec, optionName) {
     const dashIndex = trimmed.indexOf('-', 1)
     if (dashIndex === -1) {
       const code = Number(trimmed)
-      if (Number.isInteger(code)) ranges.push([code, code])
+      if (Number.isInteger(code)) {
+        ranges.push([code, code])
+      } else {
+        log.error('Ignoring `%s` entry %s: not a status code or range.', optionName, trimmed)
+      }
       continue
     }
 
     const low = Number(trimmed.slice(0, dashIndex))
     const high = Number(trimmed.slice(dashIndex + 1))
-    if (Number.isInteger(low) && Number.isInteger(high) && low <= high) ranges.push([low, high])
+    if (Number.isInteger(low) && Number.isInteger(high) && low <= high) {
+      ranges.push([low, high])
+    } else {
+      log.error('Ignoring `%s` entry %s: not a status code or range.', optionName, trimmed)
+    }
   }
 
   if (ranges.length === 0) {
@@ -51,18 +67,15 @@ function parseStatusRanges (spec, optionName) {
 }
 
 /**
- * Build the `validateStatus` predicate a plugin calls per response: it returns
- * true when the status code is *not* an error.
+ * Compile inclusive `[low, high]` bounds into the `validateStatus` predicate a
+ * plugin calls per response: it returns true when the status code is *not* an
+ * error.
  *
- * @param {string} spec
- * @param {string} optionName
+ * @param {Array<[number, number]>} ranges
  * @returns {(code: number) => boolean}
  */
-function buildStatusValidator (spec, optionName) {
-  const ranges = parseStatusRanges(spec, optionName)
-  if (ranges === undefined) return () => true
-
-  // The single-range case (both defaults, and nearly every user config) compiles
+function validatorFromRanges (ranges) {
+  // The single-range case (every default, and nearly every user config) compiles
   // to the same two comparisons the hardcoded thresholds used before.
   if (ranges.length === 1) {
     const [low, high] = ranges[0]
@@ -75,6 +88,22 @@ function buildStatusValidator (spec, optionName) {
     }
     return true
   }
+}
+
+/**
+ * Build the validator for a configured spec, falling back to the span kind's
+ * default when the spec is unusable. Falling back to the default rather than to
+ * "nothing is an error" matters: an empty environment variable (`VAR=`, which is
+ * what an unset compose value expands to) would otherwise silently stop every
+ * 5xx from being marked.
+ *
+ * @param {string} spec
+ * @param {string} optionName
+ * @param {Array<[number, number]>} defaultRanges
+ * @returns {(code: number) => boolean}
+ */
+function buildStatusValidator (spec, optionName, defaultRanges) {
+  return validatorFromRanges(parseStatusRanges(spec, optionName) ?? defaultRanges)
 }
 
 /**
@@ -94,7 +123,7 @@ function buildStatusValidator (spec, optionName) {
  * sets an explicit range keeps it with the flag on.
  *
  * @param {StatusValidatorConfig} config
- * @param {'server' | 'client'} kind
+ * @param {'server' | 'client'} kind one of `ext/kinds`
  * @returns {(code: number) => boolean}
  */
 function getStatusValidator (config, kind) {
@@ -105,19 +134,23 @@ function getStatusValidator (config, kind) {
     log.error('Expected `validateStatus` to be a function.')
   }
 
-  if (kind === 'server') {
+  if (kind === kinds.SERVER) {
     const optionName = 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES'
-    return buildStatusValidator(config[optionName] ?? SERVER_DEFAULT, optionName)
+    const configured = config[optionName]
+    return configured === undefined
+      ? validatorFromRanges(SERVER_DEFAULT_RANGES)
+      : buildStatusValidator(configured, optionName, SERVER_DEFAULT_RANGES)
   }
 
   const optionName = 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES'
+  const defaultRanges = config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    ? CLIENT_OTEL_DEFAULT_RANGES
+    : CLIENT_DEFAULT_RANGES
   const configured = config[optionName]
-  if (configured !== undefined) return buildStatusValidator(configured, optionName)
 
-  return buildStatusValidator(
-    config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? CLIENT_OTEL_DEFAULT : CLIENT_DEFAULT,
-    optionName
-  )
+  return configured === undefined
+    ? validatorFromRanges(defaultRanges)
+    : buildStatusValidator(configured, optionName, defaultRanges)
 }
 
 module.exports = {

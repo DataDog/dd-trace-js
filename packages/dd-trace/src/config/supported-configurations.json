@@ -3014,11 +3014,11 @@
       {
         "implementation": "C",
         "type": "string",
-        "default": "500-599",
+        "default": null,
         "aliases": [
           "DD_HTTP_SERVER_ERROR_STATUSES"
         ],
-        "description": "Status codes considered errors on HTTP server spans, as a comma separated list of codes and inclusive ranges (e.g. \"500-599,404\")."
+        "description": "Status codes considered errors on HTTP server spans, as a comma separated list of codes and inclusive ranges (e.g. \"500-599,404\"). Unset resolves to 500 and above, which is the long-standing default."
       }
     ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [

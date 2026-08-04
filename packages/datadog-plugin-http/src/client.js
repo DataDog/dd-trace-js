@@ -8,6 +8,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { CLIENT } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
@@ -167,7 +168,7 @@ function addRequestHeaders (req, span, config) {
 }
 
 function normalizeClientConfig (config) {
-  const validateStatus = getStatusValidator(config, 'client')
+  const validateStatus = getStatusValidator(config, CLIENT)
   const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)

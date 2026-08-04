@@ -4,6 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { SERVER } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
 const { NETWORK_PEER_ADDRESS } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { extractURL, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
@@ -46,7 +47,7 @@ class NextPlugin extends ServerPlugin {
     // (and the socket peer, which is only reachable here) exactly as
     // `web.addRequestTags` does, but only under the flag so the default output
     // stays unchanged.
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && req.headers) {
       span.setTag('http.url', obfuscateQs(this.config, extractURL(req)))
       const peerAddress = req.socket?.remoteAddress
       if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
@@ -147,7 +148,7 @@ class NextPlugin extends ServerPlugin {
 
 function normalizeConfig (config) {
   const hooks = getHooks(config)
-  const validateStatus = getStatusValidator(config, 'server')
+  const validateStatus = getStatusValidator(config, SERVER)
   const queryStringObfuscation = getQsObfuscator(config)
 
   return { ...config, hooks, validateStatus, queryStringObfuscation }

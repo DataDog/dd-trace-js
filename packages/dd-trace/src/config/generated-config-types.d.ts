@@ -273,7 +273,7 @@ export interface GeneratedConfig {
   DD_TRACE_HONO_ENABLED: boolean;
   DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
-  DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP2_ENABLED: boolean;
   DD_TRACE_HTTPS_ENABLED: boolean;
   DD_TRACE_IOREDIS_ENABLED: boolean;
@@ -730,7 +730,7 @@ export interface GeneratedEnvVarConfig {
   DD_HEAP_SNAPSHOT_DESTINATION: string;
   DD_HEAP_SNAPSHOT_INTERVAL: number;
   DD_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
-  DD_HTTP_SERVER_ERROR_STATUSES: string;
+  DD_HTTP_SERVER_ERROR_STATUSES: string | undefined;
   DD_IAST_DB_ROWS_TO_TAINT: number;
   DD_IAST_DEDUPLICATION_ENABLED: boolean;
   DD_IAST_ENABLED: boolean;
@@ -971,7 +971,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HONO_ENABLED: boolean;
   DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
-  DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP2_ENABLED: boolean;
   DD_TRACE_HTTPS_ENABLED: boolean;
   DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED: boolean;

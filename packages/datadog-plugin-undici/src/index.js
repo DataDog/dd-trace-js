@@ -8,6 +8,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT } = require('../../../ext/kinds')
 const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
 
 const {
@@ -302,7 +303,7 @@ function normalizeHeaders (headers) {
 }
 
 function normalizeConfig (config) {
-  const validateStatus = getStatusValidator(config, 'client')
+  const validateStatus = getStatusValidator(config, CLIENT)
   const hooks = getHooks(config)
 
   return {
