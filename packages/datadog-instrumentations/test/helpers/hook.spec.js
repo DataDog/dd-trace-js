@@ -8,12 +8,15 @@ const sinon = require('sinon')
 describe('Hook', () => {
   let Hook
   let iitm
+  let loaderState
   let ritm
 
   beforeEach(() => {
     iitm = sinon.stub()
+    loaderState = { syncCommonJsHooks: false }
     ritm = sinon.stub()
     Hook = proxyquire('../../src/helpers/hook', {
+      '../../../dd-trace/src/loader-state': loaderState,
       '../../../dd-trace/src/iitm': iitm,
       '../../../dd-trace/src/require-package-json': sinon.stub().returns({ version: '1.0.0' }),
       '../../../dd-trace/src/ritm': ritm,
@@ -32,6 +35,64 @@ describe('Hook', () => {
     const hook = ritm.args[0][2]
     assert.strictEqual(hook(undefined, 'test-package', '/test-package', '1.0.0'), undefined)
     sinon.assert.calledOnceWithExactly(onrequire, undefined, 'test-package', '/test-package', '1.0.0', undefined)
+  })
+
+  it('leaves CommonJS interception to IITM when synchronous hooks own it', () => {
+    loaderState.syncCommonJsHooks = true
+
+    Hook(['test-package'], sinon.stub())
+
+    sinon.assert.notCalled(ritm)
+  })
+
+  it('uses bundler metadata and CommonJS export semantics', () => {
+    const moduleExports = { default: sinon.stub() }
+    const replacement = { instrumented: true }
+    const onrequire = sinon.stub().returns(replacement)
+
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(
+      hook(
+        moduleExports,
+        'test-package',
+        '/test-package',
+        { version: '2.0.0' },
+        'commonjs'
+      ),
+      replacement
+    )
+    sinon.assert.calledOnceWithExactly(
+      onrequire,
+      moduleExports,
+      'test-package',
+      '/test-package',
+      '2.0.0',
+      false
+    )
+  })
+
+  it('uses CommonJS export semantics for type-stripped modules', () => {
+    const moduleExports = { default: sinon.stub() }
+    const replacement = { instrumented: true }
+    const onrequire = sinon.stub().returns(replacement)
+
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(
+      hook(moduleExports, 'test-package', '/test-package', undefined, 'commonjs-typescript'),
+      replacement
+    )
+    sinon.assert.calledOnceWithExactly(
+      onrequire,
+      moduleExports,
+      'test-package',
+      '/test-package',
+      '1.0.0',
+      false
+    )
   })
 
   it('rebinds named aliases on the ESM namespace', () => {

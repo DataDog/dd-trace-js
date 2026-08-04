@@ -2,18 +2,19 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+const { builtinModules } = require('node:module')
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
-const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const { createWrapperModule, getNodeModuleFormat } = require('import-in-the-middle/bundler')
+
+const modulesOfInterest = require('../datadog-instrumentations/src/helpers/bundler-modules')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const {
   OPTIONAL_PEER_FILTER,
   matchesOptionalPeerFile,
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
-const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
@@ -21,46 +22,7 @@ const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
 
 let rewriter
 
-for (const hook of Object.values(hooks)) {
-  if (hook !== null && typeof hook === 'object') {
-    hook.fn()
-  } else {
-    hook()
-  }
-}
-
-function moduleOfInterestKey (name, file) {
-  return file ? `${name}/${file}` : name
-}
-
-const builtinModules = new Set(require('module').builtinModules)
-
-function addModuleOfInterest (name, file) {
-  if (!name) return
-
-  modulesOfInterest.add(moduleOfInterestKey(name, file))
-
-  if (builtinModules.has(name)) {
-    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
-  }
-}
-
-const modulesOfInterest = new Set()
-
-for (const [name, instrumentation] of Object.entries(instrumentations)) {
-  for (const entry of instrumentation) {
-    addModuleOfInterest(name, entry.file)
-  }
-}
-
-const CHANNEL = 'dd-trace:bundler:load'
-
-const builtins = new Set()
-
-for (const builtin of builtinModules) {
-  builtins.add(builtin)
-  builtins.add(`node:${builtin}`)
-}
+const builtins = new Set(builtinModules)
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
@@ -200,8 +162,25 @@ ${build.initialOptions.banner.js}`
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
+  const wrapperImports = new Map()
 
   build.onResolve({ filter: /.*/ }, args => {
+    const imports = wrapperImports.get(args.importer)
+    const wrapperImport = imports?.get(args.path)
+    if (wrapperImport !== undefined) {
+      imports.delete(args.path)
+      if (imports.size === 0) wrapperImports.delete(args.importer)
+
+      const { target } = wrapperImport
+      return {
+        path: target.url.startsWith('file:') ? fileURLToPath(target.url) : target.url,
+        external: wrapperImport.external,
+        sideEffects: true,
+      }
+    }
+
+    if (args.pluginData?.skipDatadogInstrumentation) return
+
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       log.debug('EXTERNAL: %s', args.path)
@@ -241,7 +220,7 @@ ${build.initialOptions.banner.js}`
 
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
-    const internal = builtins.has(args.path)
+    const internal = args.path.startsWith('node:') || builtins.has(args.path)
 
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
@@ -252,6 +231,7 @@ ${build.initialOptions.banner.js}`
 
         return {
           path: fullPathToModule,
+          sideEffects: true,
           pluginData: {
             pkg: extracted?.pkg,
             path: extracted?.path,
@@ -261,6 +241,7 @@ ${build.initialOptions.banner.js}`
             kind: args.kind,
             internal,
             isESM: true,
+            format: 'builtin',
           },
         }
       }
@@ -288,7 +269,12 @@ ${build.initialOptions.banner.js}`
       try {
         const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
-        const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+        const format = getNodeModuleFormat(
+          pathToFileURL(fullPathToModule).href,
+          pathToFileURL(pathToPackageJson).href,
+          packageJson.type
+        ) ?? 'commonjs'
+        const isESM = format === 'module' || format === 'module-typescript'
         if (isESM && !interceptedESMModules.has(fullPathToModule)) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
@@ -298,6 +284,7 @@ ${build.initialOptions.banner.js}`
         // https://esbuild.github.io/plugins/#on-resolve-arguments
         return {
           path: fullPathToModule,
+          sideEffects: true,
           pluginData: {
             version: packageJson.version,
             pkg: extracted.pkg,
@@ -308,6 +295,7 @@ ${build.initialOptions.banner.js}`
             kind: args.kind,
             internal,
             isESM,
+            format,
           },
         }
       } catch (e) {
@@ -330,81 +318,95 @@ ${build.initialOptions.banner.js}`
   build.onLoad({ filter: /.*/ }, async args => {
     if (args.pluginData?.pkgOfInterest) {
       const data = args.pluginData
+      const wrapperPath = args.path
 
       log.debug('LOAD: %s@%s, pkg "%s"', data.pkg, data.version, data.path)
 
-      const pkgPath = data.raw === data.pkg
-        ? data.pkg
-        : `${data.pkg}/${data.path}`
-
-      // Read the content of the module file of interest
-      let contents
+      if (data.isESM && !args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+        return {
+          contents: fs.readFileSync(args.path, 'utf8'),
+          loader: 'js',
+          resolveDir: path.dirname(args.path),
+        }
+      }
 
       if (data.isESM) {
-        if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
-          args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
+        args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
+        if (data.internal) args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
+        interceptedESMModules.add(args.path)
+      }
 
-          if (data.internal) {
-            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
-          }
-
-          interceptedESMModules.add(args.path)
-
-          const setters = await processModule({
-            path: args.path,
-            internal: data.internal,
-            context: { format: 'module' },
-          })
-
-          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
-          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
-          contents = `
-import { register } from ${JSON.stringify(iitmPath)};
-import * as namespace from ${JSON.stringify(args.path)};
-const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
-const set = {};
-const get = {};
-
-${[...setters.values()].join(';\n')};
-
-register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
-`
-        } else {
-          contents = fs.readFileSync(args.path, 'utf8')
+      /**
+       * @param {string} specifier
+       * @param {{ parentURL?: string }} context
+       */
+      const resolveModule = async (specifier, context) => {
+        if (specifier.startsWith('node:') || builtins.has(specifier)) {
+          return { url: specifier, format: 'builtin' }
         }
-      } else {
-        const fileCode = fs.readFileSync(args.path, 'utf8')
-        // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
-        // `__commonJS` factory into an arrow function whose `arguments` resolves to the
-        // ESM top-level scope (see issue #8681). Pass `(module.exports, module)`
-        // explicitly; the IIFE declares no parameters so esbuild's static `require()`
-        // resolution inside `fileCode` is preserved through the factory's closure.
-        contents = `
-        (function() {
-          ${fileCode}
-        })(module.exports, module);
-        {
-          const dc = require('dc-polyfill');
-          const ch = dc.channel('${CHANNEL}');
-          const mod = module.exports
-          const payload = {
-            module: mod,
-            version: '${data.version}',
-            package: '${data.pkg}',
-            path: '${pkgPath}'
-          };
-          ch.publish(payload);
-          module.exports = payload.module;
-      }
-      `
+
+        const importer = context.parentURL?.startsWith('file:')
+          ? fileURLToPath(context.parentURL)
+          : ''
+        const result = await build.resolve(specifier, {
+          importer,
+          namespace: 'file',
+          resolveDir: importer ? path.dirname(importer) : process.cwd(),
+          kind: 'import-statement',
+          pluginData: { skipDatadogInstrumentation: true },
+        })
+        if (result.errors.length > 0) throw new Error(result.errors[0].text)
+
+        const builtin = result.path.startsWith('node:') || builtins.has(result.path)
+        const url = builtin ? result.path : pathToFileURL(result.path).href
+        return {
+          url,
+          format: getNodeModuleFormat(url) ?? 'commonjs',
+          watchFiles: path.isAbsolute(result.path) ? [pathToFileURL(result.path).href] : undefined,
+        }
       }
 
-      // https://esbuild.github.io/plugins/#on-load-results
+      /**
+       * @param {string} url
+       * @param {{ format?: string }} context
+       */
+      const loadModule = (url, context) => {
+        if (!url.startsWith('file:')) return { format: context.format }
+
+        const filename = fileURLToPath(url)
+        return {
+          source: fs.readFileSync(filename),
+          format: context.format ?? getNodeModuleFormat(url) ?? 'commonjs',
+          watchFiles: [url],
+        }
+      }
+
+      const moduleUrl = data.internal ? args.path : pathToFileURL(args.path).href
+      const wrapper = await createWrapperModule({
+        module: {
+          url: moduleUrl,
+          format: data.format,
+          source: data.internal ? undefined : fs.readFileSync(args.path),
+          specifier: data.raw,
+          data: { version: data.version },
+        },
+        resolve: resolveModule,
+        load: loadModule,
+      })
+      const imports = new Map()
+      for (const entry of wrapper.imports) imports.set(entry.specifier, entry)
+      wrapperImports.set(wrapperPath, imports)
+
+      const watchFiles = []
+      for (const watchFile of wrapper.watchFiles) {
+        if (watchFile.startsWith('file:')) watchFiles.push(fileURLToPath(watchFile))
+      }
+
       return {
-        contents,
+        contents: wrapper.code,
         loader: 'js',
-        resolveDir: path.dirname(args.path),
+        resolveDir: data.internal ? process.cwd() : path.dirname(args.path),
+        watchFiles,
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {

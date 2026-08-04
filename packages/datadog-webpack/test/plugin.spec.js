@@ -1,11 +1,49 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { pathToFileURL } = require('node:url')
+
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
 const optionalPeerLoader = require('../src/optional-peer-loader')
+
+/**
+ * @param {string} source
+ * @param {object} options
+ * @param {Function} [resolveModule]
+ * @returns {Promise<string>}
+ */
+function runLoader (source, options, resolveModule = async () => { throw new Error('unexpected resolve') }) {
+  return loader.call({
+    addDependency: () => {},
+    cacheable: () => {},
+    getOptions: () => options,
+    getResolve: () => resolveModule,
+    resourcePath: '/app/node_modules/mypackage/index.js',
+  }, source)
+}
+
+/**
+ * @param {object} [plugin]
+ * @returns {Function}
+ */
+function captureAfterResolve (plugin = new DatadogWebpackPlugin()) {
+  let afterResolve
+  plugin.apply({
+    options: { optimization: {} },
+    hooks: {
+      environment: { tap: () => {} },
+      thisCompilation: { tap: () => {} },
+      normalModuleFactory: {
+        tap: (name, fn) => fn({ hooks: { afterResolve: { tap: (n, f) => { afterResolve = f } } } }),
+      },
+    },
+  })
+  return afterResolve
+}
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
@@ -52,22 +90,6 @@ describe('DatadogWebpackPlugin', () => {
   })
 
   describe('optional peer bundling', () => {
-    function captureAfterResolve () {
-      const plugin = new DatadogWebpackPlugin()
-      let afterResolve
-      plugin.apply({
-        options: { optimization: {} },
-        hooks: {
-          environment: { tap: () => {} },
-          thisCompilation: { tap: () => {} },
-          normalModuleFactory: {
-            tap: (name, fn) => fn({ hooks: { afterResolve: { tap: (n, f) => { afterResolve = f } } } }),
-          },
-        },
-      })
-      return afterResolve
-    }
-
     it('applies the optional-peer loader to require-provider', () => {
       const createData = { resource: require.resolve('../../dd-trace/src/openfeature/require-provider') }
 
@@ -94,48 +116,101 @@ describe('DatadogWebpackPlugin', () => {
 
       assert.strictEqual(createData.loaders, undefined)
     })
+
+    it('marks instrumented packages as side-effectful and records their format', () => {
+      const Plugin = proxyquire('../index', {
+        '../datadog-instrumentations/src/helpers/bundler-modules': new Set(['express']),
+      })
+      const createData = {
+        resource: require.resolve('express'),
+        settings: {},
+      }
+
+      captureAfterResolve(new Plugin())({ createData, request: 'express' })
+
+      assert.strictEqual(createData.settings.sideEffects, true)
+      assert.strictEqual(createData.loaders[0].options.format, 'commonjs')
+    })
+
+    it('does not wrap the original module loaded by an IITM wrapper', () => {
+      const createData = {
+        resource: `${require.resolve('express')}${loader.ORIGINAL_QUERY}`,
+        request: 'express',
+        settings: {},
+      }
+
+      captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
   })
 })
 
 describe('loader', () => {
-  it('appends dc-polyfill channel publish to module source', () => {
+  it('wraps CommonJS through IITM', async () => {
     const source = "'use strict'\nmodule.exports = { foo: 'bar' }"
-    const options = { pkg: 'mypackage', version: '1.2.3', path: 'mypackage' }
-
-    const context = {
-      cacheable: () => {},
-      getOptions: () => options,
+    const options = {
+      format: 'commonjs',
+      specifier: 'mypackage',
+      url: 'file:///app/node_modules/mypackage/index.js',
+      version: '1.2.3',
     }
 
-    const result = loader.call(context, source)
+    const result = await runLoader(source, options)
 
-    // Switch to `assert.match(result, new RegExp(`^${RegExp.escape(source)}`), ...)` once the minimum supported
-    // Node.js version is 24. Until then, `RegExp.escape` is unavailable and hand-escaping every regex metacharacter
-    // in `source` would be more error-prone than this `startsWith` check.
-    // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
-    assert.ok(result.startsWith(source), 'result should start with original source')
-    assert.ok(result.includes("require('dc-polyfill')"), 'result should require dc-polyfill')
-    assert.ok(result.includes("'dd-trace:bundler:load'"), 'result should use the bundler channel')
-    assert.ok(result.includes("version: '1.2.3'"), 'result should contain the version')
-    assert.ok(result.includes("package: 'mypackage'"), 'result should contain the package name')
-    assert.ok(result.includes("path: 'mypackage'"), 'result should contain the path')
-    assert.ok(result.includes('module.exports = __dd_payload.module'), 'result should update module.exports')
+    assert.match(result, /registerCommonJS/)
+    assert.match(result, /"version":"1\.2\.3"/)
+    assert.doesNotMatch(result, /dd-trace:bundler:load/)
   })
 
-  it('uses __dd_ prefix to avoid name collisions', () => {
-    const source = 'module.exports = {}'
-    const options = { pkg: 'pkg', version: '1.0.0', path: 'pkg' }
-    const context = {
-      cacheable: () => {},
-      getOptions: () => options,
+  it('wraps ESM and maps the original module separately', async () => {
+    const options = {
+      format: 'module',
+      specifier: 'mypackage',
+      url: 'file:///app/node_modules/mypackage/index.js',
+      version: '1.0.0',
     }
 
-    const result = loader.call(context, source)
+    const result = await runLoader('export const value = 42', options)
 
-    assert.ok(result.includes('__dd_dc'), 'should use __dd_dc variable')
-    assert.ok(result.includes('__dd_ch'), 'should use __dd_ch variable')
-    assert.ok(result.includes('__dd_mod'), 'should use __dd_mod variable')
-    assert.ok(result.includes('__dd_payload'), 'should use __dd_payload variable')
+    assert.match(result, /registerWithData/)
+    assert.match(result, /index\.js\?__dd_iitm_original__/)
+    assert.doesNotMatch(result, /\.\/__iitm_module_0__\.js/)
+  })
+
+  it('resolves and loads ESM re-exports through webpack', async () => {
+    const nestedPath = require.resolve('../../datadog-esbuild/test/resources/export-method.mjs')
+    const options = {
+      format: 'module',
+      specifier: 'mypackage',
+      url: 'file:///app/node_modules/mypackage/index.js',
+      version: '1.0.0',
+    }
+    const result = await runLoader(
+      "export * from './export-method.mjs'",
+      options,
+      async (context, specifier) => {
+        assert.strictEqual(context, '/app/node_modules/mypackage')
+        assert.strictEqual(specifier, pathToFileURL('/app/node_modules/mypackage/export-method.mjs').href)
+        return nestedPath
+      }
+    )
+
+    assert.match(result, /exportMethod/)
+    assert.doesNotMatch(result, /\.\/__iitm_module_0__\.js/)
+  })
+
+  it('resolves builtin re-exports without calling webpack', async () => {
+    const options = {
+      format: 'module',
+      specifier: 'mypackage',
+      url: 'file:///app/node_modules/mypackage/index.js',
+      version: '1.0.0',
+    }
+    const result = await runLoader("export * from 'node:fs'", options)
+
+    assert.match(result, /\$readFile/)
+    assert.match(result, /registerWithData/)
   })
 })
 

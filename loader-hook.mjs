@@ -121,11 +121,11 @@ function load (url, context, nextLoad) {
 
 function loadSync (url, context, nextLoad) {
   if (isCommonJSLoad(context)) {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+    return getSyncImportInTheMiddleHook().loadSyncCommonJS(url, context, nextLoad)
   }
 
   return rewriterLoader.loadSync(url, context, (url, context) => {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+    return getSyncImportInTheMiddleHook().loadSyncCommonJS(url, context, nextLoad)
   })
 }
 
@@ -153,7 +153,7 @@ function getSyncImportInTheMiddleHook () {
   const importInTheMiddleRegisterHooksUrl = pathToFileURL(
     require.resolve('import-in-the-middle/register-hooks.mjs')
   ).href
-  syncImportInTheMiddleHook = createHook({ url: importInTheMiddleRegisterHooksUrl })
+  syncImportInTheMiddleHook = createHook({ url: importInTheMiddleRegisterHooksUrl }, true)
   return syncImportInTheMiddleHook
 }
 
@@ -172,8 +172,8 @@ function registerSyncLoaderHooks (data = {}) {
   if (
     typeof Module.registerHooks !== 'function' ||
     typeof syncHook.applyOptions !== 'function' ||
-    typeof syncHook.loadSync !== 'function' ||
-    typeof syncHook.resolveSync !== 'function'
+    typeof syncHook.loadSyncCommonJS !== 'function' ||
+    typeof syncHook.resolveSyncCommonJS !== 'function'
   ) {
     return false
   }
@@ -185,9 +185,10 @@ function registerSyncLoaderHooks (data = {}) {
   // that `import http from 'node:http'` is wrapped on both paths.
   syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
   Module.registerHooks({
-    resolve: syncHook.resolveSync,
+    resolve: syncHook.resolveSyncCommonJS,
     load: loadSync,
   })
+  require('./packages/dd-trace/src/loader-state.js').syncCommonJsHooks = true
 
   return true
 }

@@ -10,6 +10,7 @@ const { pathToFileURL } = require('node:url')
 const repositoryRoot = join(__dirname, '..', '..', '..')
 const loaderHookUrl = pathToFileURL(join(repositoryRoot, 'loader-hook.mjs')).href
 const configDefaultsPath = join(repositoryRoot, 'packages', 'dd-trace', 'src', 'config', 'defaults.js')
+const loaderStatePath = join(repositoryRoot, 'packages', 'dd-trace', 'src', 'loader-state.js')
 
 const securityControls = 'SANITIZER:COMMAND_INJECTION:sanitizer/index.js:sanitize'
 const sanitizerUrl = 'file:///app/sanitizer/index.js'
@@ -86,5 +87,28 @@ describe('loader hook', () => {
     )
 
     assert.strictEqual(initializeLoaderHook().includesSecurityControl, true)
+  })
+
+  it('loads CommonJS through synchronous hooks when the runtime supports them', () => {
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+      import { createRequire } from 'node:module'
+
+      const require = createRequire(${JSON.stringify(join(repositoryRoot, 'index.js'))})
+      const { registerSyncLoaderHooks } = await import(${JSON.stringify(loaderHookUrl)})
+      const registered = registerSyncLoaderHooks()
+      const loaderState = require(${JSON.stringify(loaderStatePath)})
+      const expressType = registered ? typeof require('express') : undefined
+
+      console.log(JSON.stringify({ expressType, registered, syncCommonJsHooks: loaderState.syncCommonJsHooks }))
+    `], {
+      encoding: 'utf8',
+      env: process.env,
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+
+    const data = JSON.parse(result.stdout)
+    assert.strictEqual(data.syncCommonJsHooks, data.registered)
+    if (data.registered) assert.strictEqual(data.expressType, 'function')
   })
 })

@@ -3,6 +3,7 @@
 const path = require('path')
 
 const iitm = require('../../../dd-trace/src/iitm')
+const loaderState = require('../../../dd-trace/src/loader-state')
 const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -132,10 +133,23 @@ function Hook (modules, hookOptions, onrequire) {
     return newExports
   }
 
-  this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
-  })
+  if (!loaderState.syncCommonJsHooks) {
+    this._ritmHook = ritm(modules, {}, safeHook)
+  }
+
+  /**
+   * @param {unknown} moduleExports
+   * @param {string} moduleName
+   * @param {string|undefined} moduleBaseDir
+   * @param {{ version?: string }|undefined} data
+   * @param {'builtin'|'module'|'commonjs'|'module-typescript'|'commonjs-typescript'|undefined} format
+   */
+  const hookImport = (moduleExports, moduleName, moduleBaseDir, data, format) => {
+    const isIitm = format !== 'commonjs' && format !== 'commonjs-typescript'
+    return safeHook(moduleExports, moduleName, moduleBaseDir, data?.version, isIitm)
+  }
+
+  this._iitmHook = iitm(modules, hookOptions, hookImport)
 }
 
 module.exports = Hook

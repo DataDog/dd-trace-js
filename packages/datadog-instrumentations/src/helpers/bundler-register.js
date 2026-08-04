@@ -1,16 +1,10 @@
 'use strict'
 
 const Module = require('module')
-const dc = require('dc-polyfill')
 
-const log = require('../../../dd-trace/src/log')
-const {
-  filename,
-  loadChannel,
-  matchVersion,
-} = require('./register.js')
-const hooks = require('./hooks')
-const instrumentations = require('./instrumentations')
+const originalRequire = Module.prototype.require
+
+require('./register')
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -25,95 +19,25 @@ const instrumentations = require('./instrumentations')
 // that to detect a bundled context and avoid unintended side-effects in
 // normal Node.js (e.g. shimmer-wrapping http before ESM modules load).
 if (!(module instanceof Module)) {
+  const hookedRequire = Module.prototype.require
   for (const name of ['http', 'https']) {
     try {
-      Module.prototype.require.call(module, name)
+      hookedRequire.call(module, name)
     } catch {
       // Built-in not available in this environment, skip
     }
   }
-}
 
-const CHANNEL = 'dd-trace:bundler:load'
-
-if (!dc.subscribe) {
-  dc.subscribe = (channel, cb) => {
-    dc.channel(channel).subscribe(cb)
-  }
-}
-if (!dc.unsubscribe) {
-  dc.unsubscribe = (channel, cb) => {
-    if (dc.channel(channel).hasSubscribers) {
-      dc.channel(channel).unsubscribe(cb)
-      return true
-    }
-    return false
-  }
-}
-
-/**
- * @param {string} name
- */
-function doHook (name) {
-  const hook = hooks[name] ?? hooks[`node:${name}`]
-  if (!hook) {
-    log.error('esbuild-wrapped %s missing in list of hooks', name)
-    return
-  }
-
-  const hookFn = hook.fn ?? hook
-  if (typeof hookFn !== 'function') {
-    log.error('esbuild-wrapped hook %s is not a function', name)
-    return
-  }
-
+  // Webpack stores prefixed and unprefixed builtins under separate module IDs.
+  // Seed both from the singleton that RITM patched above without re-entering
+  // RITM while either external module is still being initialized.
+  Module.prototype.require = originalRequire
   try {
-    hookFn()
-  } catch {
-    log.error('esbuild-wrapped %s hook failed', name)
+    require('http')
+    require('node:http')
+    require('https')
+    require('node:https')
+  } finally {
+    Module.prototype.require = hookedRequire
   }
 }
-
-/** @type {Set<string>} */
-const instrumentedNodeModules = new Set()
-
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
-dc.subscribe(CHANNEL, (message) => {
-  const payload = /** @type {Payload} */ (message)
-  const name = payload.package
-
-  const isPrefixedWithNode = name.startsWith('node:')
-
-  const isNodeModule = isPrefixedWithNode || !hooks[name]
-
-  if (isNodeModule) {
-    const nodeName = isPrefixedWithNode ? name.slice(5) : name
-    // Used for node: prefixed modules to prevent double instrumentation.
-    if (instrumentedNodeModules.has(nodeName)) {
-      return
-    }
-    instrumentedNodeModules.add(nodeName)
-  }
-
-  doHook(name)
-
-  const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
-
-  if (!instrumentation) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
-    return
-  }
-
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
-      continue
-    }
-
-    try {
-      loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
-    }
-  }
-})

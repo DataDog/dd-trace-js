@@ -2,35 +2,17 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+const { pathToFileURL } = require('node:url')
 
-const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const { getNodeModuleFormat } = require('import-in-the-middle/bundler')
+
+const modulesOfInterest = require('../datadog-instrumentations/src/helpers/bundler-modules')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
-const { isESMFile } = require('../datadog-esbuild/src/utils')
+const wrapperLoader = require('./src/loader')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
-
-for (const hook of Object.values(hooks)) {
-  if (hook !== null && typeof hook === 'object') {
-    hook.fn()
-  } else {
-    hook()
-  }
-}
-
-const modulesOfInterest = new Set()
-
-for (const [name, instrumentation] of Object.entries(instrumentations)) {
-  for (const entry of instrumentation) {
-    if (entry.file) {
-      modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
-    } else {
-      modulesOfInterest.add(name) // e.g. "redis"
-    }
-  }
-}
 
 /**
  * @returns {{ repositoryURL: string | null, commitSHA: string | null }}
@@ -134,6 +116,7 @@ class DatadogWebpackPlugin {
         if (!resource) {
           return
         }
+        if (resource.endsWith(wrapperLoader.ORIGINAL_QUERY)) return
 
         const normalizedResource = resource.replaceAll('\\', '/')
 
@@ -180,21 +163,26 @@ class DatadogWebpackPlugin {
           throw e
         }
 
-        if (isESMFile(normalizedResource, pkgJson, packageJson)) {
-          log.warn('Skipping ESM module (ESM support is not available in the webpack plugin): %s', resource)
-          return
-        }
-
+        const format = getNodeModuleFormat(
+          pathToFileURL(normalizedResource).href,
+          pathToFileURL(pkgJson).href,
+          packageJson.type
+        ) ?? 'commonjs'
         const version = packageJson.version
-        const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
 
         createData.loaders ||= []
         createData.loaders.unshift({
           loader: require.resolve('./src/loader'),
-          options: { pkg, version, path: pkgPath },
+          options: {
+            format,
+            specifier: request,
+            url: pathToFileURL(resource).href,
+            version,
+          },
         })
+        createData.settings.sideEffects = true
 
-        log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, pkgPath)
+        log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, modulePath)
       })
     })
   }

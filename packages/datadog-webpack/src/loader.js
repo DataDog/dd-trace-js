@@ -1,27 +1,84 @@
 'use strict'
 
-const CHANNEL = 'dd-trace:bundler:load'
+const fs = require('node:fs')
+const { builtinModules } = require('node:module')
+const path = require('node:path')
+const { fileURLToPath, pathToFileURL } = require('node:url')
+
+const { createWrapperModule, getNodeModuleFormat } = require('import-in-the-middle/bundler')
+
+const ORIGINAL_QUERY = '?__dd_iitm_original__'
+const builtins = new Set(builtinModules)
 
 /**
- * Webpack loader that appends a dc-polyfill channel publish to a CJS module.
- * Called for each module-of-interest identified by DatadogWebpackPlugin.
- *
- * @param {string} source
- * @returns {string}
+ * @param {string} url
+ * @param {{ format?: string }} context
+ * @returns {{ source?: Buffer, format?: string, watchFiles?: string[] }}
  */
-module.exports = function loader (source) {
-  this.cacheable(false)
-  const { pkg, version, path: pkgPath } = this.getOptions()
+function loadModule (url, context) {
+  if (!url.startsWith('file:')) return { format: context.format }
 
-  return (
-    source +
-    '\n;{\n' +
-    '  const __dd_dc = require(\'dc-polyfill\');\n' +
-    `  const __dd_ch = __dd_dc.channel('${CHANNEL}');\n` +
-    '  const __dd_mod = module.exports;\n' +
-    `  const __dd_payload = { module: __dd_mod, version: '${version}', package: '${pkg}', path: '${pkgPath}' };\n` +
-    '  __dd_ch.publish(__dd_payload);\n' +
-    '  module.exports = __dd_payload.module;\n' +
-    '}\n'
-  )
+  const filename = fileURLToPath(url)
+  return {
+    source: fs.readFileSync(filename),
+    format: context.format ?? getNodeModuleFormat(url) ?? 'commonjs',
+    watchFiles: [url],
+  }
 }
+
+/**
+ * @param {string|Buffer} source
+ * @returns {Promise<string>}
+ */
+module.exports = async function loader (source) {
+  this.cacheable(false)
+  const options = this.getOptions()
+
+  /**
+   * @param {string} specifier
+   * @param {{ parentURL?: string }} context
+   */
+  const resolve = async (specifier, context) => {
+    if (specifier.startsWith('node:') || builtins.has(specifier)) {
+      return { url: specifier, format: 'builtin' }
+    }
+
+    const parentPath = context.parentURL?.startsWith('file:')
+      ? fileURLToPath(context.parentURL)
+      : this.resourcePath
+    const resolved = await this.getResolve({ dependencyType: 'esm' })(path.dirname(parentPath), specifier)
+    const builtin = resolved.startsWith('node:') || builtins.has(resolved)
+    const url = builtin ? resolved : pathToFileURL(resolved).href
+    return {
+      url,
+      format: getNodeModuleFormat(url) ?? 'commonjs',
+      watchFiles: path.isAbsolute(resolved) ? [pathToFileURL(resolved).href] : undefined,
+    }
+  }
+
+  const wrapper = await createWrapperModule({
+    module: {
+      url: options.url,
+      format: options.format,
+      source,
+      specifier: options.specifier,
+      data: { version: options.version },
+    },
+    resolve,
+    load: loadModule,
+  })
+
+  let code = wrapper.code
+  for (const entry of wrapper.imports) {
+    const target = entry.external
+      ? entry.target.url
+      : `${fileURLToPath(entry.target.url)}${entry.kind === 'module' ? ORIGINAL_QUERY : ''}`
+    code = code.replaceAll(JSON.stringify(entry.specifier), JSON.stringify(target))
+  }
+  for (const watchFile of wrapper.watchFiles) {
+    if (watchFile.startsWith('file:')) this.addDependency(fileURLToPath(watchFile))
+  }
+  return code
+}
+
+module.exports.ORIGINAL_QUERY = ORIGINAL_QUERY

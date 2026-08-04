@@ -2633,10 +2633,9 @@ import-fresh@^3.2.1:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@^3.3.2:
-  version "3.3.2"
-  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-3.3.2.tgz#af7dacd4f3c25826abfc8314ebc71b6dcf47e238"
-  integrity sha512-jTd2FfOgOWOdgjkHuk/1Ms8VKFXkPs15ymYBETw1sAOrO/dY3XeGVRWir9qBbw7pXr0T2eTFwfCZ+N02HmiNGA==
+"import-in-the-middle@https://github.com/nodejs/import-in-the-middle.git#5c02a654743c1e5444a2bca8ef199f1ff40d126b":
+  version "3.3.3"
+  resolved "https://github.com/nodejs/import-in-the-middle.git#5c02a654743c1e5444a2bca8ef199f1ff40d126b"
   dependencies:
     cjs-module-lexer "^2.2.0"
     es-module-lexer "^2.2.0"
