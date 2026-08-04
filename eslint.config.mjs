@@ -19,6 +19,7 @@ import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
+import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
@@ -43,6 +44,30 @@ const SRC_FILES = [
   'packages/*/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
+]
+
+// Existing direct environment consumers may retain one suppression each. New exceptions must be added explicitly.
+const PROCESS_ENV_DISABLE_ALLOW_FILES = [
+  '.mochamultireporterrc.js',
+  'ci/diagnose.js',
+  'ci/init.js',
+  'ci/test-optimization-validation/command-runner.js',
+  'ci/vitest-no-worker-init-setup.mjs',
+  'nyc.config.js',
+  'packages/datadog-esbuild/index.js',
+  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/cypress-config.js',
+  'packages/datadog-instrumentations/src/vitest.js',
+  'packages/datadog-webpack/src/log.js',
+  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
+  'packages/dd-trace/src/config/helper.js',
+  'packages/dd-trace/src/config/index.js',
+  'packages/dd-trace/src/config/stable.js',
+  'packages/dd-trace/src/debugger/index.js',
+  'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
 const TEST_FILES = [
@@ -409,6 +434,7 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
@@ -604,6 +630,9 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'eslint-rules/eslint-no-process-env-disable': ['error', {
+        allowFiles: PROCESS_ENV_DISABLE_ALLOW_FILES,
+      }],
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
