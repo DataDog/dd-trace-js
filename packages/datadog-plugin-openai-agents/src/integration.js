@@ -15,6 +15,9 @@ const { AGENTS_ERROR_TYPE, applyError, deriveSpanName } = require('./util')
 
 const COMPONENT = 'openai-agents'
 const DEFAULT_MODEL_PROVIDER = 'openai'
+// Bounds the agents-core parent-chain walk so a cyclic chain from a future
+// agents-core version can't spin on the span-start hot path.
+const MAX_ANCESTOR_WALK = 32
 const MODEL_BASE_URL_STORE_KEY = Symbol('openai-agents.model-base-url')
 const legacyStorage = storage('legacy')
 
@@ -59,6 +62,15 @@ class OpenAIAgentsIntegration {
   #tagger
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
+  /**
+   * Parent links of agents-core spans we deliberately don't trace (`task` /
+   * `turn` and any future structural type absent from the processor's kind
+   * map). From agents-core >=0.14 they are interior nodes, so the chain has to
+   * stay walkable or every descendant would look parentless. `null` marks a
+   * span at the trace root; a missing entry means a span we never saw.
+   * @type {Map<string, string | null>}
+   */
+  #untracedParents = new Map()
   /** @type {Map<string, LLMObsTraceInfo>} */
   #traceInfo = new Map()
 
@@ -83,11 +95,33 @@ class OpenAIAgentsIntegration {
   }
 
   /**
-   * @param {string} spanId agents-core spanId
+   * Resolve the dd-trace span for an agents-core spanId. When the id belongs to
+   * a span type we don't trace — agents-core >=0.14 runs model calls inside a
+   * `turn` span — the nearest traced ancestor's span is returned so callers
+   * still activate the enclosing agent span.
+   *
+   * @param {string | undefined | null} spanId agents-core spanId
    * @returns {import('../../dd-trace/src/opentracing/span') | undefined}
    */
   getDDSpan (spanId) {
-    return this.#oaiToDdSpan.get(spanId)
+    return this.#oaiToDdSpan.get(this.#nearestTracedAncestorId(spanId))
+  }
+
+  /**
+   * Remember an untraced agents-core span's parent so the chain stays walkable.
+   *
+   * @param {object} oaiSpan
+   */
+  recordUntracedSpan (oaiSpan) {
+    const { spanId } = oaiSpan
+    if (spanId) this.#untracedParents.set(spanId, oaiSpan.parentId ?? null)
+  }
+
+  /**
+   * @param {string} spanId agents-core spanId of an untraced span
+   */
+  forgetUntracedSpan (spanId) {
+    this.#untracedParents.delete(spanId)
   }
 
   /**
@@ -114,6 +148,7 @@ class OpenAIAgentsIntegration {
       ddSpan.finish()
     }
     this.#oaiToDdSpan.clear()
+    this.#untracedParents.clear()
     this.#traceInfo.clear()
   }
 
@@ -164,7 +199,7 @@ class OpenAIAgentsIntegration {
    * workflow span before finishing.
    *
    * @param {string | undefined} traceId
-   * @param {object} [rootAgentSpan] - parentless oai-span that ended in error.
+   * @param {object} [rootAgentSpan] - top-level oai-span that ended in error.
    */
   #completeWorkflowSpan (traceId, rootAgentSpan) {
     if (!traceId) return
@@ -268,8 +303,10 @@ class OpenAIAgentsIntegration {
 
     ddSpan.finish()
     // agents-core's withTrace skips Trace.end() when its callback throws, so an
-    // errored parentless span is our last chance to finalize the workflow.
-    if (oaiSpan.parentId == null && oaiSpan.error) {
+    // errored top-level span is our last chance to finalize the workflow. From
+    // agents-core >=0.14 the top-level agent sits under an untraced `task` span,
+    // hence the ancestry walk rather than a `parentId == null` test.
+    if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
       this.#completeWorkflowSpan(oaiSpan.traceId, oaiSpan)
     }
     this.#oaiToDdSpan.delete(spanId)
@@ -360,7 +397,7 @@ class OpenAIAgentsIntegration {
   #llmSpanParentAgentName (oaiSpan) {
     const traceInfo = this.#traceInfo.get(oaiSpan.traceId)
     if (!traceInfo?.currentTopLevelAgentSpanId) return
-    if (oaiSpan.parentId !== traceInfo.currentTopLevelAgentSpanId) return
+    if (this.#nearestTracedAncestorId(oaiSpan.parentId) !== traceInfo.currentTopLevelAgentSpanId) return
     return traceInfo.currentTopLevelAgentName
   }
 
@@ -412,13 +449,13 @@ class OpenAIAgentsIntegration {
     const info = this.#traceInfo.get(oaiSpan.traceId)
     if (!info) return
 
-    const parentId = oaiSpan.parentId
+    const parentId = this.#nearestTracedAncestorId(oaiSpan.parentId)
     const type = oaiSpan.spanData?.type
 
     // Identify the first top-level agent span under the root trace and
     // stash its display name so `${agentName} (LLM)` doesn't have to read
     // the dd-trace span context's private fields later.
-    if (type === 'agent' && parentId == null) {
+    if (type === 'agent' && this.#isTopLevelSpan(oaiSpan)) {
       info.currentTopLevelAgentSpanId = oaiSpan.spanId
       info.currentTopLevelAgentName = spanName
     }
@@ -440,9 +477,8 @@ class OpenAIAgentsIntegration {
     if (!info) return
 
     if (
-      oaiSpan.parentId &&
       info.currentTopLevelAgentSpanId &&
-      oaiSpan.parentId === info.currentTopLevelAgentSpanId
+      this.#nearestTracedAncestorId(oaiSpan.parentId) === info.currentTopLevelAgentSpanId
     ) {
       info.outputOaiSpan = oaiSpan
     }
@@ -451,16 +487,44 @@ class OpenAIAgentsIntegration {
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   #resolveParent (oaiSpan) {
-    const parentId = oaiSpan.parentId
-    const traceId = oaiSpan.traceId
-    if (parentId) {
-      const parent = this.#oaiToDdSpan.get(parentId)
-      if (parent) return parent
+    return this.getDDSpan(oaiSpan.parentId) ?? this.#oaiToDdSpan.get(oaiSpan.traceId)
+  }
+
+  /**
+   * Walk the agents-core parent chain from `spanId`, skipping spans we don't
+   * trace, and return the first id that maps to a dd-trace span. Returns
+   * `undefined` when the walk reaches the trace root (or a span we never saw),
+   * which callers read as "no traced ancestor".
+   *
+   * @param {string | undefined | null} spanId agents-core spanId to start from
+   * @returns {string | undefined}
+   */
+  #nearestTracedAncestorId (spanId) {
+    let currentId = spanId
+    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+      if (this.#oaiToDdSpan.has(currentId)) return currentId
+      currentId = this.#untracedParents.get(currentId)
     }
-    if (traceId) {
-      const root = this.#oaiToDdSpan.get(traceId)
-      if (root) return root
+  }
+
+  /**
+   * True when nothing but untraced spans sits between this span and the trace
+   * root. Stricter than `#nearestTracedAncestorId(…) === undefined`, which also
+   * answers "undefined" for a parent we simply never saw — that must not be
+   * mistaken for top-level, or an error would finalize the workflow span early.
+   *
+   * @param {object} oaiSpan
+   * @returns {boolean}
+   */
+  #isTopLevelSpan (oaiSpan) {
+    let currentId = oaiSpan.parentId
+    for (let depth = 0; depth < MAX_ANCESTOR_WALK; depth++) {
+      if (currentId == null) return true
+      const parentId = this.#untracedParents.get(currentId)
+      if (parentId === undefined) return false
+      currentId = parentId
     }
+    return false
   }
 
   /**
