@@ -227,7 +227,7 @@ class Tracer extends NoopProxy {
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
           ssiHeuristics.onTriggered(() => {
-            this._startProfiler(config)
+            this._profilerStarted = this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
@@ -418,10 +418,13 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateProfiler (config) {
-    if (!this._profilerStarted && config.profiling.DD_PROFILING_ENABLED === 'true') {
-      log.debug('[proxy] Starting profiler via remote config')
-      this._profilerStarted = this._startProfiler(config)
-    }
+    const enabled = config.profiling.DD_PROFILING_ENABLED
+    // Only retry on a change to this value, so a failed start isn't retried (and re-logged) on
+    // every unrelated remote config update while the value stays unchanged.
+    if (this._profilerStarted || enabled !== 'true' || enabled === this._profilerRcValueSeen) return
+    this._profilerRcValueSeen = enabled
+    log.debug('[proxy] Starting profiler via remote config')
+    this._profilerStarted = this._startProfiler(config)
   }
 
   /**
