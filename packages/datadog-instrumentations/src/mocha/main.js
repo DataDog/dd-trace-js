@@ -428,17 +428,16 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
 
     // We remove the suites that we skip through ITR
+    const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
     isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
-    areAllSuitesSkipped = runner.suite.tests.length === 0 &&
-      runner.suite.suites.length > 0 &&
-      suitesToRun.length === 0
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
     skippedSuites = [...filteredSuites.skippedSuites]
     suitesToSkip = suitesToSkipForRun

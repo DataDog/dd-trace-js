@@ -2579,7 +2579,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
-  isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
+  isSuitesSkipped ||= jestSuitesToRun.suitesToRun.length !== originalTests.length
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
   skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
     ? skippableSuitesCoverage

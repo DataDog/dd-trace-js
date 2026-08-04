@@ -2334,6 +2334,48 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
     })
 
+    it('says TIA skipped all tests when grep excludes the remaining root-level test', async () => {
+      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: suiteFile },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./${suiteFile} --grep 'nested passing test'`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
+    })
+
     it('does not skip tests if git metadata upload fails', (done) => {
       receiver.setSuitesToSkip([{
         type: 'suite',
