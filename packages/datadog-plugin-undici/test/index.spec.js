@@ -96,10 +96,8 @@ describe('Plugin', () => {
                   'http.request.method': 'GET',
                   'url.full': `http://localhost:${port}/user`,
                   'server.address': 'localhost',
-                },
-                metrics: {
-                  'server.port': port,
-                  'http.response.status_code': 200,
+                  'server.port': String(port),
+                  'http.response.status_code': '200',
                 },
               })
               assert.ok(!Object.hasOwn(span.meta, 'http.method'))

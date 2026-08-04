@@ -76,10 +76,8 @@ describe('Plugin', () => {
                 'url.path': '/user',
                 'url.scheme': 'http',
                 'server.address': 'localhost',
-              },
-              metrics: {
-                'server.port': otelPort,
-                'http.response.status_code': 200,
+                'server.port': String(otelPort),
+                'http.response.status_code': '200',
               },
             })
             // ...and the Datadog ones are absent.

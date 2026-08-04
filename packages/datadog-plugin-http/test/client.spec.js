@@ -89,10 +89,9 @@ describe('Plugin', () => {
                   'http.request.method': 'GET',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
+                  // Every attribute leaves on the agent protocol as a `meta` string.
+                  'http.response.status_code': '200',
+                  'server.port': String(port),
                 },
               })
               // ...and the Datadog ones are absent.
@@ -119,12 +118,36 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
-                meta: { 'error.type': '400' },
-                metrics: { 'http.response.status_code': 400 },
+                meta: { 'error.type': '400', 'http.response.status_code': '400' },
+                error: 1,
               })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('marks a 5xx client response as an error, unlike the Datadog default', done => {
+          // OTel treats a client 5xx as an error, so the flag widens the default
+          // client error range to 400-599. The decision is made at capture time so
+          // the span, the trace stats and the exported payload all agree.
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '503', 'http.response.status_code': '503' },
+                error: 1,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()

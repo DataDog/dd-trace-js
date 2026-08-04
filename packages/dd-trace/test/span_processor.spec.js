@@ -326,8 +326,10 @@ describe('SpanProcessor', () => {
 
       const exported = exporter.export.firstCall.args[0][0]
       assert.strictEqual(exported.meta['http.request.method'], 'GET')
-      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.strictEqual(exported.meta['http.response.status_code'], '200')
       assert.ok(!('http.method' in exported.meta))
+      // Datadog-only, no OTel equivalent, read by ASM and endpoint aggregation.
+      assert.strictEqual(exported.meta['http.endpoint'], '/u')
     })
 
     it('records span stats from the Datadog tag names, before the export-only rename', () => {
