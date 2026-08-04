@@ -3622,6 +3622,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_POSTGRES_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_PRISMA_ENABLED": [
       {
         "implementation": "A",

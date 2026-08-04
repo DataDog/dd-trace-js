@@ -299,6 +299,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -3186,6 +3187,32 @@ declare namespace tracer {
       dbmPropagationMode?: string;
       /**
        * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
+     * [Postgres.js](https://github.com/porsager/postgres) module.
+     */
+    interface postgres extends DatabaseInstrumentation {
+      /**
+       * The service name to use. A function receives the parsed connection options.
+       */
+      service?: string | ((params: {
+        database: string;
+        host: string[];
+        port: number[];
+        user: string;
+        [key: string]: unknown;
+      }) => string);
+      /**
+       * The database monitoring propagation mode to use.
+       */
+      dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service';
+      /**
+       * Appends SQL comment propagation instead of prepending it. Appended comments can be truncated from long
+       * query strings, which loses the correlation between the query and trace.
        */
       appendComment?: boolean;
     }
