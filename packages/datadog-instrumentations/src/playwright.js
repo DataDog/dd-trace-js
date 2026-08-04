@@ -2006,14 +2006,14 @@ async function cleanupRumPage (page) {
 /**
  * Stops RUM sessions and expires correlation cookies for pages visited by the current test.
  *
- * @returns {Promise<void>}
+ * @returns {Promise<void[]>|undefined}
  */
-async function cleanupRumPages () {
-  try {
-    await Promise.all(Array.from(activeRumPages, cleanupRumPage))
-  } finally {
-    activeRumPages.clear()
-  }
+function cleanupRumPages () {
+  if (activeRumPages.size === 0) return
+
+  const cleanupPromises = Array.from(activeRumPages, cleanupRumPage)
+  activeRumPages.clear()
+  return Promise.all(cleanupPromises)
 }
 
 addHook({
