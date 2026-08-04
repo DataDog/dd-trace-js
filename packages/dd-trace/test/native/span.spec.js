@@ -360,8 +360,8 @@ describe('NativeDatadogSpan', () => {
         traceId128BitGenerationEnabled: true,
       }, false, nativeSpans)
       const childTraceId = nativeSpans.queueCreateSpanFull.getCall(0).args[1]
-      // Child must carry the SAME full 128-bit id, not a high-bits-zeroed one.
-      assert.deepStrictEqual(childTraceId, rootTraceId)
+      // Child reuses the SAME full 128-bit id, not a rebuilt or high-bits-zeroed one.
+      assert.strictEqual(childTraceId, rootTraceId)
     })
 
     it('builds the full 128-bit id for a child of a propagated (16-byte) trace id', () => {
