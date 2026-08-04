@@ -79,6 +79,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -2282,11 +2283,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
       const [, [exitCode]] = await Promise.all([
         eventsPromise,
-        once(childProcess, 'exit'),
+        once(childProcess, 'close'),
       ])
       assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
     })
 
     it('does not skip tests if git metadata upload fails', (done) => {

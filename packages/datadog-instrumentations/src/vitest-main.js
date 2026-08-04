@@ -14,6 +14,7 @@ const {
   getMaxEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
@@ -92,6 +93,7 @@ let forcedToRunSuites = {}
 let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let areAllSuitesSkipped = false
+let hasLoggedAllTestsSkippedMessage = false
 let hasRunnableSuites = false
 let hasSelectedSuites = false
 let itrCorrelationId
@@ -245,6 +247,7 @@ function resetSessionSuiteSkippingState () {
   hasUnskippableSuites = false
   hasForcedToRunSuites = false
   areAllSuitesSkipped = false
+  hasLoggedAllTestsSkippedMessage = false
   hasRunnableSuites = false
   hasSelectedSuites = false
   isSessionCodeCoverageEnabled = false
@@ -1113,7 +1116,13 @@ function getFinishWrapper (exitOrClose) {
       isVitestNoWorkerInitActive: isVitestNoWorkerInitActive || isVitestBrowserModeActive,
     })
 
-    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    const shouldLogAllTestsSkippedMessage = areAllSuitesSkipped && !hasLoggedAllTestsSkippedMessage
+    hasLoggedAllTestsSkippedMessage ||= shouldLogAllTestsSkippedMessage
+    logTestOptimizationSummary({
+      attemptToFixExecutions,
+      newTestsWithDynamicNames,
+      extraSections: shouldLogAllTestsSkippedMessage ? [TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE] : [],
+    })
 
     await flushPromise
 

@@ -26,6 +26,7 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
@@ -134,6 +135,7 @@ let numTestRetries = 0
 let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+let areAllSuitesSkipped = false
 let repositoryRoot
 
 function isValidKnownTests (receivedKnownTests) {
@@ -179,6 +181,7 @@ function resetSuiteSkippingRunState () {
   skippedSuitesCoverage = {}
   skippedSuites = []
   isSuitesSkipped = false
+  areAllSuitesSkipped = false
   repositoryRoot = undefined
   writeCoverageBackfillToCache({})
 }
@@ -1137,6 +1140,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         const oldPickles = isCoordinator ? this.sourcedPickles : this.pickleIds
 
         isSuitesSkipped = picklesToRun.length !== oldPickles.length
+        areAllSuitesSkipped = oldPickles.length > 0 && picklesToRun.length === 0
 
         log.debug('%s out of %s suites are going to run.', picklesToRun.length, oldPickles.length)
 
@@ -1253,7 +1257,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isParallel,
     })
 
-    logTestOptimizationSummary({ attemptToFixExecutions })
+    logTestOptimizationSummary({
+      attemptToFixExecutions,
+      extraSections: areAllSuitesSkipped ? [TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE] : [],
+    })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
     await flushPromise

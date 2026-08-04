@@ -47,6 +47,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -440,8 +441,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
-      childProcess.on('exit', () => {
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.on('close', () => {
         eventsPromise.then(() => {
+          assert.strictEqual(
+            testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+            1,
+            testOutput
+          )
           done()
         }).catch(done)
       })

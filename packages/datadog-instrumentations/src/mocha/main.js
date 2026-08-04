@@ -28,6 +28,7 @@ const {
   getTestCoverageLinesPercentage,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
   isModifiedTest,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -66,6 +67,7 @@ let hasWarnedDeprecatedMochaVersion = false
 const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
+let areAllSuitesSkipped = false
 let skippedSuites = []
 let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
@@ -227,6 +229,7 @@ function getMochaTestSessionCoverageFiles () {
 
 function resetSuiteSkippingRunState () {
   isSuitesSkipped = false
+  areAllSuitesSkipped = false
   skippedSuites = []
   skippableSuitesCoverage = {}
   skippedSuitesCoverage = {}
@@ -357,7 +360,11 @@ function getOnEndHandler (isParallel, onDone) {
       isParallel,
     }, onDone)
 
-    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    logTestOptimizationSummary({
+      attemptToFixExecutions,
+      newTestsWithDynamicNames,
+      extraSections: areAllSuitesSkipped ? [TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE] : [],
+    })
     loggedAttemptToFixTests.clear()
   }
 }
@@ -422,6 +429,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
     isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+    areAllSuitesSkipped = runner.suite.suites.length > 0 && suitesToRun.length === 0
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
@@ -1088,6 +1096,7 @@ addHook({
           }
         }
         isSuitesSkipped = skippedFiles.length > 0
+        areAllSuitesSkipped = files.length > 0 && filteredFiles.length === 0
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())

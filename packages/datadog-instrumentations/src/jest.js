@@ -31,6 +31,7 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getEfdRetryCount,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
@@ -328,11 +329,15 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *   efdFailureCount: number
  * } | undefined} ignoredFailures
  * @param {NonNullable<TestOptimizationSummary['attemptToFixExecutions']>} attemptToFixExecutions
+ * @param {boolean} allTestsSkipped
  */
-function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+function logSessionSummary (ignoredFailures, attemptToFixExecutions, allTestsSkipped) {
   logTestOptimizationSummary({
     attemptToFixExecutions,
-    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
+    extraSections: [
+      formatIgnoredFailuresSummary(ignoredFailures),
+      allTestsSkipped ? TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE : '',
+    ],
     newTestsWithDynamicNames,
   })
   loggedAttemptToFixTests.clear()
@@ -2595,7 +2600,12 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       recordTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
-      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
+      const allTestsSkipped = isSuitesSkipped && numTotalTests === 0 && numTotalTestSuites === 0
+      logSessionSummary(
+        ignoredFailuresSummary,
+        getAttemptToFixExecutionsFromJestResults(result),
+        allTestsSkipped
+      )
 
       resetSuiteSkippingRunState()
 
