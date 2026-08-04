@@ -3260,13 +3260,15 @@ describe('Config', () => {
   })
 
   describe('http error status env vars', () => {
-    it('keeps the raw range string, with the client range unset by default', () => {
+    it('leaves both ranges unset by default', () => {
       const config = getConfig()
 
       // The value stays the raw spec so telemetry reports what the user set; the
-      // use site (plugins/util/http-error-statuses.js) parses it. The client range
-      // has no default here so that use site can widen it under OTel semantics.
-      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+      // use site (plugins/util/http-error-statuses.js) parses it. Neither range
+      // has a default here, so that use site owns them: it widens the client
+      // range under OTel semantics, and its server default stays open above 599
+      // the way the hardcoded `code < 500` threshold was.
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, undefined)
       assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, undefined)
     })
 
