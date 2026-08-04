@@ -9,6 +9,7 @@ const NON_HUMAN_EMAILS = new Set([
   '175728472+copilot@users.noreply.github.com',
   'cursoragent@cursor.com',
   'noreply@anthropic.com',
+  'codex@openai.com',
 ])
 
 /**
