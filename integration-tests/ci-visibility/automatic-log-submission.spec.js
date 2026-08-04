@@ -19,6 +19,7 @@ const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
+const jestDependency = process.env.JEST_VERSION ? `jest@${process.env.JEST_VERSION}` : 'jest'
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
@@ -28,7 +29,7 @@ describe('test optimization automatic log submission', () => {
     'mocha',
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
-    'jest',
+    jestDependency,
     'pino',
     'winston',
     playwrightDependency,
@@ -97,7 +98,9 @@ describe('test optimization automatic log submission', () => {
   loggers.forEach(({ name: loggerName, level: expectedLevel, messageKey }) => {
     testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
       if (!isLatestCucumberSupported && name === 'cucumber') return
-      if (loggerName !== 'winston' && name !== 'mocha') return
+      if (loggerName !== 'winston' && name !== 'mocha' && name !== 'jest') return
+
+      const isJestLoggerBypass = name === 'jest' && loggerName !== 'winston'
 
       context(`with ${loggerName} and ${name}`, () => {
         it('can automatically submit logs', async () => {
@@ -108,23 +111,32 @@ describe('test optimization automatic log submission', () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
               payloads.forEach(({ headers }) => {
                 assert.equal(headers['dd-api-key'], '1')
+                if (loggerName !== 'winston') {
+                  assert.equal(headers['content-type'], 'application/json')
+                }
               })
               const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
               const [url] = payloads.flatMap(({ url }) => url)
+              const expectedMessages = isJestLoggerBypass
+                ? ['Hello simple log!']
+                : ['Hello simple log!', 'sum function being called']
 
               assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
-              assert.equal(logMessages.length, 2)
+              assert.equal(logMessages.length, expectedMessages.length)
+              if (isJestLoggerBypass) {
+                assert.equal(payloads.length, 1)
+                assert.equal(payloads[0].logMessage.length, 1)
+              }
 
               logMessages.forEach(({ dd, level }) => {
                 assert.equal(level, expectedLevel)
                 assert.equal(dd.service, 'my-service')
                 assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
+                assert.match(dd.trace_id, /^\d+$/)
+                assert.match(dd.span_id, /^\d+$/)
               })
 
-              assertObjectContains(logMessages.map(logMessage => logMessage[messageKey]), [
-                'Hello simple log!',
-                'sum function being called',
-              ])
+              assertObjectContains(logMessages.map(logMessage => logMessage[messageKey]), expectedMessages)
 
               logIds = {
                 logSpanId: logMessages[0].dd.span_id,
@@ -153,6 +165,7 @@ describe('test optimization automatic log submission', () => {
                 DD_API_KEY: '1',
                 DD_SERVICE: 'my-service',
                 TEST_LOGGER: loggerName,
+                ...(isJestLoggerBypass ? { TEST_SINGLE_LOG: '1' } : {}),
                 ...getExtraEnvVars(),
               },
             }
@@ -175,7 +188,9 @@ describe('test optimization automatic log submission', () => {
           const { logSpanId, logTraceId } = logIds
           const { testSpanId, testTraceId } = testIds
           assert.match(testOutput, /Hello simple log!/)
-          assert.match(testOutput, /sum function being called/)
+          if (!isJestLoggerBypass) {
+            assert.match(testOutput, /sum function being called/)
+          }
           // cucumber has `cucumber.step`, and that's the active span, not the test.
           // logs are queried by trace id, so it should be OK
           if (name !== 'cucumber') {
@@ -186,6 +201,55 @@ describe('test optimization automatic log submission', () => {
           assert.equal(logTraceId, testTraceId)
         })
 
+        if (isJestLoggerBypass) {
+          it('preserves caller-provided dd fields', async () => {
+            const logsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+                assert.equal(payloads.length, 1)
+                const [{ headers, logMessage, url }] = payloads
+
+                assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my%20service%26prod`)
+                assert.equal(headers['dd-api-key'], '1')
+                assert.equal(headers['content-type'], 'application/json')
+                assert.equal(logMessage.length, 1)
+                assert.equal(logMessage[0][messageKey], 'caller-provided dd')
+                assert.deepStrictEqual(logMessage[0].dd, { custom: 'value' })
+              })
+
+            childProcess = exec(command,
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                  DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+                  DD_API_KEY: '1',
+                  DD_SERVICE: 'my service&prod',
+                  TEST_CALLER_DD: '1',
+                  TEST_LOGGER: loggerName,
+                  ...getExtraEnvVars(),
+                },
+              }
+            )
+            childProcess.stdout?.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            childProcess.stderr?.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+
+            await Promise.all([
+              once(childProcess, 'exit'),
+              once(childProcess.stdout, 'end'),
+              once(childProcess.stderr, 'end'),
+              logsPromise,
+            ])
+
+            assert.match(testOutput, /caller-provided dd/)
+            assert.match(testOutput, /"custom":"value"/)
+          })
+        }
+
         it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is not set', async () => {
           childProcess = exec(command,
             {
@@ -195,6 +259,7 @@ describe('test optimization automatic log submission', () => {
                 DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
                 DD_SERVICE: 'my-service',
                 TEST_LOGGER: loggerName,
+                ...(isJestLoggerBypass ? { TEST_SINGLE_LOG: '1' } : {}),
                 ...getExtraEnvVars(),
               },
             }
@@ -237,6 +302,7 @@ describe('test optimization automatic log submission', () => {
                 DD_TRACE_LOG_LEVEL: 'warn',
                 DD_API_KEY: '',
                 TEST_LOGGER: loggerName,
+                ...(isJestLoggerBypass ? { TEST_SINGLE_LOG: '1' } : {}),
                 ...getExtraEnvVars(),
               },
             }

@@ -3052,6 +3052,8 @@ if (DD_MAJOR < 6) {
 }
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  'bunyan',
+  'pino',
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
