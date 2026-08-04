@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 
 const AMZN_TRACE_ID_ENV_VAR = '_X_AMZN_TRACE_ID'
 
@@ -16,7 +17,7 @@ function getParsedRecordHeaders (record) {
       return JSON.parse(decodedValue)
     }
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -34,9 +35,10 @@ function extract (event, tracer) {
       log.debug('Failed to extract trace context from SNS event')
     }
 
-    if (process.env[AMZN_TRACE_ID_ENV_VAR]) {
+    const amznTraceId = getEnvironmentVariable(AMZN_TRACE_ID_ENV_VAR)
+    if (amznTraceId) {
       const { extractDDContextFromAWSTraceHeader } = require('../xray-service')
-      const spanContext = extractDDContextFromAWSTraceHeader(process.env[AMZN_TRACE_ID_ENV_VAR])
+      const spanContext = extractDDContextFromAWSTraceHeader(amznTraceId)
       if (spanContext) {
         log.debug('Extracted trace context from SNS event via _X_AMZN_TRACE_ID')
         return spanContext
@@ -53,5 +55,5 @@ function extract (event, tracer) {
 module.exports = {
   extract,
   getParsedRecordHeaders,
-  AMZN_TRACE_ID_ENV_VAR
+  AMZN_TRACE_ID_ENV_VAR,
 }

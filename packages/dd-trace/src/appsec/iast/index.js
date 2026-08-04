@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
+const { isEmpty } = require('../../util')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
 const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
 const vulnerabilityReporter = require('./vulnerability-reporter')
@@ -96,7 +97,7 @@ function onIncomingHttpRequestEnd (data) {
 
       iastResponseEnd.publish({ ...data, storedHeaders })
 
-      if (Object.keys(storedHeaders).length) {
+      if (!isEmpty(storedHeaders)) {
         collectedResponseHeaders.delete(data.res)
       }
 
@@ -118,7 +119,7 @@ function onIncomingHttpRequestEnd (data) {
 function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
   if (!res) return
 
-  if (Object.keys(responseHeaders).length) {
+  if (!isEmpty(responseHeaders)) {
     collectedResponseHeaders.set(res, responseHeaders)
   }
 }

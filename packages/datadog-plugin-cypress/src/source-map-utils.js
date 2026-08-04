@@ -61,7 +61,7 @@ function decodeVLQ (str, cursor) {
  * @returns {string | null}
  */
 function resolveSourcePath (mapDir, sourceRoot, sourcePath) {
-  const cleanSourcePath = sourcePath.replace(/[?#].*$/, '')
+  const cleanSourcePath = sourcePath.split(/[?#]/)[0]
   if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(cleanSourcePath)) {
     // Virtual sources may use URL-like schemes (e.g. file://, webpack://, vite://).
     // If they encode an absolute local path in the URL pathname, use it.
@@ -158,6 +158,48 @@ function resolveOriginalSourcePosition (absoluteFilePath, generatedLine) {
           const sourceFile = resolveSourcePath(mapDir, sourceRoot, sourcePath)
           return sourceFile ? { sourceFile, line: srcLine + 1 } : null
         }
+      }
+      if (cursor.pos < line.length && line[cursor.pos] === ',') cursor.pos++
+    }
+  }
+  return null
+}
+
+/**
+ * Given a generated file's absolute path, returns the first original source file
+ * referenced by its source map. This is useful for file-level metadata when the
+ * first generated line has no source mapping, such as TypeScript-emitted prologue
+ * statements.
+ * @param {string} absoluteFilePath - Absolute path to the generated file
+ * @returns {string | null}
+ */
+function resolveOriginalSourceFile (absoluteFilePath) {
+  const sourceMap = getCachedSourceMap(absoluteFilePath)
+  if (!sourceMap) return null
+  const { mappings, sources, sourceRoot } = sourceMap
+  if (!mappings || !sources?.length) return null
+
+  const mapDir = path.dirname(absoluteFilePath)
+  const cursor = { pos: 0 }
+  let srcFile = 0
+
+  const lines = mappings.split(';')
+  for (const line of lines) {
+    if (!line) continue
+    cursor.pos = 0
+    while (cursor.pos < line.length) {
+      decodeVLQ(line, cursor) // genCol - not needed
+      if (cursor.pos < line.length && line[cursor.pos] !== ',') {
+        srcFile += decodeVLQ(line, cursor)
+        decodeVLQ(line, cursor) // srcLine - not needed
+        decodeVLQ(line, cursor) // srcCol - not needed
+        if (cursor.pos < line.length && line[cursor.pos] !== ',') {
+          decodeVLQ(line, cursor) // namesIndex - not needed
+        }
+
+        const sourcePath = sources[srcFile]
+        if (!sourcePath) return null
+        return resolveSourcePath(mapDir, sourceRoot, sourcePath)
       }
       if (cursor.pos < line.length && line[cursor.pos] === ',') cursor.pos++
     }
@@ -294,4 +336,9 @@ function resolveSourceLineForTest (absoluteFilePath, testName, invocationStack) 
   return null
 }
 
-module.exports = { resolveOriginalSourcePosition, resolveSourceLineForTest, shouldTrustInvocationDetailsLine }
+module.exports = {
+  resolveOriginalSourceFile,
+  resolveOriginalSourcePosition,
+  resolveSourceLineForTest,
+  shouldTrustInvocationDetailsLine,
+}

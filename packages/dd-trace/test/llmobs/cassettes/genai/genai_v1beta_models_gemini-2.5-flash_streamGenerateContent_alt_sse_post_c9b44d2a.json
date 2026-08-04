@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/1.19.0 gl-node/v26.0.0",
+      "x-goog-api-client": "google-genai-sdk/1.19.0 gl-node/v26.0.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "65"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"Hello, world!\"}],\"role\":\"user\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "text/event-stream",
+      "Content-Disposition": "attachment",
+      "Vary": "Origin, X-Origin, Referer",
+      "Transfer-Encoding": "chunked",
+      "Date": "Wed, 10 Jun 2026 14:40:52 GMT",
+      "Server": "scaffolding on HTTPServer2",
+      "X-XSS-Protection": "0",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Content-Type-Options": "nosniff",
+      "Server-Timing": "gfet4t7; dur=829",
+      "Alt-Svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"
+    },
+    "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Hello, world! It's good to meet you. How can I help you today?\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 5,\"candidatesTokenCount\": 19,\"totalTokenCount\": 53,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 5}],\"thoughtsTokenCount\": 29,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"c3cpap_xFpLRjMcPt5CUwQw\"}\r\n\r\n"
+  }
+}

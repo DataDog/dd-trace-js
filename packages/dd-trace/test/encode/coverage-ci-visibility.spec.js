@@ -10,11 +10,17 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 /**
  * @typedef {{
  *   version: number,
- *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
+ *   coverages: {
+ *     test_session_id: number,
+ *     test_suite_id?: number,
+ *     span_id?: number,
+ *     files: { filename: string, bitmap?: Uint8Array }[]
+ *   }[] }
  * } CoverageObject
  */
 
@@ -35,7 +41,10 @@ describe('coverage-ci-visibility', () => {
     formattedCoverage = {
       sessionId: id('1'),
       suiteId: id('2'),
-      files: ['file.js'],
+      files: [{
+        filename: 'file.js',
+        bitmap: Buffer.from([0, 0, 0, 0x40, 0x01, 0x60]),
+      }],
     }
     formattedCoverage2 = {
       sessionId: id('3'),
@@ -56,7 +65,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [
@@ -70,7 +79,8 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 2)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 1, test_suite_id: 2 })
-    assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file.js' })
+    assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file.js')
+    assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'AAAAQAFg')
 
     assertObjectContains(decodedCoverages.coverages[1], { test_session_id: 3, test_suite_id: 4 })
     assert.deepStrictEqual(decodedCoverages.coverages[1].files[0], { filename: 'file2.js' })
@@ -95,6 +105,36 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(encoder.count(), 0)
   })
 
+  it('drops the queued payload and logs when the chunk cap fires mid-encode', () => {
+    logger.error = sinon.stub()
+    // Coverage uses its own `_coverageBytes` chunk rather than the parent's
+    // `_traceBytes`, so the cap throw skipped the `AgentEncoder.encode`
+    // catch path entirely and escaped to the host process. The regression
+    // pins that the local catch in `CoverageCIVisibilityEncoder.encode`
+    // drops the queued payload instead of throwing.
+    encoder.encode(formattedCoverage)
+    assert.strictEqual(encoder.count(), 1)
+
+    const originalReserve = encoder._coverageBytes.reserve.bind(encoder._coverageBytes)
+    let triggered = false
+    sinon.stub(encoder._coverageBytes, 'reserve').callsFake(function (size) {
+      if (triggered) return originalReserve(size)
+      triggered = true
+      throw new OverflowError(MAX_SIZE + 1)
+    })
+
+    encoder.encode(formattedCoverage2)
+
+    assert.strictEqual(encoder.count(), 0, 'queued payload must be dropped on overflow')
+    sinon.assert.calledOnce(logger.error)
+  })
+
+  it('rethrows non-overflow encode errors', () => {
+    sinon.stub(encoder._coverageBytes, 'reserve').throws(new Error('not an overflow'))
+
+    assert.throws(() => encoder.encode(formattedCoverage), /not an overflow/)
+  })
+
   it('should be able to make multiple payloads', () => {
     let form, decodedCoverages
     encoder.encode(formattedCoverage)
@@ -117,7 +157,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [
@@ -132,5 +172,24 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(decodedCoverages.coverages.length, 1)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 5, test_suite_id: 6, span_id: 7 })
     assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file3.js' })
+  })
+
+  it('should be able to encode session executable line coverage', () => {
+    encoder.encode({
+      sessionId: id('8'),
+      files: [{
+        filename: 'file4.js',
+        bitmap: Buffer.from([0x80]),
+      }],
+    })
+
+    const form = encoder.makePayload()
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+
+    assert.strictEqual(decodedCoverages.coverages.length, 1)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 8 })
+    assert.ok(!('test_suite_id' in decodedCoverages.coverages[0]))
+    assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file4.js')
+    assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'gA==')
   })
 })

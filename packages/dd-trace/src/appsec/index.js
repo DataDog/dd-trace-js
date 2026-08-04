@@ -4,8 +4,8 @@ const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { storage } = require('../../../datadog-core')
 const { IS_SERVERLESS } = require('../serverless')
+const { isEmpty } = require('../util')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
 const {
@@ -16,6 +16,8 @@ const {
   fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  lambdaStartInvocation,
+  lambdaEndInvocation,
   passportVerify,
   passportUser,
   expressSession,
@@ -27,6 +29,7 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
+  informationalResponse,
   routerParam,
   fastifyResponseChannel,
   fastifyPathParams,
@@ -38,10 +41,12 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
-const apiSecuritySampler = require('./api_security_sampler')
+const apiSecurity = require('./api_security')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
+const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
+const lambda = require('./lambda')
 const rasp = require('./rasp')
 
 const responseAnalyzedSet = new WeakSet()
@@ -70,7 +75,7 @@ function enable (_config) {
 
     Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
-    apiSecuritySampler.configure(_config)
+    apiSecurity.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -94,15 +99,20 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
-    responseSetHeader.subscribe(onResponseSetHeader)
+    responseSetHeader.subscribe(onResponseOperation)
+    informationalResponse.subscribe(onResponseOperation)
     stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
     stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
     stripeConstructEvent.subscribe(onStripeConstructEvent)
+    lambdaStartInvocation.subscribe(lambda.onLambdaStartInvocation)
+    lambdaEndInvocation.subscribe(lambda.onLambdaEndInvocation)
 
     isEnabled = true
     config = _config
   } catch (err) {
-    if (!IS_SERVERLESS) {
+    if (IS_SERVERLESS) {
+      log.debug('[ASM] Serverless mode: suppressing error log, calling disable()')
+    } else {
       log.error('[ASM] Unable to start AppSec', err)
     }
 
@@ -116,8 +126,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = store?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
@@ -129,7 +138,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   }
 
   if (typeof body === 'object') {
-    if (isEmptyObject(body)) return
+    if (isEmpty(body)) return
     analyzedBodies.add(body)
   }
 
@@ -150,7 +159,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (isEmptyObject(cookies)) return
+  if (isEmpty(cookies)) return
   analyzedCookies.add(cookies)
 
   const results = waf.run({
@@ -181,12 +190,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     }
   }
 
-  const requestHeaders = { ...req.headers }
-  delete requestHeaders.cookie
-
   const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
+    [addresses.HTTP_INCOMING_HEADERS]: copyHeadersOmitting(req.headers, 'cookie'),
     [addresses.HTTP_INCOMING_METHOD]: req.method,
   }
 
@@ -205,7 +211,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   // we need to keep this to support other body parsers
   if (req.body !== undefined && req.body !== null) {
     if (typeof req.body === 'object') {
-      if (!isEmptyObject(req.body) && !analyzedBodies.has(req.body)) {
+      if (!isEmpty(req.body) && !analyzedBodies.has(req.body)) {
         persistent[addresses.HTTP_INCOMING_BODY] = req.body
       }
     } else {
@@ -217,7 +223,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     req.cookies !== null &&
     typeof req.cookies === 'object' &&
-    !isEmptyObject(req.cookies) &&
+    !isEmpty(req.cookies) &&
     !analyzedCookies.has(req.cookies)
   ) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
@@ -228,7 +234,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (
     query !== null &&
     typeof query === 'object' &&
-    !isEmptyObject(query)
+    !isEmpty(query)
   ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
@@ -236,13 +242,17 @@ function incomingHttpEndTranslator ({ req, res }) {
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
 
-  if (apiSecuritySampler.sampleRequest(req, res, true)) {
+  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
+  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (!isEmptyObject(persistent)) {
-    waf.run({ persistent }, req)
+  let wafResult
+  if (!isEmpty(persistent)) {
+    wafResult = waf.run({ persistent }, req)
   }
+
+  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
 
   waf.disposeContext(req)
 
@@ -258,8 +268,8 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportVerify')
@@ -268,12 +278,12 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
@@ -282,7 +292,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
@@ -292,7 +302,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
   if (isSdkCalled) return
 
   const results = waf.run({
@@ -308,14 +318,13 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = store?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (isEmptyObject(query)) return
+  if (isEmpty(query)) return
 
   const results = waf.run({
     persistent: {
@@ -330,7 +339,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || isEmptyObject(params)) return
+  if (!params || typeof params !== 'object' || isEmpty(params)) return
 
   const results = waf.run({
     persistent: {
@@ -343,7 +352,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.sampleRequest(req, res)) return
+  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
@@ -354,8 +363,15 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (!isEmptyObject(responseHeaders)) {
-    storedResponseHeaders.set(req, responseHeaders)
+  // Normalize header names to lowercase so downstream consumers see the same shape
+  // regardless of how the caller wrote them.
+  const normalizedResponseHeaders = {}
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    normalizedResponseHeaders[key.toLowerCase()] = value
+  }
+
+  if (!isEmpty(normalizedResponseHeaders)) {
+    storedResponseHeaders.set(req, normalizedResponseHeaders)
   }
 
   // TODO: do not call waf if inside block()
@@ -377,13 +393,10 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  responseHeaders = { ...responseHeaders }
-  delete responseHeaders['set-cookie']
-
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders,
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
     },
   }, req)
 
@@ -392,7 +405,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
-function onResponseSetHeader ({ res, abortController }) {
+function onResponseOperation ({ res, abortController }) {
   if (isBlocked(res)) {
     abortController?.abort()
   }
@@ -513,7 +526,7 @@ function disable () {
 
   appsecRemoteConfig.disableWafUpdate()
 
-  apiSecuritySampler.disable()
+  apiSecurity.disable()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
@@ -536,20 +549,25 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
-  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseOperation)
+  if (informationalResponse.hasSubscribers) informationalResponse.unsubscribe(onResponseOperation)
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
+  if (lambdaStartInvocation.hasSubscribers) lambdaStartInvocation.unsubscribe(lambda.onLambdaStartInvocation)
+  if (lambdaEndInvocation.hasSubscribers) lambdaEndInvocation.unsubscribe(lambda.onLambdaEndInvocation)
 }
 
-// this is faster than Object.keys().length === 0
-function isEmptyObject (obj) {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) {
-    return false
+/**
+ * @param {Record<string, unknown>} src
+ * @param {string} omit
+ */
+function copyHeadersOmitting (src, omit) {
+  const filtered = {}
+  for (const key of Object.keys(src)) {
+    if (key !== omit) filtered[key] = src[key]
   }
-
-  return true
+  return filtered
 }
 
 module.exports = {

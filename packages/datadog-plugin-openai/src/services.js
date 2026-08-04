@@ -20,22 +20,24 @@ module.exports.init = function (tracerConfig) {
         `env:${tracerConfig.tags.env}`,
         `version:${tracerConfig.tags.version}`,
       ],
+      lookup: tracerConfig.lookup,
     })
     : new NoopDogStatsDClient()
 
-  logger = tracerConfig && tracerConfig.apiKey
+  logger = tracerConfig && tracerConfig.DD_API_KEY
     ? new ExternalLogger({
       ddsource: 'openai',
       hostname: tracerConfig.hostname,
       service: tracerConfig.service,
-      apiKey: tracerConfig.apiKey,
+      apiKey: tracerConfig.DD_API_KEY,
       interval: FLUSH_INTERVAL,
     })
     : new NoopExternalLogger()
 
   interval = setInterval(() => {
     metrics.flush()
-  }, FLUSH_INTERVAL).unref()
+  }, FLUSH_INTERVAL)
+  interval.unref?.()
 
   return { metrics, logger }
 }

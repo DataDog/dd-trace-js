@@ -39,6 +39,7 @@ const missingPlugins = [
   'datadog-plugin-sequelize', // sequelize does not produce spans
   'datadog-plugin-body-parser', // body-parser does not produce spans
   'datadog-plugin-light-my-request', // light-my-request does not produce spans
+  'datadog-plugin-mercurius', // mercurius tracing is done through the graphql plugin (graphql.request span)
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
@@ -56,7 +57,7 @@ function extractPluginIds (source, re, index) {
 }
 
 function extractPluginsInterfaceKeys (dtsSource) {
-  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/m)
+  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/)
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]
@@ -70,10 +71,10 @@ function extractRuntimePluginPackageNames (pluginsIndexSource) {
 
 function extractDocsApiPluginList (apiMdSource) {
   const start = apiMdSource.indexOf('<h3 id="integrations-list">Available Plugins</h3>')
-  assert.ok(start !== -1, 'Could not find Available Plugins heading in docs/API.md')
+  assert.notStrictEqual(start, -1, 'Could not find Available Plugins heading in docs/API.md')
 
   const end = apiMdSource.indexOf('<h2 id="manual-instrumentation">', start)
-  assert.ok(end !== -1, 'Could not find Manual Instrumentation heading in docs/API.md')
+  assert.notStrictEqual(end, -1, 'Could not find Manual Instrumentation heading in docs/API.md')
 
   const section = apiMdSource.slice(start, end)
   return extractPluginIds(section, /^\* \[([^\]]+)\]\(/gm, 1)

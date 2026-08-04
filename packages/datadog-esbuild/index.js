@@ -2,13 +2,17 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
-const RAW_BUILTINS = require('node:module').builtinModules
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  OPTIONAL_PEER_FILTER,
+  matchesOptionalPeerFile,
+  rewriteOptionalPeerLoads,
+} = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
@@ -25,15 +29,27 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
+function moduleOfInterestKey (name, file) {
+  return file ? `${name}/${file}` : name
+}
+
+const builtinModules = new Set(require('module').builtinModules)
+
+function addModuleOfInterest (name, file) {
+  if (!name) return
+
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
+
+  if (builtinModules.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
+  }
+}
+
 const modulesOfInterest = new Set()
 
-for (const instrumentation of Object.values(instrumentations)) {
+for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
-    if (entry.file) {
-      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
-    } else {
-      modulesOfInterest.add(entry.name) // e.g. "redis"
-    }
+    addModuleOfInterest(name, entry.file)
   }
 }
 
@@ -41,7 +57,7 @@ const CHANNEL = 'dd-trace:bundler:load'
 
 const builtins = new Set()
 
-for (const builtin of RAW_BUILTINS) {
+for (const builtin of builtinModules) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
@@ -117,6 +133,11 @@ module.exports.setup = function (build) {
 ${build.initialOptions.banner.js}`
   }
 
+  // Keep the build from failing on the optional `@openfeature/core` peer of
+  // `@openfeature/server-sdk` when it is not installed (#8635). esbuild follows the chain
+  // whenever `@openfeature/server-sdk` is reachable -- the app importing it directly, or the
+  // bundled provider when the optional peer is present -- so mark `@openfeature/core` external
+  // when it is absent rather than erroring at bundle time.
   try {
     // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
@@ -160,6 +181,22 @@ ${build.initialOptions.banner.js}`
   } else {
     log.warn('No git metadata available - skipping injection')
   }
+
+  // Rewrite optional-peer loads so installed peers get bundled and survive the bundle being
+  // relocated without them on disk (#8980). Registered before the generic onLoad so it wins for
+  // these files. Absent peers stay opaque, so a build that does not opt into the feature does not
+  // follow their dependency chain (#8635).
+  build.onLoad({ filter: OPTIONAL_PEER_FILTER }, args => {
+    const normalizedPath = args.path.replaceAll('\\', '/')
+    if (!matchesOptionalPeerFile(normalizedPath)) return
+
+    log.debug('INLINE: optional-peer loader applied to %s', normalizedPath)
+    return {
+      contents: rewriteOptionalPeerLoads(fs.readFileSync(args.path, 'utf8'), path.dirname(args.path)),
+      loader: 'js',
+      resolveDir: path.dirname(args.path),
+    }
+  })
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
@@ -228,10 +265,12 @@ ${build.initialOptions.banner.js}`
         }
       }
       // The file namespace is used when requiring files from disk in userland
+      if (extracted.pkg === null) return
+
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
-        pathToPackageJson = require.resolve(`${extracted.pkg}`, { paths: [args.resolveDir] })
+        pathToPackageJson = require.resolve(extracted.pkg, { paths: [args.resolveDir] })
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
@@ -247,7 +286,7 @@ ${build.initialOptions.banner.js}`
       }
 
       try {
-        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */ (pathToPackageJson)).toString())
+        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
         if (isESM && !interceptedESMModules.has(fullPathToModule)) {
@@ -303,7 +342,7 @@ ${build.initialOptions.banner.js}`
 
       if (data.isESM) {
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
-          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+          args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
@@ -336,10 +375,15 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         }
       } else {
         const fileCode = fs.readFileSync(args.path, 'utf8')
+        // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
+        // `__commonJS` factory into an arrow function whose `arguments` resolves to the
+        // ESM top-level scope (see issue #8681). Pass `(module.exports, module)`
+        // explicitly; the IIFE declares no parameters so esbuild's static `require()`
+        // resolution inside `fileCode` is preserved through the factory's closure.
         contents = `
         (function() {
           ${fileCode}
-        })(...arguments);
+        })(module.exports, module);
         {
           const dc = require('dc-polyfill');
           const ch = dc.channel('${CHANNEL}');

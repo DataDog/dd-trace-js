@@ -13,7 +13,7 @@ function getParsedRecordHeaders (record) {
       }
     }
     return headers ? JSON.parse(headers) : null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -51,5 +51,5 @@ function extract (event, tracer) {
 
 module.exports = {
   extract,
-  getParsedRecordHeaders
+  getParsedRecordHeaders,
 }

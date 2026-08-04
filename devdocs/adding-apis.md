@@ -136,9 +136,9 @@ this.addSub('datadog-api:v1:complexMethod', ({ self, args, ret, proxy }) => {
 
 1. An API call publishes to `datadog-api:v1:methodName`.
 2. The plugin handles the event:
-   - Maps arguments/returns.
-   - Calls the method on `dd-trace`.
-   - Returns the result.
+    - Maps arguments/returns.
+    - Calls the method on `dd-trace`.
+    - Returns the result.
 
 ---
 

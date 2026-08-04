@@ -72,9 +72,9 @@ module.exports = {
  * @param {string} objectId - The ID of the object to get the properties of
  * @param {GetObjectOptions} opts - The options for the snapshot. Also used to track the deadline and communicate the
  *   deadline overrun to the caller using the `deadlineReached` flag.
- * @param {number} [depth=0] - The depth of the object. Only used internally by this module to track the current depth
+ * @param {number} [depth] - The depth of the object. Only used internally by this module to track the current depth
  *   and should not be set by the caller.
- * @param {boolean} [collection=false] - Whether the object is a collection. Only used internally by this module to
+ * @param {boolean} [collection] - Whether the object is a collection. Only used internally by this module to
  *   track the current object type and should not be set by the caller.
  * @returns {Promise<object[]>} The properties of the object
  */

@@ -11,7 +11,7 @@ require('./setup/core')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
-const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('../src/constants')
 
 const {
   MEASURED,
@@ -19,6 +19,8 @@ const {
   HTTP_ENDPOINT,
   HTTP_ROUTE,
   HTTP_METHOD,
+  SPAN_KIND,
+  GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -26,9 +28,12 @@ const {
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
 
-// Mock spans
+// Mock spans use the post-format field name `start` (nanoseconds), matching
+// what `SpanProcessor.process` hands to `onSpanFinished` via the formatted
+// span. The formatter never emits `startTime`, so reading that field bucketed
+// every span under a single NaN time key.
 const basicSpan = {
-  startTime: 12345 * 1e9,
+  start: 12345 * 1e9,
   duration: 1234,
   error: 0,
   name: 'basic-span',
@@ -37,6 +42,7 @@ const basicSpan = {
   type: 'span-type',
   meta: {
     [HTTP_STATUS_CODE]: 200,
+    [SVC_SRC_KEY]: 'integration',
   },
   metrics: {},
 }
@@ -79,6 +85,10 @@ const exporter = {
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
 
+const otlpExporter = {
+  export: sinon.stub(),
+}
+
 const {
   SpanAggStats,
   SpanAggKey,
@@ -94,22 +104,25 @@ const {
 describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,')
+    assert.strictEqual(
+      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
-    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,')
+    assert.strictEqual(
+      key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -122,7 +135,8 @@ describe('SpanAggKey', () => {
       },
     }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
@@ -136,7 +150,8 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
+      key.toString(),
+      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
@@ -150,7 +165,55 @@ describe('SpanAggKey', () => {
       },
     }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
+  })
+
+  it('should include service source in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SVC_SRC_KEY]: 'opt.plugin',
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,')
+  })
+
+  it('should include span kind in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
+  })
+
+  it('should normalize gRPC status name to numeric string in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5')
+  })
+
+  it('should keep numeric gRPC status code as numeric string in aggregation key', () => {
+    const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
+  })
+
+  it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, 'rpc.grpc.status_code': '2' }, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '2')
+  })
+
+  it('should use rpc.response.status_code OTel alias as last resort', () => {
+    const meta = { ...basicSpan.meta, 'rpc.response.status_code': 'INVALID_ARGUMENT' }
+    const span = { ...basicSpan, meta, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '3')
   })
 })
 
@@ -164,7 +227,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(basicSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -173,13 +236,17 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      srv_src: aggKey.srvSrc,
+      SpanKind: aggKey.spanKind,
+
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
       Duration: basicSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 
   it('should record a top-level span', () => {
@@ -191,7 +258,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(topLevelSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -200,13 +267,17 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      srv_src: aggKey.srvSrc,
+      SpanKind: aggKey.spanKind,
+
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
       Duration: topLevelSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 
   it('should record an error span', () => {
@@ -218,7 +289,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     errorDistribution.accept(errorSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -227,13 +298,17 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      srv_src: aggKey.srvSrc,
+      SpanKind: aggKey.spanKind,
+
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
       Duration: errorSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 })
 
@@ -282,7 +357,7 @@ describe('SpanStatsProcessor', () => {
 
   const config = {
     stats: {
-      enabled: true,
+      DD_TRACE_STATS_COMPUTATION_ENABLED: true,
       interval: 10,
     },
     hostname: '127.0.0.1',
@@ -306,14 +381,14 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.stats.enabled)
+    assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })
 
   it('should construct a disabled instance', () => {
-    const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
+    const disabledConfig = { ...config, stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 } }
     const processor = new SpanStatsProcessor(disabledConfig)
 
     assert.strictEqual(processor.enabled, false)
@@ -341,7 +416,7 @@ describe('SpanStatsProcessor', () => {
       okDistribution.accept(topLevelSpan.duration)
     }
 
-    assert.deepStrictEqual(spanBucket.toJSON(), {
+    assert.deepStrictEqual(spanBucket.toJSON(), [{
       Name: 'top-level-span',
       Service: 'service-name',
       Resource: 'resource-name',
@@ -350,13 +425,43 @@ describe('SpanStatsProcessor', () => {
       Synthetics: false,
       HTTPMethod: '',
       HTTPEndpoint: '',
+      srv_src: 'integration',
+      SpanKind: '',
+      GRPCStatusCode: '',
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
       Duration: (topLevelSpan.duration) * n,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
+  })
+
+  it('should bucket by the formatted span start, not the missing startTime field', () => {
+    const localProcessor = new SpanStatsProcessor(config)
+    clearTimeout(localProcessor.timer)
+
+    localProcessor.onSpanFinished(topLevelSpan)
+
+    const bucketTime = localProcessor.buckets.keys().next().value
+    assert.ok(Number.isFinite(bucketTime), `bucket time should be finite, got ${bucketTime}`)
+    assert.strictEqual(bucketTime, 12340000000000)
+  })
+
+  it('should bucket spans by their containing interval boundary', () => {
+    const localProcessor = new SpanStatsProcessor(config)
+    clearTimeout(localProcessor.timer)
+
+    const bucketSizeNs = config.stats.interval * 1e9
+    // Last nanosecond of the first bucket and first nanosecond of the second.
+    const lastInFirstBucket = { ...topLevelSpan, start: bucketSizeNs - topLevelSpan.duration - 1 }
+    const firstInSecondBucket = { ...topLevelSpan, start: bucketSizeNs }
+
+    localProcessor.onSpanFinished(lastInFirstBucket)
+    localProcessor.onSpanFinished(firstInSecondBucket)
+
+    const bucketTimes = [...localProcessor.buckets.keys()]
+    assert.deepStrictEqual(bucketTimes, [0, bucketSizeNs])
   })
 
   it('should export on interval', () => {
@@ -378,6 +483,9 @@ describe('SpanStatsProcessor', () => {
           Synthetics: false,
           HTTPMethod: '',
           HTTPEndpoint: '',
+          srv_src: 'integration',
+          SpanKind: '',
+          GRPCStatusCode: '',
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
@@ -411,5 +519,71 @@ describe('SpanStatsProcessor', () => {
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should clear buckets after each interval flush', () => {
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+
+    assert.strictEqual(p.buckets.size, 1)
+    p.onInterval()
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('creates and stores the injected otlp exporter', () => {
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+    assert.strictEqual(p.otlpExporter, otlpExporter)
+  })
+
+  it('should call OTLP exporter on interval when traceMetrics enabled', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    p.onInterval()
+
+    assert.ok(otlpExporter.export.calledOnce)
+    const [drained, bucketSizeNs] = otlpExporter.export.firstCall.args
+    assert.strictEqual(drained.length, 1)
+    assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
+  })
+
+  it('should not call OTLP exporter on interval when drained is empty', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+    p.onInterval()
+
+    assert.ok(otlpExporter.export.notCalled)
+  })
+
+  it('should not call the legacy /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
+    exporter.export.resetHistory()
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+    p.onSpanFinished(topLevelSpan)
+    p.onInterval()
+
+    assert.ok(exporter.export.notCalled)
+    assert.ok(otlpExporter.export.calledOnce)
+  })
+
+  it('should record spans when only OTLP is enabled', () => {
+    otlpExporter.export.resetHistory()
+    const p = new SpanStatsProcessor({
+      stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 },
+      hostname: '127.0.0.1',
+      port: 8126,
+      url: new URL('http://127.0.0.1:8126'),
+      env: 'test',
+      tags: {},
+    }, otlpExporter)
+    clearTimeout(p.timer)
+
+    p.onSpanFinished(topLevelSpan)
+    assert.strictEqual(p.buckets.size, 1)
   })
 })

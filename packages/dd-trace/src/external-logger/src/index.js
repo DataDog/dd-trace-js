@@ -26,7 +26,8 @@ class ExternalLogger {
     }
     this.timer = setInterval(() => {
       this.flush()
-    }, this.interval).unref()
+    }, this.interval)
+    this.timer.unref?.()
 
     tracerLogger.debug(`started log writer to https://${this.intake}${this.endpoint}`)
   }
@@ -77,7 +78,6 @@ class ExternalLogger {
 
   // Flushes logs with optional callback for when the call is complete
   flush (cb = () => {}) {
-    let logs
     let numLogs
     let encodedLogs
 
@@ -87,7 +87,7 @@ class ExternalLogger {
     }
 
     try {
-      logs = this.queue
+      const logs = this.queue
       this.queue = []
 
       numLogs = logs.length

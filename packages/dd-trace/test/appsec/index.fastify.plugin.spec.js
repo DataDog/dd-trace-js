@@ -12,14 +12,22 @@ const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+
+// The version matrices below necessarily pair plugin majors with fastify majors they reject. fastify core
+// reports that while booting (during `listen`) as FST_ERR_PLUGIN_VERSION_MISMATCH; older fastify-plugin
+// builds throw a plain Error carrying the same "expected '<range>' fastify version" text instead. Either
+// means "skip this unsupported combo", not a real failure.
+function isFastifyPluginVersionMismatch (error) {
+  return error.code === 'FST_ERR_PLUGIN_VERSION_MISMATCH' || /expected '.+?' fastify version/.test(error.message)
+}
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
-    let server, requestBody, axios
+    let app, server, requestBody, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -28,24 +36,24 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.get('/', (request, reply) => {
         requestBody()
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -56,6 +64,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -84,7 +93,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - body', () => {
-    let server, requestBody, axios
+    let app, server, requestBody, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -93,24 +102,24 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/', (request, reply) => {
         requestBody()
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -121,6 +130,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -184,7 +194,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Appsec blocking with schema validation', () => {
-    let server, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -193,7 +203,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/schema-validated', {
         schema: {
@@ -209,17 +219,17 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -229,6 +239,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -259,7 +270,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - path parameters', () => {
-    let server, preHandlerHookSpy, preValidationHookSpy, axios
+    let app, server, preHandlerHookSpy, preValidationHookSpy, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -268,7 +279,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
       app.get('/multiple-path-params/:parameter1/:parameter2', (request, reply) => {
         reply.send('DONE')
       })
@@ -298,17 +309,17 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -318,6 +329,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -461,7 +473,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
           })
 
-          before((done) => {
+          before(async function () {
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
@@ -480,12 +492,18 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               reply.send('DONE')
             })
 
-            app.listen({ port: 0 }, () => {
-              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-              axios = Axios.create({ baseURL: `http://localhost:${port}` })
-              done()
-            })
+            try {
+              await app.listen({ host: '127.0.0.1', port: 0 })
+            } catch (error) {
+              if (isFastifyPluginVersionMismatch(error)) {
+                return this.skip()
+              }
+              throw error
+            }
+
             server = app.server
+            const { port } = /** @type {import('net').AddressInfo} */ (server.address())
+            axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
           })
 
           beforeEach(async () => {
@@ -498,6 +516,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
                 },
               })
             )
+            setTestBlockingTemplates()
           })
 
           afterEach(() => {
@@ -506,7 +525,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           after(() => {
             server?.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should not block the request without an attack', async () => {
@@ -565,7 +584,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
       })
 
-      before((done) => {
+      before(async function () {
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
 
@@ -578,12 +597,18 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           reply.send('DONE')
         })
 
-        app.listen({ port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+        try {
+          await app.listen({ host: '127.0.0.1', port: 0 })
+        } catch (error) {
+          if (isFastifyPluginVersionMismatch(error)) {
+            return this.skip()
+          }
+          throw error
+        }
+
         server = app.server
+        const { port } = /** @type {import('net').AddressInfo} */ (server.address())
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
       })
 
       beforeEach(() => {
@@ -602,7 +627,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       after(() => {
         server?.close()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should not block the request without an attack', async () => {
@@ -635,16 +660,16 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
 describe('Api Security - Fastify', () => {
   withVersions('fastify', 'fastify', version => {
-    let config, server, axios
+    let config, app, server, axios
 
     before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
+      return agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/send', (request, reply) => {
         reply.send({ sendResKey: 'sendResValue' })
@@ -672,17 +697,17 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(() => {
@@ -692,7 +717,6 @@ describe('Api Security - Fastify', () => {
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
             enabled: true,
-            sampleDelay: 10,
           },
         },
       })

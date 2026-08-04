@@ -19,10 +19,11 @@ import { isMainThread } from 'worker_threads'
 // This file must support Node.js 12.0.0 syntax
 
 import {
-  iitmExclusions,
+  iitmExclusionRegExp,
+  initialize as hookInitialize,
   load as hookLoad,
   resolve as hookResolve,
-} from './loader-hook.mjs'
+} from './loader-hook.mjs?initialize'
 
 let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href
@@ -66,9 +67,18 @@ const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 
+// Node calls `initialize` only through `module.register`, never for `--loader`; without it
+// import-in-the-middle keeps its default matcher and proxies every application module. Loaders
+// before Node 18.19 share the application thread, where `loader-hook.mjs` builds no matcher.
+let needsHookInitialize = !isMainThread && !brokenLoaders
+
 export async function load (url, context, nextLoad) {
-  const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))
-  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? nextLoad : hookLoad
+  if (needsHookInitialize) {
+    needsHookInitialize = false
+    hookInitialize()
+  }
+
+  const loadHook = (brokenLoaders || iitmExclusionRegExp.test(url)) ? nextLoad : hookLoad
   return insertInit(await loadHook(url, context, nextLoad), url, context)
 }
 
@@ -76,10 +86,12 @@ export const resolve = brokenLoaders ? undefined : hookResolve
 
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
-  require('./init.js')
-  if (Module.register) {
-    Module.register('./loader-hook.mjs', import.meta.url, {
-      data: { exclude: iitmExclusions },
-    })
+  const initialized = require('./init.js')
+  // Only register the loader hook when instrumentation initialized. On a bailout the
+  // loader has nothing to instrument and can keep a short-lived process from exiting.
+  if (Module.register && initialized) {
+    // The loader builds its own include/exclude matcher in `initialize`, so no
+    // options need to cross the registration boundary.
+    Module.register('./loader-hook.mjs', import.meta.url)
   }
 }

@@ -2,13 +2,15 @@
 
 const assert = require('node:assert/strict')
 const { hostname } = require('node:os')
+const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const propagationHash = require('../../src/propagation-hash')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -216,6 +218,10 @@ describe('DataStreamsProcessor', () => {
     clearTimeout(processor.timer)
   })
 
+  afterEach(() => {
+    propagationHash.configure(null)
+  })
+
   it('should construct', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
@@ -290,6 +296,16 @@ describe('DataStreamsProcessor', () => {
     assert.deepStrictEqual(encoded.PayloadSize, payloadSize.toProto())
   })
 
+  it('should tag the provided span with the pathway hash on recordCheckpoint', () => {
+    const span = { setTag: sinon.stub() }
+    processor.recordCheckpoint(mockCheckpoint, span)
+    sinon.assert.calledOnceWithExactly(
+      span.setTag,
+      'pathway.hash',
+      DEFAULT_CURRENT_HASH.readBigUInt64LE().toString()
+    )
+  })
+
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
@@ -317,12 +333,10 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('should include ProcessTags when propagation is enabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
     const processTags = require('../../src/process-tags')
     processTags.initialize()
 
-    // Configure and enable the feature
-    propagationHash.configure({ propagateProcessTags: { enabled: true } })
+    propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
@@ -336,16 +350,10 @@ describe('DataStreamsProcessor', () => {
       processTags.serialized.split(','),
       'ProcessTags should match process-tags module as array'
     )
-
-    // Cleanup
-    propagationHash.configure(null)
   })
 
   it('should not include ProcessTags when propagation is disabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
-
-    // Ensure the feature is disabled
-    propagationHash.configure({ propagateProcessTags: { enabled: false } })
+    propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
@@ -354,9 +362,6 @@ describe('DataStreamsProcessor', () => {
     const payload = call.args[0]
 
     assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
-
-    // Cleanup
-    propagationHash.configure(null)
   })
 })
 
@@ -404,7 +409,7 @@ describe('CheckpointRegistry', () => {
 
   it('encodedKeys returns empty Buffer when empty', () => {
     const encoded = registry.encodedKeys
-    assert.ok(Buffer.isBuffer(encoded))
+    assert.ok(Buffer.isBuffer(encoded), `Expected Buffer, got ${inspect(encoded)}`)
     assert.strictEqual(encoded.length, 0)
   })
 
@@ -461,7 +466,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     processor.trackTransaction('tx-001', 'ingested')
     assert.strictEqual(processor.buckets.size, 1)
     const bucket = processor.buckets.values().next().value
-    assert.ok(bucket.transactions !== null)
+    assert.notStrictEqual(bucket.transactions, null)
   })
 
   it('encodes correct binary wire format', () => {
@@ -554,9 +559,12 @@ describe('_serializeBuckets with transactions', () => {
     processor.trackTransaction('tx-001', 'ingested')
     const { Stats } = processor._serializeBuckets()
     assert.strictEqual(Stats.length, 1)
-    assert.ok(Buffer.isBuffer(Stats[0].Transactions))
-    assert.ok(Buffer.isBuffer(Stats[0].TransactionCheckpointIds))
-    assert.ok(Stats[0].TransactionCheckpointIds.length > 0)
+    assert.ok(Buffer.isBuffer(Stats[0].Transactions), `Expected Buffer, got ${inspect(Stats[0].Transactions)}`)
+    assert.ok(
+      Buffer.isBuffer(Stats[0].TransactionCheckpointIds),
+      `Expected Buffer, got ${inspect(Stats[0].TransactionCheckpointIds)}`
+    )
+    assert.ok(Stats[0].TransactionCheckpointIds.length > 0, `Expected ${Stats[0].TransactionCheckpointIds.length} > 0`)
   })
 
   it('omits Transactions and TransactionCheckpointIds when no transactions in bucket', () => {

@@ -16,21 +16,17 @@ const oldEnv = process.env
 describe('git metadata tagging', () => {
   let tracer
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env = {
       ...oldEnv,
       DD_GIT_COMMIT_SHA: DUMMY_GIT_SHA,
       DD_TAGS: `git.repository_url:${DUMMY_REPOSITORY_URL}`,
     }
-    tracer = require('../')
-    return agent.load()
+    tracer = await agent.load()
   })
 
-  afterEach(() => {
-    agent.close()
-  })
-
-  afterEach(() => {
+  afterEach(async () => {
+    await agent.close()
     process.env = oldEnv
   })
 
@@ -54,8 +50,8 @@ describe('git metadata tagging', () => {
       assert.strictEqual(firstSpan.meta[SCI_REPOSITORY_URL], DUMMY_REPOSITORY_URL)
 
       const secondSpan = payload[0][1]
-      assert.ok(secondSpan.meta[SCI_COMMIT_SHA] == null)
-      assert.ok(secondSpan.meta[SCI_REPOSITORY_URL] == null)
+      assert.ok(secondSpan.meta[SCI_COMMIT_SHA] == null, `Expected ${secondSpan.meta[SCI_COMMIT_SHA]} == null`)
+      assert.ok(secondSpan.meta[SCI_REPOSITORY_URL] == null, `Expected ${secondSpan.meta[SCI_REPOSITORY_URL]} == null`)
     })
   })
 })

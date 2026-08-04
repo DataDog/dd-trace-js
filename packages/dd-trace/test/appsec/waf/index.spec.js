@@ -22,13 +22,11 @@ describe('WAF Manager', () => {
   ])
   let waf, WAFManager
   let DDWAF
-  let config
+  const config = getConfigFresh()
   let webContext
   let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
-    config = getConfigFresh()
-
     limiterStub = {
       isAllowed: sinon.stub().returns(true),
     }
@@ -130,7 +128,7 @@ describe('WAF Manager', () => {
       const req = {}
       waf.run(payload, req, 'ssrf')
 
-      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf', req)
+      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf', req, undefined)
     })
 
     it('should call wafManager.run without raspRuleType', () => {
@@ -142,7 +140,7 @@ describe('WAF Manager', () => {
       const req = {}
       waf.run(payload, req)
 
-      sinon.assert.calledOnceWithExactly(run, payload, undefined, req)
+      sinon.assert.calledOnceWithExactly(run, payload, undefined, req, undefined)
     })
 
     describe('sampling priority', () => {
@@ -460,7 +458,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params, undefined, req)
 
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttack, match({ events: ['ATTACK DATA'] }), req)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttack, match({ events: ['ATTACK DATA'] }), req, undefined)
       })
 
       it('should report if rule is triggered', () => {
@@ -584,7 +582,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params, undefined, req)
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req, undefined)
       })
 
       it('should report fingerprints when ddwafContext returns fingerprints in results attributes', () => {
@@ -606,7 +604,7 @@ describe('WAF Manager', () => {
             'server.request.body': 'foo',
           },
         }, undefined, req)
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req, undefined)
       })
     })
   })

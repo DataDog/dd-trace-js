@@ -1,0 +1,28 @@
+{
+  "supportedConfigurations": {
+    "DD_SIMPLE": [
+      {
+        "configurationNames": [
+          "simple"
+        ]
+      }
+    ],
+    "DD_OBJECT_ONLY_ENABLED": [
+      {
+        "configurationNames": [
+          "objectOnly.enabled"
+        ]
+      }
+    ],
+    "DD_APPSEC_ENABLED": [
+      {
+        "configurationNames": [
+          "appsec.enabled",
+          "appsec",
+          "experimental.appsec.enabled",
+          "experimental.appsec"
+        ]
+      }
+    ]
+  }
+}

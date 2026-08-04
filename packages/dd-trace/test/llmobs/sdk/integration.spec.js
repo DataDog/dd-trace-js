@@ -5,7 +5,6 @@ const assert = require('node:assert')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const agent = require('../../plugins/agent')
 const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -16,10 +15,13 @@ describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
 
-  const { getEvents, getEvaluationMetrics } = useLlmObs()
+  const { getEvents, assertNoLlmObsSpans, getEvaluationMetrics } = useLlmObs()
 
   before(() => {
-    tracer = require('../../../../dd-trace')
+    // `useLlmObs()` ran `agent.load` in a `before` registered above
+    // this one, so by the time we get here `global._ddtrace` is the
+    // live `TracerProxy`.
+    tracer = global._ddtrace
     llmobs = tracer.llmobs
   })
 
@@ -72,6 +74,9 @@ describe('end to end sdk integration tests', () => {
 
     function apm (input) {
       llmobs.annotate({ metadata: { foo: 'bar' } }) // should annotate the agent span
+      // `input` is forwarded so wrap captures it via `arguments` for inputValue, even though
+      // the wrapped `workflow` doesn't declare a named parameter.
+      // eslint-disable-next-line sonarjs/no-extra-arguments
       return workflow(input)
     }
     // eslint-disable-next-line no-func-assign
@@ -159,6 +164,47 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
+  describe('otel correlation bridge tags', () => {
+    it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+        llmobs.trace({ kind: 'task', name: 'inner' }, () => {})
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+      assert.equal(apmSpans.length, 2)
+
+      // The first span in the chunk carries _trace.tags, including the bridge tags.
+      const firstSpan = apmSpans[0]
+      assert.equal(firstSpan.meta.llmobs_trace_id, llmobsSpans[0].trace_id)
+      assert.equal(firstSpan.meta.llmobs_parent_id, llmobsSpans[0].span_id)
+
+      // Every SDK-tagged apm span carries the submitted marker.
+      for (const apmSpan of apmSpans) {
+        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], '1')
+      }
+    })
+
+    it('does not mark non-llmobs apm spans with _dd.llmobs.submitted', async () => {
+      tracer.trace('plainApm', () => {
+        llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {})
+      })
+
+      const { apmSpans } = await getEvents(1)
+      const plainApmSpan = apmSpans.find(s => s.name === 'plainApm')
+      const sdkSpan = apmSpans.find(s => s.name === 'wf')
+
+      assert.ok(plainApmSpan)
+      assert.ok(sdkSpan)
+      assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+
+      // bridge tags still flow to the local trace's chunk meta
+      const firstSpan = apmSpans[0]
+      assert.match(firstSpan.meta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+      assert.ok(firstSpan.meta.llmobs_parent_id)
+    })
+  })
+
   describe('distributed', () => {
     it('injects and extracts the proper llmobs context', async () => {
       const carrier = {}
@@ -176,6 +222,8 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
       assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
+      assert.equal(llmobsSpans[0].trace_id, llmobsSpans[1].trace_id)
+      assert.match(llmobsSpans[0].trace_id, /^[0-9a-f]{32}$/)
     })
 
     it('injects the local mlApp', async () => {
@@ -295,19 +343,12 @@ describe('end to end sdk integration tests', () => {
 
       beforeEach(() => {
         llmobs.registerProcessor(processor)
-        agent.reset() // make sure llmobs requests are cleared
       })
 
       it('does not submit the span', async () => {
         llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
 
-        // Race between getEvents() and a timeout - timeout should win since no spans are expected
-        // because the testagent server is running in the same process, this operation should be very low latency
-        // meaning there should be no flakiness here
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ llmobsSpans: [] }), 100))
-
-        const { llmobsSpans } = await Promise.race([getEvents(), timeoutPromise])
-        assert.equal(llmobsSpans.length, 0)
+        await assertNoLlmObsSpans()
       })
     })
 
@@ -343,6 +384,97 @@ describe('end to end sdk integration tests', () => {
 
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
         assert.equal(llmobsSpans[1].meta.output.messages[0].content, 'REDACTED')
+      })
+
+      it('redacts embedding input document content while preserving other document fields', async () => {
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+          llmobs.annotate({
+            tags: { redact_input: true },
+            inputData: [{ text: 'sensitive text', name: 'doc1', id: '1', score: 0.9 }],
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.input.documents[0].text, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].name, 'doc1')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].id, '1')
+        assert.equal(llmobsSpans[0].meta.input.documents[0].score, 0.9)
+      })
+
+      it('redacts retrieval output document content while preserving other document fields', async () => {
+        llmobs.trace({ kind: 'retrieval', name: 'retrieve' }, () => {
+          llmobs.annotate({
+            tags: { redact_output: true },
+            outputData: [{ text: 'sensitive result', name: 'doc2', id: '2', score: 0.7 }],
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.output.documents[0].text, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].name, 'doc2')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].id, '2')
+        assert.equal(llmobsSpans[0].meta.output.documents[0].score, 0.7)
+      })
+    })
+
+    describe('with a processor that filters spans by span.kind', () => {
+      before(() => {
+        llmobs.registerProcessor(span => span.kind === 'embedding' ? null : span)
+      })
+
+      after(() => {
+        llmobs.deregisterProcessor()
+      })
+
+      it('drops embedding spans but passes retrieval spans through', async () => {
+        llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+          llmobs.annotate({ inputData: [{ text: 'hello' }] })
+        })
+        llmobs.trace({ kind: 'retrieval', name: 'retrieve' }, () => {
+          llmobs.annotate({ outputData: [{ text: 'world' }] })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].name, 'retrieve')
+      })
+    })
+
+    describe('with a processor that redacts content based on span.kind', () => {
+      before(() => {
+        llmobs.registerProcessor(span => {
+          if (span.kind === 'embedding') {
+            span.input = span.input.map(doc => ({ ...doc, content: 'REDACTED' }))
+          }
+          return span
+        })
+      })
+
+      after(() => {
+        llmobs.deregisterProcessor()
+      })
+
+      it('redacts embedding input documents but leaves the enclosing workflow span unaffected', async () => {
+        llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {
+          llmobs.annotate({ inputData: 'non-sensitive input' })
+          llmobs.trace({ kind: 'embedding', name: 'embed' }, () => {
+            llmobs.annotate({ inputData: [{ text: 'sensitive text', name: 'doc1', id: '1', score: 0.9 }] })
+          })
+        })
+
+        const { llmobsSpans } = await getEvents(2)
+        assert.equal(llmobsSpans.length, 2)
+
+        const wfSpan = llmobsSpans.find(s => s.name === 'wf')
+        const embedSpan = llmobsSpans.find(s => s.name === 'embed')
+
+        assert.equal(wfSpan.meta.input.value, 'non-sensitive input')
+        assert.equal(embedSpan.meta.input.documents[0].text, 'REDACTED')
+        assert.equal(embedSpan.meta.input.documents[0].name, 'doc1')
+        assert.equal(embedSpan.meta.input.documents[0].id, '1')
+        assert.equal(embedSpan.meta.input.documents[0].score, 0.9)
       })
     })
   })

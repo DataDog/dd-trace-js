@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
 const zlib = require('node:zlib')
+const stream = require('node:stream')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -41,6 +43,9 @@ describe('request', function () {
   let request
   let log
   let docker
+  let maxAttempts
+  let retryStubs
+  let runInNoopContext
 
   beforeEach(() => {
     log = {
@@ -52,9 +57,26 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    // The retry policy is exercised in retry.spec.js. Here we keep the integration
+    // deterministic: zero backoff, no startup-phase mutation, attempt count
+    // overridable per test.
+    maxAttempts = 2
+    retryStubs = {
+      getRetryDelay: sinon.fake.returns(0),
+      getMaxAttempts: sinon.fake(() => maxAttempts),
+      markEndpointReached: sinon.fake(),
+    }
+    runInNoopContext = sinon.spy((_store, callback) => callback())
     request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
       './docker': docker,
       '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
     })
   })
 
@@ -89,6 +111,165 @@ describe('request', function () {
       })
   })
 
+  it('does not retry when retries are disabled', (done) => {
+    maxAttempts = 5
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
+    nock('http://localhost:80')
+      .get('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'GET',
+      retry: false,
+    }, (requestError) => {
+      assert.strictEqual(requestError, error)
+      sinon.assert.notCalled(retryStubs.getMaxAttempts)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  it('allows callers to cancel a request with an AbortSignal', async () => {
+    nock('http://localhost:80')
+      .get('/path')
+      .delayConnection(1000)
+      .reply(200, 'OK')
+
+    const abortController = new AbortController()
+    /**
+     * @param {() => void} resolve
+     * @param {(error: Error) => void} reject
+     */
+    const execute = (resolve, reject) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'GET',
+        retry: false,
+        signal: abortController.signal,
+      }, onResponse)
+    }
+    const completed = new Promise(execute)
+
+    abortController.abort()
+
+    await assert.rejects(completed, { code: 'ABORT_ERR' })
+  })
+
+  it('settles once when a response is truncated', async () => {
+    /**
+     * @param {import('node:http').IncomingMessage} incoming
+     * @param {import('node:http').ServerResponse} response
+     */
+    const truncate = (incoming, response) => {
+      incoming.resume()
+      response.writeHead(200)
+      response.write('partial')
+      setImmediate(() => response.destroy())
+    }
+    const server = http.createServer(truncate)
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+
+    let callbacks = 0
+    /**
+     * @param {(error: Error | null) => void} resolve
+     */
+    const execute = (resolve) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        callbacks++
+        resolve(error)
+      }
+      request('', {
+        method: 'GET',
+        retry: false,
+        url: new URL(`http://127.0.0.1:${server.address().port}`),
+      }, onResponse)
+    }
+
+    try {
+      const error = await new Promise(execute)
+      assert.strictEqual(error.code, 'ECONNRESET')
+      assert.strictEqual(callbacks, 1)
+    } finally {
+      const closed = once(server, 'close')
+      server.close()
+      await closed
+    }
+  })
+
+  it('settles once when a response times out', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+    /** @param {Error} error */
+    response.destroy = (error) => {
+      response.emit('error', error)
+      response.emit('end')
+    }
+
+    let respond
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = sinon.spy()
+    requestMessage.write = sinon.spy()
+    requestMessage.end = () => {
+      respond(response)
+      response.emit('timeout')
+    }
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      respond = onResponse
+      return requestMessage
+    }
+    const timeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    let callbacks = 0
+    /**
+     * @param {(error: Error | null) => void} resolve
+     */
+    const execute = (resolve) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        callbacks++
+        resolve(error)
+      }
+      timeoutRequest('', { method: 'GET', retry: false }, onResponse)
+    }
+
+    const error = await new Promise(execute)
+    assert.strictEqual(error.code, 'ETIMEDOUT')
+    assert.strictEqual(callbacks, 1)
+  })
+
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')
@@ -121,21 +302,33 @@ describe('request', function () {
     })
   })
 
-  // TODO: use fake timers to avoid delaying tests
-  it('should timeout after 2 seconds by default', function (done) {
-    nock('http://localhost:80')
-      .put('/path')
-      .times(2)
-      .delay(2001)
-      .reply(200)
+  // Live timeout → abort → retry → 'socket hang up' is covered by
+  // `should have a configurable timeout` below at timeout: 100. Here we only
+  // need to pin the default constant, which is faster and avoids waiting
+  // for a real timer.
+  it('defaults the request timeout to 2 seconds', (done) => {
+    const sandbox = sinon.createSandbox()
+    const realRequest = http.request
+    let observedTimeout
+    sandbox.replace(http, 'request', function (...args) {
+      const req = realRequest.apply(this, args)
+      const originalSetTimeout = req.setTimeout
+      req.setTimeout = function (timeout, callback) {
+        observedTimeout = timeout
+        return originalSetTimeout.call(this, timeout, callback)
+      }
+      return req
+    })
+
+    nock('http://localhost:80').put('/path').reply(200, 'OK')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, err => {
-      assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'socket hang up')
-      done()
+    }, (err) => {
+      sandbox.restore()
+      assert.strictEqual(observedTimeout, 2000)
+      done(err)
     })
   })
 
@@ -176,9 +369,11 @@ describe('request', function () {
   })
 
   it('should retry', (done) => {
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
     nock('http://localhost:80')
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET' })
+      .replyWithError(error)
       .put('/path')
       .reply(200, 'OK')
 
@@ -191,21 +386,97 @@ describe('request', function () {
     })
   })
 
-  it('should not retry more than once', (done) => {
-    const error = new Error('Error ECONNRESET')
+  it('should not retry on a non-retriable error code', (done) => {
+    const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
 
     nock('http://localhost:80')
-      .put('/path')
-      .replyWithError(error)
       .put('/path')
       .replyWithError(error)
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-    }, (err, res) => {
+    }, (err) => {
       assert.strictEqual(err, error)
       done()
+    })
+  })
+
+  it('should not retry on an uncoded error', (done) => {
+    const error = new Error('Error ECONNRESET')
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('should retry on ECONNREFUSED until max attempts and propagate the final error', (done) => {
+    maxAttempts = 5
+
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .times(5)
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err) => {
+      assert.strictEqual(err, error)
+      done()
+    })
+  })
+
+  it('passes the per-request options into the retry helpers', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+    nock('http://test:123')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    const options = {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'PUT',
+    }
+
+    request(Buffer.from(''), options, (err) => {
+      sinon.assert.calledWith(retryStubs.getMaxAttempts, options)
+      sinon.assert.calledWith(retryStubs.getRetryDelay, options, 1)
+      sinon.assert.calledWith(retryStubs.markEndpointReached, options)
+      done(err)
+    })
+  })
+
+  it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
+    const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
     })
   })
 
@@ -282,30 +553,69 @@ describe('request', function () {
       })
   })
 
+  // unix:<path> URLs go through parseUrl(), which extracts the socket path
+  // and hands it to http.request via options.socketPath. Assert that mapping
+  // directly via the http.request spy.
   it('should parse unix domain sockets properly', (done) => {
     const sock = '/tmp/unix_socket'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, sock)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, sock)
         done()
       })
   })
 
   it('should parse windows named pipes properly', (done) => {
     const pipe = '//./pipe/datadogtrace'
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
 
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
         method: 'PUT',
       },
-      (err, _) => {
-        assert.strictEqual(err.address, pipe)
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, pipe)
+        done()
+      })
+  })
+
+  // Config always hands exporters a URL object (`new URL(...)`), not a string,
+  // so the object branch of parseUrl must apply the same named-pipe handling.
+  // The URL parser splits `unix://./pipe/foo` into authority `.` + path
+  // `/pipe/foo`; without folding `.` back the socket path collapses to
+  // `/pipe/foo` and misses the pipe.
+  it('should parse windows named pipes given as a URL object properly', (done) => {
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
+
+    request(
+      Buffer.from(''), {
+        url: new URL('unix://./pipe/datadogtrace'),
+        method: 'PUT',
+      },
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, '//./pipe/datadogtrace')
         done()
       })
   })
@@ -318,7 +628,7 @@ describe('request', function () {
     const charLength = body.length
     const byteLength = Buffer.byteLength(body, 'utf-8')
 
-    assert.ok(charLength < byteLength)
+    assert.ok(charLength < byteLength, `Expected ${charLength} < ${byteLength}`)
 
     nock('http://test:123').post('/').reply(200, 'OK')
 
@@ -328,6 +638,7 @@ describe('request', function () {
         host: 'test',
         port: 123,
         method: 'POST',
+        path: '/',
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       },
       (err, res) => {
@@ -348,7 +659,7 @@ describe('request', function () {
     })
 
     afterEach(() => {
-      sandbox.reset()
+      sandbox.restore()
     })
 
     it('should properly set request host with IPv6', (done) => {
@@ -388,7 +699,7 @@ describe('request', function () {
         },
       })
         .post('/path')
-        .reply(200, compressedData, { 'content-encoding': 'gzip' })
+        .reply(200, compressedData, { 'content-encoding': 'GZip' })
 
       request(Buffer.from(''), {
         protocol: 'http:',
@@ -430,6 +741,146 @@ describe('request', function () {
       }, (err, res) => {
         sinon.assert.calledWith(log.error, 'Could not gunzip response: %s', 'unexpected end of file')
         assert.strictEqual(res, '')
+        done(err)
+      })
+    })
+  })
+
+  it('should drop requests when too much data is buffered', (done) => {
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize).fill(69)
+
+    nock('http://test:123', {
+      reqheaders: {
+        'content-type': 'application/octet-stream',
+        'content-length': bufferSize,
+      },
+    })
+      .put('/path')
+      .times(10)
+      .reply(200, 'OK')
+
+    let okCount = 0
+    let koCount = 0
+
+    for (let i = 0; i < 10; i++) {
+      request(
+        stream.Readable.from(buffer),
+        {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+        },
+        (err, res) => {
+          if (err) return done(err)
+
+          if (res) {
+            assert.strictEqual(res, 'OK')
+            okCount++
+          } else {
+            koCount++
+          }
+
+          if (okCount + koCount === 10) {
+            assert.strictEqual(okCount, 8)
+            assert.strictEqual(koCount, 2)
+            done()
+          }
+        })
+    }
+  })
+
+  describe('stripping the Datadog API key from a non-TLS connection', () => {
+    // `badheaders` only matches when the key is absent, so a passing request proves it was
+    // stripped; a regression that left the key on would miss the interceptor and surface here.
+    it('strips dd-api-key when sending over http to a non-loopback host', (done) => {
+      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://intake.example.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        assert.match(log.error.getCall(0).args[0], /non-TLS connection/)
+        done(err)
+      })
+    })
+
+    it('strips the DD-API-KEY header casing as well', (done) => {
+      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://intake.example.com/v1/input'),
+        headers: { 'DD-API-KEY': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        done(err)
+      })
+    })
+
+    it('strips dd-api-key for a non-loopback host that merely starts with "127."', (done) => {
+      nock('http://127.evil.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://127.evil.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        done(err)
+      })
+    })
+
+    for (const loopbackHost of ['127.0.0.1', '127.1.2.3', 'localhost', '[::1]']) {
+      it(`keeps dd-api-key over http to the loopback host ${loopbackHost}`, (done) => {
+        nock(`http://${loopbackHost}:9999`, {
+          reqheaders: { 'dd-api-key': 'secret-key' },
+        })
+          .post('/v1/input')
+          .reply(200, 'OK')
+
+        request(Buffer.from(''), {
+          method: 'POST',
+          url: new URL(`http://${loopbackHost}:9999/v1/input`),
+          headers: { 'dd-api-key': 'secret-key' },
+        }, (err, res) => {
+          assert.strictEqual(res, 'OK')
+          sinon.assert.notCalled(log.error)
+          done(err)
+        })
+      })
+    }
+
+    it('keeps dd-api-key over https to a non-loopback host', (done) => {
+      nock('https://intake.example.com', {
+        reqheaders: { 'dd-api-key': 'secret-key' },
+      })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('https://intake.example.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.notCalled(log.error)
         done(err)
       })
     })

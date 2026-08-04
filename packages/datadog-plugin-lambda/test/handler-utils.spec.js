@@ -180,7 +180,7 @@ describe('handler-utils', () => {
       const tags = {}
       const span = { setTag: function (k, v) { tags[k] = v } }
       tagObject(span, 'deep', { a: 'b' }, 0, 1)
-      assert.equal(tags['deep'], '{"a":"b"}')
+      assert.equal(tags.deep, '{"a":"b"}')
     })
 
     it('redacts sensitive keys', () => {

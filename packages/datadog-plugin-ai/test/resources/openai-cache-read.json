@@ -1,0 +1,33 @@
+{
+  "id": "chatcmpl-abc123def456",
+  "object": "chat.completion",
+  "created": 1779284000,
+  "model": "gpt-4o-mini-2024-07-18",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Datadog LLM Observability provides end-to-end visibility."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 4448,
+    "completion_tokens": 44,
+    "total_tokens": 4492,
+    "prompt_tokens_details": {
+      "cached_tokens": 4425,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "system_fingerprint": "fp_test123"
+}

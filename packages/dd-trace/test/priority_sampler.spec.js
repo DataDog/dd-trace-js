@@ -51,6 +51,10 @@ describe('PrioritySampler', () => {
         started: [],
         tags: {},
       },
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
     }
 
     span = {
@@ -421,6 +425,45 @@ describe('PrioritySampler', () => {
       assert.strictEqual(typeof context._trace.tags[SAMPLING_KNUTH_RATE], 'string')
     })
 
+    it('should format _dd.p.ksr with decimal notation for very small rates', () => {
+      Sampler.withArgs(0.000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
+    it('should round _dd.p.ksr to zero when rate is below 6 decimal precision', () => {
+      Sampler.withArgs(0.0000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.0000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.0000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0')
+    })
+
+    it('should round _dd.p.ksr up to 0.000001 when rate rounds up', () => {
+      Sampler.withArgs(0.00000051).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.00000051),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.00000051,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
     it('should not set _dd.p.ksr tag for manual sampling', () => {
       context._tags[MANUAL_KEEP] = undefined
 
@@ -465,7 +508,17 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-3')
     })
 
-    it.skip('should remove the decision maker tag when dropping the trace', () => { })
+    it('should clear the decision maker tag when dropping a previously kept trace', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-4')
+
+      prioritySampler.setPriority(span, USER_REJECT)
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      // Cleared to undefined (not deleted) so trace.tags stays in fast mode;
+      // the key remains present but reads undefined and is not emitted.
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], undefined)
+    })
 
     it('should not crash on prototype-free tags objects', () => {
       context._tags = Object.create(null)

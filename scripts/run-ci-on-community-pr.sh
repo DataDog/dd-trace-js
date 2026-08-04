@@ -33,7 +33,10 @@ if [ -z "$PR_ID" ]; then
   echo
   echo "This will:"
   echo "1. Rebase the PR with its target branch, with each contained commit signed."
-  echo "2. Create a temporary PR to allow running CI on the community PR."
+  echo "2. Create or update a temporary PR to allow running CI on the community PR."
+  echo
+  echo "Re-running with the same <pr-id> picks up any new commits on the source"
+  echo "branch and force-pushes them onto the existing temporary branch and PR."
   echo
   echo "Options:"
   echo "  --check, -c        Verify GitHub CLI installation and authentication, then exit."
@@ -50,7 +53,24 @@ check_gh
 
 GITHUB_USER=$(gh api user --jq .login)
 BASE_COMMIT=$(gh pr view $PR_ID --json baseRefOid --jq '.baseRefOid')
-TEMP_BRANCH=$GITHUB_USER/tmp-ci-run-$PR_ID-$(date +%s)
+PR_BRANCH=$(gh pr view $PR_ID --json headRefName --jq '.headRefName')
+TEMP_BRANCH_PREFIX=$GITHUB_USER/tmp-ci-run-$PR_ID-
+
+EXISTING_TEMP_BRANCH=$(gh pr list \
+  --repo DataDog/dd-trace-js \
+  --state open \
+  --author "@me" \
+  --json headRefName \
+  --jq ".[] | select(.headRefName | startswith(\"$TEMP_BRANCH_PREFIX\")) | .headRefName" \
+  | head -n1)
+
+if [ -n "$EXISTING_TEMP_BRANCH" ]; then
+  TEMP_BRANCH=$EXISTING_TEMP_BRANCH
+  echo "Updating existing temporary branch from a previous run: $TEMP_BRANCH"
+else
+  TEMP_BRANCH=${TEMP_BRANCH_PREFIX}$(date +%s)
+fi
+
 WORKTREE_DIR=$(mktemp -d)
 ORIGINAL_DIR=$(pwd)
 
@@ -58,6 +78,9 @@ cleanup() {
   if [ -n "${WORKTREE_DIR:-}" ] && [ -d "$WORKTREE_DIR" ]; then
     cd "$ORIGINAL_DIR" 2>/dev/null || true
     git worktree remove "$WORKTREE_DIR" 2>/dev/null || true
+  fi
+  if [ -n "${PR_BRANCH:-}" ]; then
+    git branch -D "$PR_BRANCH" 2>/dev/null || true
   fi
 }
 
@@ -67,16 +90,18 @@ git worktree add $WORKTREE_DIR
 cd $WORKTREE_DIR
 
 git fetch origin
-gh pr checkout $PR_ID --repo DataDog/dd-trace-js
+gh pr checkout $PR_ID --repo DataDog/dd-trace-js --force
 git rebase --gpg-sign $BASE_COMMIT
 git push --force
-git push origin HEAD:$TEMP_BRANCH
+git push --force origin HEAD:$TEMP_BRANCH
 
-gh pr create \
-  --repo DataDog/dd-trace-js \
-  --head $TEMP_BRANCH \
-  --draft \
-  --label "semver-patch" \
-  --title "Temp: Run CI on community PR #$PR_ID" \
-  --body "This is a temporary PR to allow running CI on the community PR #$PR_ID. It should be closed after CI has completed running."
+if [ -z "$EXISTING_TEMP_BRANCH" ]; then
+  gh pr create \
+    --repo DataDog/dd-trace-js \
+    --head $TEMP_BRANCH \
+    --draft \
+    --label "semver-patch" \
+    --title "Temp: Run CI on community PR #$PR_ID" \
+    --body "This is a temporary PR to allow running CI on the community PR #$PR_ID. It should be closed after CI has completed running."
+fi
 gh pr view $TEMP_BRANCH --web --repo DataDog/dd-trace-js

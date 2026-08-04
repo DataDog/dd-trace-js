@@ -36,18 +36,22 @@ const parseGitHubJsonResponse = ({ body, endpoint, res }) => {
     return JSON.parse(body)
   } catch (e) {
     throw new Error(
-      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`
+      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`,
+      { cause: e }
     )
   }
 }
 
-function getBranchUnderTest () {
-  /**
-   * GITHUB_HEAD_REF is only set for `pull_request` events
-   * GITHUB_REF_NAME is used for `push` events
-   * More info in: https://docs.github.com/en/actions/learn-github-actions/environment-variables
-   */
-  return process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME
+function getRefToTest () {
+  if (!process.env.TEST_ENVIRONMENT_REF_TO_TEST) {
+    throw new Error('TEST_ENVIRONMENT_REF_TO_TEST is required to trigger test-environment')
+  }
+
+  return process.env.TEST_ENVIRONMENT_REF_TO_TEST
+}
+
+function getRefName () {
+  return process.env.TEST_ENVIRONMENT_REF_NAME || getRefToTest()
 }
 
 const getCommonHeaders = () => {
@@ -60,13 +64,13 @@ const getCommonHeaders = () => {
 }
 
 const triggerWorkflow = () => {
-  console.log(`Branch under test: ${getBranchUnderTest()}`)
+  console.log(`Commit SHA under test: ${getRefToTest()} in ${getRefName()}`)
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
-      inputs: { branch: getBranchUnderTest() },
+      inputs: { sha: getRefToTest() },
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,

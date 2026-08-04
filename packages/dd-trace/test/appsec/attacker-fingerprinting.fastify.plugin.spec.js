@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const agent = require('../plugins/agent')
@@ -12,7 +13,7 @@ const { withVersions } = require('../setup/mocha')
 
 withVersions('fastify', 'fastify', fastifyVersion => {
   describe('Attacker fingerprinting', () => {
-    let server, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -21,23 +22,23 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/', (request, reply) => {
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(() => {
@@ -71,11 +72,20 @@ withVersions('fastify', 'fastify', fastifyVersion => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'))
+        assert.ok(
+          Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
         assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-55682ec1')
-        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'))
+        assert.ok(
+          Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
         assert.strictEqual(span.meta['_dd.appsec.fp.http.network'], 'net-1-0100000000')
-        assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'))
+        assert.ok(
+          Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
         assert.strictEqual(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-8a5edab2-2c70e12b-be31090f')
       })
     })

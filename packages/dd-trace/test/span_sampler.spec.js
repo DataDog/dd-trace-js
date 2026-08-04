@@ -41,6 +41,7 @@ describe('span sampler', () => {
       },
       _name: 'operation',
       _tags: {},
+      getTag (key) { return this._tags[key] },
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
@@ -77,6 +78,7 @@ describe('span sampler', () => {
       },
       _name: 'operation',
       _tags: {},
+      getTag (key) { return this._tags[key] },
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
@@ -131,6 +133,7 @@ describe('span sampler', () => {
       },
       _name: 'operation',
       _tags: {},
+      getTag (key) { return this._tags[key] },
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
@@ -175,6 +178,7 @@ describe('span sampler', () => {
       },
       _name: 'operation',
       _tags: {},
+      getTag (key) { return this._tags[key] },
     }
     const secondSpanContext = {
       ...firstSpanContext,
@@ -243,6 +247,7 @@ describe('span sampler', () => {
       },
       _name: 'operation',
       _tags: {},
+      getTag (key) { return this._tags[key] },
     }
     const secondSpanContext = {
       ...firstSpanContext,

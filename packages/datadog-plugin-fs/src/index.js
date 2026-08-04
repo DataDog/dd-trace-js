@@ -5,13 +5,10 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 class FsPlugin extends TracingPlugin {
   static id = 'fs'
   static operation = 'operation'
-
-  configure (...args) {
-    return super.configure(...args)
-  }
+  static experimental = true
 
   bindStart (ctx) {
-    if (!this.activeSpan) return this.skip()
+    if (!this.activeSpan) return { noop: true }
 
     const { operation, ...params } = ctx
     const lowerOp = operation.toLowerCase()

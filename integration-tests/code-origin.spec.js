@@ -20,6 +20,8 @@ describe('Code Origin for Spans', function () {
     proc = await spawnProc(appFile, {
       cwd,
       env: {
+        // Opt out: NYC's transform breaks --enable-source-maps resolution to the .ts source.
+        _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
         NODE_OPTIONS: '--enable-source-maps',
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
       },
@@ -38,6 +40,10 @@ describe('Code Origin for Spans', function () {
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
           const [span] = payload.flatMap(p => p.filter(span => span.name === 'fastify.request'))
+          // Switch to `assert.match(span.meta[...], new RegExp(`${RegExp.escape(cwd)}/code-origin/typescript\\.ts$`))`
+          // once the minimum supported Node.js version is 24. Until then, `RegExp.escape` is unavailable and
+          // hand-escaping every regex metacharacter in `cwd` would be more error-prone than this `endsWith` check.
+          // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
           assert.ok(span.meta['_dd.code_origin.frames.0.file'].endsWith(`${cwd}/code-origin/typescript.ts`))
           assertObjectContains(span, {
             meta: {

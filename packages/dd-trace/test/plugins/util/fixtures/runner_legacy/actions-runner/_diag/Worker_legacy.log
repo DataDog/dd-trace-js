@@ -1,0 +1,108 @@
+[2024-01-15 10:23:45Z INFO WorkerMessageServer] THIS IS A MOCK DIAGNOSTICS FILE CREATED BY CLAUDE FOR TESTING getJobIDFromDiagFile FUNCTION
+[2024-01-15 10:23:45Z INFO WorkerMessageServer] Worker starting, pid: 12345
+[2024-01-15 10:23:45Z INFO WorkerMessageServer] Connecting to runner process
+[2024-01-15 10:23:45Z INFO WorkerMessageServer] Connection established
+[2024-01-15 10:23:46Z INFO Worker] Processing JobRequest message
+[2024-01-15 10:23:46Z INFO Worker] Received job message:
+{
+  "messageType": "PipelineAgentJobRequest",
+  "plan": {
+    "scopeIdentifier": "3a7e8b2d-1f4c-4e9a-b6d3-9c2f1a8e5d7b",
+    "planType": "Build",
+    "planId": "f2c4a6e8-3b5d-4f7a-9c1e-2d4f6a8c0e2a",
+    "version": "1",
+    "artifactUri": "https://pipelines.actions.githubusercontent.com/abc123XYZ",
+    "requestedForId": "1234567"
+  },
+  "timeline": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "changeId": 1,
+    "location": null
+  },
+  "jobId": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
+  "jobDisplayName": "build-and-test",
+  "jobName": "build-and-test",
+  "requestId": 9876543210,
+  "lockedUntil": "2024-01-15T11:23:46.000Z",
+  "resources": {
+    "endpoints": [
+      {
+        "data": {
+          "downloadUrl": "https://codeload.github.com/"
+        },
+        "name": "GITHUB_TOKEN",
+        "url": "https://api.github.com/",
+        "authorization": {
+          "scheme": "OAuth",
+          "parameters": {
+            "accessToken": "***"
+          }
+        },
+        "isShared": false,
+        "isReady": true
+      }
+    ],
+    "files": [],
+    "repositories": [
+      {
+        "alias": "self",
+        "id": "repo-id-abc123",
+        "type": "GitHub",
+        "name": "my-org/my-repo",
+        "url": "https://github.com/my-org/my-repo",
+        "version": "abc123def456",
+        "ref": "refs/heads/main"
+      }
+    ],
+    "containers": []
+  },
+  "variables": {
+    "system.github.job": { "value": "build-and-test", "isSecret": false },
+    "GITHUB_RUN_ID": { "value": "7654321", "isSecret": false },
+    "GITHUB_RUN_NUMBER": { "value": "42", "isSecret": false },
+    "GITHUB_WORKFLOW": { "value": "CI", "isSecret": false }
+  },
+  "steps": [
+    {
+      "type": "Task",
+      "id": "step-id-0001",
+      "name": "actions/checkout",
+      "displayName": "Checkout repository",
+      "enabled": true,
+      "continueOnError": false,
+      "condition": "succeeded()",
+      "timeoutInMinutes": 0,
+      "inputs": {
+        "repository": "my-org/my-repo",
+        "ref": "refs/heads/main",
+        "token": "***"
+      },
+      "environment": {},
+      "retryCountOnTaskFailure": 0
+    }
+  ],
+  "contextData": {},
+  "workspace": { "clean": null },
+  "mask": [
+    { "type": "regex", "value": "\\*\\*\\*" }
+  ],
+  "oidcToken": null,
+  "finaStrategy": null,
+  "job": {
+    "v": 9876543210,
+    "name": "build-and-test",
+    "id": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
+    "attempt": 1,
+    "workflowName": "CI",
+    "headBranch": "refs/heads/main",
+    "headSha": "abc123def456abc123def456abc123def456abc1"
+  }
+}
+[2024-01-15 10:23:46Z INFO Worker] Job assignment accepted, jobId: d4e5f6a7-b8c9-0123-def4-567890abcdef
+[2024-01-15 10:23:46Z INFO JobRunner] Starting job execution
+[2024-01-15 10:23:47Z INFO StepRunner] Running step: Checkout repository
+[2024-01-15 10:24:01Z INFO StepRunner] Step completed: Checkout repository (result: Succeeded)
+[2024-01-15 10:24:01Z INFO JobRunner] All steps completed
+[2024-01-15 10:24:02Z INFO Worker] Job completed, result: Succeeded
+[2024-01-15 10:24:02Z INFO WorkerMessageServer] Sending job result to runner process
+[2024-01-15 10:24:02Z INFO WorkerMessageServer] Worker shutting down

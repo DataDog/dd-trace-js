@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { ProviderEvents } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -56,6 +57,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
         channel: channelStub,
       },
       '../log': log,
+      './configuration_source': {
+        create: sinon.stub(),
+      },
     })
   })
 
@@ -113,7 +117,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
         },
       },
     }
-    provider._setConfiguration(ufc)
+    provider.setConfiguration(ufc)
 
     // Wait for initialization to complete
     await initPromise
@@ -173,7 +177,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     // Now set configuration after timeout
     const ufc = { flags: { 'recovery-flag': {} } }
-    provider._setConfiguration(ufc)
+    provider.setConfiguration(ufc)
 
     // Should emit READY event to signal recovery
     sinon.assert.calledOnce(readyEventSpy)
@@ -307,8 +311,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
       assert.strictEqual(setErrorSpy.calledOnce, true)
       const errorArg = setErrorSpy.firstCall.args[0]
       assert.ok(errorArg instanceof Error)
-      assert.ok(errorArg.message.includes('Initialization timeout'))
-      assert.ok(errorArg.message.includes('6000ms'))
+      assert.ok(errorArg.message.includes('Initialization timeout'), `Got: ${inspect(errorArg.message)}`)
+      assert.ok(errorArg.message.includes('6000ms'), `Got: ${inspect(errorArg.message)}`)
     })
 
     it('should use config object value over environment variables', async () => {

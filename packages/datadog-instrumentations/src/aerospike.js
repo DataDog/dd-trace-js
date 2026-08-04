@@ -12,8 +12,8 @@ const ch = tracingChannel('apm:aerospike:command')
 function wrapCreateCommand (createCommand) {
   if (typeof createCommand !== 'function') return createCommand
 
-  return function commandWithTrace () {
-    const CommandClass = createCommand.apply(this, arguments)
+  return function commandWithTrace (...args) {
+    const CommandClass = createCommand.apply(this, args)
 
     if (!CommandClass) return CommandClass
 
@@ -41,7 +41,7 @@ function wrapProcess (process) {
 addHook({
   name: 'aerospike',
   file: 'lib/commands/command.js',
-  versions: ['4', '5', '6'],
+  versions: ['>=4'],
 },
 commandFactory => {
   return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))

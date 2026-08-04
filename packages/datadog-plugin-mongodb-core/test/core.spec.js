@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const ddpv = require('mocha/package.json').version
@@ -10,7 +11,7 @@ const semver = require('semver')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/query')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
@@ -37,7 +38,7 @@ describe('Plugin', () => {
   let id
   let tracer
   let collection
-  let startSpy
+  let injectCommentSpy
 
   describe('mongodb-core (core)', () => {
     withTopologies(getServer => {
@@ -69,7 +70,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -148,6 +149,27 @@ describe('Plugin', () => {
           })
 
           it('should serialize BigInt without erroring', done => {
+            // It appears that most versions of MongodDB are happy to use a BigInt instance.
+            // For example, 2.0.0, 3.2.0, 3.1.10, etc.
+            // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
+            // Registering the trace assertion only after the command starts avoids leaving a
+            // pending expectation that would reject on that early-return path.
+            try {
+              server.command(`test.${collection}`, {
+                find: `test.${collection}`,
+                query: {
+                  _id: 9999999999999999999999n,
+                },
+              }, () => {})
+            } catch (error) {
+              if (error.message.includes('Decimal128')) {
+                // eslint-disable-next-line no-console
+                console.log('This version of mongodb-core does not accept BigInt instances')
+                return done()
+              }
+              return done(error)
+            }
+
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -159,25 +181,6 @@ describe('Plugin', () => {
               })
               .then(done)
               .catch(done)
-
-            try {
-              server.command(`test.${collection}`, {
-                find: `test.${collection}`,
-                query: {
-                  _id: 9999999999999999999999n,
-                },
-              }, () => {})
-            } catch (err) {
-              // It appears that most versions of MongodDB are happy to use a BigInt instance.
-              // For example, 2.0.0, 3.2.0, 3.1.10, etc.
-              // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
-              if (err.message.includes('Decimal128')) {
-                // eslint-disable-next-line no-console
-                console.log('This version of mongodb-core does not accept BigInt instances')
-                return done()
-              }
-              done(err)
-            }
           })
 
           it('should stringify BSON objects', done => {
@@ -256,12 +259,10 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not swallow missing callback errors', done => {
-            try {
+          it('should not swallow missing callback errors', () => {
+            assert.throws(() => {
               server.insert(`test.${collection}`, [{ a: 1 }], {})
-            } catch (e) {
-              done()
-            }
+            })
           })
         })
 
@@ -371,7 +372,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -422,7 +423,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -439,19 +440,19 @@ describe('Plugin', () => {
 
           server.connect()
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should not inject comment', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(startSpy.called, true)
-              const ops = startSpy.getCall(0).args[0].ops
-              assert.ok(!('comment' in ops))
+              assert.strictEqual(injectCommentSpy.called, true)
+              assert.strictEqual(injectCommentSpy.getCall(0).args[1], undefined)
+              assert.strictEqual(injectCommentSpy.getCall(0).returnValue, undefined)
             })
             .then(done)
             .catch(done)
@@ -466,7 +467,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -483,18 +484,18 @@ describe('Plugin', () => {
 
           server.connect()
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should not inject comment', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment, undefined)
             })
             .then(done)
@@ -506,8 +507,8 @@ describe('Plugin', () => {
         it('DBM propagation should not alter existing comment', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment, 'test comment')
             })
             .then(done)
@@ -523,13 +524,19 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with dbmPropagationMode service', () => {
+      describe('with dbmPropagationMode full from tracer configuration', () => {
         before(() => {
-          return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          return agent.load('mongodb-core', {}, {
+            dbmPropagationMode: 'full',
+            sampler: { sampleRate: 1 },
+          })
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -546,11 +553,59 @@ describe('Plugin', () => {
 
           server.connect()
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
+        })
+
+        it('DBM propagation should inject full mode comment with traceparent', done => {
+          agent
+            .assertFirstTraceSpan(span => {
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
+
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
+              assert.ok(comment.includes(`traceparent='00-${traceId}-${spanId}-01'`), `Got: ${inspect(comment)}`)
+              assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
+      })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false,
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
+        })
+
+        afterEach(() => {
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject service mode as comment', done => {
@@ -558,8 +613,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -581,8 +636,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 'test comment,' +
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
@@ -611,8 +666,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.deepStrictEqual(comment, [
                 'test comment',
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
@@ -638,13 +693,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {
@@ -661,11 +715,11 @@ describe('Plugin', () => {
 
           server.connect()
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
@@ -674,8 +728,8 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -695,16 +749,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {
@@ -721,11 +771,11 @@ describe('Plugin', () => {
 
           server.connect()
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it(
@@ -737,8 +787,8 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(startSpy.called, true)
-                const { comment } = startSpy.getCall(0).args[0].ops
+                assert.strictEqual(injectCommentSpy.called, true)
+                const comment = injectCommentSpy.getCall(0).returnValue
                 assert.match(
                   comment,
                   new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)

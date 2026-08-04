@@ -37,7 +37,7 @@ describe('Plugin', () => {
           describe(`with tracer config ${JSON.stringify(config)}`, () => {
             before(() => agent.load(['fastify', 'find-my-way', 'http'], [{}, {}, { client: false }], config))
 
-            after(() => agent.close({ ritmReset: false, wipe: true }))
+            after(() => agent.close())
 
             it('should not add code_origin tag on entry spans', async () => {
               app.get('/user', function (request, reply) {
@@ -67,7 +67,7 @@ describe('Plugin', () => {
             describe(`with tracer config ${JSON.stringify(config)}`, () => {
               before(() => agent.load(['fastify', 'find-my-way', 'http'], [{}, {}, { client: false }], config))
 
-              after(() => agent.close({ ritmReset: false, wipe: true }))
+              after(() => agent.close())
 
               it('should add code_origin tag on entry spans when feature is enabled', async function testCase () {
                 let line

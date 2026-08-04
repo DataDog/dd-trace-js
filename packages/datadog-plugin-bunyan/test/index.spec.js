@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -36,7 +37,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without configuration', () => {
@@ -56,7 +57,7 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            assert.ok(Object.hasOwn(record, 'dd'))
+            assert.ok(Object.hasOwn(record, 'dd'), `Available keys: ${inspect(Object.keys(record))}`)
           })
         })
       })
@@ -103,7 +104,7 @@ describe('Plugin', () => {
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-          assert.ok(Object.hasOwn(record, 'dd'))
+          assert.ok(Object.hasOwn(record, 'dd'), `Available keys: ${inspect(Object.keys(record))}`)
           assert.ok(!('trace_id' in record.dd))
           assert.ok(!('span_id' in record.dd))
         })

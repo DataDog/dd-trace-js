@@ -49,7 +49,7 @@ function getAWSPartitionByRegion (region) {
  * @param {object} event
  * @returns {string|undefined}
  */
-function parseEventSourceSubType (event) {
+function parseEventSourceSubtype (event) {
   if (eventType.isAPIGatewayEvent(event)) return eventSubTypes.apiGatewayV1
   if (eventType.isAPIGatewayEventV2(event)) return eventSubTypes.apiGatewayV2
   if (eventType.isAPIGatewayWebsocketEvent(event)) return eventSubTypes.apiGatewayWebsocket
@@ -78,7 +78,6 @@ function parseEventSource (event) {
   if (eventType.isSQSEvent(event)) return eventTypes.sqs
   if (eventType.isEventBridgeEvent(event)) return eventTypes.eventBridge
   if (eventType.isStepFunctionsEvent(event)) return eventTypes.stepFunctions
-  return undefined
 }
 
 /**
@@ -132,11 +131,10 @@ function parseEventSourceARN (source, event, context) {
   }
   if (source === 'states') {
     let ev = event
-    if (typeof ev.Payload === 'object') ev = ev.Payload
-    if (typeof ev._datadog === 'object') ev = ev._datadog
+    if (ev.Payload !== null && typeof ev.Payload === 'object') ev = ev.Payload
+    if (ev._datadog !== null && typeof ev._datadog === 'object') ev = ev._datadog
     return ev.StateMachine.Id
   }
-  return undefined
 }
 
 /**
@@ -174,7 +172,7 @@ function extractHTTPTags (event) {
     }
     if (event.routeKey) {
       const array = event.routeKey.split(' ')
-      httpTags['http.route'] = array[array.length - 1]
+      httpTags['http.route'] = array.at(-1)
     }
     return httpTags
   }
@@ -219,8 +217,8 @@ function extractTriggerTags (event, context, eventSource) {
     let eventSourceARN
     try {
       eventSourceARN = parseEventSourceARN(eventSource, event, context)
-    } catch (error) {
-      log.debug(`failed to extract ${eventSource} arn from the event`)
+    } catch {
+      log.debug('failed to extract %s arn from the event', eventSource)
     }
     if (eventSourceARN) {
       triggerTags['function_trigger.event_source_arn'] = eventSourceARN
@@ -230,8 +228,8 @@ function extractTriggerTags (event, context, eventSource) {
   if (isHTTPTriggerEvent(eventSource)) {
     try {
       triggerTags = Object.assign(triggerTags, extractHTTPTags(event))
-    } catch (error) {
-      log.debug(`failed to extract http tags from ${eventSource} event`)
+    } catch {
+      log.debug('failed to extract http tags from %s event', eventSource)
     }
   }
   return triggerTags
@@ -239,13 +237,13 @@ function extractTriggerTags (event, context, eventSource) {
 
 /**
  * @param {object|undefined} triggerTags
- * @param {*} result
+ * @param {unknown} result
  * @param {boolean} isResponseStreamFunction
  * @returns {string|undefined}
  */
 function extractHTTPStatusCodeTag (triggerTags, result, isResponseStreamFunction) {
   const eventSource = triggerTags?.['function_trigger.event_source']
-  if (!isHTTPTriggerEvent(eventSource)) return undefined
+  if (!isHTTPTriggerEvent(eventSource)) return
 
   const resultStatusCode = result?.statusCode
   if (result === undefined && !isResponseStreamFunction) {
@@ -261,7 +259,7 @@ module.exports = {
   eventSubTypes,
   isHTTPTriggerEvent,
   parseEventSource,
-  parseEventSourceSubType,
+  parseEventSourceSubtype,
   parseEventSourceARN,
   extractTriggerTags,
   extractHTTPStatusCodeTag,

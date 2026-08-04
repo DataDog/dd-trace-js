@@ -3,16 +3,17 @@
 const aws = require('./aws.json')
 const sdks = { aws }
 
+/** @typedef {Record<string, { request: string[], response: string[], expand: string[] }>} SDKRules */
 /**
  * Builds rules per service for a given SDK, appending user-provided rules.
  *
- * @param {Record<string, { request: string[], response: string[], expand: string[] }>} sdk
+ * @param {SDKRules} sdk
  * @param {string[]} requestInput
  * @param {string[]} responseInput
- * @returns {Record<string, { request: string[], response: string[], expand: string[] }>}
+ * @returns {SDKRules}
  */
 function getSDKRules (sdk, requestInput, responseInput) {
-  const sdkServiceRules = {}
+  const sdkServiceRules = /** @type {SDKRules} */ ({})
   for (const [service, serviceRules] of Object.entries(sdk)) {
     sdkServiceRules[service] = {
       // Make a copy. Otherwise calling the function multiple times would append
@@ -29,12 +30,12 @@ function getSDKRules (sdk, requestInput, responseInput) {
  * Appends input rules to all supported SDKs and returns a structure mapping SDK
  * names to per-service rules.
  *
- * @param {string[]} [requestInput=[]]
- * @param {string[]} [responseInput=[]]
- * @returns {Record<string, Record<string, { request: string[], response: string[], expand: string[] }>>}
+ * @param {string[]} [requestInput]
+ * @param {string[]} [responseInput]
+ * @returns {Record<string, SDKRules>}
  */
 function appendRules (requestInput = [], responseInput = []) {
-  const sdkRules = {}
+  const sdkRules = /** @type {Record<string, SDKRules>} */ ({})
   for (const [name, sdk] of Object.entries(sdks)) {
     sdkRules[name] = getSDKRules(sdk, requestInput, responseInput)
   }

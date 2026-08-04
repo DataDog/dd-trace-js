@@ -4,8 +4,19 @@ const shimmer = require('../../../datadog-shimmer')
 const { channel } = require('./instrument')
 
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
-const layerMatchers = new WeakMap() // to store layer matchers
+const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resolved name + route matchers)
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
+
+/**
+ * @typedef {object} LayerMeta
+ * @property {string} [name]
+ * @property {string} [captureRoute]
+ * @property {boolean} [needMultiMatch]
+ * @property {Array<{ path?: string, regex?: RegExp }> & {
+ *   hasStarPath?: boolean,
+ *   hasSlashPath?: boolean
+ * }} [matchers]
+ */
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 
@@ -70,7 +81,7 @@ function collectRoutesFromRouter (router, prefix) {
       // Extract mount path from layer
       const mountPath = typeof layer.path === 'string'
         ? layer.path
-        : getLayerMatchers(layer)?.[0]?.path || ''
+        : getLayerMeta(layer)?.matchers?.[0]?.path || ''
 
       const nestedPrefix = joinPath(prefix, mountPath)
       if (nestedPrefix === null) continue
@@ -88,7 +99,7 @@ function collectRoutesFromRouter (router, prefix) {
 function normalizeRoutePaths (path) {
   if (path == null) return []
 
-  if (Array.isArray(path) === false) {
+  if (!Array.isArray(path)) {
     const normalized = normalizeRoutePath(path)
     return [normalized]
   }
@@ -121,12 +132,21 @@ function getRouterMountPaths (router) {
   return [...paths]
 }
 
-function setLayerMatchers (layer, matchers) {
-  layerMatchers.set(layer, matchers)
+/**
+ * @param {object} layer
+ * @param {LayerMeta} meta
+ * @returns {void}
+ */
+function setLayerMeta (layer, meta) {
+  layerMeta.set(layer, meta)
 }
 
-function getLayerMatchers (layer) {
-  return layerMatchers.get(layer)
+/**
+ * @param {object} layer
+ * @returns {LayerMeta | undefined}
+ */
+function getLayerMeta (layer) {
+  return layerMeta.get(layer)
 }
 
 function normalizeMethodName (method) {
@@ -224,8 +244,8 @@ module.exports = {
   setRouterMountPath,
   getRouterMountPaths,
   joinPath,
-  setLayerMatchers,
-  getLayerMatchers,
+  setLayerMeta,
+  getLayerMeta,
   markAppMounted,
   isAppMounted,
   normalizeRoutePath,

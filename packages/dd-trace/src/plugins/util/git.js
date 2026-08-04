@@ -13,6 +13,7 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS,
 } = require('../../ci-visibility/telemetry')
 const { storage } = require('../../../../datadog-core')
+const { getSegment } = require('../../util')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -37,6 +38,8 @@ const {
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
 
+const legacyStorage = storage('legacy')
+
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
 function sanitizedExec (
@@ -47,7 +50,7 @@ function sanitizedExec (
   errorMetric,
   shouldTrim = true
 ) {
-  return storage('legacy').run({ noop: true }, () => {
+  return legacyStorage.run({ noop: true }, () => {
     let startTime
     if (operationMetric) {
       incrementCountMetric(operationMetric.name, operationMetric.tags)
@@ -59,7 +62,7 @@ function sanitizedExec (
       let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
 
       if (shouldTrim) {
-        result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+        result = result.replaceAll(/(\r\n|\n|\r)/g, '')
       }
 
       if (durationMetric) {
@@ -116,9 +119,9 @@ function getGitVersion () {
   const gitVersionMatches = /** @type {RegExpMatchArray} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
-      major: Number.parseInt(gitVersionMatches[1]),
-      minor: Number.parseInt(gitVersionMatches[2]),
-      patch: Number.parseInt(gitVersionMatches[3]),
+      major: Number.parseInt(gitVersionMatches[1], 10),
+      minor: Number.parseInt(gitVersionMatches[2], 10),
+      patch: Number.parseInt(gitVersionMatches[3], 10),
     }
   } catch {
     return null
@@ -249,7 +252,7 @@ function getGitRemoteName () {
   )
 
   if (upstreamRemote) {
-    return upstreamRemote.split('/')[0]
+    return getSegment(upstreamRemote, '/', 0)
   }
 
   const remotes = sanitizedExec(
@@ -261,7 +264,7 @@ function getGitRemoteName () {
     false
   )
 
-  return remotes.split('\n')[0] || 'origin'
+  return getSegment(remotes, '\n', 0) || 'origin'
 }
 
 function getSourceBranch () {

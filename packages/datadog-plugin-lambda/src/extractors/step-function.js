@@ -13,7 +13,7 @@ function extractStateMachineContext (event) {
       redriveCount: (event.Execution.RedriveCount ?? '0').toString(),
       retryCount: (event.State.RetryCount ?? '0').toString(),
       stateEnteredTime: event.State.EnteredTime,
-      stateName: event.State.Name
+      stateName: event.State.Name,
     }
   }
   return null
@@ -23,16 +23,20 @@ function resolveStepFunctionEvent (event) {
   if (typeof event !== 'object' || event === null) return null
 
   let ev = event
-  if (typeof ev.Payload === 'object' && ev.Payload !== null) {
-    if (typeof ev.Payload._datadog === 'object' || (
-      typeof ev.Payload?.Execution?.Id === 'string' &&
-      typeof ev.Payload?.State?.EnteredTime === 'string' &&
-      typeof ev.Payload?.State?.Name === 'string'
-    )) {
-      ev = ev.Payload
-    }
+  if (
+    typeof ev.Payload === 'object' && ev.Payload !== null &&
+    (
+      (ev.Payload._datadog !== null && typeof ev.Payload._datadog === 'object') ||
+      (
+        typeof ev.Payload?.Execution?.Id === 'string' &&
+        typeof ev.Payload?.State?.EnteredTime === 'string' &&
+        typeof ev.Payload?.State?.Name === 'string'
+      )
+    )
+  ) {
+    ev = ev.Payload
   }
-  if (typeof ev._datadog === 'object') {
+  if (ev._datadog !== null && typeof ev._datadog === 'object') {
     ev = ev._datadog
   }
   return ev
@@ -57,7 +61,7 @@ function deterministicSha256Hash (input, type) {
       binaryString += num.toString(2).padStart(8, '0')
     }
 
-    const res = '0' + binaryString.substring(1, 64)
+    const res = '0' + binaryString.slice(1, 64)
     if (res === '0'.repeat(64)) {
       return '1'
     }
@@ -125,7 +129,7 @@ function extract (event) {
       const spanContext = new DatadogSpanContext({
         traceId: id(traceId, 10),
         spanId: id(parentId, 10),
-        sampling: { priority: 1 }
+        sampling: { priority: 1 },
       })
 
       spanContext._trace.tags['_dd.p.tid'] = id(ptid, 10).toString(16)
@@ -147,5 +151,5 @@ module.exports = {
   extract,
   extractStateMachineContext,
   resolveStepFunctionEvent,
-  deterministicSha256HashToBigIntString
+  deterministicSha256HashToBigIntString,
 }

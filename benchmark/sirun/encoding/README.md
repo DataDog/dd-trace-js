@@ -1,9 +1,9 @@
-This test sends a single trace many times to the encoder. Each trace is
-pre-formatted (as the encoder requires) and consists of 30 spans with the same
-content in each of them. The IDs are all randomized. A null writer is provided
-to the encoder, so writing operations are not included here.
-
-The span content contains three metas, three metrics, and reasonable values for
-everything else.
-
-The two variants correspond to the v0.4 and v0.5 encoders.
+Measures the agent trace encoder in isolation: a pre-built trace is encoded many
+times through a null writer so only the encoder cost is measured. The fixture
+(`trace-fixture.js`) mirrors a typical Node.js HTTP-service request (~30 spans:
+an Express root, middleware, Postgres/Redis/HTTP-client/DNS spans, one error
+span) with reused keys and hot values to match the encoder's string cache.
+`tickTrace` rewrites the per-request dynamic fields before each encode so V8 does
+not collapse the magnitude branches and stale-cache hits the encoder must
+exercise. `TRACE_SPANS=<n>` scales the trace; variants `0.4`/`0.5` cover the wire
+formats and the `*-events-*` variants the span-event paths.

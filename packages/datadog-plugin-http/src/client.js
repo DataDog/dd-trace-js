@@ -5,11 +5,12 @@ const { URL } = require('url')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const log = require('../../dd-trace/src/log')
+const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -28,30 +29,34 @@ class HttpClientPlugin extends ClientPlugin {
     const protocol = options.protocol || agent.protocol || 'http:'
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
-    const pathname = options.path || options.pathname
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
-    const uri = `${protocol}//${host}${path}`
+    const base = `${protocol}//${host}`
+    // A URL object (e.g. from the fetch integration) carries the query in
+    // `options.search`, not `options.path`; keep it so url.full retains the query.
+    const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
+    const path = pathname ? stripQueryAndFragment(pathname) : '/'
+    const uri = `${base}${path}`
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
-      integrationName: this.constructor.id,
+      integrationName: this.component,
+      service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
       meta: {
-        [COMPONENT]: this.constructor.id,
+        [COMPONENT]: this.component,
         'span.kind': 'client',
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
         'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port, 10),
       },
     }, false)
 
@@ -69,8 +74,6 @@ class HttpClientPlugin extends ClientPlugin {
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
-    analyticsSampler.sample(span, this.config.measured)
-
     message.span = span
     message.parentStore = store
     message.currentStore = { ...store, span }
@@ -79,11 +82,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (!this.config.propagationFilter(uri)) {
-      return false
-    }
-
-    return true
+    return Boolean(this.config.propagationFilter(uri))
   }
 
   bindAsyncStart ({ parentStore }) {
@@ -211,7 +210,7 @@ function getHeaders (config) {
     if (typeof header === 'string') {
       const separatorIndex = header.indexOf(':')
       result.push(separatorIndex === -1
-        ? [header, undefined]
+        ? [header.toLowerCase(), undefined]
         : [
             header.slice(0, separatorIndex).toLowerCase(),
             header.slice(separatorIndex + 1),

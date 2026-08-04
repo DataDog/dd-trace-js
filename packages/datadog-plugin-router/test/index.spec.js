@@ -7,13 +7,11 @@ const http = require('node:http')
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const web = require('../../dd-trace/src/plugins/util/web')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
-  let tracer
   let Router
   let appListener
 
@@ -26,22 +24,68 @@ describe('Plugin', () => {
 
   function server (router, errorHandler = defaultErrorHandler) {
     return http.createServer((req, res) => {
-      const config = web.normalizeConfig({})
-
-      web.instrument(tracer, config, req, res, 'web.request')
-
       return router(req, res, errorHandler(req, res))
     })
   }
 
   describe('router', () => {
     withVersions('router', 'router', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-
       afterEach(() => {
         appListener && appListener.close()
+      })
+
+      describe('with middleware disabled', () => {
+        before(() => {
+          return agent.load(['http', 'router'], [{}, { middleware: false }])
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          Router = require(`../../../versions/router@${version}`).get()
+        })
+
+        it('should still set the route on the request span with nested routers', done => {
+          const router = Router()
+          const childRouter = Router()
+
+          childRouter.use('/child/:id', (req, res) => {
+            res.writeHead(200)
+            res.end()
+          })
+
+          router.use('/parent', childRouter)
+
+          appListener = server(router).listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                const requestSpan = spans[0]
+
+                // Route tracking should still work — resource includes the route
+                assert.strictEqual(requestSpan.resource, 'GET /parent/child/:id')
+                assert.strictEqual(requestSpan.type, 'web')
+                assert.strictEqual(requestSpan.meta['http.route'], '/parent/child/:id')
+                assert.strictEqual(requestSpan.meta['http.method'], 'GET')
+                assert.strictEqual(requestSpan.meta['http.status_code'], '200')
+
+                // No router.middleware spans should be created
+                for (const span of spans) {
+                  assert.notStrictEqual(span.name, 'router.middleware')
+                }
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/parent/child/123`)
+              .catch(done)
+          })
+        })
       })
 
       describe('without configuration', () => {
@@ -50,7 +94,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

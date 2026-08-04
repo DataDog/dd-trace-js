@@ -12,13 +12,13 @@ const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
 
 function wrapCommandStart (start, ctx) {
-  return shimmer.wrapFunction(start, start => function () {
-    if (!startCh.hasSubscribers) return start.apply(this, arguments)
+  return shimmer.wrapFunction(start, start => function (...args) {
+    if (!startCh.hasSubscribers) return start.apply(this, args)
 
     const { reject, resolve } = this
     shimmer.wrap(this, 'resolve', function wrapResolve () {
-      return function () {
-        return finishCh.runStores(ctx, resolve, this, ...arguments)
+      return function (...args) {
+        return finishCh.runStores(ctx, resolve, this, ...args)
       }
     })
 
@@ -32,7 +32,7 @@ function wrapCommandStart (start, ctx) {
       }
     })
 
-    return startCh.runStores(ctx, start, this, ...arguments)
+    return startCh.runStores(ctx, start, this, ...args)
   })
 }
 
@@ -93,7 +93,7 @@ function createWrapQueryCallback (options) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, wrapper)
+        arguments[arguments.length - 1] = shimmer.wrapCallback(cb, wrapper)
       } else {
         arguments.length += 1
         arguments[arguments.length - 1] = wrapper()
@@ -128,25 +128,25 @@ function wrapPoolBase (PoolBase) {
 // so instead we just skip instrumentation completely to avoid memory leaks
 // and/or orphan spans.
 function wrapPoolMethod (createConnection) {
-  return function () {
-    return skipCh.runStores({}, createConnection, this, ...arguments)
+  return function (...args) {
+    return skipCh.runStores({}, createConnection, this, ...args)
   }
 }
 
 function wrapPoolGetConnectionMethod (getConnection) {
-  return function wrappedGetConnection () {
-    const cb = arguments[arguments.length - 1]
-    if (typeof cb !== 'function') return getConnection.apply(this, arguments)
+  return function wrappedGetConnection (...args) {
+    const cb = args.at(-1)
+    if (typeof cb !== 'function') return getConnection.apply(this, args)
 
     const ctx = {}
 
-    arguments[arguments.length - 1] = function () {
-      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
+    args[args.length - 1] = function (...args) {
+      return connectionFinishCh.runStores(ctx, cb, this, ...args)
     }
 
     connectionStartCh.publish(ctx)
 
-    return getConnection.apply(this, arguments)
+    return getConnection.apply(this, args)
   }
 }
 
@@ -160,14 +160,16 @@ addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
-// in 3.4.1 getConnection method start to use callbacks instead of promises
+// mariadb 3.4.1 refactored the pool: getConnection switched from promises to
+// callbacks and _createConnection was renamed to _createPoolConnection.
 addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
+  shimmer.wrap(Pool.prototype, '_createPoolConnection', wrapPoolMethod)
 
   return Pool
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
   return Pool

@@ -26,6 +26,10 @@ class EventTrackingV2 {
 }
 
 class AppsecSdk {
+  /**
+   * @param {import('../../tracer')} tracer - Tracer instance
+   * @param {import('../../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, config) {
     this._tracer = tracer
     if (config) {

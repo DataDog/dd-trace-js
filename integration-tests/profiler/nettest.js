@@ -29,9 +29,11 @@ async function oneTimeConnect (hostSpec) {
   })
 }
 
-require('dd-trace').init().profilerStarted()
-  .then(() => {
-    oneTimeConnect({ host: '127.0.0.1', port: port1 })
-  }).then(() => {
-    oneTimeConnect({ host: '127.0.0.1', port: port2 })
-  })
+require('dd-trace').init()
+
+setImmediate(() => {
+  oneTimeConnect({ host: '127.0.0.1', port: port1 })
+    .then(() => {
+      oneTimeConnect({ host: '127.0.0.1', port: port2 })
+    })
+})

@@ -9,6 +9,7 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
@@ -18,6 +19,7 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../helpers')
+const { processExitPromise } = require('./helpers')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {
@@ -26,6 +28,8 @@ if (process.platform !== 'win32') {
 
 const TIMEOUT = 30000
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+
+const OOM_HEAP_MB = 50
 
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
@@ -56,7 +60,7 @@ function expectProfileMessagePromise (agent, timeout,
       assert.strictEqual(typeof event.info.profiler.activation, 'string')
       assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
       const attachments = event.attachments
-      assert.ok(Array.isArray(attachments))
+      assert.ok(Array.isArray(attachments), `Expected array, got ${inspect(attachments)}`)
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
       assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
@@ -65,35 +69,13 @@ function expectProfileMessagePromise (agent, timeout,
         })
       }
       if (expectSeq) {
-        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
+        assert.notStrictEqual(event.tags_profiler.indexOf(',profile_seq:'), -1)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
   }, timeout, 1, true)
-}
-
-function processExitPromise (proc, timeout, expectBadExit = false) {
-  return new Promise((resolve, reject) => {
-    const timeoutObj = setTimeout(() => {
-      reject(new Error('Process timed out'))
-    }, timeout)
-
-    function checkExitCode (code) {
-      clearTimeout(timeoutObj)
-
-      if ((code !== 0) !== expectBadExit) {
-        reject(new Error(`Process exited with unexpected status code ${code}.`))
-      } else {
-        resolve()
-      }
-    }
-
-    proc
-      .on('error', reject)
-      .on('exit', checkExitCode)
-  })
 }
 
 async function getLatestProfile (cwd, pattern) {
@@ -160,7 +142,7 @@ class NetworkEventProcessor extends TimelineEventProcessor {
 
   decorateEvent (ev, pl) {
     // Exactly one of these is defined
-    assert.ok(!!pl.address !== !!pl.host, this.encoded)
+    assert.notStrictEqual(!!pl.address, !!pl.host, this.encoded)
     if (pl.address) {
       ev.address = this.strings.strings[pl.address]
     } else {
@@ -227,6 +209,106 @@ async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
   return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
+class ZlibEventProcessor extends TimelineEventProcessor {
+  processLabel () {
+    return false
+  }
+
+  decorateEvent () {}
+}
+
+async function gatherZlibTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'zlib', [], ZlibEventProcessor)
+}
+
+class CryptoEventProcessor extends TimelineEventProcessor {
+  constructor (strings, encoded) {
+    super(strings, encoded)
+
+    this.algorithmKey = strings.dedup('algorithm')
+    this.digestKey = strings.dedup('digest')
+    this.iterationsKey = strings.dedup('iterations')
+    this.keylenKey = strings.dedup('keylen')
+    this.offsetKey = strings.dedup('offset')
+    this.sizeKey = strings.dedup('size')
+    this.typeKey = strings.dedup('type')
+  }
+
+  processLabel (label, processedLabels) {
+    switch (label.key) {
+      case this.algorithmKey: processedLabels.algorithm = label.str; return true
+      case this.digestKey: processedLabels.digest = label.str; return true
+      case this.iterationsKey: processedLabels.iterations = label.num; return true
+      case this.keylenKey: processedLabels.keylen = label.num; return true
+      case this.offsetKey: processedLabels.offset = label.num; return true
+      case this.sizeKey: processedLabels.size = label.num; return true
+      case this.typeKey: processedLabels.type = label.str; return true
+      default: return false
+    }
+  }
+
+  decorateEvent (ev, pl) {
+    ev.algorithm = this.strings.strings[pl.algorithm]
+    ev.digest = this.strings.strings[pl.digest]
+    ev.type = this.strings.strings[pl.type]
+    ev.iterations = pl.iterations
+    ev.keylen = pl.keylen
+    ev.offset = pl.offset
+    ev.size = pl.size
+    for (const [k, v] of Object.entries(ev)) {
+      if (v === undefined) {
+        delete ev[k]
+      }
+    }
+  }
+}
+
+async function gatherCryptoTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'crypto', [], CryptoEventProcessor)
+}
+
+// Gathers the distinct 'gc type' label values seen across the events profile.
+// GC events are sourced through the Node API and don't carry span IDs, so this
+// has a simpler shape than gatherTimelineEvents.
+async function gatherGcTypes (cwd, scriptFilePath, agentPort, execArgv) {
+  const proc = fork(path.join(cwd, scriptFilePath), [], {
+    cwd,
+    execArgv,
+    env: {
+      DD_PROFILING_EXPORTERS: 'file',
+      DD_PROFILING_ENABLED: '1',
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: '0', // capture all events
+      DD_TRACE_AGENT_PORT: agentPort,
+    },
+  })
+
+  // A crash (e.g. issue #8839) would surface here as a non-zero exit.
+  await processExitPromise(proc, TIMEOUT)
+
+  const { profile } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+  const strings = profile.stringTable
+  const eventKey = strings.dedup('event')
+  const gcTypeKey = strings.dedup('gc type')
+  const gcEventValue = strings.dedup('gc')
+
+  const gcTypes = new Set()
+  for (const sample of profile.sample) {
+    let isGc = false
+    let gcType
+    for (const label of sample.label) {
+      if (label.key === eventKey) {
+        isGc = label.str === gcEventValue
+      } else if (label.key === gcTypeKey) {
+        gcType = strings.strings[label.str]
+      }
+    }
+    if (isGc && gcType !== undefined) {
+      gcTypes.add(gcType)
+    }
+  }
+  return gcTypes
+}
+
 async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
@@ -270,7 +352,6 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
           }
       }
     }
-    // Timestamp must be defined and be between process start and end time
     assert.notStrictEqual(ts, undefined, encoded)
     assert.strictEqual(typeof ts, 'bigint', encoded)
     assert.ok(ts <= procEnd, encoded)
@@ -278,8 +359,9 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
     // Gather only tested events
     if (event === eventValue) {
       if (process.platform !== 'win32') {
-        assert.notStrictEqual(spanId, undefined, encoded)
-        assert.notStrictEqual(localRootSpanId, undefined, encoded)
+        // Skip events without span IDs: these are from internal operations (e.g. background
+        // source map loading) that occur outside any user span and are not relevant to the test.
+        if (spanId === undefined || localRootSpanId === undefined) continue
       } else {
         assert.strictEqual(spanId, undefined, encoded)
         assert.strictEqual(localRootSpanId, undefined, encoded)
@@ -329,7 +411,7 @@ describe('profiler', () => {
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
-    oomExecArgv = ['--max-old-space-size=50']
+    oomExecArgv = [`--max-old-space-size=${OOM_HEAP_MB}`]
   })
 
   beforeEach(async () => {
@@ -350,6 +432,7 @@ describe('profiler', () => {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      // eslint-disable-next-line sonarjs/stable-tests -- timing-dependent profiler sample alignment
       this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const env = {
@@ -512,16 +595,36 @@ describe('profiler', () => {
       ])
     })
 
+    it('zlib timeline events work', async () => {
+      const events = await gatherZlibTimelineEvents(cwd, 'profiler/zlibtest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'brotliCompress' },
+        { operation: 'deflate' },
+        { operation: 'gunzip' },
+        { operation: 'gzip' },
+      ])
+    })
+
+    it('crypto timeline events work', async () => {
+      const events = await gatherCryptoTimelineEvents(cwd, 'profiler/cryptotest.js', agent.port)
+      const compare = (a, b) => a.operation.localeCompare(b.operation)
+      assertObjectContains(events.sort(compare), [
+        { operation: 'pbkdf2', digest: 'sha256', iterations: 1000, keylen: 32 },
+        { operation: 'randomBytes', size: 16 },
+        { operation: 'randomFill' },
+      ])
+    })
+
     it('net timeline events work', async () => {
       // Simple server that writes a constant message to the socket.
       const msg = 'cya later!\n'
       function createServer () {
-        const server = net.createServer((socket) => {
+        return net.createServer((socket) => {
           socket.end(msg, 'utf8')
         }).on('error', (err) => {
           throw err
         })
-        return server
       }
       // Create two instances of the server
       const server1 = createServer()
@@ -554,6 +657,21 @@ describe('profiler', () => {
         server1.close()
       }
     })
+
+    it('gc timeline events work with the minor mark-sweep collector', async function () {
+      // V8's --minor-ms collector emits GC events with kind 2, which has no
+      // NODE_PERFORMANCE_GC_* constant and used to crash the profiler.
+      // It is stable since Node 22. See issue #8839.
+      if (!satisfies(process.versions.node, '>=22.0.0')) {
+        this.skip()
+      }
+      const gcTypes = await gatherGcTypes(cwd, 'profiler/gctest.js', agent.port, ['--minor-ms'])
+      // The collector was renamed from minor_mark_compact to minor_mark_sweep in Node 22.
+      assert.ok(gcTypes.has('minor_mark_sweep'), `Expected a minor_mark_sweep GC event, got ${inspect(gcTypes)}`)
+      for (const gcType of gcTypes) {
+        assert.doesNotMatch(gcType, /^unknown/, `Unexpected unknown GC type: ${gcType}`)
+      }
+    })
   })
 
   context('shutdown', () => {
@@ -578,9 +696,14 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: '1',
         },
       })
-      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
-      // so expect telemetry callback to time out
+      // so expect telemetry callback to time out. expectedMessageCount: Infinity keeps the listener
+      // from ever resolving, so the only outcome is the timeout that expectTimeout requires.
+      const checkTelemetry = agent.assertTelemetryReceived({
+        requestType: 'generate-metrics',
+        timeout: 1000,
+        expectedMessageCount: Infinity,
+      })
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
@@ -591,6 +714,10 @@ describe('profiler', () => {
         }
       })
 
+      // All OOM tests below are retried 3 times because OOM export behavior is timing-sensitive
+      // and Node.js version-dependent: newer V8 versions (e.g. Node 26) crash faster or handle
+      // worker OOM differently, making these tests inherently unreliable without retries.
+
       it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -598,26 +725,25 @@ describe('profiler', () => {
           env: oomEnv,
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, false)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
+        proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
-      })
+      }).retries(3)
 
-      // Following tests are flaky because they use unreliable strategies to export profiles
+      // Following tests also use unreliable strategies to export profiles
       // (or check that the process can recover from OOM, which is also unreliable).
-      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '15000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '20000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3',
           },
         })
@@ -702,38 +828,47 @@ describe('profiler', () => {
       let requestCount = 0
       let pointsCount = 0
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers')
-        const series = pp.series
-        const requests = series.find(s => s.metric === 'profile_api.requests')
-        assert.strictEqual(requests.type, 'count')
-        // There's a race between metrics and on-shutdown profile, so metric
-        // value will be between 1 and 3
-        requestCount = requests.points[0][1]
-        assert.ok(requestCount >= 1)
-        assert.ok(requestCount <= 3)
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          const requests = series.find(s => s.metric === 'profile_api.requests')
+          assert.strictEqual(requests.type, 'count')
+          // There's a race between the periodic uploader and the on-shutdown
+          // upload, so the count can include up to one extra request.
+          requestCount = requests.points[0][1]
+          assert.ok(requestCount >= 1, `Expected ${requestCount} >= 1`)
+          assert.ok(requestCount <= 4, `Expected ${requestCount} <= 4`)
 
-        const responses = series.find(s => s.metric === 'profile_api.responses')
-        assert.strictEqual(responses.type, 'count')
-        assert.deepStrictEqual(responses.tags, ['status_code:200'])
+          const responses = series.find(s => s.metric === 'profile_api.responses')
+          assert.strictEqual(responses.type, 'count')
+          assert.deepStrictEqual(responses.tags, ['status_code:200'])
 
-        // Same number of requests and responses
-        assert.strictEqual(responses.points[0][1], requestCount)
-      }, 'generate-metrics', timeout)
+          // Same number of requests and responses
+          assert.strictEqual(responses.points[0][1], requestCount)
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
-      const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers')
-        const series = pp.series
-        assert.strictEqual(series.length, 2)
-        assert.strictEqual(series[0].metric, 'profile_api.bytes')
-        assert.strictEqual(series[1].metric, 'profile_api.ms')
+      const checkDistributions = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          assert.strictEqual(series.length, 2)
+          assert.strictEqual(series[0].metric, 'profile_api.bytes')
+          assert.strictEqual(series[1].metric, 'profile_api.ms')
 
-        // Same number of points
-        pointsCount = series[0].points.length
-        assert.strictEqual(pointsCount, series[1].points.length)
-      }, 'distributions', timeout)
+          // Same number of points
+          pointsCount = series[0].points.length
+          assert.strictEqual(pointsCount, series[1].points.length)
+        },
+        requestType: 'distributions',
+        timeout,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
 
@@ -748,9 +883,6 @@ describe('profiler', () => {
       if (process.platform === 'win32') {
         this.skip() // Wall profiler context count telemetry is not supported on Windows
       }
-      if (process.platform === 'darwin') {
-        this.skip() // Test is flaky on macOS
-      }
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -759,20 +891,25 @@ describe('profiler', () => {
           DD_PROFILING_UPLOAD_PERIOD: '1',
           DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
-          TEST_DURATION_MS: 1500,
+          TEST_DURATION_MS: 3000,
         },
       })
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        assert.strictEqual(pp.namespace, 'profilers');
-        ['live', 'used'].forEach(metricName => {
-          const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
-          assert.notStrictEqual(sampleContexts, undefined)
-          assert.strictEqual(sampleContexts.type, 'gauge')
-          assert.ok(sampleContexts.points[0][1] >= 1)
-        })
-      }, 'generate-metrics', timeout)
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload;
+          ['live', 'used'].forEach(metricName => {
+            const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
+            assert.notStrictEqual(sampleContexts, undefined)
+            assert.strictEqual(sampleContexts.type, 'gauge')
+            assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
+          })
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
     })

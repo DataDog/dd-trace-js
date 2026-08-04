@@ -1,0 +1,38 @@
+{
+  "name": "plugin-claude-agent-sdk",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "compact-stream-scan": {
+      "env": {
+        "SCENARIO": "compact",
+        "VARIANT": "stream-scan",
+        "OPERATIONS": "25000"
+      }
+    },
+    "compact-hook-indexed": {
+      "env": {
+        "SCENARIO": "compact",
+        "VARIANT": "hook-indexed",
+        "OPERATIONS": "25000"
+      }
+    },
+    "delayed-noisy-stream-scan": {
+      "env": {
+        "SCENARIO": "delayed-noisy",
+        "VARIANT": "stream-scan",
+        "OPERATIONS": "25000"
+      }
+    },
+    "delayed-noisy-hook-indexed": {
+      "env": {
+        "SCENARIO": "delayed-noisy",
+        "VARIANT": "hook-indexed",
+        "OPERATIONS": "25000"
+      }
+    }
+  }
+}

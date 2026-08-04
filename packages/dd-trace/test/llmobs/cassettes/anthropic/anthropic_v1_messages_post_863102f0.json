@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Content-Length": "2246",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "Anthropic/JS 0.14.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "0.14.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.17.0",
+      "anthropic-version": "2023-06-01",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the weather in San Francisco, CA?\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"thinking\",\n          \"thinking\": \"The user is asking for the weather in San Francisco, CA. I have a tool called `get_weather` that can retrieve weather information for a specific location. I have all the information I need - the location is \\\"San Francisco, CA\\\".\\n\\nLet me call the get_weather function with this location.\",\n          \"signature\": \"EuMDCmMIDRgCKkB1eZPfjnRcxmoW99Z/xbm1VoyN/DG2j3co+z8ejNAX+rytMIb+mOihutgieDmQZF6muqFX3OHwU50Np8Cr8NtwMhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDI+B85bdC8s0ki0MKhoMvdsAnGEXZzGWnTvfIjCJ/ljseZV9DMHxeNbO4lXJFpU+EKh7HWWZjNAgjOcezWkAM9ez6ID6iuzMGej71jUqrQKUJuXvh1+gfEpAT84LsY/IeIlGBcEyaW7ppHXVHHXZWhe3et3RYyyXRy2jXEcDvwkh4U2bhLe8GYr5OQyJegWW2fLoUwAyyN3t8eP5ocM8uc0iKhyVXe8isnC02K4uWdNbNow/jlDLTidMTqbvAycuK1APXmocjya5B6LiZiGYUjPiItshzaXZZUQsmwmjYMLDVfUBuE/pZgP5J5BO8J27Oss/UknBEDBaOvmP6w7YXOkgR+h+7m4dYpT/NqS0O9JV/LTwptXYbxcFTHhp7eCCXmwgR8+sHoshyBSp/j2D9aB/xwyUZ/OAS1N2S+kXPCmxyaAaVIy56lzeSdzm0vsASs1oVfITQIzSGIQiJRshjc/3HFeTZXZACMKVi4J+ePGMrEYEpG7pyZbvjvOpGAE=\"\n        },\n        {\n          \"type\": \"tool_use\",\n          \"id\": \"toolu_0167cqjALro6i5FhTB65QgnR\",\n          \"name\": \"get_weather\",\n          \"input\": {\n            \"location\": \"San Francisco, CA\"\n          },\n          \"caller\": {\n            \"type\": \"direct\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"tool_result\",\n          \"tool_use_id\": \"toolu_0167cqjALro6i5FhTB65QgnR\",\n          \"content\": [\n            {\n              \"type\": \"text\",\n              \"text\": \"The weather is 73f\"\n            }\n          ]\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 16000,\n  \"temperature\": 1,\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"budget_tokens\": 1024\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the weather for a specific location\",\n      \"input_schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    }\n  ]\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 27 Apr 2026 16:41:31 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "anthropic-ratelimit-input-tokens-limit": "4000000",
+      "anthropic-ratelimit-input-tokens-remaining": "4000000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-04-27T16:41:31Z",
+      "anthropic-ratelimit-output-tokens-limit": "800000",
+      "anthropic-ratelimit-output-tokens-remaining": "800000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-04-27T16:41:31Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19999",
+      "anthropic-ratelimit-requests-reset": "2026-04-27T16:41:31Z",
+      "anthropic-ratelimit-tokens-limit": "4800000",
+      "anthropic-ratelimit-tokens-remaining": "4800000",
+      "anthropic-ratelimit-tokens-reset": "2026-04-27T16:41:31Z",
+      "request-id": "req_011CaUcFw4ERPATpHkHkDWsQ",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "Server": "cloudflare",
+      "x-envoy-upstream-service-time": "921",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "_cfuvid=yf8eTATGgu.pBGLhFz1oBf_K2Vrv7JSIkwzUcCT9T4o-1777308090.992107-1.0.1.1-lCp1xPLTfwa_SgNbhhniNLH1V5oNFKYcJ_L_qP3xtVg; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.anthropic.com",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Robots-Tag": "none",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "9f2f4670bf98b3aa-EWR"
+    },
+    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01WVon93r4JGuPX8HFhNdoSj\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"The weather in San Francisco, CA is currently **73\u00b0F**. It's a pleasant temperature! Is there anything else you'd like to know about the weather?\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":737,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":37,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}"
+  }
+}

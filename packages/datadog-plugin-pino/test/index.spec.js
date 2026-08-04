@@ -25,7 +25,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
@@ -167,6 +167,18 @@ describe('Plugin', () => {
               logger.info(record)
 
               assert.ok(!('dd' in record))
+            })
+          })
+
+          it('should not overwrite a caller-supplied dd field', () => {
+            tracer.scope().activate(span, () => {
+              logger.info({ dd: { custom: 'value' } }, 'message')
+
+              sinon.assert.called(stream.write)
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.deepStrictEqual(record.dd, { custom: 'value' })
             })
           })
 

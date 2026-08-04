@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -24,21 +25,44 @@ describe('profiler', function () {
   let profilers
   let consoleLogger
   let logger
-  let sourceMapCreate
+  let SourceMapperStub
+  let mapperInstance
   let interval
+  let flushInterval
 
-  function waitForExport () {
-    return Promise.all([
+  // Stubs the profiling config assembly so the lifecycle tests run against the test's
+  // profiler/exporter doubles instead of real native profilers, while still exercising
+  // the compression and tag derivation.
+  const configStub = {
+    buildProfilingRuntime: (config) => {
+      const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
+      const [method, level0] = compression.split('-')
+      const level = level0 ? Number.parseInt(level0, 10) : undefined
+      return {
+        tags: { ...config.tags },
+        exporters,
+        flushInterval: config.DD_PROFILING_UPLOAD_PERIOD * 1000,
+        profilers,
+        uploadCompression: { method, level: Number.isNaN(level) ? undefined : level },
+        systemInfoReport: { oomMonitoring: { enabled: false } },
+      }
+    },
+  }
+
+  async function waitForExport () {
+    await Promise.all([
       wallProfilePromise,
       spaceProfilePromise,
       exporterPromise,
-    // After all profiles resolve, need to wait another microtask
-    // tick until _collect method calls _submit to begin the export.
-    ]).then(() => Promise.resolve())
+    ])
+    // The profiles resolving is not enough: _collect still has to reach its
+    // _submit call, which happens one microtask tick later.
+    await Promise.resolve()
   }
 
   function setUpProfiler () {
-    interval = 65 * 1000
+    flushInterval = 65 * 1000
+    interval = flushInterval
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
@@ -79,14 +103,19 @@ describe('profiler', function () {
     exporters = [exporter]
     profilers = [wallProfiler, spaceProfiler]
 
-    sourceMapCreate = sinon.stub()
+    mapperInstance = {
+      infoMap: new Map(),
+      loadDirectory: sinon.stub().resolves(),
+    }
+    SourceMapperStub = sinon.stub().returns(mapperInstance)
   }
 
-  function makeStartOptions (overrides = {}) {
+  function makeStartOptions (overrides) {
     return {
       profilers,
       exporters,
       url: 'http://127.0.0.1:8126',
+      DD_PROFILING_UPLOAD_PERIOD: flushInterval / 1000,
       ...overrides,
     }
   }
@@ -94,10 +123,11 @@ describe('profiler', function () {
   describe('not serverless', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
+        '../log': consoleLogger,
+        './config': configStub,
         '@datadog/pprof': {
-          SourceMapper: {
-            create: sourceMapCreate,
-          },
+          SourceMapper: SourceMapperStub,
+          setLogger: sinon.stub(),
         },
       }).Profiler
 
@@ -115,32 +145,82 @@ describe('profiler', function () {
     })
 
     it('should start the internal time profilers', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
     it('should start only once', async () => {
-      await profiler._start(makeStartOptions())
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
     it('should stop the internal profilers', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
       profiler.stop()
 
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
     })
 
+    it('should propagate custom label keys to the started profilers', async () => {
+      wallProfiler.setCustomLabelKeys = sinon.stub()
+      await profiler.start(makeStartOptions())
+
+      profiler.setCustomLabelKeys(['endpoint', 'resource'])
+
+      sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
+      assert.deepStrictEqual(
+        [...wallProfiler.setCustomLabelKeys.firstCall.args[0]],
+        ['endpoint', 'resource']
+      )
+    })
+
+    it('should delegate runWithLabels to the first profiler that supports it', async () => {
+      wallProfiler.runWithLabels = sinon.stub().callsFake((labels, fn) => fn())
+      await profiler.start(makeStartOptions())
+
+      const result = profiler.runWithLabels({ endpoint: '/foo' }, () => 'wrapped')
+
+      assert.strictEqual(result, 'wrapped')
+      sinon.assert.calledOnce(wallProfiler.runWithLabels)
+    })
+
+    it('should run the callback directly when no profiler supports runWithLabels', async () => {
+      await profiler.start(makeStartOptions())
+
+      assert.strictEqual(profiler.runWithLabels({}, () => 'plain'), 'plain')
+    })
+
+    it('should run the callback directly when called before start', () => {
+      assert.strictEqual(profiler.runWithLabels({}, () => 'early'), 'early')
+    })
+
+    it('should subscribe to span finishes when endpoint collection is enabled', async () => {
+      await profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: true }))
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      profiler.stop()
+    })
+
+    it('should log an error when collecting with no profile types configured', async () => {
+      profilers = []
+      await profiler.start(makeStartOptions({ logger }))
+
+      await profiler._collect('on_shutdown', false)
+
+      sinon.assert.calledOnce(consoleLogger.error)
+      assert.match(consoleLogger.error.firstCall.args[0].message, /No profile types configured/)
+    })
+
     it('should stop when starting failed', async () => {
       wallProfiler.start.throws()
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
@@ -150,7 +230,7 @@ describe('profiler', function () {
     it('should stop when capturing failed', async () => {
       wallProfiler.profile.throws(new Error('boom'))
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -166,7 +246,7 @@ describe('profiler', function () {
       const rejected = Promise.reject(new Error('boom'))
       wallProfiler.encode.returns(rejected)
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -183,7 +263,7 @@ describe('profiler', function () {
       const rejected = Promise.reject(new Error('boom'))
       exporter.export.returns(rejected)
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -196,7 +276,7 @@ describe('profiler', function () {
     })
 
     it('should flush when the interval is reached', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       clock.tick(interval)
 
@@ -206,7 +286,7 @@ describe('profiler', function () {
     })
 
     it('should flush when the profiler is stopped', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       profiler.stop()
 
@@ -234,17 +314,17 @@ describe('profiler', function () {
       process.env = {
         DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: compression,
       }
-      await profiler._start(makeStartOptions({ tags: { foo: 'foo' } }))
+      await profiler.start(makeStartOptions({ tags: { foo: 'foo' } }))
       process.env = env
 
       clock.tick(interval)
 
       const { profiles, start, end, tags } = await exporterPromise
 
-      assert.ok(Object.hasOwn(profiles, 'wall'))
+      assert.ok(Object.hasOwn(profiles, 'wall'), `Available keys: ${inspect(Object.keys(profiles))}`)
       assert.ok(profiles.wall instanceof Buffer)
       assert.strictEqual(profiles.wall.indexOf(magicBytes), 0)
-      assert.ok(Object.hasOwn(profiles, 'space'))
+      assert.ok(Object.hasOwn(profiles, 'space'), `Available keys: ${inspect(Object.keys(profiles))}`)
       assert.ok(profiles.space instanceof Buffer)
       assert.strictEqual(profiles.space.indexOf(magicBytes), 0)
       assert.ok(start instanceof Date)
@@ -276,7 +356,7 @@ describe('profiler', function () {
     it('should log exporter errors', async () => {
       exporter.export.rejects(new Error('boom'))
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -288,7 +368,7 @@ describe('profiler', function () {
     it('should log encoded profile', async () => {
       exporter.export.rejects(new Error('boom'))
 
-      await profiler._start(makeStartOptions({ logger }))
+      await profiler.start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -303,17 +383,47 @@ describe('profiler', function () {
         submit,
       ] = consoleLogger.debug.getCalls()
 
-      sinon.assert.calledWithMatch(startWall, 'Started wall profiler')
-      sinon.assert.calledWithMatch(startSpace, 'Started space profiler')
+      sinon.assert.calledWithExactly(startWall, 'Started %s profiler in %s thread', 'wall', 'Main')
+      sinon.assert.calledWithExactly(startSpace, 'Started %s profiler in %s thread', 'space', 'Main')
 
       assert.match(collectWall.args[0](), /^Collected wall profile: /)
       assert.match(collectSpace.args[0](), /^Collected space profile: /)
 
-      sinon.assert.calledWithMatch(submit, 'Submitted profiles')
+      sinon.assert.calledWithExactly(submit, 'Submitted profiles')
+    })
+
+    it('should publish lifecycle debug messages to the central log debug channel', async () => {
+      // Re-proxyquire without stubbing ../log so log.debug actually publishes
+      // to the real debugChannel.
+      const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
+        './config': configStub,
+        '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
+      }).Profiler
+      const realProfiler = new RealLogProfiler()
+      const { debugChannel } = require('../../src/log/channels')
+      const messages = []
+      const subscriber = msg => messages.push(msg)
+      debugChannel.subscribe(subscriber)
+
+      try {
+        await realProfiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+        await clock.tickAsync(1)
+
+        assert.ok(
+          messages.includes('Started wall profiler in Main thread'),
+          `Expected 'Started wall profiler in Main thread' in: ${inspect(messages)}`
+        )
+        assert.ok(messages.includes('Submitted profiles'))
+      } finally {
+        debugChannel.unsubscribe(subscriber)
+        realProfiler.stop()
+      }
     })
 
     it('should have a new start time for each capture', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       clock.tick(interval)
       await waitForExport()
@@ -331,7 +441,7 @@ describe('profiler', function () {
       await waitForExport()
 
       const { start: start2, end: end2 } = exporter.export.args[0][0]
-      assert.ok(start2 >= end)
+      assert.ok(start2 >= end, `Expected ${start2} >= ${end}`)
       assert.ok(start2 instanceof Date)
       assert.ok(end2 instanceof Date)
       assert.strictEqual(end2.getTime() - start2.getTime(), 65000)
@@ -340,26 +450,37 @@ describe('profiler', function () {
     })
 
     it('should not pass source mapper to profilers when disabled', async () => {
-      await profiler._start(makeStartOptions({ sourceMap: false }))
+      await profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: false }))
 
       const options = profilers[0].start.args[0][0]
       assert.strictEqual(options.mapper, undefined)
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
-      const mapper = { infoMap: new Map() }
-      sourceMapCreate.returns(Promise.resolve(mapper))
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: true }))
 
       const options = profilers[0].start.args[0][0]
-      assert.ok(Object.hasOwn(options, 'mapper'))
-      assert.strictEqual(mapper, options.mapper)
+      assert.ok(Object.hasOwn(options, 'mapper'), `Available keys: ${inspect(Object.keys(options))}`)
+      assert.strictEqual(mapperInstance, options.mapper)
+    })
+
+    it('should log loaded source maps when debug source maps are on', async () => {
+      consoleLogger.debug = sinon.stub().callsFake(arg => { if (typeof arg === 'function') arg() })
+      mapperInstance.infoMap = new Map([['a', {}]])
+      profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: true, DD_PROFILING_DEBUG_SOURCE_MAPS: true }))
+      await Promise.resolve() // let loadDirectory().then() run
+      await Promise.resolve()
+
+      assert.strictEqual(profiler.enabled, true)
+      sinon.assert.called(consoleLogger.debug)
     })
 
     it('should work with a root working dir and source maps on', async () => {
       const error = new Error('fail')
-      sourceMapCreate.rejects(error)
-      await profiler._start(makeStartOptions({ logger, sourceMap: true }))
+      mapperInstance.loadDirectory.rejects(error)
+      profiler.start(makeStartOptions({ logger, DD_PROFILING_SOURCE_MAP: true }))
+      await Promise.resolve() // let .then() propagate the rejection
+      await Promise.resolve() // let .catch() callback run
       assert.strictEqual(consoleLogger.error.args[0][0], error)
       assert.strictEqual(profiler.enabled, true)
     })
@@ -376,7 +497,7 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       clock.tick(interval)
 
@@ -385,7 +506,13 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, false)
     })
 
-    it('should include sourceMapCount: 0 when source maps are disabled', async () => {
+    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
+      const token = 'dd:has-missing-map-files'
+      wallProfiler.profile.returns({
+        comment: [1],
+        stringTable: { strings: ['', token] },
+      })
+
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -393,19 +520,16 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: false }))
+      await profiler.start(makeStartOptions())
 
       clock.tick(interval)
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 0)
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
     })
 
-    it('should include sourceMapCount: 0 when no source maps are found', async () => {
-      const mapper = { infoMap: new Map() }
-      sourceMapCreate.returns(Promise.resolve(mapper))
-
+    it('should set hasMissingSourceMaps to false when no profile has the comment token', async () => {
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -413,39 +537,13 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      await profiler.start(makeStartOptions())
 
       clock.tick(interval)
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 0)
-    })
-
-    it('should include sourceMapCount with the number of loaded source maps', async () => {
-      const mapper = {
-        infoMap: new Map([
-          ['file1.js', {}],
-          ['file2.js', {}],
-          ['file3.js', {}],
-        ]),
-      }
-      sourceMapCreate.returns(Promise.resolve(mapper))
-
-      exporterPromise = new Promise(resolve => {
-        exporter.export = (exportSpec) => {
-          resolve(exportSpec)
-          return Promise.resolve()
-        }
-      })
-
-      await profiler._start(makeStartOptions({ sourceMap: true }))
-
-      clock.tick(interval)
-
-      const { infos } = await exporterPromise
-
-      assert.strictEqual(infos.sourceMapCount, 3)
+      assert.strictEqual(infos.hasMissingSourceMaps, false)
     })
   })
 
@@ -454,10 +552,11 @@ describe('profiler', function () {
 
     function initServerlessProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
+        '../log': consoleLogger,
+        './config': configStub,
         '@datadog/pprof': {
-          SourceMapper: {
-            create: sourceMapCreate,
-          },
+          SourceMapper: SourceMapperStub,
+          setLogger: sinon.stub(),
         },
       }).ServerlessProfiler
 
@@ -479,7 +578,7 @@ describe('profiler', function () {
     })
 
     it('should increment profiled intervals after one interval elapses', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
       assert.strictEqual(profiler.profiledIntervals, 0)
 
       clock.tick(interval)
@@ -489,7 +588,7 @@ describe('profiler', function () {
     })
 
     it('should flush when flush after intervals is reached', async () => {
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
@@ -513,7 +612,7 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions())
+      await profiler.start(makeStartOptions())
 
       // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
@@ -525,14 +624,12 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, true)
     })
 
-    it('should include sourceMapCount in export infos', async () => {
-      const mapper = {
-        infoMap: new Map([
-          ['file1.js', {}],
-          ['file2.js', {}],
-        ]),
-      }
-      sourceMapCreate.returns(Promise.resolve(mapper))
+    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
+      const token = 'dd:has-missing-map-files'
+      wallProfiler.profile.returns({
+        comment: [1],
+        stringTable: { strings: ['', token] },
+      })
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -541,7 +638,7 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler.start(makeStartOptions())
 
       // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
@@ -550,7 +647,7 @@ describe('profiler', function () {
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 2)
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
     })
   })
 })

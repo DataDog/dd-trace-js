@@ -1,12 +1,24 @@
 'use strict'
 
-const { getTestSuitePath } = require('../../../dd-trace/src/plugins/util/test')
+const { performance } = require('node:perf_hooks')
+
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const {
+  getTestSuitePath,
+  DYNAMIC_NAME_RE,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
+  recordTestManagementExecution,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+} = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 // test channels
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
+const testDiWaitCh = channel('ci:mocha:test:di:wait')
 // after a test has failed, we'll publish to this channel
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
@@ -16,16 +28,81 @@ const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const testToContext = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const efdTests = {}
+const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
+const efdRetryCountByTestFullName = new Map()
+const efdSlowAbortedTests = new Set()
+const attemptToFixExecutions = new Map()
+const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
+
+function waitForHitProbe () {
+  const promises = {}
+  testDiWaitCh.publish({ promises })
+  return promises.hitBreakpointPromise
+}
+const loggedAttemptToFixTests = new Set()
+
+/**
+ * Checks whether a Mocha test failed, including serialized tests from parallel workers.
+ *
+ * @param {object} test
+ * @returns {boolean}
+ */
+function isTestFailed (test) {
+  if (test.isFailed) {
+    return test.isFailed()
+  }
+  if (test.isPending) {
+    return !test.isPending() && test.state === 'failed'
+  }
+  return false
+}
+
+/**
+ * Applies EFD and quarantine failure suppression to a completed Mocha runner.
+ *
+ * @param {object} runner
+ * @param {object} config
+ * @returns {void}
+ */
+function adjustRunnerFailuresForTestOptimization (runner, config) {
+  if (config.isEarlyFlakeDetectionEnabled) {
+    for (const tests of Object.values(efdTests)) {
+      const executedEfdTests = tests.filter(test => !test.isPending())
+      const failingEfdTests = tests.filter(test => isTestFailed(test))
+      const areAllEfdTestsFailing = failingEfdTests.length === executedEfdTests.length
+      const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+      if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+        if (runner.stats) {
+          runner.stats.failures -= nonQuarantinedFailingEfdTests.length
+        }
+        runner.failures -= nonQuarantinedFailingEfdTests.length
+      }
+    }
+  }
+
+  if (config.isTestManagementTestsEnabled) {
+    let numFailedQuarantinedTests = 0
+    for (const test of testsQuarantined) {
+      if (isTestFailed(test)) {
+        numFailedQuarantinedTests++
+      }
+    }
+    if (runner.stats) {
+      runner.stats.failures -= numFailedQuarantinedTests
+    }
+    runner.failures -= numFailedQuarantinedTests
+  }
+}
 
 function getAfterEachHooks (testOrHook) {
   const hooks = []
@@ -59,17 +136,145 @@ function isNewTest (test, knownTests) {
   return !testsForSuite.includes(testName)
 }
 
-function retryTest (test, numRetries, tags) {
+function setEfdRetryCountForTest (test, duration, slowTestRetries) {
+  const testName = getTestFullName(test)
+  if (efdRetryCountByTestFullName.has(testName)) {
+    return
+  }
+  const retryCount = getEfdRetryCount(duration, slowTestRetries || {})
+  efdRetryCountByTestFullName.set(testName, retryCount)
+  if (retryCount === 0) {
+    efdSlowAbortedTests.add(testName)
+  }
+}
+
+function wrapOriginalEfdTest (test, slowTestRetries) {
+  if (test._ddEfdDurationWrapped || typeof test.fn !== 'function') {
+    return
+  }
+  test._ddEfdDurationWrapped = true
+  const originalFn = test.fn
+  test.fn = shimmer.wrapFunction(originalFn, originalFn => function () {
+    const start = performance.now()
+    const recordDuration = () => {
+      setEfdRetryCountForTest(test, performance.now() - start, slowTestRetries)
+    }
+
+    if (originalFn.length > 0) {
+      const args = Array.prototype.slice.call(arguments)
+      args[0] = shimmer.wrapFunction(args[0], done => function (...args) {
+        recordDuration()
+        return done.apply(this, args)
+      })
+      return originalFn.apply(this, args)
+    }
+
+    try {
+      const result = originalFn.apply(this, arguments)
+      if (result?.then) {
+        return result.then(value => {
+          recordDuration()
+          return value
+        }, error => {
+          recordDuration()
+          throw error
+        })
+      }
+      recordDuration()
+      return result
+    } catch (error) {
+      recordDuration()
+      throw error
+    }
+  })
+}
+
+/**
+ * Disables Mocha's native retry mechanism for Datadog-managed clone retries.
+ * @param {{ retries?: (count: number) => void }} test
+ * @returns {void}
+ */
+function disableMochaRetries (test) {
+  if (typeof test.retries === 'function') {
+    test.retries(0)
+  }
+}
+
+/**
+ * Checks whether a runnable belongs to a Datadog-managed clone retry feature.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isDatadogManagedRetryTest (test, config) {
+  return test._ddIsAttemptToFix ||
+    test._ddIsEfdRetry ||
+    (config.isEarlyFlakeDetectionEnabled && (test._ddIsNew || test._ddIsModified))
+}
+
+/**
+ * Checks whether a runnable belongs to an Early Flake Detection execution.
+ * @param {{
+ *   _ddIsAttemptToFix?: boolean,
+ *   _ddIsDisabled?: boolean,
+ *   _ddIsEfdRetry?: boolean,
+ *   _ddIsModified?: boolean,
+ *   _ddIsNew?: boolean
+ * }} test
+ * @param {{ isEarlyFlakeDetectionEnabled?: boolean }} config
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionTest (test, config) {
+  return !test._ddIsAttemptToFix &&
+    !test._ddIsDisabled &&
+    config.isEarlyFlakeDetectionEnabled &&
+    (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
+}
+
+function retryTest (test, numRetries, tags, slowTestRetries) {
   const suite = test.parent
+  const isEfdRetry = tags.includes('_ddIsEfdRetry')
+  disableMochaRetries(test)
+  if (isEfdRetry) {
+    wrapOriginalEfdTest(test, slowTestRetries)
+  }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
+    disableMochaRetries(clonedTest)
     suite.addTest(clonedTest)
+    if (isEfdRetry) {
+      clonedTest._ddEfdRetryIndex = retryIndex + 1
+      const originalFn = clonedTest.fn
+      if (typeof originalFn === 'function') {
+        clonedTest.fn = shimmer.wrapFunction(originalFn, originalFn => function (...args) {
+          const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(clonedTest))
+          if (efdRetryCount !== undefined && clonedTest._ddEfdRetryIndex > efdRetryCount) {
+            clonedTest._ddShouldSkipEfdRetry = true
+            this.skip()
+          }
+          return originalFn.apply(this, args)
+        })
+      }
+    }
     for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
     }
   }
+}
+
+function getConfiguredEfdRetryCount (config) {
+  const { earlyFlakeDetectionSlowTestRetries } = config
+  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
+    return config.earlyFlakeDetectionNumRetries
+  }
+  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
 }
 
 function getSuitesByTestFile (root) {
@@ -82,7 +287,6 @@ function getSuitesByTestFile (root) {
         suitesByTestFile[suite.file] = [suite]
       }
     }
-    // eslint-disable-next-line unicorn/no-array-for-each
     suite.suites.forEach(suite => {
       getSuites(suite)
     })
@@ -109,6 +313,21 @@ function getTestFullName (test) {
   return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
 
+/**
+ * Records every attempt for a test grouped by its full test name.
+ * @param {Record<string, Array<{ file: string, fullTitle: () => string }>>} testsByFullName
+ * @param {{ file: string, fullTitle: () => string }} test
+ * @returns {void}
+ */
+function recordTestAttempt (testsByFullName, test) {
+  const testFullName = getTestFullName(test)
+  if (testsByFullName[testFullName]) {
+    testsByFullName[testFullName].push(test)
+  } else {
+    testsByFullName[testFullName] = [test]
+  }
+}
+
 function getTestStatus (test) {
   if (test.isPending()) {
     return 'skip'
@@ -126,8 +345,7 @@ function getTestToContextKey (test) {
   if (!wrappedFunctions.has(test.fn)) {
     return test.fn
   }
-  const originalFn = originalFns.get(test.fn)
-  return originalFn
+  return originalFns.get(test.fn)
 }
 
 function getTestContext (test) {
@@ -135,13 +353,37 @@ function getTestContext (test) {
   return testToContext.get(key)
 }
 
+/**
+ * Copies Test Management metadata from Mocha's original runnable to its native retry clone.
+ * @param {{
+ *   _retriedTest?: {
+ *     _ddIsDisabled?: boolean,
+ *     _ddIsQuarantined?: boolean
+ *   },
+ *   _ddIsDisabled?: boolean,
+ *   _ddIsQuarantined?: boolean
+ * }} test
+ */
+function inheritDatadogPropertiesFromRetriedTest (test) {
+  const retriedTest = test._retriedTest
+  if (!retriedTest) return
+
+  if (retriedTest._ddIsDisabled) {
+    test._ddIsDisabled = true
+  }
+  if (retriedTest._ddIsQuarantined) {
+    test._ddIsQuarantined = true
+  }
+
+  if (test._ddIsQuarantined && !test._ddIsAttemptToFix) {
+    testsQuarantined.add(test)
+  }
+}
+
 function runnableWrapper (RunnablePackage, libraryConfig) {
-  shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
+  shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
-    }
-    if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(libraryConfig?.flakyTestRetriesCount)
+      return run.apply(this, args)
     }
     // The reason why the wrapping logic is here is because we need to cover
     // `afterEach` and `beforeEach` hooks as well.
@@ -150,6 +392,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     const isAfterEach = this.parent._afterEach.includes(this)
 
     const isTestHook = isBeforeEach || isAfterEach
+    const test = isTestHook ? this.ctx.currentTest : this
 
     // we restore the original user defined function
     if (wrappedFunctions.has(this.fn)) {
@@ -158,14 +401,26 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       wrappedFunctions.delete(this.fn)
     }
 
+    if (isDatadogManagedRetryTest(test, libraryConfig)) {
+      disableMochaRetries(this)
+      if (typeof args[0] === 'function') {
+        const onRunnableFinished = args[0]
+        args[0] = function () {
+          disableMochaRetries(test)
+          return onRunnableFinished.apply(this, arguments)
+        }
+      }
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+      this.retries(libraryConfig.flakyTestRetriesCount)
+    }
+
     if (isTestHook || this.type === 'test') {
-      const test = isTestHook ? this.ctx.currentTest : this
       const ctx = getTestContext(test)
 
       if (ctx) {
         // we bind the test fn to the correct context
-        const newFn = shimmer.wrapFunction(this.fn, originalFn => function () {
-          return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
+        const newFn = shimmer.wrapFunction(this.fn, originalFn => function (...args) {
+          return testFnCh.runStores(ctx, () => originalFn.apply(this, args))
         })
 
         // we store the original function, not to lose it
@@ -176,7 +431,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
-    return run.apply(this, arguments)
+    return run.apply(this, args)
   })
   return RunnablePackage
 }
@@ -193,6 +448,8 @@ function getOnTestHandler (isMain) {
       wrappedFunctions.delete(test.fn)
     }
 
+    inheritDatadogPropertiesFromRetriedTest(test)
+
     const {
       file: testSuiteAbsolutePath,
       title,
@@ -203,6 +460,17 @@ function getOnTestHandler (isMain) {
       _ddIsQuarantined: isQuarantined,
       _ddIsModified: isModified,
     } = test
+
+    test._ddStartTime = performance.now()
+
+    if (isEfdRetry) {
+      const efdRetryCount = efdRetryCountByTestFullName.get(getTestFullName(test))
+      if (efdRetryCount !== undefined && test._ddEfdRetryIndex > efdRetryCount) {
+        test.pending = true
+        test._ddShouldSkipEfdRetry = true
+        return
+      }
+    }
 
     const testInfo = {
       testName: test.fullTitle(),
@@ -221,14 +489,23 @@ function getOnTestHandler (isMain) {
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     testInfo.isModified = isModified
+    testInfo.hasDynamicName = isNew && DYNAMIC_NAME_RE.test(test.fullTitle())
+    if (testInfo.hasDynamicName) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`)
+    }
+    if (isAttemptToFix) {
+      logAttemptToFixTestExecution(
+        getTestSuitePath(test.file, process.cwd()),
+        test.fullTitle(),
+        loggedAttemptToFixTests
+      )
+    }
     // We want to store the result of the new tests
     if (isNew) {
-      const testFullName = getTestFullName(test)
-      if (newTests[testFullName]) {
-        newTests[testFullName].push(test)
-      } else {
-        newTests[testFullName] = [test]
-      }
+      recordTestAttempt(newTests, test)
+    }
+    if (!isAttemptToFix && (isNew || isModified)) {
+      recordTestAttempt(efdTests, test)
     }
 
     if (!isAttemptToFix && isDisabled) {
@@ -241,82 +518,219 @@ function getOnTestHandler (isMain) {
   }
 }
 
-function getOnTestEndHandler (config) {
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isFlakyTestRetriesEnabled,
+  isLastAtrAttempt,
+  isEfdRetry,
+  isLastEfdRetry,
+  isAttemptToFix,
+  isLastAttemptToFix,
+  attemptToFixPassed,
+  hasPassedAnyEfdAttempt,
+  isQuarantined,
+  isDisabled,
+  isFinalAttempt,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // Intermediate executions must not carry a final status, regardless of quarantine/disabled state
+  const isExternalIntermediateExecution = !isEfdRetry && !isAttemptToFix && !isFinalAttempt
+  const isIntermediateExecution =
+    (isEfdRetry && !isLastEfdRetry) ||
+    (isAttemptToFix && !isLastAttemptToFix) ||
+    isExternalIntermediateExecution
+  if (isIntermediateExecution) {
+    return
+  }
+
+  // If the test is quarantined or disabled, its final status is skip unless attempt-to-fix takes precedence.
+  if (!isAttemptToFix && (isQuarantined || isDisabled)) {
+    return 'skip'
+  }
+
+  const isAtrActive = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry
+
+  // When no retry feature is active, every execution is final
+  if (!isAtrActive && !isEfdRetry && !isAttemptToFix) {
+    return status
+  }
+  if (isAtrActive && isLastAtrAttempt) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isEfdRetry && isLastEfdRetry) {
+    return hasPassedAnyEfdAttempt ? 'pass' : 'fail'
+  }
+  if (isAttemptToFix && isLastAttemptToFix) {
+    return attemptToFixPassed ? 'pass' : 'fail'
+  }
+}
+
+function getTestFinishInfo (test, status, config, error) {
+  let hasFailedAllRetries = false
+  let attemptToFixPassed = false
+  let attemptToFixFailed = false
+
+  const testName = getTestFullName(test)
+  if (
+    isEarlyFlakeDetectionTest(test, config) &&
+    !test._ddIsEfdRetry &&
+    !efdRetryCountByTestFullName.has(testName)
+  ) {
+    const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
+    setEfdRetryCountForTest(test, duration, config.earlyFlakeDetectionSlowTestRetries)
+  }
+
+  if (testsStatuses.get(testName)) {
+    testsStatuses.get(testName).push(status)
+  } else {
+    testsStatuses.set(testName, [status])
+  }
+  const testStatuses = testsStatuses.get(testName)
+
+  const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
+  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(config)
+  const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
+  const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
+
+  // Needed for the getFinalStatus call. This is because EFD does NOT tag as
+  // EFD retry the first run of the test. It only tags as retries the clones
+  const isEfdRetry = isEarlyFlakeDetectionTest(test, config)
+
+  if (test._ddIsAttemptToFix && isLastAttempt) {
+    if (testStatuses.includes('fail')) {
+      attemptToFixFailed = true
+    }
+    if (testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    } else if (testStatuses.every(status => status === 'pass')) {
+      attemptToFixPassed = true
+    }
+  }
+
+  if (test._ddIsEfdRetry && efdRetryCount > 0 && isLastEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    hasFailedAllRetries = true
+  }
+
+  // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+    getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
+    hasFailedAllRetries = true
+  }
+
+  const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
+  const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+    !test._ddIsAttemptToFix &&
+    !test._ddIsEfdRetry
+  const isFinalAttempt = status !== 'fail' || test._currentRetry >= test._retries
+
+  const { isFlakyTestRetriesEnabled } = config
+  const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
+
+  const finalStatus = getFinalStatus({
+    status,
+    hasFailedAllRetries,
+    isFlakyTestRetriesEnabled,
+    isLastAtrAttempt,
+    isEfdRetry,
+    isLastEfdRetry,
+    isAttemptToFix: _ddIsAttemptToFix,
+    isLastAttemptToFix: isLastAttempt,
+    attemptToFixPassed,
+    hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
+    isQuarantined: _ddIsQuarantined,
+    isDisabled: _ddIsDisabled,
+    isFinalAttempt,
+  })
+
+  if (!isMochaWorker) {
+    recordTestManagementExecution({
+      testSuite: getTestSuitePath(test.file, process.cwd()),
+      testName: test.fullTitle(),
+      status,
+      isAttemptToFix: _ddIsAttemptToFix,
+      isDisabled: _ddIsDisabled,
+      isQuarantined: _ddIsQuarantined,
+    })
+  }
+
+  if (_ddIsAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: getTestSuitePath(test.file, process.cwd()),
+      testName: test.fullTitle(),
+      status,
+      isDisabled: _ddIsDisabled,
+      isQuarantined: _ddIsQuarantined,
+    })
+  }
+
+  return {
+    hasFailedAllRetries,
+    attemptToFixPassed,
+    attemptToFixFailed,
+    isAttemptToFixRetry,
+    isAtrRetry,
+    finalStatus,
+    earlyFlakeAbortReason: efdSlowAbortedTests.has(testName) ? 'slow' : undefined,
+  }
+}
+
+function getOnTestEndHandler (config, finalAttemptHandlers) {
   return async function (test) {
+    if (test._ddShouldSkipEfdRetry) {
+      return
+    }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
+    const shouldFinishTest = ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))
+    let testFinishInfo
+    let isFinalAttempt = false
 
-    // After finishing it might take a bit for the snapshot to be handled.
-    // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
-    if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
-      await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve()
-        }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-      })
+    // If there are afterEach to be run, we don't finish the test yet.
+    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
+    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
+    // directly sets finalStatus without waiting for hooks
+    if (!ctx && test.isPending()) {
+      test._ddIsFinalAttempt = true
+      isFinalAttempt = true
     }
 
-    let hasFailedAllRetries = false
-    let attemptToFixPassed = false
-    let attemptToFixFailed = false
-
-    const testName = getTestFullName(test)
-
-    if (testsStatuses.get(testName)) {
-      testsStatuses.get(testName).push(status)
-    } else {
-      testsStatuses.set(testName, [status])
-    }
-    const testStatuses = testsStatuses.get(testName)
-
-    const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-    const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
-
-    if (test._ddIsAttemptToFix && isLastAttempt) {
-      if (testStatuses.includes('fail')) {
-        attemptToFixFailed = true
-      }
-      if (testStatuses.every(status => status === 'fail')) {
-        hasFailedAllRetries = true
-      } else if (testStatuses.every(status => status === 'pass')) {
-        attemptToFixPassed = true
+    if (shouldFinishTest) {
+      testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+      if (testFinishInfo.finalStatus !== undefined) {
+        test._ddIsFinalAttempt = true
+        isFinalAttempt = true
       }
     }
 
-    if (test._ddIsEfdRetry && isLastEfdRetry &&
-      testStatuses.every(status => status === 'fail')) {
-      hasFailedAllRetries = true
+    if (isFinalAttempt) {
+      finalAttemptHandlers?.onStart?.(test)
     }
 
-    // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-    if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
-      getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
-      hasFailedAllRetries = true
+    if (test._retriedTest?._ddShouldWaitForHitProbe) {
+      await waitForHitProbe()
     }
 
-    const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
-    const isAtrRetry = config.isFlakyTestRetriesEnabled &&
-      !test._ddIsAttemptToFix &&
-      !test._ddIsEfdRetry
-
-    // if there are afterEach to be run, we don't finish the test yet
-    if (ctx && !getAfterEachHooks(test).length) {
+    if (shouldFinishTest) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
         isLastRetry: getIsLastRetry(test),
-        hasFailedAllRetries,
-        attemptToFixPassed,
-        attemptToFixFailed,
-        isAttemptToFixRetry,
-        isAtrRetry,
+        ...testFinishInfo,
         ...ctx.currentStore,
       })
+    }
+
+    if (isFinalAttempt) {
+      finalAttemptHandlers?.onFinish?.(test)
     }
   }
 }
 
-function getOnHookEndHandler () {
+function getOnHookEndHandler (config, finalAttemptHandlers) {
   return function (hook) {
     const test = hook.ctx.currentTest
     const afterEachHooks = getAfterEachHooks(hook)
@@ -325,20 +739,123 @@ function getOnHookEndHandler () {
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const ctx = getTestContext(test)
-        if (ctx) {
-          testFinishCh.publish({
-            status,
-            hasBeenRetried: isMochaRetry(test),
-            isLastRetry: getIsLastRetry(test),
-            ...ctx.currentStore,
-          })
+        // Disabled tests are already finished in getOnTestEndHandler,
+        // skip to avoid double-publishing
+        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+          const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
+          const isFinalAttempt = testFinishInfo.finalStatus !== undefined
+          const publishTestFinish = () => {
+            testFinishCh.publish({
+              status,
+              hasBeenRetried: isMochaRetry(test),
+              isLastRetry: getIsLastRetry(test),
+              ...testFinishInfo,
+              ...ctx.currentStore,
+            })
+            if (isFinalAttempt) {
+              test._ddIsFinalAttempt = true
+            }
+          }
+          if (test._retriedTest?._ddShouldWaitForHitProbe) {
+            if (isFinalAttempt) {
+              finalAttemptHandlers?.onStart?.(test)
+            }
+            test._ddDeferredHookEnd = {
+              waitForHitProbePromise: waitForHitProbe(),
+              publishTestFinish,
+              onFinish: isFinalAttempt ? () => finalAttemptHandlers?.onFinish?.(test) : undefined,
+            }
+            return
+          }
+          publishTestFinish()
         }
       }
     }
   }
 }
 
-function getOnFailHandler (isMain) {
+function finishDeferredHookEnd (test) {
+  const deferredHookEnd = test?._ddDeferredHookEnd
+  if (!deferredHookEnd) return
+
+  const finish = () => {
+    try {
+      return deferredHookEnd.publishTestFinish()
+    } finally {
+      deferredHookEnd.onFinish?.()
+    }
+  }
+
+  delete test._ddDeferredHookEnd
+  if (!deferredHookEnd.waitForHitProbePromise) return finish()
+
+  return deferredHookEnd.waitForHitProbePromise.then(
+    finish,
+    finish
+  )
+}
+
+/**
+ * Runs a Failed Test Replay hookUp callback after pending DI operations that must happen first.
+ *
+ * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
+ * @param {object} test - Mocha test currently owning the hook.
+ * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
+ * @param {unknown} hookThis - Callback receiver.
+ * @param {IArguments} args - Arguments passed by Mocha.
+ * @returns {unknown}
+ */
+function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
+  const continueAfterProbe = () => {
+    const deferredHookEndPromise = finishDeferredHookEnd(test)
+    if (deferredHookEndPromise) {
+      return deferredHookEndPromise.then(() => fn.apply(hookThis, args), () => fn.apply(hookThis, args))
+    }
+    return fn.apply(hookThis, args)
+  }
+
+  if (failedTestReplayPromise) {
+    return failedTestReplayPromise.then(continueAfterProbe, continueAfterProbe)
+  }
+  return continueAfterProbe()
+}
+
+/**
+ * Wraps Mocha's hookUp completion callback so retries wait for DI before continuing.
+ *
+ * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
+ * @param {object} test - Mocha test currently owning the hook.
+ * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise) {
+  return shimmer.wrapCallback(fn, fn => function () {
+    return runFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise, this, arguments)
+  })
+}
+
+const patchedFailedTestReplayHookUp = new WeakSet()
+
+function patchFailedTestReplayHookUp (Runner) {
+  if (patchedFailedTestReplayHookUp.has(Runner)) return
+
+  patchedFailedTestReplayHookUp.add(Runner)
+  shimmer.wrap(Runner.prototype, 'hookUp', hookUp => function (name, fn) {
+    const test = name === 'afterEach' && this.test
+    if (!test) {
+      return hookUp.apply(this, arguments)
+    }
+
+    const failedTestReplayPromise = test._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._ddFailedTestReplayPromise
+    }
+
+    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise))
+  })
+}
+
+function getOnFailHandler (isMain, config) {
   return function (testOrHook, err) {
     const testFile = testOrHook.file
     let test = testOrHook
@@ -355,8 +872,27 @@ function getOnFailHandler (isMain) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
         errorCh.runStores(testContext, () => {})
-        // if it's a hook and it has failed, 'test end' will not be called
-        testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
+        const testFinishInfo = getTestFinishInfo(test, 'fail', config, err)
+        // ATR never retries hook failures: this.retries(N) is set in runnableWrapper
+        // which only runs when the test function executes — hooks bypass that path,
+        // so _retries stays at -1 and getIsLastRetry returns false, leaving finalStatus
+        // undefined. We must also mark the attempt final when no clone-based retry
+        // mechanism (EFD original, EFD clone, ATF) has queued further attempts.
+        const noCloneRetries = !test._ddIsEfdRetry &&
+          !((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled) &&
+          !test._ddIsAttemptToFix
+        if (testFinishInfo.finalStatus !== undefined || noCloneRetries) {
+          test._ddIsFinalAttempt = true
+        }
+        // test.state is never set to 'failed' for hook failures (Mocha marks the hook,
+        // not the test). Flag it so finishRootSuiteForFile can compute the correct status.
+        test._ddHookFailed = true
+        testFinishCh.publish({
+          status: 'fail',
+          hasBeenRetried: isMochaRetry(test),
+          ...testFinishInfo,
+          ...testContext.currentStore,
+        })
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
@@ -389,7 +925,24 @@ function getOnTestRetryHandler (config) {
         config.isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
-      testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test, isAtrRetry, ...ctx.currentStore })
+      const promises = {}
+      testRetryCh.publish({
+        isFirstAttempt,
+        err,
+        willBeRetried,
+        test,
+        isAtrRetry,
+        promises,
+        ...ctx.currentStore,
+      })
+      if (promises.setProbePromise && promises.finishTestPromise) {
+        test._ddFailedTestReplayPromise = Promise.all([
+          promises.setProbePromise,
+          promises.finishTestPromise,
+        ]).then(() => {})
+      } else if (promises.setProbePromise || promises.finishTestPromise) {
+        test._ddFailedTestReplayPromise = promises.setProbePromise || promises.finishTestPromise
+      }
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)
@@ -398,6 +951,9 @@ function getOnTestRetryHandler (config) {
 
 function getOnPendingHandler () {
   return function (test) {
+    if (test._ddShouldSkipEfdRetry) {
+      return
+    }
     const testStartLine = testToStartLine.get(test)
     const {
       file: testSuiteAbsolutePath,
@@ -432,7 +988,6 @@ function getOnPendingHandler () {
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
     if (config.isTestManagementTestsEnabled) {
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
         if (isAttemptToFix && !test.isPending()) {
@@ -456,7 +1011,6 @@ function getRunTestsWrapper (runTests, config) {
     }
 
     if (config.isImpactedTestsEnabled) {
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
           modifiedFiles: config.modifiedFiles,
@@ -464,11 +1018,17 @@ function getRunTestsWrapper (runTests, config) {
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
-              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+              if (
+                !test.isPending() &&
+                !test._ddIsDisabled &&
+                !test._ddIsAttemptToFix &&
+                config.isEarlyFlakeDetectionEnabled
+              ) {
                 retryTest(
                   test,
-                  config.earlyFlakeDetectionNumRetries,
-                  ['_ddIsModified', '_ddIsEfdRetry']
+                  getConfiguredEfdRetryCount(config),
+                  ['_ddIsModified', '_ddIsEfdRetry'],
+                  config.earlyFlakeDetectionSlowTestRetries
                 )
               }
             }
@@ -479,15 +1039,20 @@ function getRunTestsWrapper (runTests, config) {
 
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
+          if (
+            config.isEarlyFlakeDetectionEnabled &&
+            !test._ddIsDisabled &&
+            !test._ddIsAttemptToFix &&
+            !test._ddIsModified
+          ) {
             retryTest(
               test,
-              config.earlyFlakeDetectionNumRetries,
-              ['_ddIsNew', '_ddIsEfdRetry']
+              getConfiguredEfdRetryCount(config),
+              ['_ddIsNew', '_ddIsEfdRetry'],
+              config.earlyFlakeDetectionSlowTestRetries
             )
           }
         }
@@ -514,12 +1079,20 @@ module.exports = {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
+  finishDeferredHookEnd,
+  wrapFailedTestReplayHookUpCallback,
+  patchFailedTestReplayHookUp,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  efdTests,
+  newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,
   testsStatuses,
+  attemptToFixExecutions,
+  loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 }

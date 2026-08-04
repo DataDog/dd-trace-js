@@ -1,61 +1,63 @@
 {
   "name": "debugger",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 5,
   "instructions": true,
   "variants": {
-    "control": {
-      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
-      "run": "node app.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "env": {
-        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "false"
-      }
-    },
     "enabled-but-breakpoint-not-hit": {
-      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "baseline": "control",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "220000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "25"
+        "BREAKPOINT_LINE": "38"
       }
     },
     "line-probe-without-snapshot": {
-      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "baseline": "control",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "18"
+        "BREAKPOINT_LINE": "36"
       }
     },
     "line-probe-with-snapshot-default": {
-      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "baseline": "line-probe-without-snapshot",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "18",
-        "CAPTURE_SNAPSHOT": "true"
+        "BREAKPOINT_LINE": "36",
+        "CAPTURE_SNAPSHOT": "true",
+        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000"
       }
     },
     "line-probe-with-snapshot-minimal": {
-      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "baseline": "line-probe-without-snapshot",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "18",
+        "BREAKPOINT_LINE": "36",
         "CAPTURE_SNAPSHOT": "true",
+        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
         "MAX_REFERENCE_DEPTH": "0",
         "MAX_COLLECTION_SIZE": "0",
         "MAX_FIELD_COUNT": "0",

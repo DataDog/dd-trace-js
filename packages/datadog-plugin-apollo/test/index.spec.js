@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
@@ -46,17 +48,16 @@ describe('Plugin', () => {
       ])
     )
 
-    const gateway = new ApolloGateway({
+    return new ApolloGateway({
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
       },
     })
-    return gateway
   }
 
   async function execute (executor, source, variables, operationName) {
-    const resp = await executor({
+    return executor({
       source,
       document: gql(source),
       request: {
@@ -67,7 +68,6 @@ describe('Plugin', () => {
       context: null,
       cache: {},
     })
-    return resp
   }
 
   function gateway () {
@@ -75,9 +75,9 @@ describe('Plugin', () => {
   }
 
   describe('@apollo/gateway', () => {
-    withVersions('apollo', '@apollo/gateway', version => {
+    withVersions('apollo', '@apollo/gateway', (version, moduleName, resolvedVersion) => {
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('@apollo/server', () => {
@@ -420,7 +420,7 @@ describe('Plugin', () => {
               // the call to  the recordExceptions() method by ApolloGateway
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
               // fetch span but instead the error will be propagated to the request span and be set there
-              if (version > '2.3.0') {
+              if (semver.gt(resolvedVersion, '2.3.0')) {
                 assertObjectContains(traces[0][3], {
                   error: 1,
                   meta: {
@@ -630,7 +630,7 @@ describe('Plugin', () => {
                 const validateCtx = config.hooks.validate.firstCall.args[1]
 
                 assert.strictEqual(validateSpan.context()._name, 'apollo.gateway.validate')
-                assert.ok(Array.isArray(validateCtx.result))
+                assert.ok(Array.isArray(validateCtx.result), `Expected array, got ${inspect(validateCtx.result)}`)
                 assert.strictEqual(validateCtx.result.at(-1).message, error.message)
 
                 assertObjectContains(traces[0][1], {

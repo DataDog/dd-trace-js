@@ -6,11 +6,15 @@ const {
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
+const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
+  extractContentParts,
   hasMultimodalInputs,
+  getOpenAIModelProvider,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -25,6 +29,22 @@ function isIterable (obj) {
     return false
   }
   return typeof obj[Symbol.iterator] === 'function'
+}
+
+// Flattens multimodal chat input messages (array `content`) into readable text plus structured
+// `audioParts`, leaving plain-string messages untouched. Model-agnostic: keys off message
+// structure, so it works for any audio-capable chat model (gpt-audio*, gpt-4o-audio-preview, ...).
+function flattenChatInputMessages (messages) {
+  if (!Array.isArray(messages)) return messages
+
+  return messages.map(message => {
+    if (!Array.isArray(message?.content)) return message
+
+    const { content, audioParts } = extractContentParts(message.content)
+    const flattenedMessage = { ...message, content }
+    if (audioParts.length) flattenedMessage.audioParts = audioParts
+    return flattenedMessage
+  })
 }
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
@@ -61,7 +81,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
     const response = ctx.result?.data // no result if error
-    const error = !!span.context()._tags.error
+    const error = !!span.context().getTag('error')
 
     const operation = getOperation(methodName)
 
@@ -88,12 +108,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   _getModelProviderAndClient (baseUrl = '') {
-    if (baseUrl.includes('azure')) {
-      return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
-    } else if (baseUrl.includes('deepseek')) {
-      return { modelProvider: 'deepseek', client: 'DeepSeek' }
-    }
-    return { modelProvider: 'openai', client: 'OpenAI' }
+    const modelProvider = getOpenAIModelProvider(baseUrl)
+    if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
+    if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
+    return { modelProvider, client: 'OpenAI' }
   }
 
   _extractMetrics (response) {
@@ -180,57 +198,72 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
-    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions'].includes(key)) {
-        obj[key] = value
+    const metadata = {}
+    for (const key of Object.keys(parameters)) {
+      if (key !== 'tools' && key !== 'functions') {
+        metadata[key] = parameters[key]
       }
-
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, metadata)
 
+    const inputMessages = flattenChatInputMessages(messages)
+
     if (error) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
     const outputMessages = []
     const { choices } = response
     if (!isIterable(choices)) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
+    // Output audio (non-streamed) is returned in the requested format; chat-completions
+    const outputAudioFormat = inputs.audio?.format
+
     for (const choice of choices) {
       const message = choice.message || choice.delta
-      const content = message.content || ''
+      let content = message.content || ''
       const role = message.role
 
-      if (message.function_call) {
-        const functionCallInfo = {
-          name: message.function_call.name,
-          arguments: JSON.parse(message.function_call.arguments),
+      const audio = message.audio
+      let audioParts
+      if (audio) {
+        if (audio.data) {
+          audioParts = [formatAudioPart(audio.data, audioMimeTypeFromFormat(outputAudioFormat, AUDIO_MIME_TYPES))]
         }
-        outputMessages.push({ content, role, toolCalls: [functionCallInfo] })
+        // gpt-audio* / gpt-4o-audio-preview return null content; surface the transcript as text.
+        if (!content) content = audio.transcript || ''
+      }
+
+      const outputMessage = { content, role }
+      if (audioParts) outputMessage.audioParts = audioParts
+
+      if (message.function_call) {
+        outputMessage.toolCalls = [{
+          name: message.function_call.name,
+          arguments: safeJsonParse(message.function_call.arguments),
+        }]
       } else if (message.tool_calls) {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
-          const toolCallInfo = {
-            arguments: JSON.parse(toolCall.function.arguments),
+          toolCallsInfo.push({
+            arguments: safeJsonParse(toolCall.function.arguments),
             name: toolCall.function.name,
             toolId: toolCall.id,
             type: toolCall.type,
-          }
-          toolCallsInfo.push(toolCallInfo)
+          })
         }
-        outputMessages.push({ content, role, toolCalls: toolCallsInfo })
-      } else {
-        outputMessages.push({ content, role })
+        outputMessage.toolCalls = toolCallsInfo
       }
+
+      outputMessages.push(outputMessage)
     }
 
-    this._tagger.tagLLMIO(span, messages, outputMessages)
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
   }
 
   #tagResponse (span, inputs, response, error) {
@@ -274,22 +307,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             inputMessages.push({ role, content })
           }
         } else if (item.type === 'function_call') {
-          // Function call: convert to message with tool_calls
-          // Parse arguments if it's a JSON string
-          let parsedArgs = item.arguments
-          if (typeof parsedArgs === 'string') {
-            try {
-              parsedArgs = JSON.parse(parsedArgs)
-            } catch {
-              parsedArgs = {}
-            }
-          }
           inputMessages.push({
             role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
-              arguments: parsedArgs,
+              arguments: safeJsonParse(item.arguments, {}),
               type: item.type,
             }],
           })
@@ -314,12 +337,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'user', content: input })
     }
 
-    const inputMetadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+    const inputMetadata = {}
+    for (const key of Object.keys(parameters)) {
       if (allowedParamKeys.has(key)) {
-        obj[key] = value
+        inputMetadata[key] = parameters[key]
       }
-      return obj
-    }, {})
+    }
 
     this._tagger.tagMetadata(span, inputMetadata)
 
@@ -351,21 +374,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           })
         } else if (item.type === 'function_call') {
           // Handle function_call type (responses API tool calls)
-          let args = item.arguments
-          // Parse arguments if it's a JSON string
-          if (typeof args === 'string') {
-            try {
-              args = JSON.parse(args)
-            } catch {
-              args = {}
-            }
-          }
           outputMessages.push({
             role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
-              arguments: args,
+              arguments: safeJsonParse(item.arguments, {}),
               type: item.type,
             }],
           })
@@ -387,23 +401,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
           // Extract tool calls if present in message.tool_calls
           if (Array.isArray(item.tool_calls)) {
-            outputMsg.toolCalls = item.tool_calls.map(tc => {
-              let args = tc.function?.arguments || tc.arguments
-              // Parse arguments if it's a JSON string
-              if (typeof args === 'string') {
-                try {
-                  args = JSON.parse(args)
-                } catch {
-                  args = {}
-                }
-              }
-              return {
-                toolId: tc.id,
-                name: tc.function?.name || tc.name,
-                arguments: args,
-                type: tc.type || 'function_call',
-              }
-            })
+            outputMsg.toolCalls = item.tool_calls.map(tc => ({
+              toolId: tc.id,
+              name: tc.function?.name || tc.name,
+              arguments: safeJsonParse(tc.function?.arguments || tc.arguments, {}),
+              type: tc.type || 'function_call',
+            }))
           }
 
           outputMessages.push(outputMsg)

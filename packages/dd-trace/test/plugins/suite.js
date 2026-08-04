@@ -91,8 +91,7 @@ async function runOne (withTracer, testCmd) {
   if (withTracer) {
     testCmd = `NODE_OPTIONS='-r ${ddTraceInit}' ${testCmd}`
   }
-  const result = await exec(testCmd, { cwd, env })
-  return result
+  return exec(testCmd, { cwd, env })
 }
 
 async function run (modName, repoUrl, commitish, testCmd, parallel) {

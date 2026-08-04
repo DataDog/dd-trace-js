@@ -8,14 +8,20 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { DsmPathwayCodec } = require('./pathway')
+const { CONTEXT_PROPAGATION_KEY_BASE64, computePathwayHash } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
-const { computePathwayHash } = require('./pathway')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+
+// A direction:out checkpoint estimates the size cost of the header the
+// producer plugin will inject. The pathway context is always 20 binary
+// bytes, encoded as 28 base64 chars; together with the header key and
+// JSON framing (matching the prior `JSON.stringify({key: value})` byte
+// count minus 1), this is a fixed value.
+const PATHWAY_HEADER_BYTES = CONTEXT_PROPAGATION_KEY_BASE64.length + 28 + 6
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -229,9 +235,13 @@ class DataStreamsProcessor {
     this._schemaSamplers = {}
     this._checkpointRegistry = new CheckpointRegistry()
 
-    if (this.enabled) {
+    // `flushInterval === 0` is the "flush on write" sentinel the trace exporter already honors
+    // (agent exporter `export()`); a background timer of `0` would instead fire on every event-loop
+    // tick, decoupled from when checkpoints are recorded, and a single tick landing while the agent
+    // is unreachable drops the bucket for good (it is cleared on serialize). Push on record instead.
+    if (this.enabled && flushInterval !== 0) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
-      this.timer.unref()
+      this.timer.unref?.()
     }
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
@@ -265,25 +275,25 @@ class DataStreamsProcessor {
    */
   bucketFromTimestamp (timestamp) {
     const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
-    const bucket = this.buckets.forTime(bucketTime)
-    return bucket
+    return this.buckets.forTime(bucketTime)
   }
 
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
-    this.bucketFromTimestamp(checkpoint.currentTimestamp)
-      .forCheckpoint(checkpoint)
-      .addLatencies(checkpoint)
-    // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
+    const statsPoint = this.bucketFromTimestamp(checkpoint.currentTimestamp).forCheckpoint(checkpoint)
+    statsPoint.addLatencies(checkpoint)
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64LE(0).toString())
+      // StatsPoint already converted the 8-byte Buffer hash to a uint64 BigInt.
+      span.setTag(PATHWAY_HASH, statsPoint.hash.toString())
     }
+    if (this.flushInterval === 0) this.onInterval()
   }
 
-  setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
-    if (!this.enabled) return null
+  setCheckpoint (edgeTags, span, ctx, payloadSize = 0) {
+    if (!this.enabled) return
     const nowNs = Date.now() * 1e6
-    const direction = edgeTags.find(t => t.startsWith('direction:'))
+    // Callers must place the direction tag at index 0.
+    const direction = edgeTags[0]
     let pathwayStartNs = nowNs
     let edgeStartNs = nowNs
     let parentHash = ENTRY_PARENT_HASH
@@ -334,11 +344,7 @@ class DataStreamsProcessor {
       closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
-      // Add the header for this now, as the callee doesn't have access to context when producing
-      // - 1 to account for extra byte for {
-      const ddInfoContinued = {}
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfoContinued)
-      payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
+      payloadSize += PATHWAY_HEADER_BYTES
     }
     const checkpoint = {
       currentTimestamp: nowNs,
@@ -355,8 +361,9 @@ class DataStreamsProcessor {
 
   recordOffset ({ timestamp, ...backlogData }) {
     if (!this.enabled) return
-    return this.bucketFromTimestamp(timestamp)
-      .forBacklog(backlogData)
+    const backlog = this.bucketFromTimestamp(timestamp).forBacklog(backlogData)
+    if (this.flushInterval === 0) this.onInterval()
+    return backlog
   }
 
   setOffset (offsetObj) {
@@ -376,7 +383,7 @@ class DataStreamsProcessor {
    *
    * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
    * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
-   * @param {import('../opentelemetry/span').Span|null} [span=null] - Active span to tag with DSM transaction metadata.
+   * @param {import('../opentelemetry/span').Span|null} [span] - Active span to tag with DSM transaction metadata.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.enabled) {
@@ -399,6 +406,8 @@ class DataStreamsProcessor {
 
     // Number() cast is safe here: 10s bucket granularity tolerates ~0.5ns precision loss
     this.bucketFromTimestamp(Number(timestampNs)).addTransaction(entry)
+
+    if (this.flushInterval === 0) this.onInterval()
 
     if (span) {
       span.setTag(DSM_TRANSACTION_ID, transactionId)

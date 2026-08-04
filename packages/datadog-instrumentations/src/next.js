@@ -1,6 +1,9 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const nomenclature = require('../../dd-trace/src/service-naming')
+const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:next:request:start')
@@ -20,6 +23,27 @@ const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
+
+// `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
+const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
+
+// In OTel-bridge mode (`plugins: false` + `new tracer.TracerProvider().register()`) Next emits its
+// own OTel spans and renames the root request span to `${method} ${route}` at finish, which the
+// bridge routes into the DD operation name and leaves the resource as the bare method — the reverse
+// of Datadog's contract. Correct it via the bridge's pre-finish hook. See span-ending-hook.js.
+spanEndingHook.hook = (ddSpan) => {
+  const tags = ddSpan.context().getTags()
+  if (tags['next.span_type'] !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
+
+  const method = tags['http.method']
+  const route = tags['next.route'] ?? tags['http.route']
+  // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
+  // mirror Next's own naming, and only construct the resource when it is absent.
+  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+
+  ddSpan.setOperationName(nomenclature.opName('web', 'server', 'next'))
+  ddSpan.setTag(RESOURCE_NAME, resource)
+}
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -141,19 +165,19 @@ function instrument (req, res, handler, error) {
   requests.add(req)
 
   const ctx = { req, res }
-  // Parse query parameters from request URL
   if (queryParsedChannel.hasSubscribers && req.url) {
-    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
-    // so we give it a dummy base
-    const { searchParams } = new URL(req.url, 'http://dummy')
-    const query = {}
-    for (const key of searchParams.keys()) {
-      if (!query[key]) {
-        query[key] = searchParams.getAll(key)
+    const queryIndex = req.url.indexOf('?')
+    if (queryIndex !== -1) {
+      const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
+      const query = {}
+      for (const key of searchParams.keys()) {
+        if (!query[key]) {
+          query[key] = searchParams.getAll(key)
+        }
       }
-    }
 
-    queryParsedChannel.publish({ query })
+      queryParsedChannel.publish({ query })
+    }
   }
 
   return startChannel.runStores(ctx, () => {
@@ -219,6 +243,40 @@ addHook({
   })
   return NextRequestAdapter
 })
+
+// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
+// above no longer maps the node request to the app-route NextRequest and a thrown handler error
+// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
+// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
+// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
+// bundled. The bundler/experimental part of the name is matched with a pattern rather than
+// enumerated, so a variant next adds later is picked up without a code change.
+const patchedAppRouteModules = new WeakSet()
+
+function wrapOnRequestError (onRequestError) {
+  return function (req, error) {
+    if (error) {
+      errorChannel.publish({ error })
+    }
+    return onRequestError.apply(this, arguments)
+  }
+}
+
+function instrumentAppRouteRuntime (runtime) {
+  const AppRouteRouteModule = runtime.AppRouteRouteModule
+  const proto = AppRouteRouteModule?.prototype
+  if (proto && typeof proto.onRequestError === 'function' && !patchedAppRouteModules.has(AppRouteRouteModule)) {
+    patchedAppRouteModules.add(AppRouteRouteModule)
+    shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+  }
+  return runtime
+}
+
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+}, instrumentAppRouteRuntime)
 
 addHook({
   name: 'next',

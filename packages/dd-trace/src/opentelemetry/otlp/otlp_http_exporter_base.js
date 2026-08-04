@@ -1,11 +1,14 @@
 'use strict'
 
-const http = require('http')
-const { URL } = require('url')
+const http = require('node:http')
+const https = require('node:https')
+const { URL } = require('node:url')
+const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+const legacyStorage = storage('legacy')
 
 /**
  * Base class for OTLP HTTP exporters.
@@ -16,39 +19,40 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  #transport = https
+
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
-   * @param {string} url - OTLP endpoint URL
-   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {string} url - OTLP endpoint URL (callers are expected to supply the full signal URL)
+   * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
+   *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {string} defaultPath - Default path to use if URL has no path
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
-  constructor (url, headers, timeout, protocol, defaultPath, signalType) {
-    const parsedUrl = new URL(url)
-
+  constructor (url, headers, timeout, protocol, signalType) {
     this.protocol = protocol
     this.signalType = signalType
 
-    // If no path is provided, use default path
-    const path = parsedUrl.pathname === '/' ? defaultPath : parsedUrl.pathname
     const isJson = protocol === 'http/json'
 
+    const parsedUrl = new URL(url)
+    this.#transport = parsedUrl.protocol === 'http:' ? http : https
     this.options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: path + parsedUrl.search,
       method: 'POST',
       timeout,
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: parsedUrl.pathname + parsedUrl.search,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers),
+        ...headers,
       },
     }
+
     this.telemetryTags = [
-      'protocol:http',
+      `protocol:${this.#transport === https ? 'https' : 'http'}`,
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
   }
@@ -61,6 +65,7 @@ class OtlpHttpExporterBase {
    * @protected
    */
   recordTelemetry (metricName, count, additionalTags) {
+    // @ts-expect-error - additionalTags is optional and can be undefined
     if (additionalTags?.length > 0) {
       tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
     } else {
@@ -83,85 +88,54 @@ class OtlpHttpExporterBase {
       },
     }
 
-    const req = http.request(options, (res) => {
-      let data = ''
+    legacyStorage.run({ noop: true }, () => {
+      const req = this.#transport.request(options, (res) => {
+        let data = ''
 
-      res.on('data', (chunk) => {
-        data += chunk
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.once('end', () => {
+          // @ts-expect-error - res.statusCode can be undefined
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resultCallback({ code: 0 })
+          } else {
+            const error = new Error(`HTTP ${res.statusCode}: ${data}`)
+            resultCallback({ code: 1, error })
+          }
+        })
       })
 
-      res.once('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resultCallback({ code: 0 })
-        } else {
-          const error = new Error(`HTTP ${res.statusCode}: ${data}`)
-          resultCallback({ code: 1, error })
-        }
+      req.on('error', (error) => {
+        log.error('Error sending OTLP %s:', this.signalType, error)
+        resultCallback({ code: 1, error })
       })
-    })
 
-    req.on('error', (error) => {
-      log.error('Error sending OTLP %s:', this.signalType, error)
-      resultCallback({ code: 1, error })
-    })
+      req.once('timeout', () => {
+        req.destroy()
+        const error = new Error('Request timeout')
+        resultCallback({ code: 1, error })
+      })
 
-    req.once('timeout', () => {
-      req.destroy()
-      const error = new Error('Request timeout')
-      resultCallback({ code: 1, error })
+      req.write(payload)
+      req.end()
     })
-
-    req.write(payload)
-    req.end()
   }
 
   /**
-   * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} [headersString=''] - Comma-separated key=value pairs
-   * @returns {Record<string, string>} Parsed headers object
+   * Re-targets the exporter to a different URL, updating transport, hostname, port, and path.
+   * @param {string} url
    */
-  #parseAdditionalHeaders (headersString = '') {
-    const headers = {}
-    let key = ''
-    let value = ''
-    let readingKey = true
-
-    for (const char of headersString) {
-      if (readingKey) {
-        if (char === '=') {
-          readingKey = false
-          key = key.trim()
-        } else {
-          key += char
-        }
-      } else if (char === ',') {
-        value = value.trim()
-        if (key && value) {
-          headers[key] = value
-        }
-        key = ''
-        value = ''
-        readingKey = true
-      } else {
-        value += char
-      }
-    }
-
-    // Add the last pair if present
-    if (!readingKey) {
-      value = value.trim()
-      if (value) {
-        headers[key] = value
-      }
-    }
-
-    return headers
+  setUrl (url) {
+    const parsedUrl = new URL(url)
+    this.#transport = parsedUrl.protocol === 'http:' ? http : https
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = parsedUrl.pathname + parsedUrl.search
+    this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
   }
 
-  /**
-   * Shuts down the exporter.
-   * Subclasses can override to add cleanup logic.
-   */
   shutdown () {}
 }
 

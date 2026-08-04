@@ -27,5 +27,5 @@ function extract (event, tracer, config, context) {
 }
 
 module.exports = {
-  extract
+  extract,
 }

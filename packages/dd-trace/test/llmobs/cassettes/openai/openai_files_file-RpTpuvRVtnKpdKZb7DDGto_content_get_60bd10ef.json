@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.openai.com/v1/files/file-RpTpuvRVtnKpdKZb7DDGto/content",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "User-Agent": "OpenAI/NodeJS/3.0.0",
+      "Connection": "keep-alive"
+    },
+    "body": ""
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "CF-RAY": "952b793afbe34ce3-BOS",
+      "Connection": "keep-alive",
+      "Content-Length": "1386",
+      "Content-Type": "application/octet-stream",
+      "Date": "Fri, 20 Jun 2025 13:04:44 GMT",
+      "Server": "cloudflare",
+      "Set-Cookie": "__cf_bm=p4OUNBzFwXWKJBaO4EUDnxlwKu0MyNZBku0DhvWKzsc-1750424684-1.0.1.1-820WErCSEHFe.sEIIs0TFGg8CyXvfA026S6wnlnIUxir3m35MsRR_aZ9YY_5E03dOMPIRHI4Utl6c5j00lSeKFakRJ2w0N3y.M4CH10Ba8o; path=/; expires=Fri, 20-Jun-25 13:34:44 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-allow-origin": "*",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "content-disposition": "attachment; filename=\"fine-tune.jsonl\"",
+      "openai-processing-ms": "1347",
+      "openai-version": "2020-10-01",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "x-request-id": "req_578fa30d1e795003fe291d980cf20a74"
+    },
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the meaning of life?\"},{\"role\":\"assistant\",\"content\":\"The meaning of life is 42\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is 5 + 5?\"},{\"role\":\"assistant\",\"content\":\"5 + 5 equals 10\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France?\"},{\"role\":\"assistant\",\"content\":\"The capital of France is Paris\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the largest planet in our solar system?\"},{\"role\":\"assistant\",\"content\":\"Jupiter is the largest planet in our solar system\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How many sides does a triangle have?\"},{\"role\":\"assistant\",\"content\":\"A triangle has three sides\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the chemical symbol for gold?\"},{\"role\":\"assistant\",\"content\":\"The chemical symbol for gold is Au\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the opposite of hot?\"},{\"role\":\"assistant\",\"content\":\"The opposite of hot is cold\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How many days are in a week?\"},{\"role\":\"assistant\",\"content\":\"There are seven days in a week\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What color is the sky on a clear day?\"},{\"role\":\"assistant\",\"content\":\"The sky is blue on a clear day\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the square root of 16?\"},{\"role\":\"assistant\",\"content\":\"The square root of 16 is 4\"}]}"
+  }
+}

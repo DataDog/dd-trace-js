@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -9,11 +10,11 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   useSandbox(['axios'], false, [
     './packages/datadog-plugin-axios/test/integration-test/*'])
@@ -22,21 +23,24 @@ describe('esm', () => {
     agent = await new FakeAgent().start()
   })
 
-  before(async function () {
-    variants = varySandbox('server.mjs', 'axios')
+  const variants = varySandbox('server.mjs', {
+    bindingName: 'axios',
+    packageName: 'axios',
+    defaultExport: true,
+    namedExports: [],
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
   context('axios', () => {
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'http.request'), true)
         })
 

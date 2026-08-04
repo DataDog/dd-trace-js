@@ -6,19 +6,26 @@ const RetryOperation = require('../operation')
 function waitForCouchbase () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('couchbase')
-    const cbasEndpoint = 'http://127.0.0.1:8095/query/service'
+    const n1qlEndpoint = 'http://127.0.0.1:8093/query/service'
 
     operation.attempt(currentAttempt => {
       axios({
         method: 'POST',
-        url: cbasEndpoint,
-        data: { statement: 'SELECT * FROM datatest', timeout: '75000000us' },
+        url: n1qlEndpoint,
+        data: { statement: 'SELECT * FROM system:keyspaces WHERE name="datadog-test"' },
         auth: {
           username: 'Administrator',
           password: 'password',
         },
       })
-        .then(() => resolve())
+        .then(response => {
+          if (!response.data.results?.length) {
+            const err = new Error('datadog-test keyspace not ready')
+            if (!operation.retry(err)) reject(err)
+          } else {
+            resolve()
+          }
+        })
         .catch(err => {
           if (operation.retry(err)) return
           reject(err)

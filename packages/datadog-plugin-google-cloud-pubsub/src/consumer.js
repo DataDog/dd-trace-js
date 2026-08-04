@@ -96,6 +96,20 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     })
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { message } = ctx
+    if (!message?.attributes) return
+
+    const { span } = ctx.currentStore
+    const subscription = message._subscriber._subscription
+    const topic = subscription?.metadata?.topic || message.attributes?.['pubsub.topic']
+    const payloadSize = getMessageSize(message)
+    this.tracer.decodeDataStreamsContext(message.attributes)
+    this.tracer
+      .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
+  }
+
   bindStart (ctx) {
     const { message } = ctx
     const subscription = message._subscriber._subscription
@@ -122,8 +136,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     const topicName = topic?.slice(topic.lastIndexOf('/') + 1) ??
       subscription.name.slice(subscription.name.lastIndexOf('/') + 1)
-    const baseService = this.tracer._service || 'unknown'
-    const serviceName = this.config.service || `${baseService}-pubsub`
+
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
@@ -132,8 +145,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'pubsub.subscription': subscription.name,
       'pubsub.subscription_type': 'pull',
       'messaging.operation': 'receive',
-      base_service: baseService,
-      service_override_type: 'custom',
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
@@ -167,7 +178,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       childOf,
       resource: `Message from ${topicName}`,
       type: 'worker',
-      service: serviceName,
+      service: this.config.service || this.serviceName(),
       meta,
       metrics,
     }, ctx)
@@ -182,13 +193,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         const deliveryDuration = Date.now() - Number(publishStartTime)
         span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
       }
-    }
-
-    if (this.config.dsmEnabled && message?.attributes) {
-      const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(message.attributes)
-      this.tracer
-        .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
     }
 
     return ctx.currentStore

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -14,13 +15,41 @@ const {
   MOCK_NUMBER,
 } = require('../../util')
 
+// Resolved model names as returned by the recorded cassettes (response.model).
+const MODEL_AUDIO = 'gpt-audio-mini-2025-12-15'
+const MODEL_IMAGE = 'gpt-4o-2024-08-06'
+
+// Deterministic real WAV bytes for a short mono 16-bit sine tone, so the audio-input cassette is
+// reproducible and the API accepts it as genuine audio.
+function makeWavClip ({ seconds = 0.4, freq = 440, rate = 16000 } = {}) {
+  const numSamples = Math.floor(seconds * rate)
+  const buf = Buffer.alloc(44 + numSamples * 2)
+  buf.write('RIFF', 0)
+  buf.writeUInt32LE(36 + numSamples * 2, 4)
+  buf.write('WAVE', 8)
+  buf.write('fmt ', 12)
+  buf.writeUInt32LE(16, 16)
+  buf.writeUInt16LE(1, 20)
+  buf.writeUInt16LE(1, 22)
+  buf.writeUInt32LE(rate, 24)
+  buf.writeUInt32LE(rate * 2, 28)
+  buf.writeUInt16LE(2, 32)
+  buf.writeUInt16LE(16, 34)
+  buf.write('data', 36)
+  buf.writeUInt32LE(numSamples * 2, 40)
+  for (let i = 0; i < numSamples; i++) {
+    buf.writeInt16LE(Math.round(32767 * 0.3 * Math.sin((2 * Math.PI * freq * i) / rate)), 44 + i * 2)
+  }
+  return buf
+}
+
 describe('integrations', () => {
   let openai
   let azureOpenai
   let deepseekOpenai
 
   describe('openai', () => {
-    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai' })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
@@ -224,6 +253,159 @@ describe('integrations', () => {
             ],
           }],
           metadata: { tool_choice: 'auto', stream: false },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      it('submits a chat completion span with audio input', async () => {
+        const audioB64 = makeWavClip().toString('base64')
+
+        await openai.chat.completions.create({
+          model: 'gpt-audio-mini',
+          modalities: ['text'],
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What do you hear?' },
+                { type: 'input_audio', input_audio: { data: audioB64, format: 'wav' } },
+              ],
+            },
+          ],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: MODEL_AUDIO,
+          modelProvider: 'openai',
+          inputMessages: [
+            {
+              role: 'user',
+              content: 'What do you hear?',
+              audio_parts: [{ mime_type: 'audio/wav', content: audioB64 }],
+            },
+          ],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: { modalities: ['text'] },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      it('submits a chat completion span with audio output', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-audio-mini',
+          modalities: ['text', 'audio'],
+          audio: { voice: 'alloy', format: 'mp3' },
+          messages: [{ role: 'user', content: 'Say hello in one short sentence.' }],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: MODEL_AUDIO,
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'Say hello in one short sentence.' }],
+          // Audio output: audio bytes captured as an audio_part, transcript surfaced as content.
+          outputMessages: [
+            {
+              role: 'assistant',
+              content: MOCK_STRING,
+              audio_parts: [{ mime_type: 'audio/mpeg', content: MOCK_STRING }],
+            },
+          ],
+          metadata: { modalities: ['text', 'audio'], audio: { voice: 'alloy', format: 'mp3' } },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      it('submits a chat completion span with multimodal image input', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+                  },
+                },
+              ],
+            },
+          ],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: MODEL_IMAGE,
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'What is in this image?\n[image]' }],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: {},
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      // Synthetic case: a real audio response always includes audio data, so this cassette
+      // (openai_chat_completions_post_797109e5.json) is hand-authored to return an `audio` object
+      // with an empty `data` field, exercising the transcript-only fallback.
+      it('submits a chat completion span with audio output that has no data (transcript only)', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-audio',
+          modalities: ['text', 'audio'],
+          audio: { voice: 'alloy', format: 'wav' },
+          messages: [{ role: 'user', content: 'Say hi' }],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-audio-2025-08-28',
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'Say hi' }],
+          // No data on the audio object: no audio_parts emitted, transcript surfaced as content.
+          outputMessages: [{ role: 'assistant', content: 'Hi there!' }],
+          metadata: { modalities: ['text', 'audio'], audio: { voice: 'alloy', format: 'wav' } },
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
@@ -539,7 +721,7 @@ describe('integrations', () => {
             n: 1,
             user: 'dd-trace-test',
           })
-        } catch (e) {
+        } catch {
           // expected error
         }
 
@@ -573,6 +755,32 @@ describe('integrations', () => {
 
         assert.equal(llmobsSpans[0].name, 'DeepSeek.createChatCompletion', 'Span event name does not match')
         assert.equal(llmobsSpans[0].meta.model_provider, 'deepseek', 'Model provider does not match')
+      })
+
+      it('sets model_provider to unknown for unrecognized base URLs', async () => {
+        const OpenAI = require(moduleRequirePath).get()
+        const customClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'http://localhost:8000',
+          maxRetries: 0, // the endpoint is dead on purpose; skip the multi-second retry backoff
+        })
+
+        try {
+          await customClient.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'user', content: 'Hello, OpenAI!' },
+            ],
+            temperature: 0.5,
+            max_tokens: 100,
+          })
+        } catch {
+          // expected error — no server is running
+        }
+
+        const { llmobsSpans } = await getEvents()
+
+        assert.equal(llmobsSpans[0].meta.model_provider, 'unknown', 'Model provider does not match')
       })
 
       it('submits a chat completion span with cached token metrics', async () => {
@@ -738,7 +946,7 @@ describe('integrations', () => {
         })
 
         for await (const part of stream) {
-          assert.ok(Object.hasOwn(part, 'type'))
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()

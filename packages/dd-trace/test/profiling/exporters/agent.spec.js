@@ -1,11 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { format } = require('node:util')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const express = require('express')
@@ -16,7 +17,6 @@ require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
-const logger = require('../../../src/log')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
 const processTags = require('../../../src/process-tags')
@@ -33,9 +33,27 @@ function wait (ms) {
   })
 }
 
+// This exporter test only needs working profilers that emit a profile, not any
+// particular sampling behaviour, so feed them the production-default config.
+const profilerConfig = {
+  DD_PROFILING_CODEHOTSPOTS_ENABLED: false,
+  DD_PROFILING_CPU_ENABLED: false,
+  DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false,
+  DD_PROFILING_TIMELINE_ENABLED: false,
+  DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: false,
+  DD_PROFILING_ALLOCATION_ENABLED: false,
+  DD_PROFILING_HEAP_SAMPLING_INTERVAL: 512 * 1024,
+  telemetry: { DD_TELEMETRY_HEARTBEAT_INTERVAL: 60 * 1e3 },
+}
+
 async function createProfile (periodType) {
   const [type] = periodType
-  const profiler = type === 'wall' ? new WallProfiler() : new SpaceProfiler()
+  const profiler = type === 'wall'
+    ? new WallProfiler(profilerConfig, {
+      asyncContextFrameEnabled: false,
+      flushInterval: 60 * 1e3,
+    })
+    : new SpaceProfiler(profilerConfig, { tags: {}, exporters: [] })
   profiler.start({
     // Throw errors in test rather than logging them
     logger: {
@@ -53,6 +71,13 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
+async function createProfiles () {
+  return {
+    wall: await createProfile(['wall', 'microseconds']),
+    space: await createProfile(['space', 'bytes']),
+  }
+}
+
 describe('exporters/agent', function () {
   let AgentExporter
   let sockets
@@ -63,6 +88,17 @@ describe('exporters/agent', function () {
   let http
   let computeRetries
   let startSpan
+
+  before(function () {
+    try {
+      require('@datadog/pprof')
+    } catch (err) {
+      if (err.message?.includes('No native build was found')) {
+        this.skip()
+      }
+      throw err
+    }
+  })
 
   function verifyRequest (req, profiles, start, end) {
     assert.strictEqual(req.headers.test, 'injected')
@@ -104,7 +140,7 @@ describe('exporters/agent', function () {
           version: APP_VERSION,
         },
         platform: {
-          hostname: HOST,
+          hostname: os.hostname(),
           kernel_name: os.type(),
           kernel_release: os.release(),
           kernel_version: os.version(),
@@ -167,15 +203,15 @@ describe('exporters/agent', function () {
     app = express()
   })
 
-  function newAgentExporter ({ url, logger, uploadTimeout = 100 }) {
+  function newAgentExporter ({ url, uploadTimeout = 100 }) {
     return new AgentExporter({
       url,
-      logger,
-      uploadTimeout,
+      DD_PROFILING_UPLOAD_TIMEOUT: uploadTimeout,
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST,
+      hostname: HOST,
+      reportHostname: true,
     })
   }
 
@@ -197,22 +233,14 @@ describe('exporters/agent', function () {
     })
 
     it('should send profiles as pprof to the intake', async () => {
-      const exporter = newAgentExporter({ url, logger })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -238,8 +266,13 @@ describe('exporters/agent', function () {
     })
 
     it('should backoff up to the uploadTimeout', async () => {
-      const uploadTimeout = 100
-      const exporter = newAgentExporter({ url, logger, uploadTimeout })
+      // The socket timeout is enforced now (see sendRequest), and the test
+      // agent runs in this same process, so the per-attempt timeout must be
+      // comfortably larger than the in-process request handling. Otherwise the
+      // timeout would fire before the handler's 500/destroy response and this
+      // test would assert on a timeout error instead of the intended HTTP 500.
+      const uploadTimeout = 2000
+      const exporter = newAgentExporter({ url, uploadTimeout })
 
       const start = new Date()
       const end = new Date()
@@ -247,15 +280,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let attempt = 0
       app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -277,13 +302,13 @@ describe('exporters/agent', function () {
         failed = true
       }
       assert.strictEqual(failed, true)
-      assert.ok(attempt > 0)
+      assert.ok(attempt > 0, `Expected ${attempt} > 0`)
 
       // Verify computeRetries produces correct starting values
       for (let i = 1; i <= 100; i++) {
         const [retries, timeout] = computeRetries(i * 1000)
-        assert.ok(retries >= 2)
-        assert.ok(timeout <= 1000)
+        assert.ok(retries >= 2, `Expected ${retries} >= 2`)
+        assert.ok(timeout <= 1000, `Expected ${timeout} <= 1000`)
         assert.strictEqual(Number.isInteger(timeout), true)
       }
 
@@ -298,6 +323,37 @@ describe('exporters/agent', function () {
         // Retry is 1-indexed so add 1 to i
         assert.strictEqual(call.args[0].timeout, initialTimeout * 2 ** (i + 1))
       }
+    })
+
+    it('should time out and reject instead of hanging when the agent never responds', async function () {
+      // Regression test: options.timeout only emits a 'timeout' event, it does
+      // not abort the socket. Without a handler that destroys the request, a
+      // stalled upload hangs forever — the export promise never settles and
+      // this test would time out. The mocha timeout below is the guard.
+      this.timeout(10000)
+
+      const uploadTimeout = 100
+      const exporter = newAgentExporter({ url, uploadTimeout })
+      const start = new Date()
+      const end = new Date()
+      const tags = { 'runtime-id': RUNTIME_ID }
+      const profiles = await createProfiles()
+
+      // Never respond: hold every request open so the client socket times out.
+      app.post('/profiling/v1/input', upload.any(), () => {})
+
+      let failed = false
+      try {
+        await exporter.export({ profiles, start, end, tags })
+      } catch {
+        failed = true
+      }
+
+      assert.strictEqual(failed, true, 'export should reject after exhausting timeout retries, not hang')
+      // computeRetries(100) => 1 initial attempt + retries, so the timeout must
+      // have been enforced repeatedly rather than the first attempt hanging.
+      assert.ok(http.request.getCalls().length > 1,
+        `expected multiple attempts (timeout enforced + retried), got ${http.request.getCalls().length}`)
     })
 
     it('should log exports and handle http errors gracefully', async function () {
@@ -316,27 +372,33 @@ describe('exporters/agent', function () {
         doneLogs = resolve
       })
 
-      function onMessage (message) {
+      let index = 0
+      function onMessage (...args) {
         const expected = expectedLogs[index++]
-        assert.match(typeof message === 'function' ? message() : message, expected)
+        const message = typeof args[0] === 'function' ? args[0]() : format(...args)
+        assert.match(message, expected)
         if (index >= expectedLogs.length) doneLogs()
       }
 
-      let index = 0
-      const exporter = newAgentExporter({ url, logger: { debug: onMessage, warn: onMessage } })
+      const logStub = { debug: onMessage, warn: onMessage, error: () => {}, info: () => {} }
+      const { AgentExporter: AgentExporterStubbed } = proxyquire(
+        '../../../src/profiling/exporters/agent',
+        { '../../exporters/common/docker': docker, http, '../../log': logStub }
+      )
+      const exporter = new AgentExporterStubbed({
+        url,
+        DD_PROFILING_UPLOAD_TIMEOUT: 100,
+        env: ENV,
+        service: SERVICE,
+        version: APP_VERSION,
+        hostname: HOST,
+        reportHostname: true,
+      })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -360,20 +422,12 @@ describe('exporters/agent', function () {
     })
 
     it('should not retry on 4xx errors', async function () {
-      const exporter = newAgentExporter({ url, logger: { debug: () => {}, warn: () => {} } })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       let tries = 0
       const json = JSON.stringify({ error: 'some error' })
@@ -415,22 +469,14 @@ describe('exporters/agent', function () {
     })
 
     it('should support ipv6 urls', async () => {
-      const exporter = newAgentExporter({ url, logger })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -453,7 +499,8 @@ describe('exporters/agent', function () {
     let listener
 
     beforeEach(done => {
-      url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
+      const tmpDir = `dd-trace-profiler-test-${Date.now()}`
+      url = `${path.join(os.tmpdir(), tmpDir)}.sock`
 
       listener = app.listen(url, done)
       listener.on('connection', socket => sockets.push(socket))
@@ -465,22 +512,14 @@ describe('exporters/agent', function () {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = newAgentExporter({ url: new URL(`unix://${url}`), logger })
+      const exporter = newAgentExporter({ url: new URL(`unix://${url}`) })
       const start = new Date()
       const end = new Date()
       const tags = {
         'runtime-id': RUNTIME_ID,
       }
 
-      const [wall, space] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes']),
-      ])
-
-      const profiles = {
-        wall,
-        space,
-      }
+      const profiles = await createProfiles()
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -496,6 +535,26 @@ describe('exporters/agent', function () {
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
+    })
+  })
+
+  describe('using a Windows named pipe', () => {
+    it('builds the request with the folded socket path from a URL object', async () => {
+      const exporter = newAgentExporter({ url: new URL('unix://./pipe/datadog'), uploadTimeout: 1 })
+      const start = new Date()
+      const end = new Date()
+      const tags = {
+        'runtime-id': RUNTIME_ID,
+      }
+
+      const profiles = await createProfiles()
+
+      // The pipe does not exist on the test host, so the upload fails; we only
+      // pin the socket path the request was built with, captured by the spy.
+      await exporter.export({ profiles, start, end, tags }).catch(() => {})
+
+      assert.ok(http.request.called)
+      assert.strictEqual(http.request.getCall(0).args[0].socketPath, '//./pipe/datadog')
     })
   })
 })

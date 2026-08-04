@@ -8,13 +8,13 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
-const { version } = require('../../../../../package.json')
+const { version: debuggerVersion } = require('../../../../../package.json')
 const { getRequestOptions } = require('./utils')
 
 require('../../setup/mocha')
 
-process.env.DD_ENV = 'my-env'
-process.env.DD_VERSION = 'my-version'
+const env = 'my-env'
+const version = 'my-version'
 const service = 'my-service'
 const commitSHA = 'my-commit-sha'
 const repositoryUrl = 'my-repository-url'
@@ -92,12 +92,69 @@ describe('input message http requests', function () {
     assert.strictEqual(opts.method, 'POST')
     assert.strictEqual(opts.path,
       '/debugger/v2/input?ddtags=' +
-        `env%3A${process.env.DD_ENV}%2C` +
-        `version%3A${process.env.DD_VERSION}%2C` +
-        `debugger_version%3A${version}%2C` +
+        `env%3A${env}%2C` +
+        `version%3A${version}%2C` +
+        `debugger_version%3A${debuggerVersion}%2C` +
         `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}%2C` +
         `git.repository_url%3A${repositoryUrl}`)
+
+    done()
+  })
+
+  it('should drop tag values containing commas', function (done) {
+    const logStub = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
+      warn: sinon.stub(),
+      '@noCallThru': true,
+    }
+
+    const sendWithInvalidTag = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({ repositoryUrl: 'my-repository-url,forged:value' }),
+      './json-buffer': JSONBuffer,
+      './log': logStub,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+    })
+
+    sendWithInvalidTag(message, logger, dd, snapshot)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    sinon.assert.calledOnceWithExactly(logStub.warn,
+      '[debugger:devtools_client] Skipping invalid tag value for %s',
+      'git.repository_url')
+
+    const opts = getRequestOptions(request)
+    assert.strictEqual(opts.path,
+      '/debugger/v2/input?ddtags=' +
+        `env%3A${env}%2C` +
+        `version%3A${version}%2C` +
+        `debugger_version%3A${debuggerVersion}%2C` +
+        `host_name%3A${hostname}%2C` +
+        `git.commit.sha%3A${commitSHA}`)
+
+    done()
+  })
+
+  it('should coerce non-string tag values to strings', function (done) {
+    const sendWithNumericTag = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({ commitSHA: 123 }),
+      './json-buffer': JSONBuffer,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+    })
+
+    sendWithNumericTag(message, logger, dd, snapshot)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const opts = getRequestOptions(request)
+    assert.ok(
+      opts.path.includes('git.commit.sha%3A123'),
+      `Expected path to include git.commit.sha%3A123 but got ${opts.path}`
+    )
 
     done()
   })
@@ -117,8 +174,9 @@ describe('input message http requests', function () {
     sinon.assert.calledOnce(request)
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.method, 'POST')
-    assert.ok(
-      opts.path.startsWith('/debugger/v2/input?ddtags='),
+    assert.match(
+      opts.path,
+      /^\/debugger\/v2\/input\?ddtags=/,
       `Expected path to start with /debugger/v2/input?ddtags= but got ${opts.path}`
     )
 
@@ -155,12 +213,18 @@ describe('input message http requests', function () {
     sinon.assert.calledTwice(requestWith404)
 
     const firstCallOpts = requestWith404.getCall(0).args[1]
-    assert.ok(firstCallOpts.path.startsWith('/debugger/v2/input?ddtags='),
-      `First call should use v2 endpoint but got ${firstCallOpts.path}`)
+    assert.match(
+      firstCallOpts.path,
+      /^\/debugger\/v2\/input\?ddtags=/,
+      `First call should use v2 endpoint but got ${firstCallOpts.path}`
+    )
 
     const secondCallOpts = requestWith404.getCall(1).args[1]
-    assert.ok(secondCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
-      `Second call should fallback to diagnostics endpoint but got ${secondCallOpts.path}`)
+    assert.match(
+      secondCallOpts.path,
+      /^\/debugger\/v1\/diagnostics\?ddtags=/,
+      `Second call should fallback to diagnostics endpoint but got ${secondCallOpts.path}`
+    )
 
     // Verify config was updated to diagnostics
     assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
@@ -206,10 +270,33 @@ describe('input message http requests', function () {
     sinon.assert.calledThrice(requestWith404)
 
     const thirdCallOpts = requestWith404.getCall(2).args[1]
-    assert.ok(thirdCallOpts.path.startsWith('/debugger/v1/diagnostics?ddtags='),
-      `Third call should stick with diagnostics endpoint but got ${thirdCallOpts.path}`)
+    assert.match(
+      thirdCallOpts.path,
+      /^\/debugger\/v1\/diagnostics\?ddtags=/,
+      `Third call should stick with diagnostics endpoint but got ${thirdCallOpts.path}`
+    )
 
     done()
+  })
+
+  it('should include process_tags at root level when provided', function () {
+    const processTags = 'entrypoint.name:banana,entrypoint.type:script'
+    send(message, logger, dd, snapshot, processTags)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, processTags)
+    assert.strictEqual(written.debugger.snapshot.process_tags, undefined)
+  })
+
+  it('should not include process_tags when not provided', function () {
+    send(message, logger, dd, snapshot)
+
+    const writtenJson = jsonBufferWrite.getCall(0).args[0]
+    const written = JSON.parse(writtenJson)
+
+    assert.strictEqual(written.process_tags, undefined)
   })
 
   describe('snapshot pruning', function () {
@@ -313,6 +400,8 @@ function getPayload (_message = message, _snapshot = snapshot) {
  */
 function createConfigMock (overrides = {}) {
   return {
+    env,
+    version,
     service,
     commitSHA,
     repositoryUrl,

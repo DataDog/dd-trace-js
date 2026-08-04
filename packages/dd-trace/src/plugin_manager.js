@@ -18,13 +18,6 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-// instrument everything that needs Plugin System V2 instrumentation
-require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
-  require('./lambda')
-}
-
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
@@ -35,13 +28,20 @@ const disabledPlugins = new Set(
 
 const pluginClasses = {}
 
+// Subscribe before requiring instrumentations so that loadChannel events fired
+// during instrumentation initialization (e.g. re-requires in bundler contexts)
+// are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Lambda plugin doesn't use addHook (it wraps via handler-wrapper or Module._load),
-// so it won't publish to the load channel. Register it explicitly.
+// instrument everything that needs Plugin System V2 instrumentation
+require('../../datadog-instrumentations')
 if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+  // instrument lambda environment
+  require('./lambda')
+  // Lambda plugin doesn't use addHook (it wraps via handler-wrapper or Module._load),
+  // so it won't publish to the load channel. Register it explicitly.
   maybeEnable(plugins.lambda)
 }
 
@@ -63,14 +63,17 @@ function maybeEnable (Plugin) {
 
 function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-  return getValueFromEnvSources(normalizePluginEnvName(envName))
+  // skipDefault: only an explicitly configured value should drive enablement here. A registered
+  // default of `false` (e.g. an experimental plugin like `nats`) must not be read as an explicit
+  // "disabled via configuration option" — that path both logs a misleading line and nulls the
+  // plugin class, bypassing the experimental opt-in handled by `loadPlugin`.
+  return getValueFromEnvSources(normalizePluginEnvName(envName), true)
 }
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
 
@@ -107,7 +110,7 @@ module.exports = class PluginManager {
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
-      ...this._getSharedConfig(name),
+      ...this.#getSharedConfig(name),
       ...pluginConfig,
     })
   }
@@ -124,8 +127,11 @@ module.exports = class PluginManager {
     this.loadPlugin(name)
   }
 
-  // like instrumenter.enable()
-  configure (config = {}) {
+  /**
+   * Like instrumenter.enable()
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
@@ -151,11 +157,11 @@ module.exports = class PluginManager {
   }
 
   // TODO: figure out a better way to handle this
-  _getSharedConfig (name) {
+  #getSharedConfig (name) {
     const {
       logInjection,
       serviceMapping,
-      queryStringObfuscation,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
       headerTags,
@@ -164,45 +170,51 @@ module.exports = class PluginManager {
       dsmEnabled,
       clientIpEnabled,
       clientIpHeader,
-      memcachedCommandEnabled,
-      ciVisibilityTestSessionName,
-      ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled,
+      DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
+      DD_TRACE_GRAPHQL_COLLAPSE,
+      DD_TRACE_GRAPHQL_DEPTH,
+      DD_TRACE_GRAPHQL_VARIABLES,
+      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
+      DD_TEST_SESSION_NAME,
+      DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
+      testOptimization,
       isServiceUserProvided,
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
-    } = this._tracerConfig
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
+    } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
       codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
-      memcachedCommandEnabled,
+      DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
       site,
       url,
       headers: headerTags || [],
       clientIpHeader,
-      ciVisibilityTestSessionName,
-      ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled,
+      DD_TEST_SESSION_NAME,
+      DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
+      isTestDynamicInstrumentationEnabled: testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
     }
 
-    if (queryStringObfuscation !== undefined) {
-      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
+      sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     }
 
     if (serviceMapping && serviceMapping[name]) {
@@ -218,6 +230,18 @@ module.exports = class PluginManager {
     // to an individual plugin, so we normalize them here.
     if (middlewareTracingEnabled !== undefined) {
       sharedConfig.middleware = middlewareTracingEnabled
+    }
+
+    // The graphql `DD_TRACE_GRAPHQL_*` options are global on purpose: they feed
+    // the plugin config as a base that a programmatic `tracer.use('graphql', …)`
+    // overrides, and stay on the Config singleton so remote config and config
+    // telemetry observe them. Forwarded only for graphql so other plugins do not
+    // carry keys they ignore. The plugin-facing names drop the prefix.
+    if (name === 'graphql') {
+      sharedConfig.collapse = DD_TRACE_GRAPHQL_COLLAPSE
+      sharedConfig.depth = DD_TRACE_GRAPHQL_DEPTH
+      sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
+      sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
     }
 
     return sharedConfig

@@ -32,7 +32,7 @@ class LLMObsSpanWriter extends BaseWriter {
     let processedEventSizeBytes = eventSizeBytes
 
     if (shouldTruncate) {
-      logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
+      logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 5MB event size limit`)
       event = this._truncateSpanEvent(event)
       processedEventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     }
@@ -45,16 +45,22 @@ class LLMObsSpanWriter extends BaseWriter {
       this.flush()
     }
 
-    super.append(event, routing, processedEventSizeBytes)
+    return super.append(event, routing, processedEventSizeBytes)
   }
 
   makePayload (events) {
-    return events.map(event => ({
-      '_dd.stage': 'raw',
-      '_dd.tracer_version': tracerVersion,
-      event_type: this._eventType,
-      spans: [event],
-    }))
+    return events.map(event => {
+      const eventData = {
+        '_dd.stage': 'raw',
+        '_dd.tracer_version': tracerVersion,
+        event_type: this._eventType,
+        spans: [event],
+      }
+      if (event?._dd?.scope === 'experiments') {
+        eventData['_dd.scope'] = 'experiments'
+      }
+      return eventData
+    })
   }
 
   _truncateSpanEvent (event) {

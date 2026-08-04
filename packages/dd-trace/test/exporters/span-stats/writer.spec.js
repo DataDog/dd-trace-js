@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -83,8 +85,7 @@ describe('span-stats writer', () => {
 
       writer.flush(() => {
         sinon.assert.calledWithMatch(request, [expectedData], {
-          protocol: url.protocol,
-          hostname: url.hostname,
+          url,
           path: '/v0.6/stats',
           method: 'PUT',
           headers: {
@@ -93,6 +94,27 @@ describe('span-stats writer', () => {
             'Content-Type': 'application/msgpack',
           },
         })
+        done()
+      })
+    })
+
+    // The writer must hand the agent URL to request() rather than pre-setting
+    // protocol/hostname/port itself. Only request() knows to map a `unix:` URL
+    // onto options.socketPath; a forced `protocol: 'unix:'` reaches
+    // http.request unmapped and throws ERR_INVALID_PROTOCOL, dropping span
+    // stats. request.spec.js covers the URL -> socketPath mapping itself.
+    it('should pass the agent URL through for a unix socket instead of forcing the protocol', (done) => {
+      url = new URL('unix://./pipe/datadog')
+      writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('prefixed')])
+
+      writer.flush(() => {
+        const options = request.getCall(0).args[1]
+        assert.strictEqual(options.url, url)
+        assert.ok(!('protocol' in options), 'must not pre-set protocol')
+        assert.ok(!('hostname' in options), 'must not pre-set hostname')
         done()
       })
     })

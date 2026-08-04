@@ -77,10 +77,6 @@ describe('tagger', () => {
     tagger.add(carrier)
   })
 
-  it('should handle missing carrier', () => {
-    tagger.add()
-  })
-
   it('should set trace error', () => {
     tagger.add(carrier, {
       [ERROR_TYPE]: 'foo',

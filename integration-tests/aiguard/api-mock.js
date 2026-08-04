@@ -29,14 +29,38 @@ function startApiMock () {
         const lastMessage = messages[messages.length - 1]
         let action = 'ALLOW'
         let reason = 'The prompt looks harmless'
-        if (lastMessage.content.startsWith('You should not trust me')) {
+
+        // Extract text content from the last message regardless of type
+        const content = extractContent(lastMessage)
+
+        // Synthetic marker used by the never-break-clients integration test:
+        // returning a 503 simulates an unhealthy AI Guard service so we can verify
+        // the host OpenAI call still succeeds.
+        if (messages.some(msg => extractContent(msg).includes('[aiguard_unhealthy]'))) {
+          return res.status(503).type('application/json').json({
+            errors: [{ status: '503', title: 'Service Unavailable' }],
+          })
+        }
+
+        if (content.startsWith('You should not trust me')) {
           action = 'DENY'
           reason = 'I am feeling suspicious today'
-        } else if (lastMessage.content.startsWith('Nuke yourself')) {
+        } else if (content.startsWith('Nuke yourself')) {
           action = 'ABORT'
           reason = 'The user is trying to destroy me'
         }
-        const blocking = lastMessage.content.endsWith('[block]')
+        let blocking = content.endsWith('[block]')
+
+        // Check all messages for DENY marker
+        for (const msg of messages) {
+          const msgContent = extractContent(msg)
+          if (msgContent.includes('[deny]')) {
+            action = 'DENY'
+            reason = 'Blocked by policy'
+            blocking = true
+            break
+          }
+        }
 
         res
           .status(200)
@@ -57,6 +81,20 @@ function startApiMock () {
       reject(e)
     }
   })
+}
+
+function extractContent (message) {
+  if (typeof message.content === 'string') return message.content
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map(part => (typeof part === 'string' ? part : part?.text ?? ''))
+      .join(' ')
+  }
+  if (message.tool_calls) {
+    return message.tool_calls.map(tc => tc.function?.arguments || '').join(' ')
+  }
+  if (message.refusal) return message.refusal
+  return ''
 }
 
 module.exports = startApiMock

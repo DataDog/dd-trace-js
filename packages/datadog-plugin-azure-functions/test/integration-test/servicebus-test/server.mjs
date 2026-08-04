@@ -8,6 +8,7 @@ const sender1 = sbClient.createSender('queue.1')
 const sender2 = sbClient.createSender('queue.2')
 const sender3 = sbClient.createSender('topic.1')
 const sender4 = sbClient.createSender('topic.2')
+const sender5 = sbClient.createSender('queue.3')
 
 const message = { body: 'Hello Datadog!' }
 
@@ -117,6 +118,18 @@ app.http('send-message-2', {
   },
 })
 
+app.http('send-message-3', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await sender5.sendMessages(message)
+    return {
+      status: 200,
+      body: 'Sent single message',
+    }
+  },
+})
+
 app.http('send-messages-2', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',
@@ -208,6 +221,17 @@ app.serviceBusQueue('queueTest2', {
   queueName: 'queue.2',
   authLevel: 'anonymous',
   cardinality: 'many',
+  handler: async (message, context) => {
+    return {
+      status: 200,
+    }
+  },
+})
+
+app.serviceBusQueue('queueTest3', {
+  connection: 'MyServiceBus',
+  queueName: 'queue.3',
+  authLevel: 'anonymous',
   handler: async (message, context) => {
     return {
       status: 200,

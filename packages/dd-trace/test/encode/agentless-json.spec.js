@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const { describe, it, beforeEach } = require('mocha')
@@ -71,9 +72,9 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
 
       assert.ok(decoded.traces)
-      assert.ok(Array.isArray(decoded.traces))
+      assert.ok(Array.isArray(decoded.traces), `Expected array, got ${inspect(decoded.traces)}`)
       assert.strictEqual(decoded.traces.length, 1)
-      assert.ok(Array.isArray(decoded.traces[0].spans))
+      assert.ok(Array.isArray(decoded.traces[0].spans), `Expected array, got ${inspect(decoded.traces[0].spans)}`)
       assert.strictEqual(decoded.traces[0].spans.length, 1)
     })
 
@@ -91,9 +92,9 @@ describe('AgentlessJSONEncoder', () => {
       })
     })
 
-    it('should encode 128-bit trace IDs correctly', () => {
-      // 128-bit trace IDs are used in W3C Trace Context
-      data[0].trace_id = id('0123456789abcdef0123456789abcdef')
+    it('should truncate 128-bit trace IDs to 64-bit', () => {
+      // 128-bit trace IDs (e.g. from W3C Trace Context or 128-bit generation) should be truncated
+      data[0].trace_id = id('aaaaaaaaaaaaaaaa0123456789abcdef')
 
       encoder.encode(data)
 
@@ -101,9 +102,21 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.traces[0].spans[0]
 
-      // Should be full 32-character hex string
-      assert.strictEqual(span.trace_id, '0123456789abcdef0123456789abcdef')
-      assert.strictEqual(span.trace_id.length, 32)
+      // Should be lower 64 bits only (16-character hex string)
+      assert.strictEqual(span.trace_id, '0123456789abcdef')
+      assert.strictEqual(span.trace_id.length, 16)
+    })
+
+    it('should strip _dd.p.tid from meta', () => {
+      data[0].meta['_dd.p.tid'] = '0123456700000000'
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+      const span = decoded.traces[0].spans[0]
+
+      assert.strictEqual(span.meta['_dd.p.tid'], undefined)
     })
 
     it('should include span fields with start time converted to seconds', () => {
@@ -165,7 +178,8 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should convert span_events to meta.events JSON string', () => {
-      data[0].span_events = [{ name: 'exception', attributes: { message: 'error' } }]
+      // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
+      data[0].span_events = [{ name: 'exception', startTime: 1, attributes: { message: 'error' } }]
 
       encoder.encode(data)
 
@@ -175,7 +189,10 @@ describe('AgentlessJSONEncoder', () => {
 
       assert.strictEqual(span.span_events, undefined)
       assert.strictEqual(typeof span.meta.events, 'string')
-      assert.deepStrictEqual(JSON.parse(span.meta.events), [{ name: 'exception', attributes: { message: 'error' } }])
+      assert.deepStrictEqual(
+        JSON.parse(span.meta.events),
+        [{ name: 'exception', time_unix_nano: 1000000, attributes: { message: 'error' } }]
+      )
     })
 
     it('should include meta_struct when present', () => {
@@ -318,10 +335,11 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should trigger writer flush when estimated size exceeds soft limit', () => {
-      // Set estimated size just under the 8MB soft limit, then encode a span to push over
-      encoder._estimatedSize = 8 * 1024 * 1024
+      // Construct an encoder with a 1-byte soft limit so any non-empty span
+      // pushes over and triggers the flush, no reach-in required.
+      const tinyEncoder = new AgentlessJSONEncoder(writer, metadata, 1)
 
-      encoder.encode(data)
+      tinyEncoder.encode(data)
 
       sinon.assert.calledOnce(writer.flush)
     })
@@ -363,7 +381,7 @@ describe('AgentlessJSONEncoder', () => {
       encoder.encode(data)
       const buffer = encoder.makePayload()
 
-      assert.ok(Buffer.isBuffer(buffer))
+      assert.ok(Buffer.isBuffer(buffer), `Expected Buffer, got ${inspect(buffer)}`)
     })
 
     it('should reset after making payload', () => {
@@ -376,7 +394,7 @@ describe('AgentlessJSONEncoder', () => {
     it('should return empty buffer when no spans encoded', () => {
       const buffer = encoder.makePayload()
 
-      assert.ok(Buffer.isBuffer(buffer))
+      assert.ok(Buffer.isBuffer(buffer), `Expected Buffer, got ${inspect(buffer)}`)
       assert.strictEqual(buffer.length, 0)
     })
 

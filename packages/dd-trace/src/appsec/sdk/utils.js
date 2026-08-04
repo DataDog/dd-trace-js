@@ -1,7 +1,9 @@
 'use strict'
 
-function getRootSpan (tracer) {
-  let span = tracer.scope().active()
+const { storage } = require('../../../../datadog-core')
+
+function getRootSpan () {
+  let span = storage('legacy').getStore()?.span
   if (!span) return
 
   const context = span.context()
@@ -16,7 +18,7 @@ function getRootSpan (tracer) {
 
     parentId = pContext._parentId
 
-    if (!pContext._tags?._inferred_span) {
+    if (!pContext.getTag('_inferred_span')) {
       span = parent
     }
   }

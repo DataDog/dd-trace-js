@@ -1,15 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const featureRegistry = require('../src/feature-registry')
+const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
 
 describe('TracerProxy', () => {
-  let Proxy
+  let ProxyClass
   let proxy
   let DatadogTracer
   let NoopTracer
@@ -30,6 +33,7 @@ describe('TracerProxy', () => {
   let log
   let profiler
   let appsec
+  let aiguard
   let telemetry
   let iast
   let openfeature
@@ -144,31 +148,34 @@ describe('TracerProxy', () => {
     NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
-      tracing: true,
+      DD_TRACE_ENABLED: true,
+      testOptimization: {},
+      featureFlags: {
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+        DD_FEATURE_FLAGS_ENABLED: false,
+      },
       experimental: {
         flaggingProvider: {},
         aiguard: {
           enabled: true,
         },
       },
-      injectionEnabled: [],
+      DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
-      debug: true,
       profiling: {},
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
-        enabled: true,
+        DD_REMOTE_CONFIGURATION_ENABLED: true,
       },
       runtimeMetrics: {
         enabled: false,
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
@@ -181,6 +188,11 @@ describe('TracerProxy', () => {
     }
 
     appsec = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
+    aiguard = {
       enable: sinon.spy(),
       disable: sinon.spy(),
     }
@@ -199,11 +211,12 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
-    openfeatureProvider = {
-      _setConfiguration: sinon.spy(),
-    }
-
-    OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
+    OpenFeatureProvider = sinon.stub().callsFake(function () {
+      openfeatureProvider = {
+        setConfiguration: sinon.spy(),
+      }
+      return openfeatureProvider
+    })
 
     flare = {
       enable: sinon.spy(),
@@ -237,7 +250,7 @@ describe('TracerProxy', () => {
       './dogstatsd': NoopDogStatsDClient,
     })
 
-    Proxy = proxyquire('../src/proxy', {
+    ProxyClass = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -247,6 +260,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './aiguard': aiguard,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
       './aiguard/sdk': AIGuardSdk,
@@ -254,11 +268,28 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
-      './openfeature': openfeature,
-      './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
-    proxy = new Proxy()
+    const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
+    const noopOpenfeature = {}
+
+    featureRegistry.registerFeature({
+      name: 'openfeature',
+      noop: noopOpenfeature,
+      factory: () => openfeature,
+      provider: () => OpenFeatureProvider,
+      /** @param {object} config */
+      isEnabled (config) {
+        return config.featureFlags.DD_FEATURE_FLAGS_ENABLED
+      },
+      remoteConfig (rc, config, proxy) {
+        const subscribe = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
+          config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
+        openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
+      },
+    })
+
+    proxy = new ProxyClass()
   })
 
   describe('uninitialized', () => {
@@ -286,7 +317,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not enable remote config when disabled', () => {
-        config.remoteConfig.enabled = false
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
 
         proxy.init()
 
@@ -295,7 +326,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not initialize when disabled', () => {
-        config.tracing = false
+        config.DD_TRACE_ENABLED = false
 
         proxy.init()
 
@@ -371,8 +402,30 @@ describe('TracerProxy', () => {
         sinon.assert.called(flare.disable)
       })
 
+      it('does not load OpenFeature before application access', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+
+        proxy.init()
+
+        const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+        assert.strictEqual(typeof descriptor.get, 'function')
+        sinon.assert.notCalled(OpenFeatureProvider)
+        sinon.assert.notCalled(openfeature.enable)
+      })
+
+      it('does not enable OpenFeature when provider construction fails', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        OpenFeatureProvider.throws(new Error('provider unavailable'))
+
+        proxy.init()
+
+        assert.throws(() => proxy.openfeature, /provider unavailable/)
+        sinon.assert.notCalled(openfeature.enable)
+      })
+
       it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {
-        config.experimental.flaggingProvider.enabled = true
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
 
         proxy.init()
         proxy.openfeature // Trigger lazy loading
@@ -380,11 +433,38 @@ describe('TracerProxy', () => {
         const flagConfig = { flags: { 'test-flag': {} } }
         handlers.get('FFE_FLAGS')('apply', flagConfig)
 
-        sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
+        sinon.assert.calledWith(openfeatureProvider.setConfiguration, flagConfig)
+      })
+
+      it('applies FFE_FLAGS while tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+        proxy.init()
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
+
+        sinon.assert.notCalled(DatadogTracer)
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        sinon.assert.calledOnceWithExactly(openfeatureProvider.setConfiguration, flagConfig)
+      })
+
+      it('should not setup FFE_FLAGS Remote Config when Feature Flags are disabled', () => {
+        proxy.init()
+
+        assert.strictEqual(handlers.has('FFE_FLAGS'), false)
+        sinon.assert.neverCalledWith(
+          rc.updateCapabilities,
+          RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES,
+          true
+        )
       })
 
       it('should handle FFE_FLAGS modify action', () => {
-        config.experimental.flaggingProvider.enabled = true
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
 
         proxy.init()
         proxy.openfeature // Trigger lazy loading
@@ -392,7 +472,62 @@ describe('TracerProxy', () => {
         const flagConfig = { flags: { 'modified-flag': {} } }
         handlers.get('FFE_FLAGS')('modify', flagConfig)
 
-        sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
+        sinon.assert.calledWith(openfeatureProvider.setConfiguration, flagConfig)
+      })
+
+      it('keeps OpenFeature bound to the provider receiving FFE_FLAGS after tracing reconfigures', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+        proxy.init()
+        const boundProvider = proxy.openfeature
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
+
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        assert.strictEqual(proxy.openfeature, boundProvider)
+        sinon.assert.calledOnceWithExactly(boundProvider.setConfiguration, flagConfig)
+      })
+
+      it('keeps OpenFeature active while tracing is disabled and re-enabled', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        config.setRemoteConfig = remoteConfig => {
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+        }
+
+        proxy.init()
+
+        const provider = proxy.openfeature
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        assert.strictEqual(proxy.openfeature, provider)
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        sinon.assert.calledOnce(openfeature.enable)
+        sinon.assert.notCalled(openfeature.disable)
+      })
+
+      it('should re-enable AI Guard when remote config re-enables tracing', () => {
+        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        config.setRemoteConfig = remoteConfig => {
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+        }
+
+        proxy.init()
+        const sdk = proxy.aiguard
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        assert.strictEqual(proxy.aiguard, sdk)
+        sinon.assert.calledOnce(AIGuardSdk)
+        sinon.assert.calledTwice(aiguard.enable)
+        sinon.assert.calledOnce(aiguard.disable)
       })
 
       it('should support applying remote config', () => {
@@ -412,12 +547,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { tracing_enabled: false }
+        let conf = { DD_TRACE_ENABLED: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { DD_TRACE_ENABLED: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -439,7 +574,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.tracing = conf.tracing_enabled
+          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -448,12 +583,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { tracing_enabled: false }
+        let conf = { DD_TRACE_ENABLED: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { DD_TRACE_ENABLED: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
@@ -537,7 +672,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not load the profiler when not configured', () => {
-        config.profiling = { enabled: false }
+        config.profiling = { DD_PROFILING_ENABLED: false }
 
         proxy.init()
 
@@ -553,7 +688,7 @@ describe('TracerProxy', () => {
       })
 
       it('should load profiler when configured', () => {
-        config.profiling = { enabled: 'true' }
+        config.profiling = { DD_PROFILING_ENABLED: 'true' }
 
         proxy.init()
 
@@ -561,7 +696,7 @@ describe('TracerProxy', () => {
       })
 
       it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { enabled: 'true' }
+        config.profiling = { DD_PROFILING_ENABLED: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
@@ -674,11 +809,11 @@ describe('TracerProxy', () => {
     })
 
     describe('inject', () => {
-      it('should call the underlying NoopTracer', () => {
+      it('should call the underlying NoopTracer without exposing its return value', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.inject, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'noop')
+        assert.strictEqual(returnValue, undefined)
       })
     })
 
@@ -767,6 +902,15 @@ describe('TracerProxy', () => {
           const baggage = proxy.removeBaggageItem('missing')
           assert.deepStrictEqual(baggage, { key: 'value' })
         })
+
+        it('should not replace the store on invalid keys', () => {
+          proxy.setBaggageItem('key', 'value')
+          const before = proxy.getAllBaggageItems()
+          proxy.removeBaggageItem(null)
+          proxy.removeBaggageItem(123)
+          proxy.removeBaggageItem('')
+          assert.strictEqual(proxy.getAllBaggageItems(), before)
+        })
       })
 
       describe('removeAllBaggageItems', () => {
@@ -775,6 +919,26 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
           assert.deepStrictEqual(baggage, {})
+        })
+      })
+
+      describe('immutability', () => {
+        it('should freeze every store handed out', () => {
+          const allItems = proxy.getAllBaggageItems()
+          assert.ok(Object.isFrozen(allItems), `Expected frozen, got ${inspect(allItems)}`)
+          const setItem = proxy.setBaggageItem('key', 'value')
+          assert.ok(Object.isFrozen(setItem), `Expected frozen, got ${inspect(setItem)}`)
+          const removeItem = proxy.removeBaggageItem('key')
+          assert.ok(Object.isFrozen(removeItem), `Expected frozen, got ${inspect(removeItem)}`)
+          const removeAll = proxy.removeAllBaggageItems()
+          assert.ok(Object.isFrozen(removeAll), `Expected frozen, got ${inspect(removeAll)}`)
+        })
+
+        it('should refuse mutation through the returned reference', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          assert.throws(() => { baggage.key = 'tampered' }, TypeError)
+          assert.throws(() => { baggage.added = 'value' }, TypeError)
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key: 'value' })
         })
       })
     })
@@ -886,11 +1050,11 @@ describe('TracerProxy', () => {
     })
 
     describe('inject', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('should call the underlying DatadogTracer without exposing its return value', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.inject, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'tracer')
+        assert.strictEqual(returnValue, undefined)
       })
     })
 

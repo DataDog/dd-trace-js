@@ -1,4 +1,6 @@
 'use strict'
+/* eslint-disable no-console */
+// This module's whole purpose is patching the global console methods.
 
 const shimmer = require('../../datadog-shimmer')
 
@@ -58,17 +60,19 @@ function patchMethod (mod, method, getActiveSpan) {
             arguments.length = 1
             arguments[0] = `[dd.trace_id=${traceId} dd.span_id=${spanId}]`
           } else if (arguments.length === 1 && isJsonStyleLog(arguments[0])) {
-            arguments[0] = Object.assign({}, arguments[0], {
-              dd: Object.assign({}, getExistingDdContext(arguments[0]), {
+            arguments[0] = {
+              ...arguments[0],
+              dd: {
+                ...getExistingDdContext(arguments[0]),
                 trace_id: traceId,
                 span_id: spanId,
-              }),
-            })
+              },
+            }
           } else {
             arguments[0] = `[dd.trace_id=${traceId} dd.span_id=${spanId}] ${arguments[0]}`
           }
         }
-      } catch (e) {
+      } catch {
         // Swallow - logging inside log should not break
       }
 

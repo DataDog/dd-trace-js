@@ -1,26 +1,31 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('bunyan', 'bunyan', version => {
     useSandbox([`'bunyan@${version}'`], false,
       ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'bunyan')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'bunyan',
+      packageName: 'bunyan',
+      defaultExport: true,
+      namedExports: ['createLogger'],
+      namedExportBinding: 'namespace',
     })
 
     beforeEach(async () => {
@@ -28,10 +33,10 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
@@ -41,7 +46,7 @@ describe('esm', () => {
           undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            assert.ok(Object.hasOwn(jsonObject, 'dd'))
+            assert.ok(Object.hasOwn(jsonObject, 'dd'), `Available keys: ${inspect(Object.keys(jsonObject))}`)
           }
         )
       }).timeout(20000)

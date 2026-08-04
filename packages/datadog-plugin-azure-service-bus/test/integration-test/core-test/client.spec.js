@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -9,15 +10,18 @@ const {
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+const spawnEnv = {
+  DD_TRACE_FLUSH_INTERVAL: '2000',
+  NODE_OPTIONS: '--experimental-global-webcrypto',
+}
 
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('azure-service-bus', '@azure/service-bus', version => {
     useSandbox([`'@azure/service-bus@${version}'`], false, [
@@ -28,20 +32,24 @@ describe('esm', () => {
       process.env.DD_TRACE_DISABLED_PLUGINS = 'amqplib,amqp10,rhea,net'
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'ServiceBusClient', undefined, '@azure/service-bus', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'ServiceBusClient',
+      packageName: '@azure/service-bus',
+      defaultExport: false,
+      namedExports: ['ServiceBusClient'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)

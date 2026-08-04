@@ -2,6 +2,8 @@
 
 const path = require('path')
 
+const { getEnvironmentVariable } = require('../config/helper')
+
 /**
  * Lambda handler wrapper module.
  *
@@ -17,7 +19,7 @@ const path = require('path')
 
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 
-const fullHandler = process.env.DD_LAMBDA_HANDLER
+const fullHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
 if (!fullHandler) {
   throw new Error(
     'dd-trace handler-wrapper: DD_LAMBDA_HANDLER is not set. ' +
@@ -26,7 +28,7 @@ if (!fullHandler) {
 }
 
 const FUNCTION_EXPR = /^([^.]*)\.(.*)$/
-const taskRoot = process.env.LAMBDA_TASK_ROOT || process.cwd()
+const taskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT') || process.cwd()
 
 // Parse handler string: "dir/index.handler" -> module="dir/index", handlerPath="handler"
 // Parse handler string: "index.nested.handler" -> module="index", handlerPath="nested.handler"
@@ -48,7 +50,7 @@ function resolveHandler (obj, dotPath) {
   const parts = dotPath.split('.')
   let current = obj
   for (let i = 0; i < parts.length; i++) {
-    if (current === undefined || current === null) return undefined
+    if (current === undefined || current === null) return
     current = current[parts[i]]
   }
   return current
@@ -56,7 +58,7 @@ function resolveHandler (obj, dotPath) {
 
 const originalHandler = resolveHandler(handlerModule, handlerPath)
 if (typeof originalHandler !== 'function') {
-  throw new Error(
+  throw new TypeError(
     'dd-trace handler-wrapper: Handler "' + handlerPath + '" in module "' + modulePath +
     '" is not a function (got ' + typeof originalHandler + ')'
   )

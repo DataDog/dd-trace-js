@@ -14,78 +14,87 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
   macos:
     name: ${{ github.workflow }} / macos
     runs-on: macos-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   windows:
     name: ${{ github.workflow }} / windows
-    runs-on: windows-latest
+    runs-on: windows-2022
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
         with:
-          cache: "true"
-      - run: yarn test:appsec:ci
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
+      - uses: ./.github/actions/install
+      - run: npm run test:appsec:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   ldapjs:
     name: ${{ github.workflow }} / ldapjs
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ldapjs
     services:
       openldap:
-        image: bitnamilegacy/openldap:latest
+        image: bitnamilegacy/openldap@sha256:687f14a22b5c74fb057a57221acdbe7b8c82e2d3619fc380db3af48ec4aa04ed # latest
         ports:
           - "1389:1389"
           - "1636:1636"
@@ -95,26 +104,28 @@ jobs:
           LDAP_USERS: "user01,user02"
           LDAP_PASSWORDS: "password1,password2"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   postgres:
     name: ${{ github.workflow }} / postgres
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       postgres:
-        image: postgres:9.5
+        image: postgres@sha256:75ebf479151a8fd77bf2fed46ef76ce8d518c23264734c48f2d1de42b4eb40ae # 9.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -124,26 +135,28 @@ jobs:
       PLUGINS: pg|knex
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   mysql:
     name: ${{ github.workflow }} / mysql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
-        image: mariadb:10.4
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: "db"
@@ -153,154 +166,166 @@ jobs:
       PLUGINS: mysql|mysql2|sequelize
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   express:
     name: ${{ github.workflow }} / express
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   fastify:
     name: ${{ github.workflow }} / fastify
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   graphql:
     name: ${{ github.workflow }} / graphql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   mongodb-core:
     name: ${{ github.workflow }} / mongodb-core
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
       PLUGINS: express-mongo-sanitize|mquery
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   mongoose:
     name: ${{ github.workflow }} / mongoose
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
-        image: circleci/mongo
+        image: circleci/mongo@sha256:454132cea3bda78131361269be8d6cbce85ede665b183df7c1fc9a0baf185b94 # latest
         ports:
           - 27017:27017
     env:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   sourcing:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: cookie
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   next:
     strategy:
@@ -310,159 +335,159 @@ jobs:
           - oldest
           - latest
         range:
-          [
-            ">=10.2.0 <11",
-            ">=11.0.0 <13",
-            "11.1.4",
-            ">=13.0.0 <14",
-            "13.2.0",
-            ">=14.0.0 <=14.2.6",
-            ">=14.2.7 <15",
-            ">=15.0.0",
-          ]
+          - "11.1.4"
+          - "12.3.7"
+          - "13.0.0"
+          - "13.2.0"
+          - "13.5.11"
+          - "14.0.0"
+          - "14.2.6"
+          - "14.2.7"
+          - "14.2.35"
+          - "15.0.0"
+          - "*"
         include:
-          - range: ">=10.2.0 <11"
-            range_clean: gte.10.2.0.and.lt.11
-          - range: ">=11.0.0 <13"
-            range_clean: gte.11.0.0.and.lt.13
-          - range: "11.1.4"
-            range_clean: 11.1.4
-          - range: ">=13.0.0 <14"
-            range_clean: gte.13.0.0.and.lt.14
-          - range: "13.2.0"
-            range_clean: 13.2.0
-          - range: ">=14.0.0 <=14.2.6"
-            range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: ">=14.2.7 <15"
-            range_clean: gte.14.2.7.and.lt.15
-          - range: ">=15.0.0"
-            range_clean: gte.15.0.0
-    name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean }})
+          - range: "*"
+            range_clean: latest
+    name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean || matrix.range }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/testagent/start
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/push_to_test_optimization
+          flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   lodash:
     name: ${{ github.workflow }} / lodash
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: lodash
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   integration:
     strategy:
+      fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:appsec
-      - uses: ./.github/actions/push_to_test_optimization
+      - run: npm run test:integration:appsec:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: appsec-integration-${{ matrix.version }}
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   passport:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: passport-local|passport-http
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   template:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: handlebars|pug
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   node-serialize:
     name: ${{ github.workflow }} / node-serialize
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: node-serialize
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   kafka:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       kafka:
-        image: apache/kafka:3.9.1
+        image: apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed # 3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -482,33 +507,37 @@ jobs:
       PLUGINS: kafkajs
       SERVICES: kafka
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   stripe:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: stripe
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-      - uses: ./.github/actions/push_to_test_optimization
+      - run: npm run test:appsec:plugins:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: appsec-stripe
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}

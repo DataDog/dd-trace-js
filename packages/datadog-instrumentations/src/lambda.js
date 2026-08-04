@@ -4,6 +4,7 @@ const path = require('path')
 const Module = require('module')
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
   addHook,
 } = require('./helpers/instrument')
@@ -65,9 +66,9 @@ function _resolveHandlerParent (moduleExports, handlerPath) {
   let obj = moduleExports
   for (let i = 0; i < parts.length - 1; i++) {
     obj = obj[parts[i]]
-    if (obj === undefined || obj === null) return undefined
+    if (obj === undefined || obj === null) return
   }
-  return { parent: obj, key: parts[parts.length - 1] }
+  return { parent: obj, key: parts.at(-1) }
 }
 
 /**
@@ -91,17 +92,17 @@ function wrapLambdaHandler (originalHandler, handlerPath) {
   const isResponseStream = _isResponseStream(originalHandler)
 
   function wrappedHandler (event, contextOrStream, contextOrCallback) {
-    var args = Array.prototype.slice.call(arguments)
+    const args = Array.prototype.slice.call(arguments)
 
     // For response streaming, args are (event, responseStream, context)
     // For normal invocation, args are (event, context, callback?)
-    var context = isResponseStream ? contextOrCallback : contextOrStream
+    const context = isResponseStream ? contextOrCallback : contextOrStream
 
-    var channelContext = {
-      event: event,
-      context: context,
-      handlerPath: handlerPath,
-      isResponseStream: isResponseStream,
+    const channelContext = {
+      event,
+      context,
+      handlerPath,
+      isResponseStream,
     }
 
     return lambdaChannel.tracePromise(
@@ -127,7 +128,7 @@ function wrapLambdaHandler (originalHandler, handlerPath) {
  * @param {string} handlerPath dot-delimited path to the handler within exports.
  */
 function _patchHandlerExports (moduleExports, handlerPath) {
-  var resolved = _resolveHandlerParent(moduleExports, handlerPath)
+  const resolved = _resolveHandlerParent(moduleExports, handlerPath)
   if (resolved && typeof resolved.parent[resolved.key] === 'function') {
     shimmer.wrap(resolved.parent, resolved.key, function (original) {
       return wrapLambdaHandler(original, handlerPath)
@@ -136,30 +137,30 @@ function _patchHandlerExports (moduleExports, handlerPath) {
 }
 
 // Determine which mode to use based on environment
-var originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
-var currentHandler = process.env._HANDLER || ''
-var usingHandlerWrapper = currentHandler.indexOf('handler-wrapper') !== -1
+const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+const currentHandler = getEnvironmentVariable('_HANDLER') || ''
+const usingHandlerWrapper = currentHandler.includes('handler-wrapper')
 
 if (originalLambdaHandler && !usingHandlerWrapper) {
   // Legacy auto mode: DD_LAMBDA_HANDLER is set but _HANDLER was NOT overridden
   // to point to our handler-wrapper module (e.g., older layer setup without
   // dd_trace_wrapper, or custom integration). Fall back to Module._load patching.
   // Note: this does NOT work on nodejs22.x which uses ESM import() for handlers.
-  var lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-  var moduleRootAndHandler = _extractModuleRootAndHandler(originalLambdaHandler)
-  var moduleRoot = moduleRootAndHandler[0]
-  var moduleAndHandler = moduleRootAndHandler[1]
-  var moduleAndPath = _extractModuleNameAndHandlerPath(moduleAndHandler)
-  var moduleName = moduleAndPath[0]
-  var handlerPath = moduleAndPath[1]
+  const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
+  const moduleRootAndHandler = _extractModuleRootAndHandler(originalLambdaHandler)
+  const moduleRoot = moduleRootAndHandler[0]
+  const moduleAndHandler = moduleRootAndHandler[1]
+  const moduleAndPath = _extractModuleNameAndHandlerPath(moduleAndHandler)
+  const moduleName = moduleAndPath[0]
+  const handlerPath = moduleAndPath[1]
 
-  var taskRoot = lambdaTaskRoot || process.cwd()
-  var lambdaStylePath = path.resolve(taskRoot, moduleRoot, moduleName)
+  const taskRoot = lambdaTaskRoot || process.cwd()
+  const lambdaStylePath = path.resolve(taskRoot, moduleRoot, moduleName)
 
   // Build a set of resolved paths the handler module could have (with extensions)
-  var targetPaths = new Set()
-  var extensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '']
-  for (var i = 0; i < extensions.length; i++) {
+  const targetPaths = new Set()
+  const extensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '']
+  for (let i = 0; i < extensions.length; i++) {
     targetPaths.add(lambdaStylePath + extensions[i])
   }
 
@@ -167,22 +168,22 @@ if (originalLambdaHandler && !usingHandlerWrapper) {
   // extension or index.js resolution differs from our guesses
   try {
     targetPaths.add(require.resolve(lambdaStylePath))
-  } catch (e) {
+  } catch {
     // Module may not exist yet at instrumentation registration time
   }
 
-  var originalLoad = Module._load
-  var patched = false
+  const originalLoad = Module._load
+  let patched = false
 
   Module._load = function (request, parent, isMain) {
-    var result = originalLoad.apply(this, arguments)
+    const result = originalLoad.apply(this, arguments)
 
     if (!patched) {
       // Resolve the requested module to an absolute path to compare against targets
-      var resolvedPath
+      let resolvedPath
       try {
         resolvedPath = Module._resolveFilename(request, parent, isMain)
-      } catch (e) {
+      } catch {
         return result
       }
 
@@ -199,7 +200,7 @@ if (originalLambdaHandler && !usingHandlerWrapper) {
   addHook({ name: 'datadog-lambda-js', versions: ['>=4'] }, function (datadogLambdaModule) {
     shimmer.wrap(datadogLambdaModule, 'datadog', function (originalDatadog) {
       return function (userHandler) {
-        var wrappedUserHandler = wrapLambdaHandler(userHandler, 'handler')
+        const wrappedUserHandler = wrapLambdaHandler(userHandler, 'handler')
         return originalDatadog(wrappedUserHandler)
       }
     })

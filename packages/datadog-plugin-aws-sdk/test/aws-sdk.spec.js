@@ -7,17 +7,41 @@ const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, sort } = require('./spec_helpers')
+const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
+  // The config singleton is built lazily on the first `agent.load(...)` and is
+  // not rebuilt across describes, so any env var the singleton needs to see
+  // must be set before then. The 'with env variable _BATCH_PROPAGATION_ENABLED'
+  // describe asserts on these specific values; they're harmless to the other
+  // describes (which assert on programmatic config that wins in the `??` chain).
+  const ORIGINAL_BATCH_PROPAGATION_ENV = {
+    GLOBAL: process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+    KINESIS: process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED,
+    SQS: process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED,
+  }
+  before(() => {
+    process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = 'true'
+    process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = 'false'
+    process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = 'true'
+  })
+  after(() => {
+    function restore (name, original) {
+      if (original === undefined) delete process.env[name]
+      else process.env[name] = original
+    }
+    restore('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.GLOBAL)
+    restore('DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.KINESIS)
+    restore('DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.SQS)
+  })
+
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
   describe('aws-sdk direct import', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk'], (version) => {
+    withAwsSdkV2Versions((version) => {
       if (semver.intersects(version, '>2.3.0')) {
         const S3 = require(`../../../versions/aws-sdk@${version}`).get('aws-sdk/clients/s3')
         const s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
@@ -27,7 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -49,7 +73,8 @@ describe('Plugin', () => {
               aws_service: 'S3',
               'aws.operation': 'listBuckets',
             })
-          }).then(done, done)
+          // first S3 call against localstack on the oldest SDK is slow to connect
+          }, { timeoutMs: 5000 }).then(done, done)
 
           s3.listBuckets({}, e => e && done(e))
         })
@@ -74,7 +99,7 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let s3
       let sqs
@@ -95,7 +120,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -141,7 +166,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
-              assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+              assert.match(span.meta['aws.response.request_id'], /\w{8}(-\w{4}){3}-\w{12}/)
             }
           }).then(done, done)
 
@@ -201,7 +226,7 @@ describe('Plugin', () => {
         }
 
         it('should bind callbacks to the correct active span', (done) => {
-          const span = {}
+          const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             s3.listBuckets({}, () => {
@@ -274,7 +299,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configured', (done) => {
@@ -298,6 +323,96 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with a service function', () => {
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service (params) {
+              return params?.Bucket ? `s3-bucket-${params.Bucket}` : undefined
+            },
+          }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('derives the service name from the request params', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'completeMultipartUpload my-bucket',
+              service: 's3-bucket-my-bucket',
+            })
+          }).then(done, done)
+
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, () => {})
+        })
+
+        it('falls back to the default service name when the function returns undefined', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'listBuckets',
+              service: 'test-aws-s3',
+            })
+          }).then(done, done)
+
+          s3.listBuckets({}, () => {})
+        })
+      })
+
+      describe('with a service function returning a non-string', () => {
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service (params) {
+              return params?.Bucket ? params.Bucket.length : undefined
+            },
+          }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('falls back to the default service name', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'completeMultipartUpload my-bucket',
+              service: 'test-aws-s3',
+            })
+          }).then(done, done)
+
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, () => {})
+        })
+      })
+
       describe('with service configuration', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
@@ -316,25 +431,23 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
-        it('should allow disabling a specific service', (done) => {
-          let total = 0
+        it('should allow disabling a specific service', async () => {
+          // s3 is disabled, so its request must never be traced within the window.
+          const listBucketsNotTraced = agent.assertNoTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.request' && span.resource === 'listBuckets') {
+                  throw new Error('listBuckets must not be traced when s3 is disabled')
+                }
+              }
+            }
+          })
 
-          agent.assertSomeTraces(traces => {
-            const span = sort(traces[0])[0]
-
-            assertObjectContains(span, {
-              name: 'aws.request',
-              resource: 'listBuckets',
-              service: 'test',
-            })
-
-            total++
-          }).catch(() => {}, { timeoutMs: 100 })
-
-          agent.assertSomeTraces(traces => {
+          // sqs stays enabled, so its request must be traced.
+          const listQueuesTraced = agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             assertObjectContains(span, {
@@ -342,21 +455,12 @@ describe('Plugin', () => {
               resource: 'listQueues',
               service: 'test',
             })
-
-            total++
-          }).catch((e) => {}, { timeoutMs: 100 })
+          })
 
           s3.listBuckets({}, () => {})
           sqs.listQueues({}, () => {})
 
-          setTimeout(() => {
-            try {
-              assert.strictEqual(total, 1)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
+          await Promise.all([listBucketsNotTraced, listQueuesTraced])
         })
       })
 
@@ -380,7 +484,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {
@@ -395,9 +499,9 @@ describe('Plugin', () => {
 
       describe('with env variable _BATCH_PROPAGATION_ENABLED configuration', () => {
         before(() => {
-          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
-          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
-          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = 'true'
+          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = 'false'
+          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = 'true'
 
           return agent.load(['aws-sdk'])
         })
@@ -407,7 +511,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {

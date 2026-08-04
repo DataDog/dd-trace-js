@@ -54,7 +54,7 @@ describe('plugins/util/url', () => {
       assert.strictEqual(result, 'https://secure.example.com/secure/path')
     })
 
-    it('should extract full URL from HTTPS request with connection.encrypted', () => {
+    it('should not read `connection.encrypted` (deprecated alias for `socket.encrypted`)', () => {
       const req = {
         headers: {
           host: 'secure.example.com',
@@ -65,7 +65,7 @@ describe('plugins/util/url', () => {
       }
 
       const result = url.extractURL(req)
-      assert.strictEqual(result, 'https://secure.example.com/secure/path')
+      assert.strictEqual(result, 'http://secure.example.com/secure/path')
     })
 
     it('should extract full URL from HTTP/2 request', () => {
@@ -135,6 +135,64 @@ describe('plugins/util/url', () => {
       const result = url.obfuscateQs(config, urlPath + 'secret/' + qs)
 
       assert.strictEqual(result, urlPath + 'secret/?data=<redacted>')
+    })
+  })
+
+  describe('buildClientHttpUrl', () => {
+    const base = 'http://perdu.com'
+    const strippedUrl = 'http://perdu.com/path'
+
+    it('returns the stripped url when there is no query', () => {
+      const config = { queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path', strippedUrl), strippedUrl)
+    })
+
+    it('includes the query with sensitive values obfuscated', () => {
+      const config = { queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=<redacted>'
+      )
+    })
+
+    it('drops the query when query-string obfuscation is set to true', () => {
+      const config = { queryStringObfuscation: true }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl), strippedUrl)
+    })
+
+    it('keeps the raw query when query-string obfuscation is disabled', () => {
+      const config = { queryStringObfuscation: false }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=secret'
+      )
+    })
+  })
+
+  describe('getQsObfuscator', () => {
+    it('passes booleans through', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: true }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: false }), false)
+    })
+
+    it('treats an empty string as disabled and ".*" as a full redaction', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '' }), false)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '.*' }), true)
+    })
+
+    it('compiles a regex string and caches the compiled result', () => {
+      const first = url.getQsObfuscator({ queryStringObfuscation: 'token' })
+      assert.ok(first instanceof RegExp)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 'token' }), first)
+    })
+
+    it('falls back to full redaction on an invalid regex or a non-string/boolean value', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '[' }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 123 }), true)
     })
   })
 
@@ -281,6 +339,12 @@ describe('plugins/util/url', () => {
           url.calculateHttpEndpoint('/files/this_is_a_very_long_filename_indeed'),
           '/files/{param:str}'
         )
+      })
+
+      it('should treat 20 chars as the {param:str} length boundary', () => {
+        // 19 plain chars (no digit, no special) stay verbatim; 20 cross into {param:str}.
+        assert.strictEqual(url.calculateHttpEndpoint('/x/abcdefghijklmnopqrs'), '/x/abcdefghijklmnopqrs')
+        assert.strictEqual(url.calculateHttpEndpoint('/x/abcdefghijklmnopqrst'), '/x/{param:str}')
       })
 
       it('should replace strings with special characters as {param:str}', () => {

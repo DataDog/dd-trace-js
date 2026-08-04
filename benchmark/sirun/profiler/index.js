@@ -1,43 +1,40 @@
 'use strict'
 
-const {
-  profiler,
-  WallProfiler,
-  SpaceProfiler,
-} = require('../../../packages/dd-trace/src/profiling')
+const assert = require('node:assert/strict')
+
+const guard = require('../startup-guard')
+const tracer = require('../../..')
 
 const { PROFILER } = process.env
 
-const profilers = []
-
-if (PROFILER === 'wall' || PROFILER === 'all') {
-  profilers.push(new WallProfiler())
+if (PROFILER !== 'wall' && PROFILER !== 'all') {
+  process.env.DD_PROFILING_WALLTIME_ENABLED = 'false'
 }
-if (PROFILER === 'space' || PROFILER === 'all') {
-  profilers.push(new SpaceProfiler())
+if (PROFILER !== 'space' && PROFILER !== 'all') {
+  process.env.DD_PROFILING_HEAP_ENABLED = 'false'
 }
 
-if (profilers.length === 0) {
-  // Add a no-op "profiler"
-  profilers.push({
-    start: () => {},
-    stop: () => {},
-    profile: () => { return true },
-    encode: () => { Promise.resolve(true) },
-  })
+tracer.init({ profiling: 'true' })
+
+assert.equal(tracer._profilerStarted, true, 'profiler.start did not return true')
+
+// Keep the process busy so the wall and space profilers actually sample. Sized
+// to stay under the 60s upload period, so no profile is exported and no agent
+// is required.
+guard.loopStart()
+const ROUNDS = 32_000
+let sink = 0
+for (let round = 0; round < ROUNDS; round++) {
+  for (let i = 0; i < 20_000; i++) {
+    sink += Math.sqrt(i) * Math.cos(i)
+  }
+  const items = new Array(2000)
+  for (let i = 0; i < items.length; i++) {
+    items[i] = { index: i, label: `item-${i}` }
+  }
+  sink += items[round % items.length].index
 }
 
-const exporters = [{
-  export () {
-    profiler.stop()
-    return Promise.resolve()
-  },
-}]
+assert.notEqual(sink, Infinity)
 
-profiler._start({
-  profilers,
-  exporters,
-  interval: 0,
-}).then(() => {
-  profiler._timer.ref()
-})
+guard.done()

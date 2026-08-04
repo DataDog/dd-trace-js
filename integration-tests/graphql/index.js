@@ -4,7 +4,6 @@ const tracer = require('dd-trace')
 const path = require('path')
 
 tracer.init({
-  debug: true,
   port: process.env.AGENT_PORT,
   appsec: {
     enabled: true,
@@ -97,6 +96,7 @@ async function main () {
   const server = new ApolloServer({
     typeDefs,
     resolvers,
+    allowBatchedHttpRequests: true,
   })
 
   const { url } = await startStandaloneServer(server, { listen: { port: process.env.APP_PORT || 0 } })

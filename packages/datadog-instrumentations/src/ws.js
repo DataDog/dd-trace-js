@@ -3,6 +3,7 @@
 const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
 
 const shimmer = require('../../datadog-shimmer')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   addHook,
   channel,
@@ -62,24 +63,24 @@ const setSocketCh = channel('tracing:ws:server:connect:setSocket')
 let kWebSocketSymbol
 
 function wrapHandleUpgrade (handleUpgrade) {
-  return function () {
-    const [req, socket, , cb] = arguments
+  return function (...args) {
+    const [req, socket, , cb] = args
     if (!serverCh.start.hasSubscribers || typeof cb !== 'function') {
-      return handleUpgrade.apply(this, arguments)
+      return handleUpgrade.apply(this, args)
     }
 
     const ctx = { req, socket }
 
-    arguments[3] = function () {
+    args[3] = function (...args) {
       return serverCh.asyncStart.runStores(ctx, () => {
         try {
-          return cb.apply(this, arguments)
+          return cb.apply(this, args)
         } finally {
           serverCh.asyncEnd.publish(ctx)
         }
-      }, this, ...arguments)
+      }, this, ...args)
     }
-    return serverCh.traceSync(handleUpgrade, ctx, this, ...arguments)
+    return serverCh.traceSync(handleUpgrade, ctx, this, ...args)
   }
 }
 
@@ -106,7 +107,7 @@ function createWrapEmit (emit) {
     }
 
     const ctx = { req }
-    ctx.req.resStatus = headers[0].split(' ')[1]
+    ctx.req.resStatus = getSegment(headers[0], ' ', 1)
 
     emitCh.runStores(ctx, () => {
       try {

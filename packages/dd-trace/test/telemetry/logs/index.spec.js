@@ -18,9 +18,9 @@ describe('telemetry logs', () => {
   beforeEach(() => {
     defaultConfig = {
       telemetry: {
-        enabled: true,
-        logCollection: true,
-        debug: false,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
+        DD_TELEMETRY_DEBUG: false,
       },
     }
 
@@ -65,7 +65,7 @@ describe('telemetry logs', () => {
         'dc-polyfill': dc,
       })
 
-      defaultConfig.telemetry.logCollection = false
+      defaultConfig.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED = false
       logs.start(defaultConfig)
 
       sinon.assert.notCalled(telemetryLog.subscribe)
@@ -222,7 +222,7 @@ describe('telemetry logs', () => {
     })
 
     it('should not drain logCollector and call sendData if not enabled', () => {
-      defaultConfig.telemetry.logCollection = false
+      defaultConfig.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED = false
 
       logs.start(defaultConfig)
 

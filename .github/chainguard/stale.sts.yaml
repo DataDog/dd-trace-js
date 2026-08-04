@@ -1,0 +1,11 @@
+issuer: https://token.actions.githubusercontent.com
+
+subject: repo:DataDog/dd-trace-js:ref:refs/heads/master
+
+claim_pattern:
+  event_name: schedule
+  ref: refs/heads/master
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/stale\.yml@refs/heads/master
+
+permissions:
+  pull_requests: write

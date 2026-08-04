@@ -1,0 +1,28 @@
+# CODEOWNERS for a small Node library. Representative of the common case: a
+# couple dozen rules, mostly anchored directories plus a few extension globs,
+# and no global `*` default (so unowned paths fall through to a full-scan miss).
+
+# Source
+/src/ @acme/core
+/src/parser/ @acme/parser
+/src/serializer/ @acme/serializer
+/lib/ @acme/core
+
+# Types
+/types/ @acme/types
+*.d.ts @acme/types
+
+# Tests
+/test/ @acme/qa
+*.spec.js @acme/qa
+*.test.js @acme/qa
+
+# Tooling / CI
+/.github/ @acme/platform
+/scripts/ @acme/platform
+*.yml @acme/platform
+
+# Docs
+/docs/ @acme/docs
+*.md @acme/docs
+README.md @acme/docs

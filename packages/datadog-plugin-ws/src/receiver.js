@@ -6,6 +6,7 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
@@ -28,7 +29,7 @@ class WSReceiverPlugin extends TracingPlugin {
     if (!socket.spanContext) return
 
     const spanTags = socket.spanTags
-    const path = spanTags['resource.name'].split(' ')[1]
+    const path = getSegment(spanTags['resource.name'], ' ', 1)
     const opCode = binary ? 'binary' : 'text'
 
     const service = this.serviceName({ pluginConfig: this.config })
@@ -48,7 +49,7 @@ class WSReceiverPlugin extends TracingPlugin {
     }, ctx)
 
     if (traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
-      span.setTag('_dd.dm.service', spanTags['service.name'] || service)
+      span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
       span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
       span.setTag('_dd.dm.inherited', 1)
     }
@@ -62,6 +63,7 @@ class WSReceiverPlugin extends TracingPlugin {
   }
 
   asyncStart (ctx) {
+    if (!ctx.span) return
     ctx.span.finish()
   }
 

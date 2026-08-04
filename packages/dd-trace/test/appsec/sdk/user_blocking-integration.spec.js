@@ -6,11 +6,11 @@ const path = require('path')
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const blocking = require('../../../src/appsec/blocking')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
+const { json } = require('../../../src/appsec/blocked_templates')
 
 describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
@@ -24,6 +24,7 @@ describe('user_blocking - Integration with the tracer', () => {
   let controller
   let appListener
   let port
+  let tracer
 
   function listener (req, res) {
     if (controller) {
@@ -32,7 +33,7 @@ describe('user_blocking - Integration with the tracer', () => {
   }
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http')
     http = require('http')
   })
 
@@ -51,7 +52,7 @@ describe('user_blocking - Integration with the tracer', () => {
     appsec.disable()
 
     appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('isUserBlocked', () => {
@@ -152,7 +153,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(ret, false)
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(!('appsec.blocked' in traces[0][0].meta) || traces[0][0].meta['appsec.blocked'] !== 'true')
+        assert.notStrictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
       }).then(done).catch(done)
@@ -185,6 +186,33 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['http.status_code'], '302')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
+    })
+
+    it('should block using json body but remove security_response_id template', async () => {
+      controller = (req, res) => {
+        const ret = tracer.appsec.blockRequest(req, res)
+        assert.strictEqual(ret, true)
+      }
+      const response = await axios.get(`http://localhost:${port}/`, { validateStatus: false })
+      assert.strictEqual(JSON.stringify(response.data), json.replace('[security_response_id]', ''))
+    })
+
+    it('should block using redirect data but remove security_response_id template', async () => {
+      blocking.setDefaultBlockingActionParameters([
+        {
+          id: 'block',
+          parameters: {
+            location: '/redirected?should_ignore=[security_response_id]',
+            status_code: 302,
+          },
+        },
+      ])
+      controller = (req, res) => {
+        const ret = tracer.appsec.blockRequest(req, res)
+        assert.strictEqual(ret, true)
+      }
+      const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0, validateStatus: false })
+      assert.strictEqual(response.headers.location, '/redirected?should_ignore=')
     })
   })
 })

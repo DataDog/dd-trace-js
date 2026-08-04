@@ -3,12 +3,12 @@
 const fs = require('fs')
 const path = require('path')
 
+const getConfig = require('../../../config')
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
-const { getValueFromEnvSources } = require('../../../config/helper')
 
 const log = require('../../../log')
-const { isFalse } = require('../../../util')
+const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
@@ -51,7 +51,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
+      'dd-api-key': getConfig().DD_API_KEY,
     },
     timeout: 15_000,
     url,
@@ -146,7 +146,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   try {
     const packFileContent = fs.readFileSync(packFileToUpload)
     // The original filename includes a random prefix, so we remove it here
-    const [, filename] = path.basename(packFileToUpload).split('-')
+    const filename = getSegment(path.basename(packFileToUpload), '-', 1)
     form.append('packfile', packFileContent, {
       filename,
       contentType: 'application/octet-stream',
@@ -288,7 +288,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(getValueFromEnvSources('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
+    if (getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
       unshallowRepository(false)
     }
 

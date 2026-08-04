@@ -2,14 +2,16 @@
 
 /* eslint-disable no-console */
 
-const tracer = require('dd-trace').init()
+require('dd-trace').init()
 const { Worker, isMainThread, threadId } = require('worker_threads')
 
 const nworkers = Number(process.argv[2] || 0)
-const workerMaxOldGenerationSizeMb = process.argv[3]
+const workerMaxOldGenerationSizeMb = Number(process.argv[3]) || 50
 const maxCount = process.argv[4] || 12
 const sleepMs = process.argv[5] || 50
-const sizeQuantum = process.argv[6] || 5 * 1024 * 1024
+const sizeQuantum = Number(process.argv[6]) ||
+  Number(process.env._DD_TESTING_PROFILING_OOM_SIZE_QUANTUM_BYTES) ||
+  5 * 1024 * 1024
 
 console.log(`${isMainThread ? 'Main thread' : `Worker ${threadId}`}: \
 nworkers=${nworkers} workerMaxOldGenerationSizeMb=${workerMaxOldGenerationSizeMb} \
@@ -20,7 +22,9 @@ if (isMainThread) {
     const worker = new Worker(__filename,
       {
         argv: [0, ...process.argv.slice(3)],
-        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {}),
+        ...(workerMaxOldGenerationSizeMb
+          ? { resourceLimits: { maxOldGenerationSizeMb: workerMaxOldGenerationSizeMb } }
+          : {}),
       })
     const threadId = worker.threadId
     worker
@@ -29,6 +33,8 @@ if (isMainThread) {
   }
 }
 
+// `leak` is intentionally populated to anchor allocations in the OOM fixture.
+// eslint-disable-next-line sonarjs/no-unused-collection
 const leak = []
 let count = 0
 
@@ -43,8 +49,4 @@ function foo (size) {
   if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
 }
 
-tracer.profilerStarted().then(
-  () => {
-    setTimeout(() => foo(sizeQuantum), sleepMs)
-  }
-)
+setTimeout(() => foo(sizeQuantum), sleepMs)

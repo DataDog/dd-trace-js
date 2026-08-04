@@ -3,8 +3,8 @@
 function run () {
   /* eslint-disable no-unused-vars */
   const {
-    oblit, obnew, arr, regex, date, map, set, wmap, wset, gen, err, fn, bfn, afn, cls, acls, prox, custProx, pPen,
-    pRes, pRej, tarr, ab, sab, circular, hidden,
+    oblit, obnew, arr, regex, date, idate, map, set, wmap, wset, gen, err, fn, bfn, afn, cls, acls, prox, custProx,
+    pPen, pRes, pRej, tarr, ab, sab, circular, hidden,
   } = get()
   /* eslint-enable no-unused-vars */
   return 'my return value' // breakpoint at this line
@@ -90,6 +90,7 @@ function get () {
     arr: [1, 2, 3],
     regex: /foo/,
     date: new Date('2024-09-20T07:22:59.998Z'),
+    idate: new Date('not a valid date'),
     map: new Map([[1, 2], [3, 4]]),
     set: new Set([[1, 2], 3, 4]),
     wmap: new WeakMap(/** @type {Array<[object, number]>} */ ([[ref.wmo1, 2], [ref.wmo2, 4]])),

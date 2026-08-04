@@ -3,9 +3,11 @@
 const ERROR_TYPE = require('../constants')
 
 const telemetryMetrics = require('../telemetry/metrics')
+const { getSegment } = require('../util')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
+  ML_APP,
   PARENT_ID_KEY,
   SESSION_ID,
   ROOT_PARENT_ID,
@@ -21,7 +23,7 @@ function extractIntegrationFromTags (tags) {
   if (!Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
-  return integrationTag.split(':')[1] || null
+  return getSegment(integrationTag, ':', 1) || null
 }
 
 function extractTagsFromSpanEvent (event) {
@@ -44,7 +46,7 @@ function incrementLLMObsSpanStartCount (tags, value = 1) {
 
 function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
-  const spanTags = span.context()._tags
+  const spanTags = span.context().getTags()
 
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
   const hasSessionId = mlObsTags[SESSION_ID] != null
@@ -86,6 +88,7 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     site: config.site,
     auto: Number(autoEnabled),
     ml_app: config.llmobs.mlApp,
+    sample_rate: config.llmobs.sampleRate,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
@@ -121,6 +124,32 @@ function recordLLMObsAnnotate (span, err, value = 1) {
   }
   if (err) tags.error_type = err
   llmobsMetrics.count('annotations', tags).inc(value)
+}
+
+function recordCostTagsAnnotated (span, source, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const tags = {
+    span_kind: mlObsTags[SPAN_KIND] || 'N/A',
+    source,
+    ml_app: mlObsTags[ML_APP] || 'N/A',
+    model_provider: mlObsTags[MODEL_PROVIDER] || 'N/A',
+  }
+
+  llmobsMetrics.count('cost_tags.annotated', tags).inc(value)
+}
+
+function recordCostTagsSubmitted (span, count, source, state, reason = 'none') {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const tags = {
+    span_kind: mlObsTags[SPAN_KIND] || 'N/A',
+    source,
+    ml_app: mlObsTags[ML_APP] || 'N/A',
+    model_provider: mlObsTags[MODEL_PROVIDER] || 'N/A',
+    state,
+    reason,
+  }
+
+  llmobsMetrics.count('cost_tags.submitted', tags).inc(count)
 }
 
 function recordUserFlush (err, value = 1) {
@@ -167,6 +196,8 @@ module.exports = {
   recordLLMObsSpanSize,
   recordDroppedPayload,
   recordLLMObsAnnotate,
+  recordCostTagsAnnotated,
+  recordCostTagsSubmitted,
   recordUserFlush,
   recordExportSpan,
   recordSubmitEvaluation,

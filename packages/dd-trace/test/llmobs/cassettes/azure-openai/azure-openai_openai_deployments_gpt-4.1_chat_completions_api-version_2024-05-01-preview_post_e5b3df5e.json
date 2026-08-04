@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://dd.openai.azure.com/openai/deployments/gpt-4.1/chat/completions?api-version=2024-05-01-preview",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "AzureOpenAI/JS 6.18.0",
+      "X-Stainless-Retry-Count": "0",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": "6.18.0",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v22.17.0",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "213"
+    },
+    "body": "{\"model\":\"gpt-4.1\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"},{\"role\":\"user\",\"content\":\"Hello, OpenAI!\"}],\"temperature\":0.5,\"stream\":false,\"max_tokens\":100,\"n\":1,\"user\":\"dd-trace-test\"}"
+  },
+  "response": {
+    "status": {
+      "code": 401,
+      "message": "PermissionDenied"
+    },
+    "headers": {
+      "Content-Length": "224",
+      "Content-Type": "application/json",
+      "Date": "Wed, 20 Aug 2025 13:52:24 GMT",
+      "apim-request-id": "b198bf3e-4771-4a89-896f-1ba58f66e45d"
+    },
+    "body": "{\"error\":{\"code\":\"401\",\"message\":\"Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.\"}}"
+  }
+}

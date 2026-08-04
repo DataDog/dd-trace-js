@@ -12,12 +12,14 @@
  * @param {boolean} isColdStart
  * @param {Array} rootNodes - require tree root nodes
  */
-function traceColdStart (tracer, parentSpan, functionName, currentSpanStartTime, minDuration, ignoreLibs, isColdStart, rootNodes) {
+function traceColdStart (
+  tracer, parentSpan, functionName, currentSpanStartTime, minDuration, ignoreLibs, isColdStart, rootNodes
+) {
   if (!rootNodes || rootNodes.length === 0) return
 
   const ignoreSet = ignoreLibs ? ignoreLibs.split(',') : []
   const coldStartSpanStartTime = rootNodes[0].startTime
-  const coldStartSpanEndTime = Math.min(rootNodes[rootNodes.length - 1].endTime, currentSpanStartTime)
+  const coldStartSpanEndTime = Math.min(rootNodes.at(-1).endTime, currentSpanStartTime)
 
   let targetParent = parentSpan
   if (isColdStart) {

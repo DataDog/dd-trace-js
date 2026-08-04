@@ -7,10 +7,12 @@ const rawExpectedSchema = {
     v0: {
       serviceName: () => 'test',
       opName: () => 'next.request',
+      defaultTracerService: 'test',
     },
     v1: {
       serviceName: () => 'test',
       opName: () => 'http.server.request',
+      defaultTracerService: 'test',
     },
   },
 }

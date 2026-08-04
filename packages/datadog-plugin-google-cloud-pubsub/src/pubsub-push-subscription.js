@@ -10,6 +10,8 @@ const pushReceiveSpans = new WeakMap()
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
+  static type = 'messaging'
+  static kind = 'consumer'
 
   constructor (...args) {
     super(...args)
@@ -145,17 +147,12 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const subscriptionName = subscription?.slice(subscription.lastIndexOf('/') + 1) ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
-
-    // Get the base service name and construct the pubsub service override
-    const baseService = this.tracer._service
-    const serviceOverride = this.config.service ?? `${baseService}-pubsub`
-
     // Use this.startSpan() which automatically activates the span
     const span = this.startSpan('pubsub.push.receive', {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
-      service: serviceOverride,
+      service: this.config.service || this.serviceName(),
       meta: {
         component: 'google-cloud-pubsub',
         'pubsub.method': 'receive',
@@ -163,7 +160,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
         'pubsub.message_id': message.messageId,
         'pubsub.subscription_type': 'push',
         'pubsub.topic': topicName,
-        '_dd.base_service': baseService,
+        '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
         'resource.name': `Push Subscription ${subscriptionName}`,
       },
@@ -184,7 +181,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     if (linkContext) {
       if (span.addLink) {
-        span.addLink(linkContext, {})
+        span.addLink({ context: linkContext, attributes: {} })
       } else {
         span._links ??= []
         span._links.push({ context: linkContext, attributes: {} })

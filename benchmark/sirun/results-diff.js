@@ -5,8 +5,8 @@ const { getResults } = require('./get-results')
 function walk (tree, oldTree, path = []) {
   if (typeof tree === 'number') {
     const diff = tree - oldTree
-    const pctDiff = 100 * diff / oldTree
-    return pctDiff
+    // pctDiff
+    return 100 * diff / oldTree
   }
 
   if (typeof tree === 'string') {

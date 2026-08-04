@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -13,7 +14,6 @@ describe('Plugin', () => {
         // Needed when this spec file run together with other spec files, in which case the agent config is not
         // re-loaded unless the existing agent is wiped first. And we need the agent config to be re-loaded in order to
         // enable Code Origin for Spans.
-        agent.wipe()
       })
 
       beforeEach(async () => {
@@ -25,7 +25,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should add code_origin tags for outbound requests', done => {
@@ -38,11 +38,26 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['_dd.code_origin.type'], 'exit')
 
               // Just validate that frame 0 tags are present. The detailed validation is performed in a different test.
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.file'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.line'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.column'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.method'))
-              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.type'))
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.file'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.line'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.column'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.method'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(span.meta, '_dd.code_origin.frames.0.type'),
+                `Available keys: ${inspect(Object.keys(span.meta))}`
+              )
             })
             .then(done)
             .catch(done)

@@ -8,9 +8,10 @@ const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const appsec = require('../../src/appsec')
-const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
+const { blockedTemplateJson: json, blockedTemplateGraphql: graphqlJson, setTestBlockingTemplates } = require('./utils')
+
 const schema = `
 directive @case(format: String) on FIELD
 
@@ -76,6 +77,7 @@ function graphqlCommonTests (config) {
   describe('Block with content', () => {
     beforeEach(() => {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {

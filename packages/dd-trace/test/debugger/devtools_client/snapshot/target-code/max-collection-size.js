@@ -6,7 +6,7 @@ const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../../../src/debugger/dev
 // which nothing is captured.
 const LARGE_SIZE = LARGE_OBJECT_SKIP_THRESHOLD - 1
 
-function run () {
+function run () { /* eslint-disable sonarjs/no-unused-collection -- collections inspected via debugger CDP */
   const arr = []
   const map = new Map()
   const set = new Set()

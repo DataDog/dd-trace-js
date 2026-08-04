@@ -1,11 +1,11 @@
 'use strict'
 
-const { COMPONENT } = require('../../dd-trace/src/constants')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
-const { storage } = require('../../datadog-core')
 
+const { ImpendingTimeout } = require('../../dd-trace/src/lambda/runtime/errors')
 const { parseEventSource, extractTriggerTags, extractHTTPStatusCodeTag } = require('./trigger')
 const { createInferredSpan } = require('./span-inferrer')
 const { extractTraceContext } = require('./trace-context-extractor')
@@ -13,10 +13,8 @@ const { patchConsole, unpatchConsole } = require('./console-patcher')
 const { LambdaDogStatsD, isExtensionRunning } = require('./dogstatsd')
 const { incrementInvocations, incrementErrors, incrementBatchItemFailures } = require('./enhanced-metrics')
 const { didFunctionColdStart, setSandboxInit } = require('./cold-start')
-const { traceColdStart } = require('./cold-start-tracer')
-const { tagObject, isBatchItemFailure, batchItemFailureCount, HANDLER_STREAMING, STREAM_RESPONSE } = require('./handler-utils')
+const { tagObject, isBatchItemFailure, batchItemFailureCount } = require('./handler-utils')
 const { getSpanPointerAttributes } = require('./span-pointers')
-const { ImpendingTimeout } = require('../../dd-trace/src/lambda/runtime/errors')
 
 const initTime = Date.now()
 
@@ -34,7 +32,7 @@ class LambdaPlugin extends TracingPlugin {
   }
 
   configure (config) {
-    const lambdaConfig = Object.assign({
+    const lambdaConfig = {
       enhancedMetrics: true,
       createInferredSpan: true,
       captureLambdaPayload: false,
@@ -47,9 +45,10 @@ class LambdaPlugin extends TracingPlugin {
       minColdStartTraceDurationMs: 3,
       coldStartTraceSkipLib: '',
       addSpanPointers: true,
-    }, config.lambda || {})
+      ...config.lambda,
+    }
 
-    return super.configure(Object.assign({}, config, { lambda: lambdaConfig }))
+    return super.configure({ ...config, lambda: lambdaConfig })
   }
 
   bindStart (ctx) {
@@ -72,7 +71,7 @@ class LambdaPlugin extends TracingPlugin {
     if (context) {
       try {
         triggerTags = extractTriggerTags(event, context, eventSource)
-      } catch (e) {
+      } catch {
         log.debug('Failed to extract trigger tags')
       }
     }
@@ -82,7 +81,7 @@ class LambdaPlugin extends TracingPlugin {
     let parentSpanContext
     try {
       parentSpanContext = extractTraceContext(event, context, this.tracer, config)
-    } catch (e) {
+    } catch {
       log.debug('Failed to extract trace context from event')
     }
 
@@ -93,7 +92,7 @@ class LambdaPlugin extends TracingPlugin {
         inferredSpanResult = createInferredSpan(
           event, context, parentSpanContext, this.tracer, config.decodeAuthorizerContext
         )
-      } catch (e) {
+      } catch {
         log.debug('Failed to create inferred span')
       }
     }
@@ -104,18 +103,19 @@ class LambdaPlugin extends TracingPlugin {
     const childOf = inferredSpanResult?.span || parentSpanContext || null
 
     // Create the aws.lambda span
-    const functionArn = context?.invokedFunctionArn || process.env.AWS_LAMBDA_FUNCTION_NAME || ''
-    const functionName = context?.functionName || process.env.AWS_LAMBDA_FUNCTION_NAME || ''
+    const functionArn = context?.invokedFunctionArn || getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') || ''
+    const functionName = context?.functionName || getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') || ''
     const requestId = context?.awsRequestId
 
-    const meta = Object.assign({}, triggerTags, {
+    const meta = {
+      ...triggerTags,
       cold_start: coldStart.toString(),
       function_arn: functionArn,
       request_id: requestId,
       'resource.name': functionName,
       functionname: functionName,
       'span.type': 'serverless',
-    })
+    }
 
     const span = this.startSpan('aws.lambda', {
       service: this.serviceName(),
@@ -155,7 +155,7 @@ class LambdaPlugin extends TracingPlugin {
     if (config.captureLambdaPayload) {
       try {
         tagObject(span, 'function.request', event, 0, config.captureLambdaPayloadMaxDepth)
-      } catch (e) {
+      } catch {
         log.debug('Failed to tag event payload')
       }
     }
@@ -184,7 +184,7 @@ class LambdaPlugin extends TracingPlugin {
       if (config.captureLambdaPayload && result !== undefined) {
         try {
           tagObject(span, 'function.response', result, 0, config.captureLambdaPayloadMaxDepth)
-        } catch (e) {
+        } catch {
           log.debug('Failed to tag response payload')
         }
       }
@@ -207,7 +207,7 @@ class LambdaPlugin extends TracingPlugin {
           for (const p of pointers) {
             span.addLink(p.pointer)
           }
-        } catch (e) {
+        } catch {
           log.debug('Failed to add span pointers')
         }
       }
@@ -221,7 +221,7 @@ class LambdaPlugin extends TracingPlugin {
           } else {
             ctx._inferredSpan.finish()
           }
-        } catch (e) {
+        } catch {
           log.debug('Failed to finish inferred span')
         }
       }
@@ -249,7 +249,7 @@ class LambdaPlugin extends TracingPlugin {
     if (ctx._inferredSpan && ctx._inferredSpanIsAsync) {
       try {
         ctx._inferredSpan.finish()
-      } catch (e) {
+      } catch {
         log.debug('Failed to finish async inferred span')
       }
     }
@@ -262,7 +262,7 @@ class LambdaPlugin extends TracingPlugin {
 
   _setupTimeout (lambdaContext, span) {
     const remainingTime = lambdaContext.getRemainingTimeInMillis()
-    let flushDeadline = Number.parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
+    let flushDeadline = Number.parseInt(getEnvironmentVariable('DD_APM_FLUSH_DEADLINE_MILLISECONDS'), 10) || 100
     if (flushDeadline < 0) flushDeadline = 100
 
     const self = this
@@ -282,7 +282,7 @@ class LambdaPlugin extends TracingPlugin {
     }, remainingTime - flushDeadline)
 
     if (this._timeoutTimer.unref) {
-      this._timeoutTimer.unref()
+      this._timeoutTimer.unref?.()
     }
   }
 }

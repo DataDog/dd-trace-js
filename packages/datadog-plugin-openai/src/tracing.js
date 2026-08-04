@@ -8,6 +8,7 @@ const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
 const { DD_MAJOR } = require('../../../version')
+const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
@@ -157,7 +158,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const span = store?.span
     if (!span) return
 
-    const error = !!span.context()._tags.error
+    const error = !!span.context().getTag('error')
 
     let headers, body, method, path
     if (!error) {
@@ -171,7 +172,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       headers = Object.fromEntries(headers)
     }
 
-    const resource = span._spanContext._tags['resource.name']
+    const resource = span.context().getTag('resource.name')
     const normalizedMethodName = store.normalizedMethodName
 
     body = coerceResponseBody(body, normalizedMethodName)
@@ -209,6 +210,18 @@ class OpenAiTracingPlugin extends TracingPlugin {
     span.finish()
     this.sendLog(resource, span, tags, openaiStore, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
+  }
+
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    super.error(ctx) // add normal error tag
+
+    const errorType = ctx.error?.type
+    if (errorType) {
+      span.setTag(ERROR_TYPE, errorType)
+    }
   }
 
   sendMetrics (headers, body, endpoint, duration, error, spanTags) {
@@ -560,9 +573,8 @@ function createResponseResponseExtraction (tags, body, openaiStore) {
 
 // The server almost always responds with JSON
 function coerceResponseBody (body, methodName) {
-  switch (methodName) {
-    case 'downloadFile':
-      return { file: body }
+  if (methodName === 'downloadFile') {
+    return { file: body }
   }
 
   const type = typeof body
@@ -574,9 +586,8 @@ function coerceResponseBody (body, methodName) {
     }
   } else if (type === 'object') {
     return body
-  } else {
-    return {}
   }
+  return {}
 }
 
 // This method is used to replace a dynamic URL segment with an asterisk
@@ -594,28 +605,19 @@ function lookupOperationEndpoint (operationId, methodName, url) {
       return '/v1/files/*/content'
 
     case 'retrieveFineTune':
-      switch (methodName) {
-        case 'fine_tuning.jobs.retrieve':
-          return '/v1/fine_tuning/jobs/*'
-        default:
-          return '/v1/fine-tunes/*'
-      }
+      return methodName === 'fine_tuning.jobs.retrieve'
+        ? '/v1/fine_tuning/jobs/*'
+        : '/v1/fine-tunes/*'
 
     case 'listFineTuneEvents':
-      switch (methodName) {
-        case 'fine_tuning.jobs.listEvents':
-          return '/v1/fine_tuning/jobs/*/events'
-        default:
-          return '/v1/fine-tunes/*/events'
-      }
+      return methodName === 'fine_tuning.jobs.listEvents'
+        ? '/v1/fine_tuning/jobs/*/events'
+        : '/v1/fine-tunes/*/events'
 
     case 'cancelFineTune':
-      switch (methodName) {
-        case 'fine_tuning.jobs.cancel':
-          return '/v1/fine_tuning/jobs/*/cancel'
-        default:
-          return '/v1/fine-tunes/*/cancel'
-      }
+      return methodName === 'fine_tuning.jobs.cancel'
+        ? '/v1/fine_tuning/jobs/*/cancel'
+        : '/v1/fine-tunes/*/cancel'
   }
 
   return url

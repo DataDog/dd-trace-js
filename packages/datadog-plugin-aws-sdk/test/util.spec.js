@@ -5,7 +5,12 @@ const { Buffer } = require('node:buffer')
 
 const { describe, it } = require('mocha')
 
-const { generatePointerHash, encodeValue, extractPrimaryKeys, extractQueueMetadata } = require('../src/util')
+const {
+  encodeValue,
+  extractPrimaryKeys,
+  extractQueueMetadata,
+  generatePointerHash,
+} = require('../src/util')
 
 describe('generatePointerHash', () => {
   describe('should generate a valid hash for S3 object with', () => {

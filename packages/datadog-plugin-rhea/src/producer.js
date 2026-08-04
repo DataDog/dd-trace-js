@@ -37,12 +37,12 @@ class RheaProducerPlugin extends ProducerPlugin {
 
 function addDeliveryAnnotations (msg, tracer, span) {
   if (msg) {
-    msg.delivery_annotations = msg.delivery_annotations || {}
+    msg.delivery_annotations ||= {}
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
 
     if (tracer._config.dsmEnabled) {
-      const targetName = span.context()._tags['amqp.link.target.address']
+      const targetName = span.context().getTag('amqp.link.target.address')
       const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
       const dataStreamsContext = tracer
         .setCheckpoint(['direction:out', `exchange:${targetName}`, 'type:rabbitmq'], span, payloadSize)

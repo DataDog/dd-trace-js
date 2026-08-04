@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.titan-text-lite-v1/invoke-with-response-stream",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-amzn-bedrock-accept": "application/json",
+      "Content-Length": "109",
+      "User-Agent": "aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"inputText\":\"What is the capital of France?\",\"textGenerationConfig\":{\"temperature\":0.5,\"maxTokenCount\":512}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/vnd.amazon.eventstream",
+      "Date": "Tue, 09 Sep 2025 18:49:59 GMT",
+      "Transfer-Encoding": "chunked",
+      "X-Amzn-Bedrock-Content-Type": "application/json",
+      "x-amzn-RequestId": "7e6855f0-e369-4fe2-81e5-b01bff580f7a"
+    },
+    "body": "base64:AAACJQAAAEvAxUYOCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SnZkWFJ3ZFhSVVpYaDBJam9pWEc1UVlYSnBjeUJwY3lCMGFHVWdZMkZ3YVhSaGJDQnZaaUJHY21GdVkyVXVJRkJoY21sekxDQjBhR1VnWTJGd2FYUmhiQ0J2WmlCR2NtRnVZMlVzSUdseklHRWdZMmwwZVNCMGFHRjBJR2hoY3lCaVpXVnVJR0VnWTJWdWRHVnlJRzltSUdGeWRDd2dZM1ZzZEhWeVpTd2dZVzVrSUdOMWFYTnBibVVnWm05eUlHTmxiblIxY21sbGN5NGdWR2hsSUdOcGRIa2dhWE1nYUc5dFpTQjBieUJ6YjIxbElHOW1JSFJvWlNCM2IzSnNaQ2R6SUcxdmMzUWdabUZ0YjNWeklpd2lhVzVrWlhnaU9qQXNJblJ2ZEdGc1QzVjBjSFYwVkdWNGRGUnZhMlZ1UTI5MWJuUWlPbTUxYkd3c0ltTnZiWEJzWlhScGIyNVNaV0Z6YjI0aU9tNTFiR3dzSW1sdWNIVjBWR1Y0ZEZSdmEyVnVRMjkxYm5RaU9qZDkiLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNIn06tAr8AAACswAAAEueg5S+CzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SnZkWFJ3ZFhSVVpYaDBJam9pSUd4aGJtUnRZWEpyY3l3Z2FXNWpiSFZrYVc1bklIUm9aU0JGYVdabVpXd2dWRzkzWlhJc0lFNXZkSEpsSUVSaGJXVWdRMkYwYUdWa2NtRnNMQ0JoYm1RZ2RHaGxJRXh2ZFhaeVpTQk5kWE5sZFcwdUlGQmhjbWx6SUdseklHRnNjMjhnWVNCdFlXcHZjaUJwYm5SbGNtNWhkR2x2Ym1Gc0lHaDFZaUJtYjNJZ1luVnphVzVsYzNNc0lHWnBibUZ1WTJVc0lHRnVaQ0IwYjNWeWFYTnRMaUlzSW1sdVpHVjRJam93TENKMGIzUmhiRTkxZEhCMWRGUmxlSFJVYjJ0bGJrTnZkVzUwSWpvM09Dd2lZMjl0Y0d4bGRHbHZibEpsWVhOdmJpSTZJa1pKVGtsVFNDSXNJbWx1Y0hWMFZHVjRkRlJ2YTJWdVEyOTFiblFpT201MWJHd3NJbUZ0WVhwdmJpMWlaV1J5YjJOckxXbHVkbTlqWVhScGIyNU5aWFJ5YVdOeklqcDdJbWx1Y0hWMFZHOXJaVzVEYjNWdWRDSTZOeXdpYjNWMGNIVjBWRzlyWlc1RGIzVnVkQ0k2Tnpnc0ltbHVkbTlqWVhScGIyNU1ZWFJsYm1ONUlqb3pNalUzTENKbWFYSnpkRUo1ZEdWTVlYUmxibU41SWpveU5UWTVmWDA9IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSUyJ9VK4OpA=="
+  }
+}

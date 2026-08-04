@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
@@ -29,12 +30,14 @@ describe('ci-visibility/requests/request', () => {
 
   describe('statusCode preservation across retries', () => {
     it('should preserve 429 status code when the retry fails with a network error', (done) => {
+      const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
       // x-ratelimit-reset: '0' → reset is in the past → waitMs = max(0, 0 − Date.now()) = 0
       nock('http://localhost:8126')
         .post('/path')
         .reply(429, 'rate limited', { 'x-ratelimit-reset': '0' })
         .post('/path')
-        .replyWithError({ code: 'ECONNRESET' })
+        .replyWithError(networkError)
 
       request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
         assert.ok(err)
@@ -44,17 +47,54 @@ describe('ci-visibility/requests/request', () => {
     })
 
     it('should preserve 5xx status code when the retry fails with a network error', (done) => {
+      const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
       nock('http://localhost:8126')
         .post('/path')
         .reply(503, 'service unavailable')
         .post('/path')
-        .replyWithError({ code: 'ECONNRESET' })
+        .replyWithError(networkError)
 
       request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
         assert.ok(err)
         assert.strictEqual(statusCode, 503)
         done()
       })
+    })
+  })
+
+  it('should retry on a transient network error and succeed on the next attempt', (done) => {
+    const networkError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
+    nock('http://localhost:8126')
+      .post('/path')
+      .replyWithError(networkError)
+      .post('/path')
+      .reply(200, 'ok')
+
+    request('{}', { url: 'http://localhost:8126', path: '/path' }, (err, res, statusCode) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(res, 'ok')
+      assert.strictEqual(statusCode, 200)
+      done()
+    })
+  })
+
+  // A Windows named pipe URL object must reach http.request as a single
+  // `//./pipe/<name>` socket path; the connection itself fails on the test host,
+  // which is fine — we only pin the options the request was built with.
+  it('derives the socket path for a Windows named pipe URL object', (done) => {
+    const requestSpy = sinon.spy(http, 'request')
+
+    request('{}', { url: new URL('unix://./pipe/datadog'), path: '/path' }, () => {
+      requestSpy.restore()
+      try {
+        assert.ok(requestSpy.called)
+        assert.strictEqual(requestSpy.getCall(0).args[0].socketPath, '//./pipe/datadog')
+      } catch (error) {
+        return done(error)
+      }
+      done()
     })
   })
 })

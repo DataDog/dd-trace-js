@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -10,12 +11,12 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
@@ -26,22 +27,25 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'Gateway', undefined, 'microgateway-core')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Gateway',
+      packageName: 'microgateway-core',
+      defaultExport: true,
+      namedExports: [],
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'microgateway.request'), true)
         })
       }).timeout(20000)

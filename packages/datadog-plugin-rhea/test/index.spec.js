@@ -19,10 +19,10 @@ describe('Plugin', () => {
 
   describe('rhea', function () {
     before(() => {
-      agent.load('rhea')
+      return agent.load('rhea')
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
@@ -125,7 +125,7 @@ describe('Plugin', () => {
                   })
                 }
               }, { timeoutMs: 2000 })
-              assert.ok(((statsPointsReceived) >= (1)))
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
             }).then(done, done)
 
@@ -143,7 +143,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(((statsPointsReceived) >= (2)))
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 2000 }).then(done, done)
 
@@ -243,7 +243,7 @@ describe('Plugin', () => {
             it('should extract the span context', done => {
               container.once('message', msg => {
                 const span = tracer.scope().active()
-                assert.notStrictEqual(span._spanContext._parentId, null)
+                assert.notStrictEqual(span.context()._parentId, null)
                 done()
               })
               context.sender.send({ body: 'Hello World!' })
@@ -455,10 +455,10 @@ describe('Plugin', () => {
                 const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
-                Session.prototype.on_transfer = function onTransferWrapped () {
+                Session.prototype.on_transfer = function onTransferWrapped (...args) {
                   try {
-                    return onTransfer.apply(this, arguments)
-                  } catch (e) {
+                    return onTransfer.apply(this, args)
+                  } catch {
                     // this is just to prevent mocha from crashing
                   }
                 }

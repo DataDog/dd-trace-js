@@ -26,6 +26,9 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   // Event Hub triggers
   shimmer.wrap(app, 'eventHub', wrapHandler)
 
+  // CosmosDB triggers
+  shimmer.wrap(app, 'cosmosDB', wrapHandler)
+
   return azureFunction
 })
 

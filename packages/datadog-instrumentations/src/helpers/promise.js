@@ -21,9 +21,9 @@ exports.wrapThen = function wrapThen (origThen) {
 function wrapCallback (ar, callback) {
   if (typeof callback !== 'function') return callback
 
-  return function () {
+  return function (...args) {
     return ar.runInAsyncScope(() => {
-      return callback.apply(this, arguments)
+      return callback.apply(this, args)
     })
   }
 }

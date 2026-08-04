@@ -3,6 +3,7 @@
 const { randomBytes } = require('crypto')
 const { createSocket } = require('dgram')
 const log = require('../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const AMZN_TRACE_ID_ENV_VAR = '_X_AMZN_TRACE_ID'
 const AWS_XRAY_DAEMON_ADDRESS_ENV_VAR = 'AWS_XRAY_DAEMON_ADDRESS'
@@ -17,7 +18,7 @@ const SAMPLE_MODE = {
   USER_REJECT: -1,
   AUTO_REJECT: 0,
   AUTO_KEEP: 1,
-  USER_KEEP: 2
+  USER_KEEP: 2,
 }
 
 function hexStrToDecimalStr (hexString) {
@@ -29,7 +30,7 @@ function parseAWSTraceHeader (awsTraceHeader) {
   const root = parts[0]
   const parent = parts[1]
   const _sampled = parts[2]
-  if (parent === undefined || _sampled === undefined) return undefined
+  if (parent === undefined || _sampled === undefined) return
 
   const traceIdParts = root.split('=')
   const parentIdParts = parent.split('=')
@@ -39,7 +40,7 @@ function parseAWSTraceHeader (awsTraceHeader) {
   const parentId = parentIdParts[1]
   const sampled = sampledParts[1]
 
-  if (traceId === undefined || parentId === undefined || sampled === undefined) return undefined
+  if (traceId === undefined || parentId === undefined || sampled === undefined) return
 
   return { traceId, parentId, sampled }
 }
@@ -49,40 +50,30 @@ function convertToSampleMode (xraySampled) {
 }
 
 function convertToParentId (xrayParentId) {
-  if (xrayParentId.length !== 16) return undefined
+  if (xrayParentId.length !== 16) return
   try {
     return BigInt('0x' + xrayParentId).toString(10)
-  } catch (e) {
+  } catch {
     log.debug('Failed to convert X-Ray parent ID: %s', xrayParentId)
-    return undefined
   }
 }
 
 function convertToTraceId (xrayTraceId) {
   const parts = xrayTraceId.split('-')
-  if (parts.length < 3) return undefined
+  if (parts.length < 3) return
 
   const lastPart = parts[2]
-  if (lastPart.length !== 24) return undefined
+  if (lastPart.length !== 24) return
 
   try {
-    return (BigInt('0x' + lastPart) % BigInt('0x8000000000000000')).toString(10)
-  } catch (e) {
+    return (BigInt('0x' + lastPart) % 0x80_00_00_00_00_00_00_00n).toString(10)
+  } catch {
     log.debug('Failed to convert X-Ray trace ID: %s', lastPart)
-    return undefined
   }
-}
-
-function parseXrayTraceId (header) {
-  if (!header) {
-    header = process.env[AMZN_TRACE_ID_ENV_VAR]
-  }
-  if (!header) return undefined
-  return parseAWSTraceHeader(header)
 }
 
 function extractXrayContext () {
-  const header = process.env[AMZN_TRACE_ID_ENV_VAR]
+  const header = getEnvironmentVariable(AMZN_TRACE_ID_ENV_VAR)
   if (header === undefined) {
     log.debug('Could not read X-Ray trace header from env')
     return null
@@ -113,7 +104,7 @@ function extractXrayContext () {
     traceId,
     parentId,
     sampleMode,
-    source: 'xray'
+    source: 'xray',
   }
 }
 
@@ -124,29 +115,29 @@ function extractDDContextFromAWSTraceHeader (amznTraceId) {
   const traceIdParts = awsContext.traceId.split('-')
   if (traceIdParts && traceIdParts.length > 2 && traceIdParts[2].startsWith(DD_TRACE_JAVA_TRACE_ID_PADDING)) {
     return {
-      traceId: hexStrToDecimalStr(traceIdParts[2].substring(8)),
+      traceId: hexStrToDecimalStr(traceIdParts[2].slice(8)),
       parentId: hexStrToDecimalStr(awsContext.parentId),
       sampleMode: parseInt(awsContext.sampled, 10),
-      source: 'event'
+      source: 'event',
     }
   }
   return null
 }
 
 function generateSubsegment (key, metadata) {
-  const header = process.env[AMZN_TRACE_ID_ENV_VAR]
+  const header = getEnvironmentVariable(AMZN_TRACE_ID_ENV_VAR)
   if (header === undefined) {
     log.debug('Could not read X-Ray trace header from env')
-    return undefined
+    return
   }
 
   const context = parseAWSTraceHeader(header)
-  if (context === undefined) return undefined
+  if (context === undefined) return
 
   const sampled = convertToSampleMode(parseInt(context.sampled, 10))
   if (sampled === SAMPLE_MODE.USER_REJECT || sampled === SAMPLE_MODE.AUTO_REJECT) {
     log.debug('Discarding X-Ray metadata subsegment due to sampling')
-    return undefined
+    return
   }
 
   const milliseconds = Date.now() * 0.001
@@ -161,14 +152,14 @@ function generateSubsegment (key, metadata) {
     type: 'subsegment',
     metadata: {
       [SUBSEGMENT_NAMESPACE]: {
-        [key]: metadata
-      }
-    }
+        [key]: metadata,
+      },
+    },
   })
 }
 
 function sendSegmentToXray (segment) {
-  const daemon = process.env[AWS_XRAY_DAEMON_ADDRESS_ENV_VAR]
+  const daemon = getEnvironmentVariable(AWS_XRAY_DAEMON_ADDRESS_ENV_VAR)
   if (daemon === undefined) {
     log.debug('X-Ray daemon env var not set, not sending subsegment')
     return
@@ -186,8 +177,12 @@ function sendSegmentToXray (segment) {
   let client
   try {
     client = createSocket('udp4')
-    client.send(message, 0, message.length, port, address, function (error, bytes) {
+    client.send(message, 0, message.length, port, address, function (error) {
       if (client) client.close()
+      if (error) {
+        log.debug('Error sending metadata payload to X-Ray daemon: %s', error.message)
+        return
+      }
       log.debug('X-Ray daemon received metadata payload')
     })
   } catch (error) {
@@ -202,7 +197,7 @@ function sendXraySubsegment (traceContext, lambdaContext) {
   const metadata = {
     'trace-id': traceContext.traceId,
     'parent-id': traceContext.parentId,
-    'sampling-priority': traceContext.sampleMode
+    'sampling-priority': traceContext.sampleMode,
   }
 
   const subsegment = generateSubsegment(SUBSEGMENT_KEY, metadata)
@@ -241,5 +236,5 @@ module.exports = {
   parseXrayTraceId: parseAWSTraceHeader,
   addLambdaTriggerTags,
   addStepFunctionContext,
-  addMetadata
+  addMetadata,
 }

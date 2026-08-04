@@ -6,7 +6,7 @@ const log = require('../../dd-trace/src/log')
 const HOST = '127.0.0.1'
 const PORT = 8125
 const SOCKET_TYPE = 'udp4'
-const TAG_RE = /[^\w\d_\-:/\.]/gu
+const TAG_RE = /[^\w\-:/.]/gu
 const TAG_SUB = '_'
 const MAX_FLUSH_TIMEOUT = 1000
 
@@ -63,7 +63,7 @@ class LambdaDogStatsD {
   }
 
   _normalizeTags (tags) {
-    return tags.map(function (t) { return t.replace(TAG_RE, TAG_SUB) })
+    return tags.map(function (t) { return t.replaceAll(TAG_RE, TAG_SUB) })
   }
 
   _report (metric, metricType, value, tags, timestamp) {
@@ -71,7 +71,7 @@ class LambdaDogStatsD {
     if (timestamp) timestamp = Math.floor(timestamp)
 
     const serializedTags = tags && tags.length ? `|#${this._normalizeTags(tags).join(',')}` : ''
-    const timestampPart = timestamp != null ? `|T${timestamp}` : ''
+    const timestampPart = timestamp == null ? '' : `|T${timestamp}`
     const payload = `${metric}:${value}|${metricType}${serializedTags}${timestampPart}`
     this._send(payload)
   }
@@ -82,7 +82,7 @@ class LambdaDogStatsD {
     const promise = new Promise(function (resolve) {
       self._socket.send(msg, PORT, HOST, function (err) {
         if (err) {
-          log.debug(`Unable to send metric packet: ${err.message}`)
+          log.debug('Unable to send metric packet: %s', err.message)
         }
         resolve()
       })
@@ -103,7 +103,7 @@ function isExtensionRunning () {
   try {
     require('node:fs').accessSync('/opt/extensions/datadog-agent')
     return true
-  } catch (e) {
+  } catch {
     return false
   }
 }

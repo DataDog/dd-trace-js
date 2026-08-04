@@ -3,49 +3,16 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const tracer = require('../../')
+
 const id = require('../id')
 const log = require('../log')
-const DatadogSpanContext = require('../opentracing/span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
-
-function normalizeLinkContext (context) {
-  if (!context) return
-
-  // OTel API bridge SpanContext wrapper
-  if (context._ddContext) return context._ddContext
-
-  // Datadog span context
-  if (typeof context.toTraceId === 'function' && typeof context.toSpanId === 'function') {
-    return context
-  }
-
-  // Standard OTel SpanContext (traceId/spanId)
-  if (typeof context.traceId !== 'string' || typeof context.spanId !== 'string') {
-    // Invalid
-    return
-  }
-
-  let sampling
-  if (typeof context.traceFlags === 'number') {
-    sampling = { priority: context.traceFlags & 1 }
-  }
-
-  let tracestate
-  if (context.traceState?.serialize) {
-    tracestate = TraceState.fromString(context.traceState.serialize())
-  }
-
-  return new DatadogSpanContext({
-    traceId: id(context.traceId, 16),
-    spanId: id(context.spanId, 16),
-    sampling,
-    tracestate,
-  })
-}
+const { normalizeLinkContext } = require('./span-helpers')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -81,10 +48,10 @@ class Tracer {
   }
 
   _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
-    const origin = null
+    let origin = null
     let samplingPriority = traceFlag
 
-    ts = ts?.traceparent || null
+    ts = ts?.traceparent
 
     if (ts) {
       // Use TraceState.fromString to parse the tracestate header
@@ -101,19 +68,17 @@ class Tracer {
         // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
         // Extract values as needed, similar to the original logic
         const samplingPriorityTs = ddTraceStateData.get('s')
-        const origin = ddTraceStateData.get('o')
+        origin = ddTraceStateData.get('o') ?? null
         // Convert Map to object for meta
         const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(
-          traceFlag,
-          Number.parseInt(samplingPriorityTs, 10),
-          origin
-        )
+        // Guard against an undefined/empty `s:` field that would result in NaN.
+        const tracestateSamplingPriority = samplingPriorityTs ? Math.trunc(samplingPriorityTs) : undefined
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
-        log.debug('no dd list member in tracestate from incoming request:', ts)
+        log.debug('No dd list member in tracestate from incoming request:', ts)
       }
     }
 
@@ -121,8 +86,8 @@ class Tracer {
       traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
     })
 
-    spanContext._sampling = { priority: samplingPriority }
-    spanContext._trace = { origin }
+    spanContext._ddContext._sampling = { priority: samplingPriority }
+    spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
     return spanContext
   }
 
@@ -142,6 +107,14 @@ class Tracer {
       spanContext = new SpanContext()
     }
 
+    // init() didn't finish setting up real tracing (e.g. DD_TRACE_ENABLED=false,
+    // or init() was never called), so the inner tracer is still the noop.
+    // DatadogSpan can't construct without a processor + prioritySampler, so fall
+    // through to a non-recording span; the SpanContext still propagates.
+    if (!tracer._tracingInitialized) {
+      return api.trace.wrapSpanContext(spanContext)
+    }
+
     const spanKind = options.kind || api.SpanKind.INTERNAL
     const links = []
     if (options.links?.length) {
@@ -156,28 +129,6 @@ class Tracer {
       }
     }
     const attributes = sanitizeAttributes(options.attributes)
-
-    // TODO: sampling API is not yet supported
-    // // make sampling decision
-    // const samplingResult = this._sampler.shouldSample(
-    //   context,
-    //   spanContext.traceId,
-    //   name,
-    //   spanKind,
-    //   attributes,
-    //   links
-    // )
-
-    // // Should use new span context
-    // spanContext._ddContext._sampling.priority =
-    //   samplingResult.decision === api.SamplingDecision.RECORD_AND_SAMPLED
-    //     ? AUTO_KEEP
-    //     : AUTO_REJECT
-
-    // if (samplingResult.decision === api.SamplingDecision.NOT_RECORD) {
-    //   api.diag.debug('Recording is off, propagating context in a non-recording span')
-    //   return api.trace.wrapSpanContext(spanContext)
-    // }
 
     return new Span(
       this,

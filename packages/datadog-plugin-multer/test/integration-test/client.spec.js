@@ -3,20 +3,27 @@
 const assert = require('node:assert/strict')
 const axios = require('axios')
 const {
-  useSandbox, sandboxCwd, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc,
+  useSandbox,
+  sandboxCwd,
+  varySandbox,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('multer', 'multer', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'multer@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-multer/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'multer')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'multer',
+      packageName: 'multer',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -24,11 +31,11 @@ withVersions('multer', 'multer', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.post(`${proc.url}/upload`, { key: 'value' })

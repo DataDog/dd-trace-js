@@ -6,6 +6,11 @@ const { wrapThen } = require('./helpers/promise')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
+// Bound around the deferred query execution. The `bindStore` transform returns a
+// child store with the analysis marker set, covering the whole async scope that
+// reaches the mongodb driver. `runStores` enters the child only for that scope
+// and restores the parent on its own.
+const execCh = channel('datadog:mongoose:model:filter:exec')
 // this channel is for wrapping the callback of exec methods and handling store context
 const execStartCh = channel('apm:mongoose:exec:start')
 const execFinishCh = channel('apm:mongoose:exec:finish')
@@ -50,11 +55,11 @@ const collectionMethodsWithFilter = [
   'remove',
 ]
 
-const collectionMethodsWithTwoFilters = [
+const collectionMethodsWithTwoFilters = new Set([
   'findOneAndUpdate',
   'updateMany',
   'updateOne',
-]
+])
 
 addHook({
   name: 'mongoose',
@@ -62,18 +67,18 @@ addHook({
   file: 'lib/model.js',
 }, Model => {
   for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
-    const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+    const useTwoArguments = collectionMethodsWithTwoFilters.has(methodName)
     if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {
-      return function wrappedModelMethod () {
+      return function wrappedModelMethod (...args) {
         if (!startCh.hasSubscribers) {
-          return method.apply(this, arguments)
+          return method.apply(this, args)
         }
 
-        const filters = [arguments[0]]
+        const filters = [args[0]]
         if (useTwoArguments) {
-          filters.push(arguments[1])
+          filters.push(args[1])
         }
 
         let callbackWrapped = false
@@ -84,10 +89,10 @@ addHook({
           if (typeof args[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
             shimmer.wrap(args, lastArgumentIndex, originalCb => {
-              return function () {
+              return function (...args) {
                 finishCh.publish(ctx)
 
-                return originalCb.apply(this, arguments)
+                return originalCb.apply(this, args)
               }
             })
 
@@ -101,19 +106,25 @@ addHook({
         }
 
         return startCh.runStores(ctx, () => {
-          wrapCallbackIfExist(arguments, ctx)
+          wrapCallbackIfExist(args, ctx)
 
-          const res = method.apply(this, arguments)
+          // A callback query executes synchronously inside `method.apply`, so the
+          // exec scope (and the deferred driver call it spawns) must be entered
+          // here. A promise query defers execution to a later `exec`/`then`, which
+          // is bound separately below.
+          const res = callbackWrapped
+            ? execCh.runStores(ctx, () => method.apply(this, args))
+            : method.apply(this, args)
 
           // if it is not callback, wrap exec method and its then
           if (!callbackWrapped) {
             shimmer.wrap(res, 'exec', originalExec => {
-              return function wrappedExec () {
+              return function wrappedExec (...args) {
                 if (!callbackWrapped) {
-                  wrapCallbackIfExist(arguments, ctx)
+                  wrapCallbackIfExist(args, ctx)
                 }
 
-                const execResult = originalExec.apply(this, arguments)
+                const execResult = execCh.runStores(ctx, () => originalExec.apply(this, args))
 
                 if (callbackWrapped || typeof execResult?.then !== 'function') {
                   return execResult
@@ -121,27 +132,25 @@ addHook({
 
                 // wrap them method, wrap resolve and reject methods
                 shimmer.wrap(execResult, 'then', originalThen => {
-                  return function wrappedThen () {
-                    const resolve = arguments[0]
-                    const reject = arguments[1]
+                  return function wrappedThen (...args) {
+                    const resolve = args[0]
+                    const reject = args[1]
 
-                    arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
-                      finishCh.publish(ctx)
+                    if (typeof resolve === 'function') {
+                      args[0] = shimmer.wrapCallback(resolve, resolve => function wrappedResolve (...args) {
+                        finishCh.publish(ctx)
+                        return resolve.apply(this, args)
+                      })
+                    }
 
-                      if (resolve) {
-                        return resolve.apply(this, arguments)
-                      }
-                    })
+                    if (typeof reject === 'function') {
+                      args[1] = shimmer.wrapCallback(reject, reject => function wrappedReject (...args) {
+                        finishCh.publish(ctx)
+                        return reject.apply(this, args)
+                      })
+                    }
 
-                    arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
-                      finishCh.publish(ctx)
-
-                      if (reject) {
-                        return reject.apply(this, arguments)
-                      }
-                    })
-
-                    return originalThen.apply(this, arguments)
+                    return originalThen.apply(this, args)
                   }
                 })
 
@@ -165,8 +174,8 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js',
 }, sanitizeFilter => {
-  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
-    const sanitizedObject = sanitizeFilter.apply(this, arguments)
+  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter (...args) {
+    const sanitizedObject = sanitizeFilter.apply(this, args)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
       sanitizeFilterFinishCh.publish({

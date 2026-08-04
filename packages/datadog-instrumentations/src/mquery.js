@@ -20,14 +20,14 @@ const methods = [
   'where',
 ]
 
-const methodsOptionalArgs = ['findOneAndUpdate']
+const methodsOptionalArgs = new Set(['findOneAndUpdate'])
 
 function getFilters (args, methodName) {
   const [arg0, arg1] = args
 
   const filters = arg0 !== null && typeof arg0 === 'object' ? [arg0] : []
 
-  if (arg1 !== null && typeof arg1 === 'object' && methodsOptionalArgs.includes(methodName)) {
+  if (arg1 !== null && typeof arg1 === 'object' && methodsOptionalArgs.has(methodName)) {
     filters.push(arg1)
   }
 
@@ -42,22 +42,22 @@ addHook({
     if (!(methodName in Query.prototype)) continue
 
     shimmer.wrap(Query.prototype, methodName, method => {
-      return function () {
+      return function (...args) {
         if (prepareCh.hasSubscribers) {
-          const filters = getFilters(arguments, methodName)
+          const filters = getFilters(args, methodName)
           if (filters?.length) {
             prepareCh.publish({ filters })
           }
         }
 
-        return method.apply(this, arguments)
+        return method.apply(this, args)
       }
     })
   }
 
   shimmer.wrap(Query.prototype, 'exec', originalExec => {
-    return function wrappedExec () {
-      return tracingCh.tracePromise(originalExec, {}, this, arguments)
+    return function wrappedExec (...args) {
+      return tracingCh.tracePromise(originalExec, {}, this, args)
     }
   })
 

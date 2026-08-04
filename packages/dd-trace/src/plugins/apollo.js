@@ -3,13 +3,15 @@
 const { storage } = require('../../../datadog-core')
 const TracingPlugin = require('./tracing')
 
+const legacyStorage = storage('legacy')
+
 class ApolloBasePlugin extends TracingPlugin {
   static id = 'apollo.gateway'
   static type = 'web'
   static kind = 'server'
 
   bindStart (ctx) {
-    const store = storage('legacy').getStore()
+    const store = legacyStorage.getStore()
     const childOf = store ? /** @type {import('../opentracing/span') | undefined} */ (store.span) : null
 
     const span = this.startSpan(this.getOperationName(), {

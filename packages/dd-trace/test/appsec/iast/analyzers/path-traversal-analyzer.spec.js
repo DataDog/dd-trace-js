@@ -5,6 +5,7 @@ const os = require('os')
 const path = require('path')
 
 const fs = require('fs')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../../../datadog-core')
@@ -93,7 +94,7 @@ describe('path-traversal-analyzer', () => {
   it('If no context it should return evidence with an undefined ranges array', () => {
     const evidence = pathTraversalAnalyzer._getEvidence('', null)
     assert.strictEqual(evidence.value, '')
-    assert.ok(Array.isArray(evidence.ranges))
+    assert.ok(Array.isArray(evidence.ranges), `Expected array, got ${inspect(evidence.ranges)}`)
     assert.strictEqual(evidence.ranges.length, 0)
   })
 

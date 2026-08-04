@@ -1,0 +1,23 @@
+{
+  "supportedConfigurations": {
+    "DD_LLMOBS_ENABLED": [
+      {
+        "namespace": "llmobs"
+      }
+    ],
+    "DD_LLMOBS_ML_APP": [
+      {
+        "configurationNames": [
+          "llmobs.mlApp"
+        ]
+      }
+    ],
+    "DD_TRACE_ENABLED": [
+      {
+        "configurationNames": [
+          "tracing"
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "./vendor/dist/opentracing";
+import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -19,6 +19,12 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * Starts and returns a new Span representing a logical unit of work.
+   *
+   * The returned span is not activated on the current scope. Spans created
+   * while it is open — via {@link Tracer.trace} or auto-instrumentation — only
+   * nest under it when it is the active span, so wrap the work in
+   * {@link Scope.activate} (or use {@link Tracer.trace}) when child spans
+   * should descend from it.
    * @param {string} name The name of the operation.
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
@@ -65,7 +71,7 @@ interface Tracer extends opentracing.Tracer {
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends tracer.PluginName> (plugin: P, config?: tracer.PluginOptions[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -130,6 +136,11 @@ interface Tracer extends opentracing.Tracer {
 
   appsec: tracer.Appsec;
 
+  /**
+   * Profiling API for attaching custom labels to profiler samples.
+   */
+  profiling: tracer.Profiling;
+
   TracerProvider: tracer.opentelemetry.TracerProvider;
 
   dogstatsd: tracer.DogStatsD;
@@ -145,12 +156,12 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * OpenFeature Provider with Remote Config integration.
+   * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed.
    *
-   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+   * @env DD_FEATURE_FLAGS_ENABLED
+   * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -213,8 +224,8 @@ interface Tracer extends opentracing.Tracer {
   removeAllBaggageItems (): Record<string, string>;
 }
 
-// left out of the namespace, so it
-// is doesn't need to be exported for Tracer
+// Left out of the namespace, so it doesn't need to be exported for Tracer.
+// Only include plugins here that can be either disabled or configured.
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
@@ -222,9 +233,12 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
+  "claude-agent-sdk": tracer.plugins.claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
@@ -240,12 +254,12 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
+  "electron": tracer.plugins.electron;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
-  "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -259,7 +273,6 @@ interface Plugins {
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs;
-  "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "langgraph": tracer.plugins.langgraph;
@@ -267,15 +280,18 @@ interface Plugins {
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
   "mocha": tracer.plugins.mocha;
+  "modelcontextprotocol-sdk": tracer.plugins.modelcontextprotocol_sdk;
   "moleculer": tracer.plugins.moleculer;
   "mongodb-core": tracer.plugins.mongodb_core;
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
+  "openai-agents": tracer.plugins.openai_agents;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
   "playwright": tracer.plugins.playwright;
@@ -298,6 +314,9 @@ interface Plugins {
 }
 
 declare namespace tracer {
+  export interface PluginOptions extends Plugins {}
+  export type PluginName = keyof PluginOptions;
+
   export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
@@ -345,17 +364,6 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
-
-    /**
-     * Causally links another span to the current span
-     *
-     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
-     * This will be removed in the next major version.
-     * @param {SpanContext} context The context of the span to link to.
-     * @param {Object} attributes An optional key value pair of arbitrary values.
-     * @returns {void}
-     */
-    addLink (context: SpanContext, attributes?: Object): void;
 
     /**
      * Adds a single link to the span.
@@ -410,7 +418,7 @@ declare namespace tracer {
    */
   export interface SamplingRule {
     /**
-     * Sampling rate for this rule.
+     * Sampling rate for this rule. A range between 0 and 1 representing the percent of traces sampled.
      */
     sampleRate: number
 
@@ -423,6 +431,22 @@ declare namespace tracer {
      * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
      */
     name?: string | RegExp
+
+    /**
+     * Resource name on which to apply this rule. The rule will apply to all resource names if not provided.
+     */
+    resource?: string | RegExp
+
+    /**
+     * Span tags on which to apply this rule, keyed by tag name. Each value is a glob pattern or regular
+     * expression, and the rule only applies when every entry matches the span's tags.
+     */
+    tags?: { [key: string]: string | RegExp }
+
+    /**
+     * Maximum number of traces matching this rule to sample per second.
+     */
+    maxPerSecond?: number
   }
 
   /**
@@ -456,11 +480,15 @@ declare namespace tracer {
   export interface PropagationStyle {
     /**
      * Selection of context propagation injection mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_INJECT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     inject: string[],
 
     /**
      * Selection and priority order of context propagation extraction mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_EXTRACT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     extract: string[]
   }
@@ -476,6 +504,14 @@ declare namespace tracer {
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     apmTracingEnabled?: boolean
+
+    /**
+     * List of baggage tag keys to be included in the baggage.
+     * @default ['user.id', 'session.id', 'account.id']
+     * @env DD_TRACE_BAGGAGE_TAG_KEYS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageTagKeys?: string[];
 
     /**
      * Whether to enable trace ID injection in log records to be able to correlate
@@ -577,7 +613,7 @@ declare namespace tracer {
 
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-     * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+     * @env DD_TRACE_SAMPLE_RATE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     sampleRate?: number;
@@ -592,10 +628,10 @@ declare namespace tracer {
     rateLimit?: number,
 
     /**
-     * Sampling rules to apply to priority sampling. Each rule is a JSON,
-     * consisting of `service` and `name`, which are regexes to match against
-     * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
-     * specified, will defer to global sampling rate for all spans.
+     * Sampling rules to apply to priority sampling. Each rule matches against a trace's
+     * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
+     * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -632,23 +668,31 @@ declare namespace tracer {
      */
     runtimeMetrics?: boolean | {
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_GC_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       gc?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      eventLoop?: boolean
+      eventLoop?: boolean,
+
+      /**
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      native?: boolean
     }
 
     /**
@@ -674,26 +718,20 @@ declare namespace tracer {
     protocolVersion?: string
 
     /**
-     * Deprecated in favor of the global versions of the variables provided under this option
-     *
-     * @deprecated
-     * @hidden
+     * Whether to enable inferred proxy services.
+     * @default false
+     * @env DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    ingestion?: {
-      /**
-       * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-       * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      sampleRate?: number
+    inferredProxyServicesEnabled?: boolean
 
-      /**
-       * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
-       * @env DD_TRACE_RATE_LIMIT
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      rateLimit?: number
-    };
+    /**
+     * The site to use for the trace.
+     * @default 'datadoghq.com'
+     * @env DD_SITE
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    site?: string;
 
     /**
      * Experimental features can be enabled individually using key / value pairs.
@@ -702,18 +740,11 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * @default false
-       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      b3?: boolean
-
-      /**
        * Whether to write traces to log output or agentless, rather than send to an agent
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      exporter?: 'log' | 'agent' | 'datadog'
+      exporter?: 'log' | 'agent' | 'datadog' | 'electron'
 
       /**
        * Whether to enable the experimental `getRumData` method.
@@ -723,27 +754,6 @@ declare namespace tracer {
        */
       enableGetRumData?: boolean
 
-      /**
-       * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
-       */
-      iast?: boolean | IastOptions
-
-      appsec?: {
-        /**
-         * Configuration of Standalone ASM mode
-         * Deprecated in favor of `apmTracingEnabled`.
-         *
-         * @deprecated
-         */
-        standalone?: {
-          /**
-           * Whether to enable Standalone ASM.
-           * @default false
-           */
-          enabled?: boolean
-        }
-      },
-
       aiguard?: {
         /**
          * Set to `true` to enable the SDK.
@@ -751,6 +761,15 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
+        /**
+         * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
+         * When `true`, AI Guard will block requests that violate security policies.
+         * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
+         * @default true
+         * @env DD_AI_GUARD_BLOCK
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        block?: boolean,
         /**
          * URL of the AI Guard REST API.
          * @env DD_AI_GUARD_ENDPOINT
@@ -784,9 +803,9 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
-         * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
-         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
+         * Legacy feature flagging provider switch.
+         * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
+         * the provider.
          *
          * @default false
          * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
@@ -803,11 +822,27 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Configuration for span enrichment with feature flag evaluation data.
+         */
+        spanEnrichment?: {
+          /**
+           * Whether to enable span enrichment with feature flag data.
+           * When enabled, feature flag evaluation metadata is attached to APM spans.
+           * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED environment variable.
+           *
+           * @default false
+           * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
       }
     };
 
     /**
      * Whether to load all built-in plugins.
+     * @deprecated To deactivate plugins, use the specific DD_TRACE_<INTEGRATION>_ENABLED environment variables.
      * @default true
      */
     plugins?: boolean;
@@ -849,11 +884,20 @@ declare namespace tracer {
 
     /**
      * Enables DBM to APM link using tag injection.
+     *
+     * - `disabled`: No SQL comment is injected (default).
+     * - `service`: Injects a SQL comment with service-level tags (database name, service, environment,
+     *   host, tracer service, tracer version). Enables DBM–APM correlation without full trace linking.
+     * - `full`: Same as `service`, plus a W3C `traceparent` for full distributed trace correlation.
+     * - `dynamic_service`: Same as `service`, but also automatically injects the propagation hash
+     *   (`ddsh`) when process tags are enabled (`DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true`).
+     *   This is a convenience shorthand for `service` + `DD_DBM_INJECT_SQL_BASEHASH=true`.
+     *
      * @default 'disabled'
      * @env DD_DBM_PROPAGATION_MODE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    dbmPropagationMode?: 'disabled' | 'service' | 'full'
+    dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service'
 
     /**
      * Whether to enable Data Streams Monitoring.
@@ -1011,15 +1055,6 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
-
-        /** Whether to enable request body collection on RASP event
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_RASP_COLLECT_REQUEST_BODY
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        bodyCollection?: boolean
       },
       /**
        * Configuration for stack trace reporting
@@ -1046,39 +1081,6 @@ declare namespace tracer {
          */
         maxDepth?: number,
       },
-      /**
-       * Configuration for extended headers collection tied to security events
-       *
-       * @deprecated Use UI and Remote Configuration to enable extended data collection
-       */
-      extendedHeadersCollection?: {
-        /** Whether to enable extended headers collection
-         * @default false
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_COLLECT_ALL_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        enabled: boolean,
-
-        /** Whether to redact collected headers
-         * @default true
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        redaction: boolean,
-
-        /** Specifies the maximum number of headers collected.
-         * @default 50
-         *
-         * @deprecated Use UI and Remote Configuration to enable extended data collection
-         * @env DD_APPSEC_MAX_COLLECTED_HEADERS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        maxHeaders: number,
-      }
     }
 
     /**
@@ -1092,6 +1094,18 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean
+
+      experimental?: {
+        exit_spans?: {
+          /**
+           * Whether to attach code origin data to exit spans.
+           * @default false
+           * @env DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
+      }
     }
 
     /**
@@ -1226,6 +1240,134 @@ declare namespace tracer {
        */
       redactionExcludedIdentifiers?: string[]
     }
+
+    /**
+     * Maximum size in bytes for serialized baggage items.
+     * @default 8192
+     * @env DD_TRACE_BAGGAGE_MAX_BYTES
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageMaxBytes?: number
+
+    /**
+     * Maximum number of baggage items allowed on a context.
+     * @default 64
+     * @env DD_TRACE_BAGGAGE_MAX_ITEMS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageMaxItems?: number
+
+    /**
+     * Header tags (key-value pairs comma separated) to extract and attach to spans.
+     * TODO: In the next major version, this will become an object.
+     * @env DD_TRACE_HEADER_TAGS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    headerTags?: string[]
+
+    /**
+     * Whether to use Datadog legacy baggage extraction and injection behavior.
+     * @default true
+     * @env DD_TRACE_LEGACY_BAGGAGE_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    legacyBaggageEnabled?: boolean
+
+    /**
+     * Whether middleware spans should be created.
+     * @default true
+     * @env DD_TRACE_MIDDLEWARE_TRACING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    middlewareTracingEnabled?: boolean
+
+    /**
+     * Whether to enable OpenAI log collection.
+     * @default false
+     * @env DD_OPENAI_LOGS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    openAiLogsEnabled?: boolean
+
+    /**
+     * Peer service name remapping rules.
+     * @env DD_TRACE_PEER_SERVICE_MAPPING
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    peerServiceMapping?: { [key: string]: string }
+
+    /**
+     * Controls the naming schema version used for spans.
+     * @default 'v0'
+     * @env DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanAttributeSchema?: 'v0' | 'v1'
+
+    /**
+     * Whether to compute peer.service tags automatically.
+     * @default false
+     * @env DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanComputePeerService?: boolean
+
+    /**
+     * Whether to remove integration names from service names under the active schema.
+     * @default false
+     * @env DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanRemoveIntegrationFromService?: boolean
+
+    /**
+     * Whether to enable client-side stats computation.
+     * @default false
+     * @env DD_TRACE_STATS_COMPUTATION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    stats?: boolean
+
+    /**
+     * Whether to generate 128-bit trace IDs.
+     * @default true
+     * @env DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceId128BitGenerationEnabled?: boolean
+
+    /**
+     * Whether to include the high 64 bits of 128-bit trace IDs in logs.
+     * @default true
+     * @env DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceId128BitLoggingEnabled?: boolean
+
+    /**
+     * Whether websocket message spans should be created.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesEnabled?: boolean
+
+    /**
+     * Whether websocket message spans should inherit sampling decisions.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesInheritSampling?: boolean
+
+    /**
+     * Whether websocket message spans should start separate traces.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesSeparateTraces?: boolean
+
   }
 
   /**
@@ -1385,6 +1527,35 @@ declare namespace tracer {
     trackUserLoginFailure(login: string, metadata?: any): void;
   }
 
+  export interface Profiling {
+    /**
+     * Declares the set of custom label keys that will be used with
+     * {@link runWithLabels}. This is used for profile upload metadata
+     * (so the Datadog UI knows which keys to index for filtering) and
+     * for pprof serialization optimization.
+     *
+     * @param keys Custom label key names.
+     */
+    setCustomLabelKeys(keys: Iterable<string>): void;
+
+    /**
+     * Runs a function with custom profiling labels attached to all wall profiler
+     * samples taken during its execution. Labels are key-value pairs that appear
+     * in the pprof output and can be used to filter flame graphs in the Datadog UI.
+     *
+     * Requires AsyncContextFrame (ACF) to be enabled. Supports nesting: inner
+     * calls merge labels with outer calls, with inner values taking precedence.
+     *
+     * When profiling is not enabled or ACF is not active, the function is still
+     * called but labels are silently dropped.
+     *
+     * @param labels Custom labels to attach to profiler samples.
+     * @param fn Function to execute with the labels.
+     * @returns The return value of fn.
+     */
+    runWithLabels<T>(labels: Record<string, string | number>, fn: () => T): T;
+  }
+
   export interface Appsec {
     /**
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
@@ -1453,7 +1624,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
@@ -1629,6 +1800,10 @@ declare namespace tracer {
        */
       tags: string[];
       /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
+      /**
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
@@ -1647,6 +1822,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */
@@ -1762,6 +1941,20 @@ declare namespace tracer {
     interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
+    interface DatabaseInstrumentation extends Instrumentation {
+      /**
+       * Truncate the resource name (e.g. the query) to the given length.
+       * When set to `true`, truncates to 5000 characters (matching the
+       * Datadog agent's default). When set to a number, truncates to that
+       * many characters. This can help prevent large queries from blocking
+       * the event loop during trace encoding.
+       *
+       * @default false
+       */
+      truncate?: boolean | number;
+    }
+
+    /** @hidden */
     interface Http extends Instrumentation {
       /**
        * List of URLs/paths that should be instrumented.
@@ -1775,14 +1968,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
        * List of URLs/paths that should not be instrumented. Takes precedence over
        * allowlist if a URL matches an entry in both.
        *
@@ -1793,14 +1978,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a URL/path is allowed.
@@ -1981,7 +2158,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    interface Prisma extends Instrumentation {}
+    interface Prisma extends DatabaseInstrumentation {}
 
     /** @hidden */
     interface PrismaClient extends Prisma {}
@@ -2018,6 +2195,12 @@ declare namespace tracer {
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
     interface anthropic extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
+     */
+    interface claude_agent_sdk extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments
@@ -2070,9 +2253,23 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
+     */
+    interface aws_durable_execution_sdk_js extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
+      /**
+       * The service name to be used for this plugin. When a function is used it is called with the AWS
+       * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
+       * is used as the service name. Returning a nullish value falls back to the default service name, so
+       * individual resources can be mapped without renaming every call to the service.
+       */
+      service?: string | ((params: anyObject) => string | undefined | null);
+
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
@@ -2099,6 +2296,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * @azure/cosmos module
+     */
+    interface azure_cosmos extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2139,7 +2342,21 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
+       *
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
@@ -2209,6 +2426,26 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [electron](https://github.com/electron/electron) module.
+     */
+    interface electron extends Instrumentation {
+      /**
+       * Whether to enable instrumentation of ipc spans
+       *
+       * @default true
+       */
+      ipc?: boolean;
+
+      /**
+       * Whether to enable instrumentation of net spans
+       *
+       * @default true
+       */
+      net?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
     interface express extends HttpServer {}
@@ -2236,12 +2473,6 @@ declare namespace tracer {
     interface fs extends Instrumentation {}
 
     /**
-     * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
-     * module to bind the callbacks the the caller context.
-     */
-    interface generic_pool extends Integration {}
-
-    /**
      * This plugin automatically instruments the
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
@@ -2251,29 +2482,48 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-   interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration {}
 
-   /**
+  /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-   interface google_genai extends Integration {}
+  interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+  /** @hidden */
+  interface ExecutionArgs {
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
+    }
+
+    /** Context object passed to the `hooks.resolve` callback for each instrumented field. */
+    interface FieldContext {
+      /** The field name being resolved */
+      fieldName: string;
+      /** The dot-separated field path (e.g. `'user.address.city'`) */
+      path: string;
+      /** The error from the resolver, or `null` if it succeeded */
+      error: Error | null;
+      /** The value returned by the resolver (sync resolvers only; `undefined` for async) */
+      result: unknown;
     }
 
     /**
      * This plugin automatically instruments the
      * [graphql](https://github.com/graphql/graphql-js) module.
+     *
+     * It also instruments [mercurius](https://github.com/mercurius-js/mercurius)
+     * (the Fastify GraphQL adapter): every request through `app.graphql` /
+     * `reply.graphql` opens a top-level `graphql.request` span that parents the
+     * `graphql.parse`/`graphql.validate`/`graphql.execute` spans and carries the
+     * request text. This span is produced even when mercurius serves the query
+     * from its JIT-compiled path, where `graphql.execute` does not run.
      *
      * The `graphql` integration uses the operation name as the span resource name.
      * If no operation name is set, the resource name will always be just `query`,
@@ -2299,8 +2549,11 @@ declare namespace tracer {
       /**
        * The maximum depth of fields/resolvers to instrument. Set to `0` to only
        * instrument the operation or to `-1` to instrument all fields/resolvers.
+       * Counts selection-set nesting (named fields) only; list indices do not
+       * count toward the limit, regardless of `collapse`.
        *
        * @default -1
+       * @env DD_TRACE_GRAPHQL_DEPTH
        */
       depth?: number;
 
@@ -2317,7 +2570,10 @@ declare namespace tracer {
       /**
        * An array of variable names to record. Can also be a callback that returns
        * the key/value pairs to record. For example, using
-       * `variables => variables` would record all variables.
+       * `variables => variables` would record all variables. The environment
+       * variable only accepts the array form (comma-separated variable names).
+       *
+       * @env DD_TRACE_GRAPHQL_VARIABLES
        */
       variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
@@ -2326,8 +2582,17 @@ declare namespace tracer {
        * `users.*.name` span instead of `users.0.name`, `users.1.name`, etc)
        *
        * @default true
+       * @env DD_TRACE_GRAPHQL_COLLAPSE
        */
       collapse?: boolean;
+
+      /**
+       * An array of error `extensions` keys to attach to the span error event
+       * for each GraphQL error.
+       *
+       * @env DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+       */
+      errorExtensions?: string[];
 
       /**
        * Whether to enable signature calculation for the resource name. This can
@@ -2349,6 +2614,7 @@ declare namespace tracer {
         execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
+        resolve?: (span?: Span, field?: FieldContext) => void;
       }
     }
 
@@ -2448,14 +2714,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2463,14 +2721,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -2505,14 +2755,6 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both. Commands must be in
        * lowercase for example 'xread'.
@@ -2520,14 +2762,6 @@ declare namespace tracer {
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Valkey command should be instrumented.
@@ -2553,12 +2787,6 @@ declare namespace tracer {
      * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
-
-    /**
-     * This plugin patches the [knex](https://knexjs.org/)
-     * module to bind the promise callback the the caller context.
-     */
-    interface knex extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2616,8 +2844,15 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     */
+    interface modelcontextprotocol_sdk extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
      */
+
     interface moleculer extends Moleculer {
       /**
        * Configuration for Moleculer clients. Set to false to disable client
@@ -2645,6 +2880,24 @@ declare namespace tracer {
       heartbeatEnabled?: boolean;
 
       /**
+       * How to mask primitive query values in the `mongodb.query` tag and the
+       * resource name (when `queryInResourceName` is also enabled). Keys,
+       * operator names, and array / pipeline shape are preserved so the masked
+       * query is still a usable query signature.
+       *
+       * - `'types'`: replace each primitive leaf with its `typeof` name
+       *   (`'string'`, `'number'`, `'boolean'`, `'bigint'`, `'object'`,
+       *   `'null'`). Keeps the same redaction guarantee as `'redact'` but
+       *   preserves the value types so the rendered query can still be used
+       *   to design indexes.
+       * - `'redact'`: replace each primitive leaf with `'?'`. Strictest masking.
+       * - `'none'`: do not mask. Values land verbatim on the span.
+       *
+       * @default 'none'
+       */
+      obfuscateQuery?: 'none' | 'types' | 'redact';
+
+      /**
        * Whether to include the query contents in the resource name.
        */
       queryInResourceName?: boolean;
@@ -2669,6 +2922,13 @@ declare namespace tracer {
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
     interface mysql2 extends mysql {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@nats-io/transport-node](https://github.com/nats-io/nats.js) and
+     * [@nats-io/nats-core](https://github.com/nats-io/nats.js) modules.
+     */
+    interface nats extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2714,6 +2974,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
      */
     interface opensearch extends elasticsearch {}
@@ -2739,7 +3005,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [pg](https://node-postgres.com/) module.
      */
-    interface pg extends Instrumentation {
+    interface pg extends DatabaseInstrumentation {
       /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
@@ -2797,28 +3063,12 @@ declare namespace tracer {
       allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
-       * Deprecated in favor of `allowlist`.
-       *
-       * deprecated
-       * @hidden
-       */
-      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
        * List of commands that should not be instrumented. Takes precedence over
        * allowlist if a command matches an entry in both.
        *
        * @default []
        */
       blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
-
-      /**
-       * Deprecated in favor of `blocklist`.
-       *
-       * @deprecated
-       * @hidden
-       */
-      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
        * Custom filter function used to decide whether a Redis command should be instrumented.
@@ -2829,6 +3079,14 @@ declare namespace tracer {
        * @returns true to instrument the command, false to skip it
        */
       filter?: (command: string) => boolean;
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
     }
 
     /**
@@ -2847,7 +3105,16 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [router](https://github.com/pillarjs/router) module.
      */
-    interface router extends Integration {}
+    interface router extends Integration {
+      /**
+       * Whether to enable instrumentation of router.middleware spans.
+       * When set to `false`, middleware spans are suppressed but route
+       * tracking (resource name, `http.route` tag) is still performed.
+       *
+       * @default true
+       */
+      middleware?: boolean;
+    }
 
     /**
     * This plugin automatically instruments the
@@ -3124,16 +3391,6 @@ declare namespace tracer {
       recordException(exception: Exception, time?: TimeInput): void;
 
       /**
-       * Causally links another span to the current span
-       *
-       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
-       * @param {otel.SpanContext} context The context of the span to link to.
-       * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
-       * @returns {void}
-       */
-      addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
-
-      /**
        * Adds a single link to the span.
        *
        * Links added after the creation will not affect the sampling decision.
@@ -3257,13 +3514,6 @@ declare namespace tracer {
     maxContextOperations?: number,
 
     /**
-     * Defines the pattern to ignore cookie names in the vulnerability hash calculation
-     * @default ".{32,}"
-     * @deprecated This property has no effect because hash calculation algorithm has been updated for cookie vulnerabilities
-     */
-    cookieFilterPattern?: string,
-
-    /**
      * Defines the number of rows to taint in data coming from databases
      * @default 1
      * @env DD_IAST_DB_ROWS_TO_TAINT
@@ -3301,16 +3551,6 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls. This option is not supported when
-     * using ESM.
-     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * environment variable instead.
-     * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    securityControlsConfiguration?: string,
-
-    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      * @env DD_IAST_TELEMETRY_VERBOSITY
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -3339,12 +3579,22 @@ declare namespace tracer {
       enabled: boolean,
 
       /**
+       * Datasets & Experiments API. Requires LLM Observability to be enabled and
+       * `DD_API_KEY` / `DD_APP_KEY` to be set.
+       */
+      experiments: Experiments,
+
+      /**
        * Enable LLM Observability tracing.
+       *
+       * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
       enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
+       *
+       * @deprecated Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.
        */
       disable (): void,
 
@@ -3418,13 +3668,22 @@ declare namespace tracer {
        *    outputData: { content: 'response', role: 'ai' },
        *    metadata: { temperature: 0.7 },
        *    tags: { host: 'localhost' },
-       *    metrics: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
+       *    metrics: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+       *    toolDefinitions: [
+       *      {
+       *        name: 'get_weather',
+       *        description: 'Returns the current weather for a given location.',
+       *        schema: { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
+       *        version: '1.0.0'
+       *      },
+       *      { name: 'get_time' }
+       *    ]
        *  })
        * })
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, and metrics to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -3478,7 +3737,163 @@ declare namespace tracer {
       flush (): void
     }
 
+    /** JSON-serializable value accepted by LLMObs Experiments. */
+    type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
+    /**
+     * A task run over each dataset record during an experiment.
+     */
+    type ExperimentTask = (
+      input: JSONType,
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores a single task output. The return type selects the metric:
+     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
+     */
+    type ExperimentEvaluator = (
+      input: JSONType,
+      output: JSONType,
+      expectedOutput: JSONType
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
+
+    interface CreateDatasetOptions {
+      description?: string
+      records?: Array<{
+        id?: string,
+        inputData: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>
+      }>
+    }
+
+    interface ExperimentOptions {
+      name: string
+      dataset: Dataset
+      task: ExperimentTask
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
+      description?: string
+      config?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      throwOnErrors?: boolean
+    }
+
+    interface PullDatasetOptions {
+      /** Dataset version to pull. Defaults to latest. */
+      version?: number
+      /** Wait until at least this many records are readable (absorbs write lag). */
+      expectedRecordCount?: number
+      /** Maximum total time to wait, in ms. Default 30000. */
+      maxWaitMs?: number
+    }
+
+    interface ExperimentResultRow {
+      index: number
+      spanId: string
+      traceId: string
+      startNs: number
+      durationNs: number
+      input: JSONType
+      output: JSONType
+      expectedOutput: JSONType
+      readonly isError: boolean
+      errorType: string | null
+      errorMessage: string | null
+      evaluations: Record<string, JSONType>
+      evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+    }
+
+    interface ExperimentResult {
+      experimentId: string
+      rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
+      /** Dashboard URL for the experiment. */
+      url: string
+    }
+
+    interface DatasetPushResult {
+      /** Number of records from this push that were confirmed with a record id. */
+      pushedCount: number
+      /** Number of records attempted in this push. */
+      totalCount: number
+    }
+
+    interface Dataset {
+      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      /** Creates the dataset remotely if needed and pushes any unpushed records. */
+      push (): Promise<DatasetPushResult>
+      name (): string
+      id (): string | null
+      projectId (): string | null
+      version (): number | null
+      latestVersion (): number | null
+      records (): Array<{
+        id: string | null,
+        input: JSONType,
+        expectedOutput: JSONType,
+        metadata: Record<string, JSONType>
+      }>
+      /** Dashboard URL for the dataset, or null until pushed. */
+      url (): string | null
+    }
+
+    interface Experiment {
+      name (): string
+      experimentId (): string | null
+      url (): string | null
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
+    }
+
+    interface Experiments {
+      /** Create a local dataset buffer; pushed on the first experiment run. */
+      createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+      /** Pull an existing dataset (with records) by name. */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+      /** Build an experiment to run over a dataset. */
+      experiment (options: ExperimentOptions): Experiment
+    }
+
     interface LLMObservabilitySpan {
+      /**
+       * The span kind
+       */
+      kind: spanKind,
+
       /**
        * The input content associated with the span.
        */
@@ -3585,6 +4000,26 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Audio segments attached to the message (e.g. speech input/output)
+       */
+      audioParts?: AudioPart[],
+    }
+
+    /**
+     * Represents an audio segment attached to an LLM chat model message.
+     */
+    interface AudioPart {
+      /**
+       * The MIME type of the audio (e.g. "audio/wav", "audio/mpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The audio content as a base64-encoded string
+       */
+      content: string,
     }
 
     /**
@@ -3655,6 +4090,13 @@ declare namespace tracer {
       template?: string | Message[]
     }
 
+    interface ToolDefinition {
+      name : string,
+      description? : string,
+      schema? : {[key : string] : any}
+      version? : string
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -3691,9 +4133,21 @@ declare namespace tracer {
       tags?: { [key: string]: any },
 
       /**
+       * List of tag keys to propagate to LLM Observability cost and token metrics emitted from this span.
+       * Each key must already be present in `tags` from this call or from a previous annotation on the
+       * same span.
+       */
+      costTags?: string[],
+
+      /**
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+      /**
+       * A list of ToolDefinition object that represents the tools available to the LLM for this span
+       * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
+       * */
+      toolDefinitions?: ToolDefinition[]
     }
 
     interface AnnotationContextOptions {
@@ -3701,6 +4155,13 @@ declare namespace tracer {
        * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
        */
       tags?: { [key: string]: any },
+
+      /**
+       * List of tag keys to propagate to LLM Observability cost and token metrics emitted from each span
+       * in the context.
+       * Each key must already be present in `tags` on the span when it starts.
+       */
+      costTags?: string[],
 
       /**
        * Set to override the span name for any spans annotated within the returned context.
@@ -3801,6 +4262,15 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       agentlessEnabled?: boolean,
+
+      /**
+       * The proportion of LLM Observability traces to sample, between `0` and `1` (inclusive).
+       * The decision is computed once per trace, propagated across services, and recorded on every
+       * span; spans are always sent and the decision is honored at ingestion time. Defaults to `1`.
+       * @env DD_LLMOBS_SAMPLE_RATE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      sampleRate?: number,
     }
 
     /** @hidden */

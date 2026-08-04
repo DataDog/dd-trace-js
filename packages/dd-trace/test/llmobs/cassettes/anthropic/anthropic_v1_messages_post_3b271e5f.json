@@ -1,0 +1,60 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Content-Length": "207",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "Anthropic/JS 0.14.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "0.14.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.22.0",
+      "anthropic-version": "2023-06-01",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello, world!\"\n    }\n  ],\n  \"max_tokens\": 100,\n  \"temperature\": 0.5,\n  \"system\": \"talk like a pirate\"\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 27 Apr 2026 14:50:16 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "anthropic-ratelimit-input-tokens-limit": "4000000",
+      "anthropic-ratelimit-input-tokens-remaining": "4000000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-04-27T14:50:15Z",
+      "anthropic-ratelimit-output-tokens-limit": "800000",
+      "anthropic-ratelimit-output-tokens-remaining": "800000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-04-27T14:50:16Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19999",
+      "anthropic-ratelimit-requests-reset": "2026-04-27T14:50:14Z",
+      "anthropic-ratelimit-tokens-limit": "4800000",
+      "anthropic-ratelimit-tokens-remaining": "4800000",
+      "anthropic-ratelimit-tokens-reset": "2026-04-27T14:50:15Z",
+      "request-id": "req_011CaUTmk2FLvdWM43HMZLmE",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "Server": "cloudflare",
+      "x-envoy-upstream-service-time": "2173",
+      "Content-Encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "server-timing": "x-originResponse;dur=2175",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "_cfuvid=3CRpc_0a9gxyGuNXhoN51PFn2mr63pI_kYkO7id.QHg-1777301413.9938958-1.0.1.1-Fxl8JCfOO.SKtEhUEVDiVprDj4dC3xJ26cagZqkSQ3I; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.anthropic.com",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Robots-Tag": "none",
+      "CF-RAY": "9f2ea36d78574204-EWR"
+    },
+    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01DQvvsACySRRMzscQyhw4GY\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Ahoy, matey! \ud83c\udff4\u200d\u2620\ufe0f\\n\\nShiver me timbers, 'tis a fine day on the seven seas! Welcome aboard, ye scallywag! \\n\\nWhat brings ye to these waters, eh? Be ye lookin' fer treasure, adventure, or perhaps some wisdom from an old sea dog like meself? \\n\\nSpeak up now, and don't be shy! \u2693\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":16,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":99,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}"
+  }
+}

@@ -21,7 +21,21 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let Graphql
   let pm
+  let registeredDefaults
+
+  function makeTracerConfig (overrides = {}) {
+    return {
+      plugins: true,
+      spanAttributeSchema: 'v0',
+      spanRemoveIntegrationFromService: false,
+      // The real tracer Config always carries the testOptimization namespace;
+      // #getSharedConfig reads it, so the stand-in must provide it too.
+      testOptimization: {},
+      ...overrides,
+    }
+  }
 
   beforeEach(() => {
     tracer = {
@@ -31,8 +45,10 @@ describe('Plugin Manager', () => {
     class FakePlugin {
       constructor (aTracer) {
         assert.strictEqual(aTracer, tracer)
-        instantiated.push(this.constructor.id)
+        instantiated.push(/** @type {{ id: string }} */ (/** @type {unknown} */ (this.constructor)).id)
       }
+
+      configure () {}
     }
 
     const plugins = {
@@ -55,12 +71,17 @@ describe('Plugin Manager', () => {
         static experimental = true
         static id = 'eight'
       },
+      graphql: class Graphql extends FakePlugin {
+        static id = 'graphql'
+      },
     }
 
     Two = plugins.two
     Two.prototype.configure = sinon.spy()
     Four = plugins.four
     Four.prototype.configure = sinon.spy()
+    Graphql = plugins.graphql
+    Graphql.prototype.configure = sinon.spy()
 
     // disabled plugins
     Five = plugins.five
@@ -73,6 +94,10 @@ describe('Plugin Manager', () => {
 
     process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
 
+    // Mirrors getValueFromEnvSources: an explicit env value wins, otherwise the registered
+    // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
+    // model a plugin whose default-enabled flag is `false` (e.g. an experimental plugin).
+    registeredDefaults = {}
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
@@ -80,8 +105,11 @@ describe('Plugin Manager', () => {
         getEnvironmentVariable (name) {
           return process.env[name]
         },
-        getValueFromEnvSources (name) {
-          return process.env[name]
+        getValueFromEnvSources (name, skipDefault) {
+          if (process.env[name] !== undefined) {
+            return process.env[name]
+          }
+          return skipDefault ? undefined : registeredDefaults[name]
         },
       },
     })
@@ -108,7 +136,7 @@ describe('Plugin Manager', () => {
 
       it('should keep the config for future configure calls', () => {
         pm.configurePlugin('two', { foo: 'bar' })
-        pm.configure()
+        pm.configure(makeTracerConfig())
         loadChannel.publish({ name: 'two' })
         sinon.assert.calledWithMatch(Two.prototype.configure, {
           enabled: true,
@@ -118,7 +146,7 @@ describe('Plugin Manager', () => {
     })
 
     describe('without env vars', () => {
-      beforeEach(() => pm.configure())
+      beforeEach(() => pm.configure(makeTracerConfig()))
 
       it('works with no config param', () => {
         pm.configurePlugin('two')
@@ -158,7 +186,7 @@ describe('Plugin Manager', () => {
     })
 
     describe('with disabled plugins', () => {
-      beforeEach(() => pm.configure())
+      beforeEach(() => pm.configure(makeTracerConfig()))
 
       it('should not call configure on individual enable override', () => {
         pm.configurePlugin('five', { enabled: true })
@@ -167,7 +195,7 @@ describe('Plugin Manager', () => {
       })
 
       it('should not configure all disabled plugins', () => {
-        pm.configure({})
+        pm.configure(makeTracerConfig())
         loadChannel.publish({ name: 'five' })
         sinon.assert.notCalled(Five.prototype.configure)
         sinon.assert.notCalled(Six.prototype.configure)
@@ -175,7 +203,7 @@ describe('Plugin Manager', () => {
     })
 
     describe('with env var true', () => {
-      beforeEach(() => pm.configure())
+      beforeEach(() => pm.configure(makeTracerConfig()))
 
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '1'
@@ -223,7 +251,7 @@ describe('Plugin Manager', () => {
     })
 
     describe('with env var false', () => {
-      beforeEach(() => pm.configure())
+      beforeEach(() => pm.configure(makeTracerConfig()))
 
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '0'
@@ -274,7 +302,7 @@ describe('Plugin Manager', () => {
   describe('configure', () => {
     describe('without the load event', () => {
       it('should not instantiate plugins', () => {
-        pm.configure()
+        pm.configure(makeTracerConfig())
         pm.configurePlugin('two')
         assert.strictEqual(instantiated.length, 0)
         sinon.assert.notCalled(Two.prototype.configure)
@@ -283,13 +311,13 @@ describe('Plugin Manager', () => {
 
     describe('with an experimental plugin', () => {
       it('should disable the plugin by default', () => {
-        pm.configure()
+        pm.configure(makeTracerConfig())
         loadChannel.publish({ name: 'eight' })
         sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: false })
       })
 
       it('should enable the plugin when configured programmatically', () => {
-        pm.configure()
+        pm.configure(makeTracerConfig())
         pm.configurePlugin('eight')
         loadChannel.publish({ name: 'eight' })
         sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
@@ -297,24 +325,32 @@ describe('Plugin Manager', () => {
 
       it('should enable the plugin when configured with an environment variable', () => {
         process.env.DD_TRACE_EIGHT_ENABLED = 'true'
-        pm.configure()
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'eight' })
+        sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
+      })
+
+      it('should not hard-disable the plugin when its registered default is false', () => {
+        registeredDefaults.DD_TRACE_EIGHT_ENABLED = false
+        pm.configure(makeTracerConfig())
+        pm.configurePlugin('eight')
         loadChannel.publish({ name: 'eight' })
         sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
       })
     })
 
     it('instantiates plugin classes', () => {
-      pm.configure()
+      pm.configure(makeTracerConfig())
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       assert.deepStrictEqual(instantiated, ['two', 'four'])
     })
 
     describe('service naming schema manager', () => {
-      const config = {
+      const config = makeTracerConfig({
         foo: { bar: 1 },
         baz: 2,
-      }
+      })
       let configureSpy
 
       beforeEach(() => {
@@ -331,19 +367,19 @@ describe('Plugin Manager', () => {
       })
     })
 
-    it('skips configuring plugins entirely when plugins is false', () => {
-      pm.configurePlugin = sinon.spy()
-      pm.configure({ plugins: false })
-      sinon.assert.notCalled(pm.configurePlugin)
+    it('disables plugins globally when plugins is false', () => {
+      pm.configure(makeTracerConfig({ plugins: false }))
+      loadChannel.publish({ name: 'two' })
+      sinon.assert.calledWithMatch(Two.prototype.configure, { enabled: false })
     })
 
     it('observes configuration options', () => {
-      pm.configure({
+      pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
         logInjection: true,
-        queryStringObfuscation: '.*',
+        DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
-      })
+      }))
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       sinon.assert.calledWithMatch(Two.prototype.configure, {
@@ -360,10 +396,35 @@ describe('Plugin Manager', () => {
         clientIpEnabled: true,
       })
     })
+
+    it('forwards graphql global options to the graphql plugin under their plugin-facing names', () => {
+      pm.configure(makeTracerConfig({
+        DD_TRACE_GRAPHQL_COLLAPSE: false,
+        DD_TRACE_GRAPHQL_DEPTH: 2,
+        DD_TRACE_GRAPHQL_VARIABLES: ['foo'],
+        DD_TRACE_GRAPHQL_ERROR_EXTENSIONS: ['code'],
+      }))
+      loadChannel.publish({ name: 'graphql' })
+      sinon.assert.calledWithMatch(Graphql.prototype.configure, {
+        enabled: true,
+        collapse: false,
+        depth: 2,
+        variables: ['foo'],
+        errorExtensions: ['code'],
+      })
+    })
+
+    it('does not forward graphql options to other plugins', () => {
+      pm.configure(makeTracerConfig({ DD_TRACE_GRAPHQL_COLLAPSE: false }))
+      loadChannel.publish({ name: 'two' })
+      const config = Two.prototype.configure.lastCall.args[0]
+      assert.ok(!('collapse' in config))
+      assert.ok(!('errorExtensions' in config))
+    })
   })
 
   describe('destroy', () => {
-    beforeEach(() => pm.configure())
+    beforeEach(() => pm.configure(makeTracerConfig()))
 
     it('should disable the plugins', () => {
       loadChannel.publish({ name: 'two' })

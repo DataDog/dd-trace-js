@@ -1,12 +1,10 @@
 'use strict'
 
 const { EventEmitter } = require('events')
-const { promisify } = require('util')
-const zlib = require('zlib')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const { Config } = require('./config')
+const { buildProfilingRuntime } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -14,18 +12,12 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./we
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
-function logError (logger, ...args) {
-  if (logger) {
-    logger.error(...args)
-  }
-}
-
 function findWebSpan (startedSpans, spanId) {
   for (let i = startedSpans.length; --i >= 0;) {
     const ispan = startedSpans[i]
     const context = ispan.context()
     if (context._spanId === spanId) {
-      if (isWebServerSpan(context._tags)) {
+      if (isWebServerSpan(context.getTags())) {
         return true
       }
       spanId = context._parentId
@@ -34,24 +26,47 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
+
+function profileHasMissingSourceMaps (profile) {
+  const strings = profile?.stringTable?.strings
+  if (!strings) return false
+  return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
+}
+
 function processInfo (infos, info, type) {
   if (Object.keys(info).length > 0) {
     infos[type] = info
   }
 }
 
+// Route pprof through the central log module so logLevel applies.
+const pprofLogger = {
+  trace: (...args) => log.trace(...args),
+  debug: (...args) => log.debug(...args),
+  info: (...args) => log.info(...args),
+  warn: (...args) => log.warn(...args),
+  error: (...args) => log.error(...args),
+  fatal: (...args) => log.error(...args),
+}
+
 class Profiler extends EventEmitter {
   #compressionFn
+  #compressionFnInitialized = false
   #compressionOptions
-  #config
+  #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
+  #exporters
+  #flushInterval
   #lastStart
-  #logger
   #profileSeq = 0
+  #profilers
   #spanFinishListener
-  #sourceMapCount = 0
+  #systemInfoReport
+  #tags
   #timer
+  #uploadCompression
 
   constructor () {
     super()
@@ -61,161 +76,162 @@ class Profiler extends EventEmitter {
   get serverless () { return false }
 
   get flushInterval () {
-    return this.#config?.flushInterval
-  }
-
-  start (config) {
-    const {
-      service,
-      version,
-      env,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      injectionEnabled,
-      reportHostname,
-    } = config
-    const { enabled, sourceMap, exporters } = config.profiling
-    const { heartbeatInterval } = config.telemetry
-
-    // TODO: Unify with main logger and rewrite template strings to use printf formatting.
-    const logger = {
-      debug (message) { log.debug(message) },
-      info (message) { log.info(message) },
-      warn (message) { log.warn(message) },
-      error (...args) { log.error(...args) },
-    }
-
-    const libraryInjected = injectionEnabled.length > 0
-    let activation
-    if (enabled === 'auto') {
-      activation = 'auto'
-    } else if (enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
-    const options = {
-      service,
-      version,
-      env,
-      logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      libraryInjected,
-      activation,
-      heartbeatInterval,
-      reportHostname,
-    }
-
-    return this._start(options).catch((err) => {
-      logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
-      return false
-    })
+    return this.#flushInterval
   }
 
   get enabled () {
     return this.#enabled
   }
 
-  #logError (err) {
-    logError(this.#logger, err)
+  /**
+   * Declares the set of custom label keys that will be used with
+   * {@link runWithLabels}. This is used for profile upload metadata and
+   * for pprof serialization optimization (low-cardinality deduplication).
+   *
+   * @param {Iterable<string>} keys - Custom label key names
+   */
+  setCustomLabelKeys (keys) {
+    this.#customLabelKeys.clear()
+    for (const key of keys) {
+      this.#customLabelKeys.add(key)
+    }
+    if (this.#profilers) {
+      for (const profiler of this.#profilers) {
+        profiler.setCustomLabelKeys?.(this.#customLabelKeys)
+      }
+    }
   }
 
-  async _start (options) {
+  /**
+   * Runs a function with custom profiling labels attached to wall profiler samples.
+   *
+   * @param {Record<string, string | number>} labels - Custom labels to attach
+   * @param {function(): T} fn - Function to execute with the labels
+   * @returns {T} The return value of fn
+   * @template T
+   */
+  runWithLabels (labels, fn) {
+    if (!this.#enabled || !this.#profilers) {
+      return fn()
+    }
+    for (const profiler of this.#profilers) {
+      if (profiler.runWithLabels) {
+        return profiler.runWithLabels(labels, fn)
+      }
+    }
+    return fn()
+  }
+
+  #getCompressionFn () {
+    if (!this.#compressionFnInitialized) {
+      this.#compressionFnInitialized = true
+      try {
+        const { promisify } = require('util')
+        const zlib = require('zlib')
+        const { method, level: clevel } = this.#uploadCompression
+        switch (method) {
+          case 'gzip':
+            this.#compressionFn = promisify(zlib.gzip)
+            if (clevel !== undefined) {
+              this.#compressionOptions = {
+                level: clevel,
+              }
+            }
+            break
+          case 'zstd':
+            // eslint-disable-next-line n/no-unsupported-features/node-builtins
+            if (typeof zlib.zstdCompress === 'function') {
+              // eslint-disable-next-line n/no-unsupported-features/node-builtins
+              this.#compressionFn = promisify(zlib.zstdCompress)
+              if (clevel !== undefined) {
+                this.#compressionOptions = {
+                  params: {
+                    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                    [zlib.constants.ZSTD_c_compressionLevel]: clevel,
+                  },
+                }
+              }
+            } else {
+              const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+              const level = clevel ?? 0 // 0 is zstd default compression level
+              this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+            }
+            break
+        }
+      } catch (error) {
+        log.error(error)
+      }
+    }
+    return this.#compressionFn
+  }
+
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
+  start (config) {
     if (this.enabled) return true
-
-    const config = this.#config = new Config(options)
-
-    this.#logger = config.logger
     this.#enabled = true
-    this._setInterval()
 
+    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+      buildProfilingRuntime(config)
+    this.#tags = tags
+    this.#exporters = exporters
+    this.#flushInterval = flushInterval
+    this.#profilers = profilers
+    this.#uploadCompression = uploadCompression
+    this.#systemInfoReport = systemInfoReport
+
+    this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
-    try {
-      const { setLogger, SourceMapper } = require('@datadog/pprof')
-      setLogger(config.logger)
+    const { setLogger, SourceMapper } = require('@datadog/pprof')
+    setLogger(pprofLogger)
 
-      if (config.sourceMap) {
-        mapper = await SourceMapper.create([process.cwd()], config.debugSourceMaps)
-        this.#sourceMapCount = mapper.infoMap.size
-        if (config.debugSourceMaps) {
-          this.#logger.debug(() => {
-            return this.#sourceMapCount === 0
-              ? 'Found no source maps'
-              : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-          })
-        }
-      }
-
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this.#compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this.#compressionOptions = {
-              level: clevel,
-            }
+    if (config.DD_PROFILING_SOURCE_MAP) {
+      mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
+      mapper.loadDirectory(process.cwd())
+        .then(() => {
+          if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
+            const count = mapper.infoMap.size
+            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+            log.debug(() => {
+              return count === 0
+                ? 'Found no source maps'
+                : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+            })
           }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
-            // eslint-disable-next-line n/no-unsupported-features/node-builtins
-            this.#compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this.#compressionOptions = {
-                params: {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel,
-                },
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
-      }
-    } catch (err) {
-      this.#logError(err)
+        })
+        .catch((error) => {
+          log.error(error)
+        })
     }
 
     try {
       const start = new Date()
       const nearOOMCallback = this.#nearOOMExport.bind(this)
-      for (const profiler of config.profilers) {
+      for (const profiler of profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
           nearOOMCallback,
         })
-        this.#logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
+        log.debug('Started %s profiler in %s thread', profiler.type, threadNamePrefix)
       }
 
-      if (config.endpointCollectionEnabled) {
+      if (config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED) {
         this.#spanFinishListener = this.#onSpanFinish.bind(this)
         spanFinishedChannel.subscribe(this.#spanFinishListener)
       }
 
       this._capture(this._timeoutInterval, start)
-      return true
-    } catch (e) {
-      this.#logError(e)
+    } catch (error) {
+      log.error(error)
       this.#stop()
       return false
     }
+
+    return true
   }
 
   #nearOOMExport (profileType, encodedProfile, info) {
@@ -229,7 +245,7 @@ class Profiler extends EventEmitter {
   }
 
   _setInterval () {
-    this._timeoutInterval = this.#config.flushInterval
+    this._timeoutInterval = this.#flushInterval
   }
 
   stop () {
@@ -251,9 +267,9 @@ class Profiler extends EventEmitter {
       this.#spanFinishListener = undefined
     }
 
-    for (const profiler of this.#config.profilers) {
+    for (const profiler of this.#profilers) {
       profiler.stop()
-      this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+      log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
     }
 
     clearTimeout(this.#timer)
@@ -265,7 +281,7 @@ class Profiler extends EventEmitter {
     this.#lastStart = start
     if (!this.#timer || timeout !== this._timeoutInterval) {
       this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
-      this.#timer.unref()
+      this.#timer.unref?.()
     } else {
       this.#timer.refresh()
     }
@@ -273,7 +289,7 @@ class Profiler extends EventEmitter {
 
   #onSpanFinish (span) {
     const context = span.context()
-    const tags = context._tags
+    const tags = context.getTags()
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)
@@ -294,8 +310,8 @@ class Profiler extends EventEmitter {
   #createInitialInfos () {
     return {
       serverless: this.serverless,
-      settings: this.#config.systemInfoReport,
-      sourceMapCount: this.#sourceMapCount,
+      settings: this.#systemInfoReport,
+      hasMissingSourceMaps: false,
     }
   }
 
@@ -303,7 +319,7 @@ class Profiler extends EventEmitter {
     if (!this.enabled) return
 
     try {
-      if (this.#config.profilers.length === 0) {
+      if (this.#profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
@@ -313,11 +329,11 @@ class Profiler extends EventEmitter {
 
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
-        for (const profiler of this.#config.profilers) {
+        for (const profiler of this.#profilers) {
           const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
-            this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+            log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
           }
           if (!profile) continue
           profiles.push({ profiler, profile, info })
@@ -332,43 +348,48 @@ class Profiler extends EventEmitter {
 
       const encodedProfiles = {}
       const infos = this.#createInitialInfos()
+      const compressionFn = this.#getCompressionFn()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
-            ? await this.#compressionFn(encoded, this.#compressionOptions)
+          const compressed = encoded instanceof Buffer && compressionFn !== undefined
+            ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          if (profileHasMissingSourceMaps(profile)) {
+            infos.hasMissingSourceMaps = true
+          }
           processInfo(infos, info, profiler.type)
-          this.#logger.debug(() => {
+          // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+          log.debug(() => {
             const profileJson = JSON.stringify(profile, (_, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
             return `Collected ${profiler.type} profile: ` + profileJson
           })
           hasEncoded = true
-        } catch (err) {
+        } catch (error) {
           // If encoding one of the profile types fails, we should still try to
           // encode and submit the other profile types.
-          this.#logError(err)
+          log.error(error)
         }
       }))
 
       if (hasEncoded) {
         await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
-        this.#logger.debug('Submitted profiles')
+        log.debug('Submitted profiles')
       }
-    } catch (err) {
-      this.#logError(err)
+    } catch (error) {
+      log.error(error)
       this.#stop()
     }
   }
 
   #submit (profiles, infos, start, end, snapshotKind) {
-    const { tags } = this.#config
+    const tags = this.#tags
 
     // Flatten endpoint counts
     const endpointCounts = {}
@@ -379,12 +400,13 @@ class Profiler extends EventEmitter {
 
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
-    const tasks = this.#config.exporters.map(exporter =>
-      exporter.export(exportSpec).catch(err => {
-        if (this.#logger) {
-          this.#logger.warn(err)
-        }
+    const customAttributes = this.#customLabelKeys.size > 0
+      ? [...this.#customLabelKeys]
+      : undefined
+    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
+    const tasks = this.#exporters.map(exporter =>
+      exporter.export(exportSpec).catch(error => {
+        log.warn(error)
       })
     )
 

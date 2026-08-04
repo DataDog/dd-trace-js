@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/files",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 6.48.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "6.48.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.14.1",
+      "Content-Type": "multipart/form-data; boundary=openai-lskdmq8xgg",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate"
+    },
+    "body": "--openai-lskdmq8xgg\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fine-tune.jsonl\"\r\nContent-Type: application/octet-stream\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the meaning of life?\"},{\"role\":\"assistant\",\"content\":\"The meaning of life is 42\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is 5 + 5?\"},{\"role\":\"assistant\",\"content\":\"5 + 5 equals 10\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France?\"},{\"role\":\"assistant\",\"content\":\"The capital of France is Paris\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the largest planet in our solar system?\"},{\"role\":\"assistant\",\"content\":\"Jupiter is the largest planet in our solar system\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How many sides does a triangle have?\"},{\"role\":\"assistant\",\"content\":\"A triangle has three sides\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the chemical symbol for gold?\"},{\"role\":\"assistant\",\"content\":\"The chemical symbol for gold is Au\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the opposite of hot?\"},{\"role\":\"assistant\",\"content\":\"The opposite of hot is cold\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How many days are in a week?\"},{\"role\":\"assistant\",\"content\":\"There are seven days in a week\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What color is the sky on a clear day?\"},{\"role\":\"assistant\",\"content\":\"The sky is blue on a clear day\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is the square root of 16?\"},{\"role\":\"assistant\",\"content\":\"The square root of 16 is 4\"}]}\r\n--openai-lskdmq8xgg\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nfine-tune\r\n--openai-lskdmq8xgg--\r\n"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 20 Jul 2026 16:32:26 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "Server": "cloudflare",
+      "x-request-id": "req_ff0809fb4d3443d1af7230adda6f302f",
+      "openai-processing-ms": "233",
+      "openai-version": "2020-10-01",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "access-control-allow-origin": "*",
+      "x-openai-proxy-wasm": "v0.1",
+      "cf-cache-status": "DYNAMIC",
+      "Access-Control-Expose-Headers": "CF-Ray",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "set-cookie": "__cf_bm=kV6uM1U85lrNQckwC2TC8XeGr6TVjJxfn1hvWzRSfX0-1784565145.74432-1.0.1.1-XtSB9pG1APWZlYx891clgcAJYFgODHyU4EQGPHWMDfaQIYytU5GentEL8IHLorHEsSFCrqszAkR2wfujAd2.sU4PB2TxkIfeea18mqpMqRDHw3Pn8aXiIUFRJCNzg3kc; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Mon, 20 Jul 2026 17:02:26 GMT",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a1e35ca0ea49a02c-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"object\": \"file\",\n  \"id\": \"file-NKNSLyUfXnKGnNT9jEUD8u\",\n  \"purpose\": \"fine-tune\",\n  \"filename\": \"fine-tune.jsonl\",\n  \"bytes\": 1386,\n  \"created_at\": 1784565146,\n  \"expires_at\": null,\n  \"status\": \"processed\",\n  \"status_details\": null\n}\n"
+  }
+}

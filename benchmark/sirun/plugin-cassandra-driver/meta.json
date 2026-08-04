@@ -1,0 +1,19 @@
+{
+  "name": "plugin-cassandra-driver",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "query": {
+      "env": { "VARIANT": "query", "OPERATIONS": "35000000" }
+    },
+    "batch": {
+      "env": { "VARIANT": "batch", "OPERATIONS": "2000000" }
+    },
+    "long-query": {
+      "env": { "VARIANT": "long-query", "OPERATIONS": "30000000" }
+    }
+  }
+}

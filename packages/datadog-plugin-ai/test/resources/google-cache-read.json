@@ -1,0 +1,19 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          { "text": "Datadog LLM Observability provides end-to-end visibility." }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 4448,
+    "candidatesTokenCount": 44,
+    "totalTokenCount": 4492,
+    "cachedContentTokenCount": 4425
+  }
+}

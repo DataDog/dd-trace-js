@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/1.19.0 gl-node/v22.17.0",
+      "x-goog-api-client": "google-genai-sdk/1.19.0 gl-node/v22.17.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "65"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"Hello, world!\"}],\"role\":\"user\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Alt-Svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+      "Content-Disposition": "attachment",
+      "Content-Type": "text/event-stream",
+      "Date": "Wed, 03 Dec 2025 20:02:38 GMT",
+      "Server": "scaffolding on HTTPServer2",
+      "Server-Timing": "gfet4t7; dur=359",
+      "Transfer-Encoding": "chunked",
+      "Vary": "Origin",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-XSS-Protection": "0"
+    },
+    "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Hello\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 5,\"totalTokenCount\": 5,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 5}]},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Xpcwac3qI-GSmNAPkaHBkA4\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" there! How can I help you today?\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 4,\"candidatesTokenCount\": 11,\"totalTokenCount\": 15,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 4}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 11}]},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Xpcwac3qI-GSmNAPkaHBkA4\"}\r\n\r\n"
+  }
+}

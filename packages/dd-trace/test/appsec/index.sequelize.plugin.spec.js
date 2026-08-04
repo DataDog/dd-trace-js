@@ -51,7 +51,6 @@ describe('sequelize', () => {
               rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
-                sampleDelay: 10,
               },
             },
           }))
@@ -60,7 +59,7 @@ describe('sequelize', () => {
         // close agent
         after(() => {
           appsec.disable()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         // init express

@@ -1,0 +1,22 @@
+{
+  "name": "sampling",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "agent": {
+      "env": { "VARIANT": "agent", "OPERATIONS": "12000000" }
+    },
+    "rule-match": {
+      "env": { "VARIANT": "rule-match", "OPERATIONS": "3000000" }
+    },
+    "rule-miss": {
+      "env": { "VARIANT": "rule-miss", "OPERATIONS": "3000000" }
+    },
+    "rate-limited": {
+      "env": { "VARIANT": "rate-limited", "OPERATIONS": "3000000" }
+    }
+  }
+}

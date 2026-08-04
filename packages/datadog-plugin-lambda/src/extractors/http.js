@@ -4,16 +4,16 @@ const log = require('../../../dd-trace/src/log')
 
 const AUTHORIZING_REQUEST_ID_HEADER = 'x-datadog-authorizing-requestid'
 
-const HTTPEventSubType = {
+const HTTPEventSubtype = {
   ApiGatewayV1: 'api-gateway-rest-api',
   ApiGatewayV2: 'api-gateway-http-api',
   ApiGatewayWebSocket: 'api-gateway-websocket',
-  Unknown: 'unknown-sub-type'
+  Unknown: 'unknown-sub-type',
 }
 
-function getEventSubType (event) {
+function getEventSubtype (event) {
   if (event.requestContext?.stage !== undefined && event.httpMethod !== undefined && event.resource !== undefined) {
-    return HTTPEventSubType.ApiGatewayV1
+    return HTTPEventSubtype.ApiGatewayV1
   }
   if (
     event.requestContext !== undefined &&
@@ -21,20 +21,20 @@ function getEventSubType (event) {
     event.rawQueryString !== undefined &&
     !event.requestContext.domainName?.includes('lambda-url')
   ) {
-    return HTTPEventSubType.ApiGatewayV2
+    return HTTPEventSubtype.ApiGatewayV2
   }
   if (event.requestContext !== undefined && event.requestContext.messageDirection !== undefined) {
-    return HTTPEventSubType.ApiGatewayWebSocket
+    return HTTPEventSubtype.ApiGatewayWebSocket
   }
-  return HTTPEventSubType.Unknown
+  return HTTPEventSubtype.Unknown
 }
 
-function getInjectedAuthorizerHeaders (event, eventSubType) {
+function getInjectedAuthorizerHeaders (event, eventSubtype) {
   const authorizerHeaders = event?.requestContext?.authorizer
   if (!authorizerHeaders) return null
 
   let rawDatadogData = authorizerHeaders._datadog
-  if (eventSubType === HTTPEventSubType.ApiGatewayV2) {
+  if (eventSubtype === HTTPEventSubtype.ApiGatewayV2) {
     rawDatadogData = authorizerHeaders.lambda?._datadog
   }
   if (!rawDatadogData) return null
@@ -56,8 +56,8 @@ function extract (event, tracer, config) {
 
   if (decodeAuthorizerContext) {
     try {
-      const eventSourceSubType = getEventSubType(event)
-      const injectedAuthorizerHeaders = getInjectedAuthorizerHeaders(event, eventSourceSubType)
+      const eventSourceSubtype = getEventSubtype(event)
+      const injectedAuthorizerHeaders = getInjectedAuthorizerHeaders(event, eventSourceSubtype)
       if (injectedAuthorizerHeaders !== null) {
         const spanContext = tracer.extract('text_map', injectedAuthorizerHeaders)
         if (spanContext === null) return null
@@ -92,8 +92,8 @@ function extract (event, tracer, config) {
 
 module.exports = {
   extract,
-  getEventSubType,
+  getEventSubtype,
   getInjectedAuthorizerHeaders,
-  HTTPEventSubType,
-  AUTHORIZING_REQUEST_ID_HEADER
+  HTTPEventSubtype,
+  AUTHORIZING_REQUEST_ID_HEADER,
 }

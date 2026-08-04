@@ -28,7 +28,7 @@ describe('db sources with pg', () => {
                                       command VARCHAR(50))`)
 
       await client.query(`INSERT INTO examples (id, name, query, command)
-                                     VALUES (1, 'Item1', 'SELECT 1', 'ls'),
+                                      VALUES (1, 'Item1', 'SELECT 1', 'ls'),
                                             (2, 'Item2', 'SELECT 1', 'ls'),
                                             (3, 'Item3', 'SELECT 1', 'ls')`)
     })

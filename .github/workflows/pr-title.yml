@@ -1,0 +1,130 @@
+name: Pull Request Title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+    branches:
+      - "master"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      # Shared between both steps. Must stay portable across bash ERE and JS
+      # regex (no lookarounds, named groups, or other JS-only features).
+      # Revert PRs always get semver-patch regardless of the original change's type.
+      PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
+    steps:
+      - name: Auto-rename GitHub revert title to Conventional Commit
+        id: rename
+        if: startsWith(github.event.pull_request.title, 'Revert "')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const title = context.payload.pull_request.title
+            const m = title.match(/^Revert "(.+)"$/)
+            if (!m) return
+            const newTitle = `revert: ${m[1]}`
+            core.notice(`Auto-renaming PR title to: ${newTitle}`)
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+              title: newTitle,
+            })
+            core.setOutput('renamed', 'true')
+
+      - name: Validate PR title against Conventional Commits
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action != 'edited' || github.event.changes.title != null)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
+            echo "::error::PR title does not follow Conventional Commits format."
+            echo "Got:      $PR_TITLE"
+            echo "Expected: <type>(<scope>)?(!)?: <subject>"
+            echo "          revert(!)?: <subject>  (for reverts, always semver-patch)"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore"
+            exit 1
+          fi
+          echo "PR title OK: $PR_TITLE"
+
+      - name: Sync labels with PR title
+        if: steps.rename.outputs.renamed != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
+            const parse = (title) => {
+              const m = (title || '').match(pattern)
+              if (!m) return {}
+              const isRevert = !m[3]
+              return {
+                type: isRevert ? 'revert' : m[3],
+                scope: isRevert ? undefined : m[5],
+                breaking: isRevert ? m[2] === '!' : m[6] === '!',
+              }
+            }
+
+            // Reverts are always semver-patch regardless of the original change's type.
+            const semverFor = ({ type, breaking }) => {
+              if (!type) return undefined
+              if (breaking) return 'semver-major'
+              if (type === 'feat') return 'semver-minor'
+              return 'semver-patch'
+            }
+
+            const pr = context.payload.pull_request
+            const next = parse(pr.title)
+
+            // Prefetch all existing repo labels once to avoid per-label API calls.
+            const repoLabels = new Set()
+            for await (const page of github.paginate.iterator(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 })) {
+              for (const label of page.data) repoLabels.add(label.name)
+            }
+
+            // Returns the set of labels derived from a parsed title.
+            // Type and scope are only added if they exist in the repo.
+            const titledLabels = (parsed) => {
+              const labels = new Set()
+              if (!parsed.type) return labels
+              if (repoLabels.has(parsed.type)) labels.add(parsed.type)
+              if (parsed.scope && repoLabels.has(parsed.scope)) labels.add(parsed.scope)
+              const semver = semverFor(parsed)
+              if (semver) labels.add(semver)
+              return labels
+            }
+
+            const nextLabels = titledLabels(next)
+            const current = new Set((pr.labels || []).map(l => l.name))
+
+            // When the title changes, remove labels from the old title that no
+            // longer apply so stale type/scope/semver labels don't linger.
+            const titleChanged = context.payload.action === 'edited' &&
+              context.payload.changes?.title?.from != null
+            const toRemove = new Set()
+            if (titleChanged) {
+              const prev = parse(context.payload.changes.title.from)
+              for (const label of titledLabels(prev)) {
+                if (!nextLabels.has(label)) toRemove.add(label)
+              }
+            }
+
+            const desired = new Set([...current].filter(l => !toRemove.has(l)))
+            for (const label of nextLabels) desired.add(label)
+
+            const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
+            if (!unchanged) {
+              await github.rest.issues.setLabels({
+                ...context.repo,
+                issue_number: pr.number,
+                labels: [...desired],
+              })
+            }

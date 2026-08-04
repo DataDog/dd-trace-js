@@ -11,7 +11,7 @@ function getParsedRecordHeaders (record) {
     const decodedData = Buffer.from(kinesisData, 'base64').toString('ascii')
     const parsedBody = JSON.parse(decodedData)
     return parsedBody?._datadog ?? null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -38,5 +38,5 @@ function extract (event, tracer) {
 
 module.exports = {
   extract,
-  getParsedRecordHeaders
+  getParsedRecordHeaders,
 }

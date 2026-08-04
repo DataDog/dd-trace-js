@@ -1,47 +1,44 @@
+// Programmatic ESM entry point for the 'esm' module type tests.
+// Instrumentation works via the default cypress.config.js in the project
+// (which uses defineConfig), NOT via the inline setupNodeEvents below —
+// Cypress does not call setupNodeEvents from inline config objects.
 import cypress from 'cypress'
+
+const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 async function runCypress () {
   const results = await cypress.run({
     config: {
       defaultCommandTimeout: 1000,
+      retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
+        ? { runMode: retries, openMode: 0 }
+        : Number(process.env.CYPRESS_RETRIES_AS_NUMBER),
       e2e: {
-        testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
+        ...(process.env.CYPRESS_TEST_ISOLATION === undefined
+          ? {}
+          : { testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false' }),
         setupNodeEvents (on, config) {
           if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
-            import('cypress-fail-fast/plugin').then(module => {
+            return import('cypress-fail-fast/plugin').then(module => {
               module.default(on, config)
             })
           }
-          if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
-            on('after:run', (...args) => {
-              // do custom stuff
-              // and call after-run at the end
-              return import('dd-trace/ci/cypress/after-run').then(module => {
-                module.default(...args)
-              })
-            })
-          }
-          if (process.env.CYPRESS_ENABLE_AFTER_SPEC_CUSTOM) {
-            on('after:spec', (...args) => {
-              // do custom stuff
-              // and call after-spec at the end
-              return import('dd-trace/ci/cypress/after-spec').then(module => {
-                module.default(...args)
-              })
-            })
-          }
-          return import('dd-trace/ci/cypress/plugin').then(module => {
-            return module.default(on, config)
-          })
         },
         specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
       },
+      // Mirror the env-driven gating in cypress.config.js: off by default so most
+      // specs do not capture screenshots; the failure-screenshot upload tests set
+      // CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
+      // The 'esm' module type runs Cypress through this programmatic config rather
+      // than cypress.config.js, so the same gating has to live here too.
       video: false,
-      screenshotOnRunFailure: false,
+      screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
     },
   })
-  if (results.totalFailed !== 0) {
-    process.exit(1)
+
+  const failures = results.totalFailed ?? results.failures ?? 0
+  if (failures !== 0) {
+    process.exit(failures)
   }
 }
 

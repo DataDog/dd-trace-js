@@ -1,24 +1,29 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { EventEmitter } = require('events')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { storage } = require('../../../../datadog-core')
 const {
   httpClientRequestStart,
+  httpClientResponseStart,
   httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
+const { withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
 
 describe('RASP - ssrf.js', () => {
   let waf
-  let legacyStorage
   let downstream
   let ssrf
   let telemetry
+
+  let nextIncludeBodies
 
   const makeCtx = (overrides = {}) => ({
     args: {
@@ -30,14 +35,22 @@ describe('RASP - ssrf.js', () => {
   })
 
   const stubStore = (req = {}, res = {}) => {
-    legacyStorage.getStore.returns({ req, res })
+    storage('legacy').enterWith(req ? withRequest(undefined, req) : {})
     return { req, res }
   }
 
+  const clearStore = () => {
+    storage('legacy').enterWith({})
+  }
+
   const publishRequestStart = ({ ctx, includeBodies = false, requestAddresses = {} }) => {
-    downstream.shouldSampleBody.returns(includeBodies)
+    nextIncludeBodies = includeBodies
     downstream.extractRequestData.returns(requestAddresses)
     httpClientRequestStart.publish(ctx)
+  }
+
+  const publishResponseStart = (ctx, res) => {
+    httpClientResponseStart.publish({ ctx, res })
   }
 
   const createResponse = ({ statusCode = 200, headers = {} } = {}) => {
@@ -48,9 +61,7 @@ describe('RASP - ssrf.js', () => {
   }
 
   beforeEach(() => {
-    legacyStorage = {
-      getStore: sinon.stub(),
-    }
+    nextIncludeBodies = false
 
     waf = {
       run: sinon.stub(),
@@ -59,12 +70,22 @@ describe('RASP - ssrf.js', () => {
     downstream = {
       enable: sinon.stub(),
       disable: sinon.stub(),
-      shouldSampleBody: sinon.stub().returns(true),
-      handleRedirectResponse: sinon.stub().returns(false),
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
-      storeRedirectBodyCollectionDecision: sinon.stub(),
+      planResponseBodyCollection: sinon.stub().callsFake((originatingReq, res, ctx) => {
+        delete ctx.shouldCollectBody
+
+        const location = res.headers?.location
+        const isRedirect = res.statusCode >= 300 && res.statusCode < 400 && location
+        if (isRedirect) {
+          return
+        }
+
+        if (nextIncludeBodies) {
+          ctx.shouldCollectBody = true
+        }
+      }),
     }
 
     telemetry = {
@@ -72,7 +93,6 @@ describe('RASP - ssrf.js', () => {
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
-      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
       '../downstream_requests': downstream,
       '../telemetry': telemetry,
@@ -94,6 +114,7 @@ describe('RASP - ssrf.js', () => {
   afterEach(() => {
     sinon.restore()
     ssrf.disable()
+    clearStore()
   })
 
   describe('analyzeSsrf', () => {
@@ -133,7 +154,7 @@ describe('RASP - ssrf.js', () => {
 
     it('should not analyze ssrf if no store', () => {
       const ctx = makeCtx()
-      legacyStorage.getStore.returns(undefined)
+      clearStore()
 
       httpClientRequestStart.publish(ctx)
 
@@ -158,13 +179,26 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.notCalled(waf.run)
     })
 
-    it('does not set shouldCollectBody flag when sampling disabled', () => {
+    it('does not set shouldCollectBody until response headers when sampling disabled', () => {
       const ctx = makeCtx()
       stubStore({}, {})
 
       publishRequestStart({ ctx, includeBodies: false })
+      sinon.assert.match(ctx.shouldCollectBody, sinon.match.undefined)
 
-      sinon.assert.match(ctx.shouldCollectBody, false)
+      publishResponseStart(ctx, createResponse())
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+    })
+
+    it('sets shouldCollectBody when body sampling is enabled at response', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      publishRequestStart({ ctx, includeBodies: true })
+      publishResponseStart(ctx, createResponse())
+
+      sinon.assert.calledOnce(downstream.planResponseBodyCollection)
+      sinon.assert.match(ctx.shouldCollectBody, true)
     })
 
     it('evaluates response and passes body through to extractResponseData', () => {
@@ -182,8 +216,8 @@ describe('RASP - ssrf.js', () => {
       waf.run.onSecondCall().returns({ events: [{ id: 'ssrf' }] })
 
       publishRequestStart({ ctx, includeBodies: true, requestAddresses })
-
       const response = createResponse({ headers: { 'content-type': 'application/json' } })
+      publishResponseStart(ctx, response)
       const body = Buffer.from('{"ok":true}')
 
       httpClientResponseFinish.publish({ ctx, res: response, body })
@@ -205,6 +239,7 @@ describe('RASP - ssrf.js', () => {
       waf.run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
+      publishResponseStart(ctx, createResponse())
 
       const response = createResponse()
       httpClientResponseFinish.publish({ ctx, res: response, body: null })
@@ -222,6 +257,7 @@ describe('RASP - ssrf.js', () => {
       waf.run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
+      publishResponseStart(ctx, createResponse())
 
       const response = createResponse()
       httpClientResponseFinish.publish({ ctx, res: response, body: null })
@@ -232,9 +268,8 @@ describe('RASP - ssrf.js', () => {
 
     it('handles redirect responses and skips body analysis', () => {
       const ctx = makeCtx()
-      const { req } = stubStore({}, {})
+      stubStore({}, {})
 
-      downstream.handleRedirectResponse.returns(true)
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
         [addresses.HTTP_OUTGOING_RESPONSE_HEADERS]: { location: 'http://example.com/redirect' },
@@ -244,10 +279,12 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({ ctx, includeBodies: true })
 
       const response = createResponse({ statusCode: 302, headers: { location: 'http://example.com/redirect' } })
+      publishResponseStart(ctx, response)
+
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
+
       const body = Buffer.from('redirect body')
       httpClientResponseFinish.publish({ ctx, res: response, body })
-
-      sinon.assert.calledOnceWithExactly(downstream.handleRedirectResponse, req, response)
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
 
@@ -258,7 +295,6 @@ describe('RASP - ssrf.js', () => {
       const ctx = makeCtx()
       stubStore({}, {})
 
-      downstream.handleRedirectResponse.returns(false)
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
         [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true },
@@ -268,39 +304,86 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({ ctx, includeBodies: true })
 
       const response = createResponse({ statusCode: 200 })
+      publishResponseStart(ctx, response)
       const body = Buffer.from('{"ok":true}')
       httpClientResponseFinish.publish({ ctx, res: response, body })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, body)
     })
 
-    it('does not store redirect decision when shouldCollectBody is false', () => {
+    it('redirect response does not enable body collection when sampling is disabled', () => {
       const ctx = makeCtx()
       stubStore({}, {})
 
       publishRequestStart({ ctx, includeBodies: false })
 
       const response = createResponse({ statusCode: 302, headers: { location: 'http://example.com/redirect' } })
-      httpClientResponseFinish.publish({ ctx, res: response, body: null })
+      publishResponseStart(ctx, response)
 
-      sinon.assert.notCalled(downstream.storeRedirectBodyCollectionDecision)
+      assert.strictEqual(ctx.shouldCollectBody, undefined)
     })
 
     it('passes null body when shouldCollectBody is false even for non-redirect', () => {
       const ctx = makeCtx()
       stubStore({}, {})
 
-      downstream.handleRedirectResponse.returns(false)
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
       waf.run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
+      publishResponseStart(ctx, createResponse({ statusCode: 200 }))
 
       const response = createResponse({ statusCode: 200 })
       const body = Buffer.from('{"data":"test"}')
       httpClientResponseFinish.publish({ ctx, res: response, body })
+
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+
+    it('skips body analysis for redirect response at finish', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      const response = createResponse({ statusCode: 302, headers: { location: 'http://example.com/redirect' } })
+      publishResponseStart(ctx, response)
+      httpClientResponseFinish.publish({
+        ctx,
+        res: response,
+        body: null,
+      })
+
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+
+    it('skips WAF body when shouldCollectBody is false even if finish payload includes body', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: false })
+      publishResponseStart(ctx, createResponse({ statusCode: 200 }))
+
+      const response = createResponse()
+      const body = Buffer.from('{"ok":true}')
+
+      httpClientResponseFinish.publish({
+        ctx,
+        res: response,
+        body,
+      })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
     })

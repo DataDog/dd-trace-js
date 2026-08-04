@@ -11,6 +11,14 @@ const startCh = channel('apm:mongodb:query:start')
 const finishCh = channel('apm:mongodb:query:finish')
 const errorCh = channel('apm:mongodb:query:error')
 
+// Per-Connection cached topology shape (mongodb >= 4). The Connection's `address` is immutable
+// for the lifetime of the connection, so we synthesize the `{ s: { options } }` envelope the
+// plugin expects only once per connection. A WeakMap keeps the cache off the foreign Connection
+// instance — no extra own-key visible to `Reflect.ownKeys`, `Object.freeze`, or another tracer's
+// instrumentation walking the connection.
+/** @type {WeakMap<object, { s: { options: { host?: string, port?: string } } }>} */
+const topologyCache = new WeakMap()
+
 addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   const serverProto = Server.Server.prototype
   shimmer.wrap(serverProto, 'command', command => wrapCommand(command, 'command'))
@@ -22,26 +30,22 @@ addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   shimmer.wrap(cursorProto, '_getmore', _getmore => wrapCursor(_getmore, 'getMore', 'getMore'))
   shimmer.wrap(cursorProto, '_find', _find => wrapQuery(_find, '_find'))
   shimmer.wrap(cursorProto, 'kill', kill => wrapCursor(kill, 'killCursors', 'killCursors'))
-  return Server
 })
 
 addHook({ name: 'mongodb', versions: ['>=4 <4.6.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
   shimmer.wrap(proto, 'query', query => wrapConnectionCommand(query, 'query'))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=4.6.0 <6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, instrumentPromise))
-  return Connection
 })
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <4'], file: 'lib/core/wireprotocol/index.js' }, wp => wrapWp(wp))
@@ -50,12 +54,10 @@ addHook({ name: 'mongodb-core', versions: ['>=3.2'], file: 'lib/wireprotocol/ind
 
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/3_2_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
-  return WireProtocol
 })
 
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/2_6_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
-  return WireProtocol
 })
 
 addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }, util => {
@@ -71,7 +73,6 @@ addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }
 
     return maybePromise.apply(this, arguments)
   })
-  return util
 })
 
 function wrapWp (wp) {
@@ -86,66 +87,75 @@ function wrapWp (wp) {
 }
 
 function wrapUnifiedCommand (command, operation, name) {
-  const wrapped = function (server, ns, ops) {
+  return function (server, ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
     return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
-  return wrapped
 }
 
 function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
-  const wrapped = function (ns, ops) {
+  const opts = { name }
+  return function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
-    const hostParts = typeof this.address === 'string' ? this.address.split(':') : ''
-    const options = hostParts.length === 2
-      ? { host: hostParts[0], port: hostParts[1] }
-      : {} // no port means the address is a random UUID so no host either
-    const topology = { s: { options } }
-
-    ns = `${ns.db}.${ns.collection}`
-    return instrumentFn(operation, command, this, arguments, topology, ns, ops, { name })
+    let topology = topologyCache.get(this)
+    if (topology === undefined) {
+      topology = synthesizeTopology(this.address)
+      topologyCache.set(this, topology)
+    }
+    return instrumentFn(operation, command, this, arguments, topology, `${ns.db}.${ns.collection}`, ops, opts)
   }
-  return wrapped
+}
+
+/**
+ * @param {string} address
+ * @returns {{ s: { options: { host?: string, port?: string } } }}
+ */
+function synthesizeTopology (address) {
+  if (typeof address === 'string') {
+    const colon = address.indexOf(':')
+    // Match the previous `.split(':')` length-2 check: exactly one colon with non-empty parts on both sides.
+    if (colon > 0 && colon < address.length - 1 && !address.includes(':', colon + 1)) {
+      return { s: { options: { host: address.slice(0, colon), port: address.slice(colon + 1) } } }
+    }
+  }
+  // No port means the address is a random UUID, an IPv6 form, or otherwise unparseable, so no host either.
+  return { s: { options: {} } }
 }
 
 function wrapQuery (query, operation, name) {
-  const wrapped = function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
     const pool = this.server.s.pool
     const ns = this.ns
     const ops = this.cmd
-    return instrument(operation, query, this, arguments, pool, ns, ops)
+    return instrument(operation, query, this, args, pool, ns, ops)
   }
-
-  return wrapped
 }
 
 function wrapCursor (cursor, operation, name) {
-  const wrapped = function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return cursor.apply(this, arguments)
+      return cursor.apply(this, args)
     }
     const pool = this.server.s.pool
     const ns = this.ns
-    return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
+    return instrument(operation, cursor, this, args, pool, ns, {}, { name })
   }
-  return wrapped
 }
 
 function wrapCommand (command, operation, name) {
-  const wrapped = function (ns, ops) {
+  return function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
     return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
-  return wrapped
 }
 
 function instrument (operation, command, instance, args, server, ns, ops, options = {}) {
@@ -164,7 +174,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
     name,
   }
   return startCh.runStores(ctx, () => {
-    args[index] = shimmer.wrapFunction(callback, callback => function (err, res) {
+    args[index] = shimmer.wrapCallback(callback, callback => function (err, res) {
       if (err) {
         ctx.error = err
         errorCh.publish(ctx)
@@ -183,6 +193,8 @@ function instrument (operation, command, instance, args, server, ns, ops, option
     }
   })
 }
+
+module.exports = { synthesizeTopology }
 
 function instrumentPromise (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])

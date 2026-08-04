@@ -4,9 +4,16 @@ const assert = require('node:assert/strict')
 const os = require('node:os')
 
 const { describe, it, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('./setup/core')
-const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata } = require('../src/azure_metadata')
+const {
+  getAzureAppMetadata,
+  getAzureTagsFromMetadata,
+  getAzureFunctionMetadata,
+} = proxyquire('../src/azure_metadata', {
+  './config': () => proxyquire.noPreserveCache()('../src/config', {})(),
+})
 
 describe('Azure metadata', () => {
   const AZURE_ENV_KEYS = [
@@ -156,5 +163,40 @@ describe('Azure metadata', () => {
     process.env.DD_AZURE_RESOURCE_GROUP = 'should_not_use_this'
     const metadata = getAzureFunctionMetadata()
     assert.strictEqual(metadata.resourceGroup, 'regular_resource_group')
+  })
+
+  describe('resource group extraction from WEBSITE_OWNER_NAME', () => {
+    /** @param {string} ownerName */
+    function resourceGroupFor (ownerName) {
+      process.env.WEBSITE_SITE_NAME = 'site'
+      process.env.WEBSITE_OWNER_NAME = ownerName
+      return getAzureAppMetadata().resourceGroup
+    }
+
+    it('strips the -Linux suffix before splitting on the last dash', () => {
+      assert.strictEqual(resourceGroupFor('sub+rg-regionwebspace-Linux'), 'rg')
+    })
+
+    it('preserves dashes inside the resource group', () => {
+      assert.strictEqual(resourceGroupFor('sub+with-dashes-regionwebspace'), 'with-dashes')
+    })
+
+    it('extracts from the shortest accepted form', () => {
+      assert.strictEqual(resourceGroupFor('a+b-cwebspace'), 'b')
+    })
+
+    it('returns undefined when WEBSITE_OWNER_NAME has no plus separator', () => {
+      // Suffix is otherwise valid; pins the early `plusIdx === -1` guard.
+      assert.strictEqual(resourceGroupFor('rg-regionwebspace'), undefined)
+    })
+
+    it('returns undefined when WEBSITE_OWNER_NAME does not end in webspace', () => {
+      // Length is chosen so removing the `webspace` guard would otherwise return `'rg'`.
+      assert.strictEqual(resourceGroupFor('sub+rg-something-region'), undefined)
+    })
+
+    it('returns undefined when no dash precedes the region marker', () => {
+      assert.strictEqual(resourceGroupFor('sub+regionwebspace'), undefined)
+    })
   })
 })

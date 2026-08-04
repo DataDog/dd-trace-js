@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
@@ -37,6 +38,7 @@ describe('RASP', () => {
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
           DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody),
+          DD_TRACE_STARTUP_LOGS: 'false',
         },
       }, stdOutputHandler, stdOutputHandler)
       axios = Axios.create({ baseURL: proc.url })
@@ -50,18 +52,27 @@ describe('RASP', () => {
 
   async function assertExploitDetected () {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
       assert.match(payload[0][0].meta['_dd.appsec.json'], /"test-rule-id-2"/)
     })
   }
 
   async function assertBodyReported (expectedBody, truncated) {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.ok(Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'))
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta_struct))}`
+      )
       assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
 
       if (truncated) {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
       }
     })
   }
@@ -137,7 +148,7 @@ describe('RASP', () => {
 
       try {
         await axios.get('/crash')
-      } catch (e) {
+      } catch {
         return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           setTimeout(() => {
             if (hasOutput) {
@@ -165,7 +176,7 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-A')
-        } catch (e) {
+        } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
@@ -188,7 +199,7 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-B')
-        } catch (e) {
+        } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
@@ -240,7 +251,7 @@ describe('RASP', () => {
       it('should crash as expected after block in domain request', async () => {
         try {
           await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
-        } catch (e) {
+        } catch {
           return await testAppCrashesAsExpected()
         }
 
@@ -265,7 +276,7 @@ describe('RASP', () => {
       it('should crash as expected after a requiest block when error is unhandled', async () => {
         try {
           await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
-        } catch (e) {
+        } catch {
           return await testAppCrashesAsExpected()
         }
 

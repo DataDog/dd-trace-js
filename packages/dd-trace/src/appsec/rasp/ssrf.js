@@ -3,11 +3,14 @@
 const { format } = require('url')
 const {
   httpClientRequestStart,
+  httpClientResponseStart,
   httpClientResponseFinish,
 } = require('../channels')
-const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
+const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
+const { isEmpty } = require('../../util')
 const downstream = require('../downstream_requests')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 const { RULE_TYPES, handleResult } = require('./utils')
@@ -19,6 +22,7 @@ function enable (_config) {
   downstream.enable(_config)
 
   httpClientRequestStart.subscribe(analyzeSsrf)
+  httpClientResponseStart.subscribe(planResponseBodyCollection)
   httpClientResponseFinish.subscribe(handleResponseFinish)
 }
 
@@ -26,18 +30,15 @@ function disable () {
   downstream.disable()
 
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
+  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
 }
 
 function analyzeSsrf (ctx) {
-  const store = storage('legacy').getStore()
-  const req = store?.req
+  const req = getActiveRequest()
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !outgoingUrl) return
-
-  // Determine if we should collect the response body based on sampling rate and redirect URL
-  ctx.shouldCollectBody = downstream.shouldSampleBody(req, outgoingUrl)
 
   const requestAddresses = downstream.extractRequestData(ctx)
 
@@ -50,30 +51,37 @@ function analyzeSsrf (ctx) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, store?.res, ctx.abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, ctx.abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
 }
 
 /**
+ * Channel handler: plans downstream response body capture once response headers are available.
+ * @param {{ ctx: object, res: import('http').IncomingMessage }} payload channel payload.
+ */
+function planResponseBodyCollection ({ ctx, res }) {
+  const originatingRequest = getActiveRequest()
+  if (!originatingRequest || !res) return
+
+  downstream.planResponseBodyCollection(originatingRequest, res, ctx)
+}
+
+/**
  * Finalizes body collection for the response and triggers RASP analysis.
- * @param {{
- *   ctx: object,
- *   res: import('http').IncomingMessage,
- *   body: string|Buffer|null
- * }} payload event payload from the channel.
+ * @param {object} params event payload from the channel.
+ * @param {object} params.ctx instrumentation context.
+ * @param {import('http').IncomingMessage} params.res downstream response.
+ * @param {string|Buffer|null} params.body collected body.
  */
 function handleResponseFinish ({ ctx, res, body }) {
   // downstream response object
   if (!res) return
 
-  const store = storage('legacy').getStore()
-  const originatingRequest = store?.req
+  const originatingRequest = getActiveRequest()
   if (!originatingRequest) return
 
-  // Skip body analysis for redirect responses
-  const evaluateBody = ctx.shouldCollectBody && !downstream.handleRedirectResponse(originatingRequest, res)
-  const responseBody = evaluateBody ? body : null
+  const responseBody = ctx.shouldCollectBody ? body : null
   runResponseEvaluation(res, originatingRequest, responseBody)
 }
 
@@ -86,7 +94,7 @@ function handleResponseFinish ({ ctx, res, body }) {
 function runResponseEvaluation (res, req, responseBody) {
   const responseAddresses = downstream.extractResponseData(res, responseBody)
 
-  if (!Object.keys(responseAddresses).length) return
+  if (isEmpty(responseAddresses)) return
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'response' }
   const result = waf.run({ ephemeral: responseAddresses }, req, raspRule)

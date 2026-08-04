@@ -1,81 +1,33 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 if (Number(process.env.USE_TRACER)) {
   require('../../..').init()
 }
 
 if (Number(process.env.EVERYTHING)) {
-  // TODO: Add a preparation step that installs these dependencies. That way we
-  // are independent from what is currently installed in case a dependency is
-  // removed.
-  const packages = [
-    '@babel/helpers',
-    '@datadog/libdatadog',
-    '@datadog/native-appsec',
-    '@datadog/native-iast-taint-tracking',
-    '@datadog/native-metrics',
-    '@datadog/pprof',
-    '@datadog/sketches-js',
-    '@datadog/wasm-js-rewriter',
-    '@eslint/eslintrc',
-    '@eslint/js',
-    '@isaacs/ttlcache',
-    '@msgpack/msgpack',
-    '@opentelemetry/api',
-    '@opentelemetry/core',
-    '@stylistic/eslint-plugin',
-    'axios',
-    'benchmark',
-    'body-parser',
-    'crypto-randomuuid',
-    'dc-polyfill',
-    'eslint-plugin-cypress',
-    'eslint-plugin-import',
-    'eslint-plugin-mocha',
-    'eslint-plugin-n',
-    'eslint-plugin-promise',
-    'eslint-plugin-unicorn',
-    'eslint',
-    'express',
-    'glob',
-    'globals',
-    'graphql',
-    'ignore',
-    'import-in-the-middle',
-    'istanbul-lib-coverage',
-    'jest-docblock',
-    'jsonpath-plus',
-    'jszip',
-    'limiter',
-    'lodash.sortby',
-    'lru-cache',
-    'mocha',
-    'module-details-from-path',
-    'multer',
-    'mutexify',
-    'nock',
-    'nyc',
-    'octokit',
-    'opentracing',
-    'path-to-regexp',
-    'pprof-format',
-    'protobufjs',
-    'proxyquire',
-    'retry',
-    'rfdc',
-    'semifies',
-    'semver',
-    'shell-quote',
-    'sinon',
-    'source-map',
-    'tiktoken',
-    'tlhunter-sorted-set',
-    'ttl-set',
-    'workerpool',
-    'yaml',
-    'yarn-deduplicate',
-  ]
-  for (const pkg of packages) {
-    require(pkg)
+  if (Number(process.env.ESM)) {
+    // The ESM variant registers the iitm ESM loader through
+    // NODE_OPTIONS=--import ../../../register.js, so importing the fixture routes
+    // every dependency and its transitive graph through the loader's resolve/load
+    // hooks. The CJS branch below goes through require-in-the-middle and never
+    // touches the ESM loader, so this is the only startup variant that measures
+    // the synchronous-vs-asynchronous loader cost the iitm hooks change.
+    assert.match(
+      process.env.NODE_OPTIONS ?? '',
+      /--import\b.+register\.js/,
+      'ESM startup variant must register the iitm loader via --import register.js'
+    )
+    // The floating import is the measured workload: it keeps the process alive
+    // until the graph finishes loading, and a rejection surfaces as a non-zero exit.
+    import('./everything-fixture/index.mjs')
+  } else {
+    require('./everything-fixture')
+
+    assert.ok(
+      require.cache[require.resolve('./everything-fixture/node_modules/express')],
+      'everything-fixture did not load (express not in require cache)'
+    )
   }
 }

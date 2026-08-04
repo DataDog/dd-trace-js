@@ -1,25 +1,36 @@
 'use strict'
 
 const { By, Builder } = require('selenium-webdriver')
-const chrome = require('selenium-webdriver/chrome')
+const { cleanChromeOptions, createChromeOptions } = require('../selenium-options')
 
 async function run () {
-  const options = new chrome.Options()
-  options.addArguments('--headless')
-  const build = new Builder().forBrowser('chrome').setChromeOptions(options)
-  const driver = await build.build()
+  let driver
+  let userDataDir
 
-  await driver.get(process.env.WEB_APP_URL)
+  try {
+    const chromeOptions = createChromeOptions()
+    userDataDir = chromeOptions.userDataDir
+    const build = new Builder().forBrowser('chrome').setChromeOptions(chromeOptions.options)
+    driver = await build.build()
 
-  await driver.getTitle()
+    await driver.get(process.env.WEB_APP_URL)
 
-  await driver.manage().setTimeouts({ implicit: 500 })
+    await driver.getTitle()
 
-  const helloWorld = await driver.findElement(By.className('hello-world'))
+    await driver.manage().setTimeouts({ implicit: 500 })
 
-  await helloWorld.getText()
+    const helloWorld = await driver.findElement(By.className('hello-world'))
 
-  return driver.quit()
+    await helloWorld.getText()
+  } finally {
+    try {
+      if (driver !== undefined) {
+        await driver.quit()
+      }
+    } finally {
+      cleanChromeOptions(userDataDir)
+    }
+  }
 }
 
 run()

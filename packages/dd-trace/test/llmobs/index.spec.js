@@ -3,10 +3,21 @@
 const assert = require('node:assert/strict')
 
 const { channel } = require('dc-polyfill')
-const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { DD_MAJOR } = require('../../../../version')
+const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const LLMObsTagger = require('../../src/llmobs/tagger')
+const {
+  PROPAGATED_TRACE_ID_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SESSION_ID,
+  TRACE_ID,
+} = require('../../src/llmobs/constants/tags')
+const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -22,6 +33,9 @@ describe('module', () => {
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
   let fetchAgentInfoStub
+
+  /** @type {import('sinon').SinonStub} */
+  let startupLogStub
 
   beforeEach(() => {
     store = {}
@@ -40,7 +54,7 @@ describe('module', () => {
 
     fetchAgentInfoStub = sinon.stub()
 
-    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
+    const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
       '../log': logger,
@@ -56,18 +70,29 @@ describe('module', () => {
           fetchAgentInfo: fetchAgentInfoStub,
         },
       }),
-    })
+    }
+
+    if (DD_MAJOR < 6) {
+      startupLogStub = sinon.stub(console, 'error')
+    } else {
+      startupLogStub = sinon.stub()
+
+      llmobsModuleProxyRequireMeta['../startup-log'] = {
+        logGenericError: startupLogStub,
+      }
+    }
+
+    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', llmobsModuleProxyRequireMeta)
 
     removeDestroyHandler()
   })
 
   afterEach(() => {
+    sinon.restore()
     llmobsModule.disable()
   })
 
   after(() => {
-    sinon.restore()
-
     // get rid of mock stubs for writers
     delete require.cache[require.resolve('../../../dd-trace/src/llmobs')]
   })
@@ -90,7 +115,129 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+    })
+
+    it('injects the sampling rate and decision from the parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SAMPLE_RATE]: '0.5',
+        [SAMPLING_DECISION]: '0',
+      })
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sr=0.5,_dd.p.llmobs_sd=0'
+      )
+    })
+
+    it('injects the session_id from the parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SESSION_ID]: 'my-session',
+      })
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=my-session'
+      )
+    })
+
+    it('injects the session_id from the trace-level default when the active span carries none', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+            _trace: { tags: { '_ml_obs.trace_session_id': 'trace-session' } },
+          }
+        },
+      }
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=trace-session'
+      )
+    })
+
+    it('converts the local LLMObs trace id to decimal for propagation', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            _trace: { tags: {} },
+            toSpanId () { return 'parent-id' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [TRACE_ID]: '6a5f76e7000000001973227978d8110b',
+      })
+
+      const carrier = { 'x-datadog-tags': '' }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        // eslint-disable-next-line @stylistic/max-len
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_trace_id=141393847380800662846519802803680448779'
+      )
+    })
+
+    it('forwards an extracted LLMObs trace id without reinterpreting it', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      const wireTraceId = '12345678901234567890123456789012'
+      store.span = {
+        context () {
+          return {
+            _trace: { tags: { [PROPAGATED_TRACE_ID_KEY]: wireTraceId } },
+            toSpanId () { return 'parent-id' },
+          }
+        },
+      }
+
+      const carrier = { 'x-datadog-tags': '' }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        `_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_trace_id=${wireTraceId}`
+      )
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
@@ -100,7 +247,7 @@ describe('module', () => {
         'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
@@ -112,27 +259,69 @@ describe('module', () => {
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], '')
     })
+
+    it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {}
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
+    })
+
+    it('appends to an existing non-empty x-datadog-tags with a single comma separator', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
+    })
+
+    describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
+      let config
+
+      before(() => {
+        process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = '0'
+        config = getConfigFresh({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+        delete process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+      })
+
+      it('does not write x-datadog-tags', () => {
+        llmobsModule.enable(config)
+
+        const carrier = {}
+        injectCh.publish({ carrier })
+
+        assert.ok(!('x-datadog-tags' in carrier))
+      })
+    })
   })
 
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({
+        llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true,
           },
-        }),
-        {
-          message: 'Cannot send LLM Observability data without a running agent ' +
-            'or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.',
+          startupLogs: true,
         })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
+        llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' }, startupLogs: true })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
@@ -142,7 +331,7 @@ describe('module', () => {
           llmobs: {
             agentlessEnabled: true,
           },
-          apiKey: 'test',
+          DD_API_KEY: 'test',
           site: 'datadoghq.com',
         })
 
@@ -180,20 +369,24 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
         it('configures the agentless writers', () => {
           llmobsModule.enable({
             llmobs: {},
-            apiKey: 'test',
+            DD_API_KEY: 'test',
             site: 'datadoghq.com',
           })
 
@@ -227,26 +420,23 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          assert.throws(
-            () => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
-            {
-              message: 'Cannot send LLM Observability data without a running agent ' +
-                'or without both a Datadog API key and site.\n' +
-                'Ensure these configurations are set before running your application.',
-            }
-          )
+          llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 
       describe('when an API key is provided', () => {
         it('configures the agentless writers', () => {
-          llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)

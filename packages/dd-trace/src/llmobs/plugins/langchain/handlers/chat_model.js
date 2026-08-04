@@ -2,6 +2,7 @@
 
 const LLMObsTagger = require('../../../tagger')
 const { spanHasError } = require('../../../util')
+const { getRole } = require('../messages')
 const LangChainLLMObsHandler = require('.')
 
 const LLM = 'llm'
@@ -22,7 +23,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
     for (const messageSet of inputs) {
       for (const message of messageSet) {
         const content = message.content || ''
-        const role = this.getRole(message)
+        const role = getRole(message)
         inputMessages.push({ content, role })
       }
     }
@@ -54,7 +55,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
     for (const messageSet of results.generations) {
       for (const chatCompletion of messageSet) {
         const chatCompletionMessage = chatCompletion.message
-        const role = this.getRole(chatCompletionMessage)
+        const role = getRole(chatCompletionMessage)
         const content = chatCompletionMessage.text || ''
         const toolCalls = this.extractToolCalls(chatCompletionMessage)
         outputMessages.push({ content, role, toolCalls })

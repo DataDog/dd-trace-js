@@ -1,19 +1,24 @@
 'use strict'
 
 const assert = require('assert')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const { once } = require('events')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const webAppServer = require('./web-app-server')
+
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
@@ -21,19 +26,15 @@ describe('test optimization automatic log submission', () => {
 
   useSandbox([
     'mocha',
-    '@cucumber/cucumber',
+    ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'jest',
     'winston',
-    '@playwright/test',
+    playwrightDependency,
   ], true)
 
   before(async () => {
     cwd = sandboxCwd()
-    const { NODE_OPTIONS, ...restOfEnv } = process.env
-    // Install chromium (configured in integration-tests/playwright.config.js)
-    // *Be advised*: this means that we'll only be using chromium for this test suite
-    // Must run in before hook: sandbox is created at test time so workflow can't install
-    execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+    installPlaywrightChromium(cwd)
     await new Promise((resolve, reject) => {
       webAppServer.listen(0, () => {
         const address = webAppServer.address()
@@ -86,7 +87,7 @@ describe('test optimization automatic log submission', () => {
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
-    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+    if (!isLatestCucumberSupported && name === 'cucumber') return
 
     context(`with ${name}`, () => {
       it('can automatically submit logs', async () => {

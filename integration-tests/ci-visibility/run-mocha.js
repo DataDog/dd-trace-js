@@ -5,6 +5,9 @@ const Mocha = require('mocha')
 const mocha = new Mocha({
   parallel: !!process.env.RUN_IN_PARALLEL,
 })
+if (process.env.MOCHA_RETRIES) {
+  mocha.retries(Number(process.env.MOCHA_RETRIES))
+}
 if (process.env.TESTS_TO_RUN) {
   const tests = JSON.parse(process.env.TESTS_TO_RUN)
   tests.forEach(test => {
@@ -17,6 +20,9 @@ if (process.env.TESTS_TO_RUN) {
 mocha.run((failures) => {
   if (process.send) {
     process.send('finished')
+  }
+  if (process.env.REPORT_RUN_CALLBACK) {
+    process.stdout.write('programmatic Mocha run completed\n')
   }
   if (process.env.SHOULD_CHECK_RESULTS && failures > 0) {
     process.exit(1)

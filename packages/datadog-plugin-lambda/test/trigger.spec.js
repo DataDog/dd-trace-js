@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 const {
   parseEventSource,
-  parseEventSourceSubType,
+  parseEventSourceSubtype,
   extractTriggerTags,
   extractHTTPStatusCodeTag,
   isHTTPTriggerEvent,
@@ -151,17 +151,17 @@ describe('trigger', () => {
     })
   })
 
-  describe('parseEventSourceSubType', () => {
+  describe('parseEventSourceSubtype', () => {
     it('returns api-gateway-rest-api for v1 event', () => {
-      assert.equal(parseEventSourceSubType(apiGatewayV1Event), eventSubTypes.apiGatewayV1)
+      assert.equal(parseEventSourceSubtype(apiGatewayV1Event), eventSubTypes.apiGatewayV1)
     })
 
     it('returns api-gateway-http-api for v2 event', () => {
-      assert.equal(parseEventSourceSubType(apiGatewayV2Event), eventSubTypes.apiGatewayV2)
+      assert.equal(parseEventSourceSubtype(apiGatewayV2Event), eventSubTypes.apiGatewayV2)
     })
 
     it('returns unknown-sub-type for non-API Gateway event', () => {
-      assert.equal(parseEventSourceSubType(sqsEvent), eventSubTypes.unknown)
+      assert.equal(parseEventSourceSubtype(sqsEvent), eventSubTypes.unknown)
     })
   })
 

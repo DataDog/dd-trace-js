@@ -28,9 +28,12 @@ tracer.use('pg', {
 <h5 id="ai"></h5>
 <h5 id="amqp10"></h5>
 <h5 id="anthropic"></h5>
+<h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
+<h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
+<h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
@@ -46,12 +49,12 @@ tracer.use('pg', {
 <h5 id="cypress"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
+<h5 id="electron"></h5>
 <h5 id="express"></h5>
 <h5 id="fastify"></h5>
 <h5 id="fetch"></h5>
 <h5 id="find-my-way"></h5>
 <h5 id="fs"></h5>
-<h5 id="generic-pool"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="google-cloud-vertexai"></h5>
 <h5 id="google-genai"></h5>
@@ -65,7 +68,6 @@ tracer.use('pg', {
 <h5 id="iovalkey"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
-<h5 id="knex"></h5>
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
 <h5 id="langgraph"></h5>
@@ -73,15 +75,18 @@ tracer.use('pg', {
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
+<h5 id="modelcontextprotocol-sdk"></h5>
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
+<h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+<h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="pg"></h5>
@@ -108,9 +113,12 @@ tracer.use('pg', {
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
+* [claude-agent-sdk](./interfaces/export_.plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
+* [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
@@ -126,12 +134,12 @@ tracer.use('pg', {
 * [cypress](./interfaces/export_.plugins.cypress.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
+* [electron](./interfaces/export_.plugins.electron.html)
 * [express](./interfaces/export_.plugins.express.html)
 * [fastify](./interfaces/export_.plugins.fastify.html)
 * [fetch](./interfaces/export_.plugins.fetch.html)
 * [find-my-way](./interfaces/export_.plugins.find_my_way.html)
 * [fs](./interfaces/export_.plugins.fs.html)
-* [generic-pool](./interfaces/export_.plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
 * [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
 * [google-genai](./interfaces/export_.plugins.google_genai.html)
@@ -145,7 +153,6 @@ tracer.use('pg', {
 * [iovalkey](./interfaces/export_.plugins.iovalkey.html)
 * [jest](./interfaces/export_.plugins.jest.html)
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
-* [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
 * [langgraph](./interfaces/export_.plugins.langgraph.html)
@@ -153,15 +160,18 @@ tracer.use('pg', {
 * [memcached](./interfaces/export_.plugins.memcached.html)
 * [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)
+* [modelcontextprotocol-sdk](./interfaces/export_.plugins.modelcontextprotocol_sdk.html)
 * [moleculer](./interfaces/export_.plugins.moleculer.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
+* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pg](./interfaces/export_.plugins.pg.html)
@@ -501,6 +511,21 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 <h3 id="tracer-settings">Tracer settings</h3>
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
+
+<h3 id="test-optimization-settings">Test Optimization settings</h3>
+
+Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
+reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
+accepted; if more are provided, the report is uploaded without flags.
+
+Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
+Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
+Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
+duration-based retry policy applies.
+
+Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
+The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
+are disabled, quarantined, or run in Attempt to Fix mode.
 
 <h3 id="custom-logging">Custom Logging</h3>
 

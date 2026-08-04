@@ -1,7 +1,7 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 export default (req, res) => {
-  const tracer = require('../../../../../dd-trace')
+  const tracer = require('dd-trace')
 
   if (req.query.createChildSpan === 'true') {
     const childSpan = tracer.startSpan('child.operation', {

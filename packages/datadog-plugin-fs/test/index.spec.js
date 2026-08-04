@@ -8,25 +8,38 @@ const util = require('node:util')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const realFS = { ...require('node:fs') }
+const { storage } = require('../../datadog-core')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
-const plugins = require('../../dd-trace/src/plugins')
-
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
+  describe('registry', () => {
+    const plugins = require('../../dd-trace/src/plugins')
+    const FsPlugin = require('../src')
+
+    it('resolves the fs plugin under both the fs and node:fs keys', () => {
+      assert.strictEqual(plugins.fs, FsPlugin)
+      assert.strictEqual(plugins['node:fs'], FsPlugin)
+    })
+
+    it('marks the fs plugin experimental so it stays disabled by default', () => {
+      assert.strictEqual(FsPlugin.experimental, true)
+    })
+  })
+
   describe('fs not instrumented without internal method call', () => {
     let fs
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
-    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
-      tracer = require('../../dd-trace')
+    beforeEach(async () => {
+      tracer = await agent.load([], undefined, { flushInterval: 1 })
       fs = require('node:fs')
-    }))
+    })
 
     describe('with parent span', () => {
       beforeEach((done) => {
@@ -37,25 +50,17 @@ describe('Plugin', () => {
 
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          function waitForNextTrace () {
-            agent.assertSomeTraces((data) => {
-              if (data) {
-                data.forEach((arr) => {
-                  arr.forEach((trace) => {
-                    if (trace.name === 'fs.operation') {
-                      assert.fail('should not have been any fs traces')
-                    }
-                  })
-                })
+          agent
+            .assertNoTraces((data) => {
+              for (const traces of data) {
+                for (const trace of traces) {
+                  if (trace.name === 'fs.operation') {
+                    assert.fail('should not have been any fs traces')
+                  }
+                }
               }
-              process.nextTick(() => {
-                waitForNextTrace()
-              })
-            }).catch(done)
-          }
-
-          waitForNextTrace()
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {
@@ -74,33 +79,31 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
-    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
-      tracer = require('../../dd-trace')
+    beforeEach(async () => {
+      tracer = await agent.load('fs', undefined, { flushInterval: 1 })
       fs = require('fs')
       tracer.use('fs', { enabled: true })
-    }))
+    })
 
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
-      plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
 
     after((done) => {
       realFS.rm(tmpdir, { force: true, recursive: true }, done)
-      delete plugins.fs
     })
 
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.assertSomeTraces(() => {
-            assert.fail('should not have been any traces')
-          }).catch(done)
-
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+          agent
+            .assertNoTraces(() => {
+              assert.fail('should not have been any traces')
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {
@@ -109,6 +112,16 @@ describe('Plugin', () => {
               realFS.closeSync(fd)
             }
           })
+        })
+      })
+
+      describe('existsSync', () => {
+        it('should not leak noop store to parent context', () => {
+          const storeBefore = storage('legacy').getStore()
+
+          fs.existsSync(__filename)
+
+          assert.strictEqual(storage('legacy').getStore(), storeBefore)
         })
       })
     })
@@ -294,7 +307,7 @@ describe('Plugin', () => {
           const filename = path.join(__filename, Math.random().toString())
           try {
             fs.openSync(filename, 'r')
-          } catch (err) {
+          } catch {
             expectOneSpan(agent, done, {
               resource: 'openSync',
               error: 0,
@@ -373,7 +386,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -412,7 +425,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -464,7 +477,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -987,7 +1000,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1012,7 +1025,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1041,10 +1054,10 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(sourceFile)
-          } catch (e) { /* */ }
+          } catch { /* */ }
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1071,7 +1084,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1099,7 +1112,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1177,7 +1190,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1302,7 +1315,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1334,7 +1347,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1634,7 +1647,7 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
-            } catch (e) { /* */ }
+            } catch { /* */ }
             await fs.promises.unlink(filename)
           })
 
@@ -1883,7 +1896,8 @@ describe('Plugin', () => {
         if (name.split('.').reduce(reducer, realFS)) {
           describe(name, () => {
             fn(name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
                   assert.strictEqual(tracer.scope().active(), span)
@@ -1902,7 +1916,8 @@ describe('Plugin', () => {
         if (realFS.promises && name in realFS.promises) {
           describe('promises.' + name, () => {
             fn('promises.' + name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {

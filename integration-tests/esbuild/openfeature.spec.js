@@ -6,7 +6,8 @@ const path = require('node:path')
 const { FakeAgent, sandboxCwd, useSandbox } = require('../helpers')
 
 // This should switch to our withVersion helper. The order here currently matters.
-const esbuildVersions = ['latest', '0.16.12']
+const { ESBUILD_VERSION } = process.env
+const esbuildVersions = ESBUILD_VERSION ? [ESBUILD_VERSION] : ['latest', '0.16.12']
 
 esbuildVersions.forEach((version) => {
   describe('OpenFeature', () => {
@@ -22,7 +23,7 @@ esbuildVersions.forEach((version) => {
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
       execSync('npm install -g yarn', { cwd })
 
-      execSync('yarn', { cwd })
+      execSync('yarn --ignore-engines', { cwd })
     })
 
     beforeEach(async () => {

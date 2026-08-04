@@ -3,7 +3,6 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { getAgentUrl } = require('./agent/url')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -63,12 +62,21 @@ function logAgentError (agentError) {
   }
 }
 
+function logGenericError (message) {
+  if (!config?.startupLogs) {
+    return
+  }
+
+  warn('DATADOG TRACER DIAGNOSTIC - Generic Error: ' + message)
+}
+
 /**
  * Returns config info without integrations (used by startupLog).
  * @returns {Record<string, unknown>}
  */
 function configInfo () {
-  const url = getAgentUrl(config)
+  const url = config.url
+  const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
 
   return {
     [inspect.custom] () {
@@ -97,9 +105,12 @@ function configInfo () {
     ...(config.tags && config.tags.version && { dd_version: config.tags.version }),
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
-    profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
+    profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.enabled,
     data_streams_enabled: !!config.dsmEnabled,
+    otlp_traces_export_enabled: config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility,
+    otlp_metrics_export_enabled: !!config.DD_METRICS_OTEL_ENABLED,
+    otlp_logs_export_enabled: !!config.DD_LOGS_OTEL_ENABLED,
   }
 }
 
@@ -143,4 +154,5 @@ module.exports = {
   setSamplingRules,
   tracerInfo,
   errors,
+  logGenericError,
 }

@@ -10,6 +10,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -31,28 +32,30 @@ class Http2ClientPlugin extends ClientPlugin {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
-    const pathname = path.split(/[?#]/)[0]
+    const pathname = path.split(/[?#]/, 1)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+    const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
+    const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
+      service: this.serviceName({ pluginConfig: this.config, sessionDetails }),
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
         'out.host': sessionDetails.host,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port, 10),
       },
     }, false)
 

@@ -14,15 +14,15 @@ function parseLambdaARN (arn, version) {
 
   const tags = { region, account_id: accountId, functionname }
 
-  if (alias !== undefined) {
+  if (alias === undefined) {
+    tags.resource = functionname
+  } else {
     if (alias.startsWith('$')) {
-      alias = alias.substring(1)
+      alias = alias.slice(1)
     } else if (!Number(alias)) {
       tags.executedversion = version
     }
     tags.resource = functionname + ':' + alias
-  } else {
-    tags.resource = functionname
   }
 
   return tags

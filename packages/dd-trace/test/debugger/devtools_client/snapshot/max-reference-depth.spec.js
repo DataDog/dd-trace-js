@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
@@ -19,9 +20,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assertOnBreakpoint(done, { maxReferenceDepth: 1 }, (state) => {
         assert.strictEqual(Object.keys(state).length, 1)
 
-        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.ok(Object.hasOwn(state, 'myNestedObj'), `Available keys: ${inspect(Object.keys(state))}`)
         assert.strictEqual(state.myNestedObj.type, 'Object')
-        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.ok(
+          Object.hasOwn(state.myNestedObj, 'fields'),
+          `Available keys: ${inspect(Object.keys(state.myNestedObj))}`
+        )
         assert.strictEqual(Object.keys(state.myNestedObj).length, 2)
 
         assert.ok('deepObj' in state.myNestedObj.fields)
@@ -42,9 +46,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assertOnBreakpoint(done, { maxReferenceDepth: 5 }, (state) => {
         assert.strictEqual(Object.entries(state).length, 1)
 
-        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.ok(Object.hasOwn(state, 'myNestedObj'), `Available keys: ${inspect(Object.keys(state))}`)
         assert.strictEqual(state.myNestedObj.type, 'Object')
-        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.ok(
+          Object.hasOwn(state.myNestedObj, 'fields'),
+          `Available keys: ${inspect(Object.keys(state.myNestedObj))}`
+        )
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
         assert.ok('deepObj' in state.myNestedObj.fields)
@@ -93,9 +100,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       assertOnBreakpoint(done, (state) => {
         assert.strictEqual(Object.entries(state).length, 1)
 
-        assert.ok(Object.hasOwn(state, 'myNestedObj'))
+        assert.ok(Object.hasOwn(state, 'myNestedObj'), `Available keys: ${inspect(Object.keys(state))}`)
         assert.strictEqual(state.myNestedObj.type, 'Object')
-        assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
+        assert.ok(
+          Object.hasOwn(state.myNestedObj, 'fields'),
+          `Available keys: ${inspect(Object.keys(state.myNestedObj))}`
+        )
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
         assert.ok('deepObj' in state.myNestedObj.fields)

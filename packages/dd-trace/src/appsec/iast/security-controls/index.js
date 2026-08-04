@@ -21,10 +21,10 @@ let controlsKeys
 let hooks
 
 function configure (iastConfig) {
-  if (!iastConfig?.securityControlsConfiguration) return
+  if (!iastConfig.DD_IAST_SECURITY_CONTROLS_CONFIGURATION) return
 
   try {
-    controls = parse(iastConfig.securityControlsConfiguration)
+    controls = parse(iastConfig.DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     if (controls?.size > 0) {
       hooks = new WeakSet()
       controlsKeys = [...controls.keys()]
@@ -111,8 +111,8 @@ function resolve (path, obj, separator = '.') {
 }
 
 function wrapSanitizer (target, secureMarks) {
-  return shimmer.wrapFunction(target, orig => function () {
-    const result = orig.apply(this, arguments)
+  return shimmer.wrapFunction(target, orig => function (...args) {
+    const result = orig.apply(this, args)
 
     try {
       return addSecureMarks(result, secureMarks)

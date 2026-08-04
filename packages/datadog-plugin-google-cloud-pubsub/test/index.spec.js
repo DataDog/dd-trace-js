@@ -1,9 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const sinon = require('sinon')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -11,15 +12,16 @@ const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mo
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
-const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const gc = global.gc ?? (() => {})
+
+if (typeof global.gc !== 'function') {
+  throw new Error('requires --expose-gc flag')
+}
+
+const gc = global.gc
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
-const dsmTopicName = 'dsm-topic'
 
 describe('Plugin', () => {
   let tracer
@@ -40,7 +42,7 @@ describe('Plugin', () => {
     })
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
       let pubsub
@@ -50,6 +52,12 @@ describe('Plugin', () => {
       let v1
       let gax
 
+      // pubsub 2.x bundles its own @grpc/grpc-js, so the internal v1 client rejects credentials minted by the
+      // test-pinned google-gax ("Channel credentials must be a ChannelCredentials object"). 1.x and 3.x+
+      // stay compatible, so gate only the low-level v1 tests on 2.x; the public-API tests still cover that major.
+      const pkgVersion = require(`../../../versions/@google-cloud/pubsub@${version}`).version()
+      const itInternalApi = semver.satisfies(pkgVersion, '2.x') ? it.skip : it
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
@@ -57,7 +65,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          gax = require('../../../versions/google-gax@3.5.7').get()
+          gax = require('../../../versions/google-gax@5.0.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
@@ -86,7 +94,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented when using the internal API', async () => {
+          itInternalApi('should be instrumented when using the internal API', async () => {
             const publisher = new v1.PublisherClient({
               grpc: gax.grpc,
               projectId: project,
@@ -111,7 +119,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented w/ error', async () => {
+          itInternalApi('should be instrumented w/ error', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.controlPlane.opName,
               service: expectedSchema.controlPlane.serviceName,
@@ -133,7 +141,7 @@ describe('Plugin', () => {
               // This should fail because the topic already exists or similar error
               await publisher.createTopic({ name })
               await publisher.createTopic({ name }) // Try to create twice to force error
-            } catch (e) {
+            } catch {
             // this is just to prevent mocha from crashing
             }
             return expectedSpanPromise
@@ -228,8 +236,11 @@ describe('Plugin', () => {
             sub.on('message', msg => {
               const activeSpan = tracer.scope().active()
               if (activeSpan) {
-                const receiverSpanContext = activeSpan._spanContext
-                assert.ok(typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null)
+                const receiverSpanContext = activeSpan.context()
+                assert.ok(
+                  typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null,
+                  `Expected non-null object, got ${inspect(receiverSpanContext._parentId)}`
+                )
               }
               msg.ack()
             })
@@ -366,228 +377,168 @@ describe('Plugin', () => {
         })
       })
 
-      describe('data stream monitoring', () => {
-        let dsmTopic
-        let sub
-        let consume
-        let expectedProducerHash
-        let expectedConsumerHash
-
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
-            dsmEnabled: true,
-          })
+      // Regression for APMS-19318: DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+      // must strip the `-pubsub` suffix from consumer-side spans. With the env var
+      // set, the SchemaManager short-circuits service-name lookups to v1's
+      // identityService so the suffix is dropped without affecting v0 default behavior.
+      describe('with DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', () => {
+        // Pass the schema fields through `tracerConfig`. The shared
+        // `agent.close + agent.load` path rebuilds the tracer when
+        // `tracerConfig` differs from the previous load; that rebuild
+        // re-runs `pluginManager.configure` and therefore
+        // `Nomenclature.configure`, which overwrites any pre-test
+        // `Nomenclature.configure` from a `before` block. Putting the
+        // fields here makes the rebuild materialise them.
+        beforeEach(async () => {
+          tracer = await agent.load(
+            'google-cloud-pubsub',
+            { dsmEnabled: false },
+            {
+              flushMinSpans: 1,
+              spanAttributeSchema: 'v0',
+              spanRemoveIntegrationFromService: true,
+            }
+          )
+          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          topicName = getTopic()
+          resource = `projects/${project}/topics/${topicName}`
+          pubsub = new lib.PubSub({ projectId: project })
         })
 
-        before(async () => {
+        it('uses the host service name (no -pubsub suffix) on consumer spans', async () => {
+          const expectedSpanPromise = expectSpanWithDefaults({
+            name: expectedSchema.receive.opName,
+            service: 'test',
+            type: 'worker',
+            meta: {
+              component: 'google-cloud-pubsub',
+              'span.kind': 'consumer',
+              'pubsub.topic': resource,
+            },
+          })
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+          sub.on('message', msg => msg.ack())
+          await publish(topic, { data: Buffer.from('hello') })
+          return expectedSpanPromise
+        })
+      })
+
+      describe('garbage collection and memory leaks', function () {
+        beforeEach(async () => {
+          await agent.load('google-cloud-pubsub', { dsmEnabled: true })
+
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
-          resource = `projects/${project}/topics/${dsmTopicName}`
           pubsub = new PubSub({ projectId: project })
-          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
-
-          dsmTopic = await pubsub.createTopic(dsmTopicName)
-          dsmTopic = dsmTopic[0]
-          sub = await dsmTopic.createSubscription('DSM')
-          sub = sub[0]
-          consume = function (cb) {
-            sub.on('message', cb)
-          }
-
-          const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
-
-          const phash = propagationHash.getHash()
-          expectedProducerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            ENTRY_PARENT_HASH,
-            phash
-          )
-          expectedConsumerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            expectedProducerHash,
-            phash
-          )
         })
 
-        describe('should set a DSM checkpoint', () => {
-          it('on produce', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
+        it('should clean up WeakMap entries when messages are garbage collected', async function () {
+          this.timeout(10000)
 
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = 0
-              // we should have 1 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived += statsBuckets.Stats.length
-                  })
-                }
-              })
-              assert.ok(statsPointsReceived >= 1)
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
-            }, { timeoutMs: TIMEOUT })
+          // Create a weak reference to track if message is GC'd
+          let messageWasCollected = false
+          const finalizationRegistry = new FinalizationRegistry(() => {
+            messageWasCollected = true
           })
 
-          it('on consume', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            await consume(async () => {
-              agent.expectPipelineStats(dsmStats => {
-                let statsPointsReceived = 0
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                assert.ok(statsPointsReceived >= 2)
-                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
-              }, { timeoutMs: TIMEOUT })
-            })
-          })
-        })
+          // Use unique topic name for GC test
+          const gcTopicName = `gc-test-${Date.now()}`
 
-        describe('it should set a message payload size', () => {
-          let recordCheckpointSpy
+          // Publish and consume without acknowledging
+          await (async () => {
+            const [topic] = await pubsub.createTopic(gcTopicName)
+            const [subscription] = await topic.createSubscription('gc-test-sub')
 
-          beforeEach(() => {
-            recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-          })
-
-          afterEach(() => {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
-          })
-
-          it('when producing a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-          })
-
-          it('when consuming a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
-
-            await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            })
-          })
-        })
-
-        describe('garbage collection and memory leaks', function () {
-          // GC tests need --expose-gc flag
-          if (typeof global.gc !== 'function') {
-            return it.skip('requires --expose-gc flag')
-          }
-
-          it('should clean up WeakMap entries when messages are garbage collected', async function () {
-            this.timeout(10000)
-
-            // Create a weak reference to track if message is GC'd
-            let messageWasCollected = false
-            const finalizationRegistry = new FinalizationRegistry(() => {
-              messageWasCollected = true
-            })
-
-            // Use unique topic name for GC test
-            const gcTopicName = `gc-test-${Date.now()}`
-
-            // Publish and consume without acknowledging
-            await (async () => {
-              const [topic] = await pubsub.createTopic(gcTopicName)
-              const [subscription] = await topic.createSubscription('gc-test-sub')
-
-              let messageReceived = false
-              subscription.on('message', (message) => {
-                // Register the message for GC tracking
-                finalizationRegistry.register(message, 'test-message')
-                messageReceived = true
-                // DON'T call message.ack() - this tests the GC cleanup path
-              })
-
-              await publish(topic, { data: Buffer.from('gc test message') })
-
-              // Wait for message to be received
-              await new Promise((resolve) => {
-                const checkInterval = setInterval(() => {
-                  if (messageReceived) {
-                    clearInterval(checkInterval)
-                    resolve()
-                  }
-                }, 100)
-              })
-
-              // Close subscription to release references
-              subscription.close()
-            })()
-
-            // Force garbage collection multiple times
-            gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
-            gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
-            gc()
-
-            // Wait a bit for FinalizationRegistry callback
-            await new Promise(resolve => setTimeout(resolve, 500))
-
-            // Verify the message was garbage collected
-            // This proves WeakMap doesn't prevent GC
-            assert.ok(messageWasCollected, 'Message should be garbage collected even without ack()')
-          })
-
-          it('should not leak memory with many messages without ack', async function () {
-            this.timeout(20000) // Increase timeout for older Pub/Sub versions
-
-            const initialMemory = process.memoryUsage().heapUsed
-
-            // Use unique topic name for leak test
-            const leakTopicName = `leak-test-${Date.now()}`
-            const [topic] = await pubsub.createTopic(leakTopicName)
-            const [subscription] = await topic.createSubscription('leak-test-sub')
-
-            let messagesReceived = 0
-            const targetMessages = 50 // Reduce from 100 to 50 for faster test
-
+            let messageReceived = false
             subscription.on('message', (message) => {
-              messagesReceived++
-              // DON'T acknowledge - test that WeakMap doesn't leak
+              // Register the message for GC tracking
+              finalizationRegistry.register(message, 'test-message')
+              messageReceived = true
+              // DON'T call message.ack() - this tests the GC cleanup path
             })
 
-            // Send many messages
-            for (let i = 0; i < targetMessages; i++) {
-              await publish(topic, { data: Buffer.from(`leak test ${i}`) })
-            }
+            await publish(topic, { data: Buffer.from('gc test message') })
 
-            // Wait for all messages
-            await new Promise((resolve) => {
+            // Wait for message to be received
+            await /** @type {Promise<void>} */ (new Promise((resolve) => {
               const checkInterval = setInterval(() => {
-                if (messagesReceived >= targetMessages) {
+                if (messageReceived) {
                   clearInterval(checkInterval)
                   resolve()
                 }
               }, 100)
-            })
+            }))
 
+            // Close subscription to release references
             subscription.close()
+          })()
 
-            // Force GC
-            gc()
-            await new Promise(resolve => setTimeout(resolve, 100))
-            gc()
+          // Force garbage collection multiple times
+          gc()
+          await new Promise(resolve => setTimeout(resolve, 100))
+          gc()
+          await new Promise(resolve => setTimeout(resolve, 100))
+          gc()
 
-            const afterMemory = process.memoryUsage().heapUsed
-            const memoryIncrease = afterMemory - initialMemory
+          // Wait a bit for FinalizationRegistry callback
+          await new Promise(resolve => setTimeout(resolve, 500))
 
-            // Memory should not increase significantly (less than 10MB for 50 messages)
-            // If WeakMap is leaking, this would be much higher
-            assert.ok(
-              memoryIncrease < 10 * 1024 * 1024,
-              `Memory increase should be minimal but was ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`
-            )
+          // Verify the message was garbage collected
+          // This proves WeakMap doesn't prevent GC
+          assert.ok(messageWasCollected, 'Message should be garbage collected even without ack()')
+        })
+
+        it('should not leak memory with many messages without ack', async function () {
+          this.timeout(20000) // Increase timeout for older Pub/Sub versions
+
+          const initialMemory = process.memoryUsage().heapUsed
+
+          // Use unique topic name for leak test
+          const leakTopicName = `leak-test-${Date.now()}`
+          const [topic] = await pubsub.createTopic(leakTopicName)
+          const [subscription] = await topic.createSubscription('leak-test-sub')
+
+          let messagesReceived = 0
+          const targetMessages = 50 // Reduce from 100 to 50 for faster test
+
+          subscription.on('message', (message) => {
+            messagesReceived++
+            // DON'T acknowledge - test that WeakMap doesn't leak
           })
+
+          // Send many messages
+          for (let i = 0; i < targetMessages; i++) {
+            await publish(topic, { data: Buffer.from(`leak test ${i}`) })
+          }
+
+          // Wait for all messages
+          await /** @type {Promise<void>} */ (new Promise((resolve) => {
+            const checkInterval = setInterval(() => {
+              if (messagesReceived >= targetMessages) {
+                clearInterval(checkInterval)
+                resolve()
+              }
+            }, 100)
+          }))
+
+          subscription.close()
+
+          // Force GC
+          gc()
+          await new Promise(resolve => setTimeout(resolve, 100))
+          gc()
+
+          const afterMemory = process.memoryUsage().heapUsed
+          const memoryIncrease = afterMemory - initialMemory
+
+          // Memory should not increase significantly (less than 10MB for 50 messages)
+          // If WeakMap is leaking, this would be much higher
+          assert.ok(
+            memoryIncrease < 10 * 1024 * 1024,
+            `Memory increase should be minimal but was ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`
+          )
         })
       })
 

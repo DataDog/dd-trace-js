@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -10,6 +11,7 @@ const {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -17,13 +19,15 @@ describe('esm', () => {
   withVersions('express', 'express', version => {
     let agent
     let proc
-    let variants
 
     useSandbox([`'express@${version}'`], false,
       ['./packages/datadog-plugin-express/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'express')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'express',
+      packageName: 'express',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -31,10 +35,10 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
         it(`is instrumented loaded with ${variant}`, async () => {
           proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
@@ -45,9 +49,9 @@ describe('esm', () => {
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(payload.length, 1)
-            assert.ok(Array.isArray(payload[0]))
+            assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
             assert.strictEqual(payload[0].length, numberOfSpans)
             assert.strictEqual(payload[0][0].name, 'express.request')
             assert.strictEqual(payload[0][1].name, `${whichMiddleware}.middleware`)
@@ -70,9 +74,9 @@ describe('esm', () => {
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(payload.length, 1)
-            assert.ok(Array.isArray(payload[0]))
+            assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
             assert.strictEqual(payload[0].length, numberOfSpans)
             assert.strictEqual(payload[0][0].name, 'express.request')
           })

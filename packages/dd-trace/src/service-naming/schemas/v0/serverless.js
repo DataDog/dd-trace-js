@@ -17,6 +17,18 @@ const serverless = {
       serviceName: identityService,
     },
   },
+  client: {
+    'aws-durable-execution-sdk-js': {
+      opName: () => 'aws.durable.invoke',
+      serviceName: identityService,
+    },
+  },
+  internal: {
+    'aws-durable-execution-sdk-js': {
+      opName: () => 'aws.durable.execute',
+      serviceName: identityService,
+    },
+  },
 }
 
 module.exports = serverless

@@ -1,12 +1,12 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const Reporter = require('../reporter')
 const Limiter = require('../../rate_limiter')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
@@ -110,24 +110,34 @@ function removeConfig (configPath) {
   }
 }
 
-function run (data, req, raspRule) {
+// `req` in the WAF execution path may be any object, not necessarily
+// an HTTP IncomingMessage (it is a plain object for lambda).
+// Always guard HTTP-specific property access.
+// @see packages/dd-trace/test/appsec/lambda.spec.js
+
+/**
+ * @param {object} data - WAF address data ({ persistent, ephemeral })
+ * @param {object} req - Request key for WAF context lookup. May be an HTTP
+ *   IncomingMessage or a plain object (Lambda invocation key).
+ * @param {string} [raspRule] - RASP rule identifier
+ * @param {object} [rootSpan] - Root span to tag (required for Lambda)
+ */
+function run (data, req, raspRule, rootSpan) {
   if (!req) {
-    const store = storage('legacy').getStore()
-    if (!store || !store.req) {
+    req = getActiveRequest()
+    if (!req) {
       log.warn('[ASM] Request object not available in waf.run')
       return
     }
-
-    req = store.req
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
-  const result = wafContext.run(data, raspRule, req)
+  const result = wafContext.run(data, raspRule, req, rootSpan)
 
   if (result?.keep) {
     if (limiter.isAllowed()) {
-      const rootSpan = web.root(req)
-      keepTrace(rootSpan, ASM)
+      const span = rootSpan || web.root(req)
+      keepTrace(span, ASM)
     } else {
       updateRateLimitedMetric(req)
     }

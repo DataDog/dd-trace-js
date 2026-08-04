@@ -4,9 +4,11 @@ const assert = require('node:assert/strict')
 const { execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const semifies = require('semifies')
+
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -33,6 +35,7 @@ function execPrismaGenerate (config, cwd) {
         '--target esnext',
         '--module commonjs',
         '--allowJs true',
+        '--skipLibCheck true',
         '--moduleResolution node',
       ].join(' '),
     ].join(' && '), {
@@ -82,7 +85,7 @@ async function copySchemaToVersionDir (schemaPath, range) {
 }
 
 function createPrismaClient (prisma, config) {
-  // With the introduction of v7 prisma now enforces the use of adpaters
+  // With the introduction of v7 prisma now enforces the use of adapters
   if (config.v7) {
     const { PrismaPg } = require('@prisma/adapter-pg')
     const adapter = new PrismaPg({ connectionString: process.env[TEST_DATABASE_ENV_NAME] })
@@ -92,6 +95,21 @@ function createPrismaClient (prisma, config) {
     return new prisma.PrismaClient({ datasourceUrl: process.env[TEST_DATABASE_ENV_NAME] })
   }
   return new prisma.PrismaClient()
+}
+
+function createEngineDbQuerySpan (queryText) {
+  return [{
+    id: '1',
+    parentId: null,
+    name: 'prisma:engine:db_query',
+    startTime: [1745340876, 436861000],
+    endTime: [1745340876, 438601541],
+    kind: 'client',
+    attributes: {
+      'db.system': 'postgresql',
+      'db.query.text': queryText,
+    },
+  }]
 }
 
 describe('Plugin', () => {
@@ -326,16 +344,20 @@ describe('Plugin', () => {
         supportedRange = '>=6.16.0 <7.0.0'
       }
       withVersions('prisma', ['@prisma/client'], supportedRange, async (range, _moduleName_, version) => {
+        // Run prisma generate once per (config, version) pair instead of once per describe block.
+        // All three describe blocks below use the same schema + version, so the output is identical.
+        before(async function () {
+          this.timeout(10000)
+          clearPrismaEnv()
+          setPrismaEnv(config)
+          const cwd = await copySchemaToVersionDir(config.schema, range)
+          execPrismaGenerate(config, cwd)
+        })
+
         describe(`without configuration ${config.schema}`, () => {
           before(async function () {
             this.timeout(10000)
-            clearPrismaEnv()
-            setPrismaEnv(config)
-
-            const cwd = await copySchemaToVersionDir(config.schema, range)
-
             await agent.load(['prisma', 'pg'])
-            execPrismaGenerate(config, cwd)
             prisma = loadPrismaModule(config, range)
 
             prismaClient = createPrismaClient(prisma, config)
@@ -348,7 +370,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should do automatic instrumentation', async () => {
@@ -408,7 +430,7 @@ describe('Plugin', () => {
                 'prisma.method': 'findMany',
                 'prisma.model': 'users',
               },
-            })
+            }, { spanResourceMatch: /^users\.findMany$/ })
 
             tracingHelper.runInChildSpan(
               {
@@ -420,25 +442,33 @@ describe('Plugin', () => {
               }
             )
 
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
 
           it('should generate engine span from array of spans', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0].length, 2)
-              assert.strictEqual(traces[0][0].span_id, traces[0][1].parent_id)
-              assert.strictEqual(traces[0][0].name, 'prisma.engine')
-              assert.strictEqual(traces[0][0].resource, 'query')
-              assert.strictEqual(traces[0][0].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][0].meta['prisma.name'], 'query')
-              assert.strictEqual(traces[0][1].name, 'prisma.engine')
-              assert.strictEqual(traces[0][1].resource, 'SELECT 1')
-              assert.strictEqual(traces[0][1].type, 'sql')
-              assert.strictEqual(traces[0][1].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][1].meta['prisma.name'], 'db_query')
-              assert.strictEqual(traces[0][1].meta['db.type'], 'postgres')
+              assertObjectContains(traces[0], {
+                length: 2,
+                0: {
+                  name: 'prisma.engine',
+                  resource: 'query',
+                  meta: {
+                    'prisma.type': 'engine',
+                    'prisma.name': 'query',
+                  },
+                },
+                1: {
+                  parent_id: traces[0][0].span_id,
+                  name: 'prisma.engine',
+                  resource: 'SELECT 1',
+                  type: 'sql',
+                  meta: {
+                    'prisma.type': 'engine',
+                    'prisma.name': 'db_query',
+                    'db.type': 'postgres',
+                  },
+                },
+              })
             })
 
             const engineSpans = [
@@ -464,9 +494,7 @@ describe('Plugin', () => {
               },
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
 
           it('should include database connection attributes in db_query spans', async () => {
@@ -488,36 +516,66 @@ describe('Plugin', () => {
             })
 
             const engineSpans = [
-              {
-                id: '1',
-                parentId: null,
-                name: 'prisma:engine:db_query',
-                startTime: [1745340876, 436861000],
-                endTime: [1745340876, 438601541],
-                kind: 'client',
-                attributes: {
-                  'db.system': 'postgresql',
-                  'db.query.text': 'SELECT 1',
-                },
-              },
+              ...createEngineDbQuerySpan('SELECT 1'),
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
+
+          if (config.v7) {
+            it('should tag db_query spans with the active client adapter metadata in read-replica setups', async () => {
+              const initialDbUrl = process.env[TEST_DATABASE_ENV_NAME]
+              process.env[TEST_DATABASE_ENV_NAME] =
+                'postgres://postgres:postgres@primary.db.internal:5432/postgres'
+              const primaryClient = createPrismaClient(prisma, config)
+
+              process.env[TEST_DATABASE_ENV_NAME] =
+                'postgres://postgres:postgres@replica.db.internal:5433/postgres'
+              const replicaClient = createPrismaClient(prisma, config)
+
+              if (initialDbUrl === undefined) {
+                delete process.env[TEST_DATABASE_ENV_NAME]
+              } else {
+                process.env[TEST_DATABASE_ENV_NAME] = initialDbUrl
+              }
+
+              assert.ok(primaryClient._tracingHelper)
+              assert.ok(replicaClient._tracingHelper)
+
+              const replicaReadTrace = agent.assertSomeTraces(traces => {
+                const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assertObjectContains(dbQuerySpan, {
+                  resource: 'SELECT 1',
+                  meta: {
+                    'out.host': 'replica.db.internal',
+                    'network.destination.port': '5433',
+                  },
+                })
+              })
+              replicaClient._tracingHelper.dispatchEngineSpans(createEngineDbQuerySpan('SELECT 1'))
+              await replicaReadTrace
+
+              const primaryWriteTrace = agent.assertSomeTraces(traces => {
+                const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assertObjectContains(dbQuerySpan, {
+                  resource: 'INSERT INTO "User" ("name") VALUES ($1)',
+                  meta: {
+                    'out.host': 'primary.db.internal',
+                    'network.destination.port': '5432',
+                  },
+                })
+              })
+              primaryClient._tracingHelper.dispatchEngineSpans(createEngineDbQuerySpan(
+                'INSERT INTO "User" ("name") VALUES ($1)'
+              ))
+              await primaryWriteTrace
+            })
+          }
         })
 
         describe('without tracer initialization', () => {
           before(async function () {
             this.timeout(10000)
-            clearPrismaEnv()
-            setPrismaEnv(config)
-
-            const cwd = await copySchemaToVersionDir(config.schema, range)
-
-            execPrismaGenerate(config, cwd)
-
             require('../../dd-trace')
 
             prisma = loadPrismaModule(config, range)
@@ -534,20 +592,13 @@ describe('Plugin', () => {
           describe('with custom service name', () => {
             before(async function () {
               this.timeout(10000)
-              clearPrismaEnv()
-              setPrismaEnv(config)
-
-              const cwd = await copySchemaToVersionDir(config.schema, range)
-
-              execPrismaGenerate(config, cwd)
-
               const pluginConfig = {
                 service: 'custom',
               }
               return agent.load(['prisma', 'pg'], pluginConfig)
             })
 
-            after(() => { return agent.close({ ritmReset: false }) })
+            after(() => { return agent.close() })
 
             beforeEach(() => {
               prisma = loadPrismaModule(config, range)

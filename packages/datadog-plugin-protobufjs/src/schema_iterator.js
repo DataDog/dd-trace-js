@@ -47,10 +47,10 @@ class SchemaExtractor {
 
   static extractProperty (field, schemaName, fieldName, builder, depth) {
     let array = false
-    let description
     let ref
     let enumValues
 
+    const description = field.comment
     const resolvedType = field.resolvedType ? field.resolvedType.constructor.name : field.type
 
     const isRepeatedField = field.rule === 'repeated'
@@ -124,7 +124,7 @@ class SchemaExtractor {
   }
 
   iterateOverSchema (builder) {
-    this.constructor.extractSchema(this.schema, builder, 0)
+    SchemaExtractor.extractSchema(this.schema, builder, 0)
   }
 
   static attachSchemaOnSpan (args, span, operation, tracer) {
@@ -135,7 +135,7 @@ class SchemaExtractor {
       return
     }
 
-    if (span.context()._tags[SCHEMA_TYPE] && operation === 'serialization') {
+    if (span.context().getTag(SCHEMA_TYPE) && operation === 'serialization') {
       // we have already added a schema to this span, this call is an encode of nested schema types
       return
     }

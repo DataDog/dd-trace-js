@@ -31,7 +31,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -117,7 +117,7 @@ describe('Plugin', () => {
 
           try {
             client.batch(queries, { prepare: true })
-          } catch (e) {
+          } catch {
             // older versions require a callback
           }
         })
@@ -182,7 +182,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -238,7 +238,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(done => {

@@ -42,7 +42,7 @@ describe('command-injection-analyzer with kafkajs', () => {
 
               const command = message.value.toString()
               execSync(command)
-            } catch (e) {
+            } catch {
               // do nothing
             }
           },

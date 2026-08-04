@@ -10,7 +10,7 @@ const sinon = require('sinon')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const log = require('../../../../src/log')
 const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
- require('../../../../src/appsec/iast/taint-tracking/secure-marks')
+  require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'

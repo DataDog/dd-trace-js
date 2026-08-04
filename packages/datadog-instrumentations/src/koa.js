@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const exitChannel = channel('apm:koa:middleware:exit')
@@ -10,12 +10,13 @@ const nextChannel = channel('apm:koa:middleware:next')
 const finishChannel = channel('apm:koa:middleware:finish')
 const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
+const publishError = createErrorPublisher(errorChannel)
 
 const originals = new WeakMap()
 
 function wrapCallback (callback) {
-  return function callbackWithTrace () {
-    const handleRequest = callback.apply(this, arguments)
+  return function callbackWithTrace (...args) {
+    const handleRequest = callback.apply(this, args)
 
     if (typeof handleRequest !== 'function') return handleRequest
 
@@ -28,14 +29,14 @@ function wrapCallback (callback) {
 }
 
 function wrapUse (use) {
-  return function useWithTrace () {
-    const result = use.apply(this, arguments)
+  return function useWithTrace (...args) {
+    const result = use.apply(this, args)
 
-    if (!Array.isArray(this.middleware)) return result
+    if (Array.isArray(this.middleware)) {
+      const fn = this.middleware.pop()
 
-    const fn = this.middleware.pop()
-
-    this.middleware.push(wrapMiddleware(fn))
+      this.middleware.push(wrapMiddleware(fn))
+    }
 
     return result
   }
@@ -54,8 +55,8 @@ function wrapRegister (register) {
 }
 
 function wrapRouterUse (use) {
-  return function useWithTrace () {
-    const router = use.apply(this, arguments)
+  return function useWithTrace (...args) {
+    const router = use.apply(this, args)
 
     for (const layer of router.stack) {
       wrapStack(layer)
@@ -132,7 +133,7 @@ function fulfill (ctx, error) {
   const route = ctx.routePath
 
   if (error) {
-    errorChannel.publish({ req, error })
+    publishError({ req, error })
   }
 
   // TODO: make sure that the parent class cannot override this in `enter`
@@ -144,10 +145,10 @@ function fulfill (ctx, error) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, next => function (...args) {
     nextChannel.publish({ req })
 
-    return next.apply(this, arguments)
+    return next.apply(this, args)
   })
 }
 

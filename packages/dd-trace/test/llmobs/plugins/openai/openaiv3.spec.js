@@ -16,7 +16,7 @@ describe('integrations', () => {
   let openai
 
   describe('openai', () => {
-    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai' })
 
     withVersions('openai', 'openai', '<4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`

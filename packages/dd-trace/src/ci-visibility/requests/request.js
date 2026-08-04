@@ -7,54 +7,14 @@ const zlib = require('zlib')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { httpAgent, httpsAgent } = require('../../exporters/common/agents')
-const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
+const {
+  RATE_LIMIT_MAX_WAIT_MS,
+  isRetriableNetworkError,
+  singleJitteredDelay,
+} = require('../../exporters/common/retry')
+const { parseUrl } = require('../../exporters/common/url')
 
-const RATE_LIMIT_MAX_WAIT_MS = 30_000
-const RETRY_BASE_MS = 5000
-const RETRY_JITTER_MS = 2500
-
-/**
- * Calculates retry delay with jitter to prevent thundering herd.
- * Delay is RETRY_BASE_MS + random(0, RETRY_JITTER_MS) (e.g. 5–7.5 seconds).
- *
- * @returns {number} Delay in milliseconds
- */
-function getRetryDelay () {
-  return RETRY_BASE_MS + (Math.random() * RETRY_JITTER_MS)
-}
-
-/**
- * Determines if a network error is retriable (transient failures only).
- * ECONNREFUSED is retried because it can be transient (service starting up,
- * restarts, rolling deploys, k8s pod/readiness transitions). ENOTFOUND is
- * excluded as it indicates DNS failure or wrong host and is usually not transient.
- *
- * @param {Error} err - The error to check
- * @returns {boolean}
- */
-function isRetriableNetworkError (err) {
-  if (!err.code) return false
-  return err.code === 'ECONNREFUSED' ||
-    err.code === 'ECONNRESET' ||
-    err.code === 'ETIMEDOUT' ||
-    err.code === 'EPIPE'
-}
-
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
-    return urlToHttpOptions(urlObjOrString)
-  }
-
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
+const legacyStorage = storage('legacy')
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
@@ -62,6 +22,10 @@ function parseUrl (urlObjOrString) {
  * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.
+ *
+ * Retry timers stay ref'd. Test-runner plugins block the suite via
+ * `delay: true` channels until this callback fires; an unref'd retry would
+ * let the host exit first and the suite would never run.
  *
  * @param {string} data - Request body (e.g. JSON string)
  * @param {object} options - { url, path?, method?, headers?, timeout? } (may be mutated)
@@ -78,7 +42,7 @@ function request (data, options, callback) {
     if (url.protocol === 'unix:') {
       opts.socketPath = url.pathname
     } else {
-      opts.path = opts.path ?? url.path
+      opts.path ??= url.path
       opts.protocol = url.protocol
       opts.hostname = url.hostname
       opts.port = url.port
@@ -97,7 +61,7 @@ function request (data, options, callback) {
   let firstStatusCode = null
 
   const makeRequest = () => {
-    storage('legacy').run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       const req = client.request(opts, (res) => {
         // Capture non-2xx status code as soon as we see it so telemetry preserves it if the retry
         // fails with a network error (no HTTP response) before 'end' fires
@@ -136,9 +100,9 @@ function request (data, options, callback) {
           if (res.statusCode === 429 && !hasRetried) {
             const resetHeader = res.headers['x-ratelimit-reset']
             const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? Number.NaN
+              ? NaN
               : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : Number.NaN
+            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true
@@ -157,7 +121,7 @@ function request (data, options, callback) {
               // ignore
             }
             hasRetried = true
-            setTimeout(makeRequest, getRetryDelay())
+            setTimeout(makeRequest, singleJitteredDelay())
             return
           }
 
@@ -177,7 +141,7 @@ function request (data, options, callback) {
         // Retry on retriable network errors
         if (!hasRetried && isRetriableNetworkError(err)) {
           hasRetried = true
-          setTimeout(makeRequest, getRetryDelay())
+          setTimeout(makeRequest, singleJitteredDelay())
           return
         }
 

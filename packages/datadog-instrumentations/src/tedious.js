@@ -4,12 +4,40 @@ const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
+  AsyncResource,
 } = require('./helpers/instrument')
+
+// Listeners added to the BulkLoad row stream (`bulkLoad.getRowStream()`) by the caller would
+// otherwise run in whatever async context emits the stream event, losing the span that was active
+// when the listener was registered. Bind each registered listener to its registration context so
+// `'finish'`/`'error'`/`'data'` handlers run in the caller's span, as they did before the tracer
+// moved to AsyncLocalStorage. tedious' own internal listeners are attached before `getRowStream`
+// returns, so only caller listeners are bound.
+const ROW_STREAM_LISTENER_METHODS = ['addListener', 'on', 'once', 'prependListener', 'prependOnceListener']
+
+function bindRowStreamListeners (rowStream) {
+  for (const method of ROW_STREAM_LISTENER_METHODS) {
+    shimmer.wrap(rowStream, method, register => function (eventName, listener) {
+      if (typeof listener !== 'function') {
+        return register.apply(this, arguments)
+      }
+      return register.call(this, eventName, AsyncResource.bind(listener))
+    })
+  }
+  return rowStream
+}
 
 addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
   const startCh = channel('apm:tedious:request:start')
   const finishCh = channel('apm:tedious:request:finish')
   const errorCh = channel('apm:tedious:request:error')
+
+  if (typeof tedious.BulkLoad?.prototype?.getRowStream === 'function') {
+    shimmer.wrap(tedious.BulkLoad.prototype, 'getRowStream', getRowStream => function () {
+      return bindRowStreamListeners(getRowStream.apply(this, arguments))
+    })
+  }
+
   shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
     if (!startCh.hasSubscribers) {
       return makeRequest.apply(this, arguments)

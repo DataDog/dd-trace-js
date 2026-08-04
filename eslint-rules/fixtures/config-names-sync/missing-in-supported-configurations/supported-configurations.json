@@ -1,0 +1,11 @@
+{
+  "supportedConfigurations": {
+    "DD_SIMPLE": [
+      {
+        "configurationNames": [
+          "simple"
+        ]
+      }
+    ]
+  }
+}

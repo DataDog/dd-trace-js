@@ -2,36 +2,296 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+const { SPAN_TYPE } = require('../../../../../ext/tags')
 require('../../setup/core')
+const getConfig = require('../../../src/config')
+const Span = require('../../../src/opentracing/span')
 
 const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
+  getTestLevelsMetadataTags,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getLineCoverageBitmap,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
+  getMaxEfdRetryCount,
+  getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordTestManagementExecution,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  collectTestOptimizationSummariesFromTraces,
+  formatTestManagementSummary,
+  formatAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
+  getLibraryCapabilitiesTags,
+  getTestParentSpan,
+  setRumTestCorrelation,
+  setRumTestTags,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../../src/plugins/util/test')
 
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const {
+  CI_JOB_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+} = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('library capabilities', () => {
+  it('advertises TIA for Vitest unless the execution mode does not support it', () => {
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0')[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      '1'
+    )
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0', {
+        omitTestImpactAnalysis: true,
+      })[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      undefined
+    )
+  })
+})
+
+describe('RUM test correlation', () => {
+  const tracer = { _config: getConfig() }
+  const processor = { process () {} }
+  const prioritySampler = { sample () {} }
+
+  /**
+   * @param {import('../../../src/opentracing/span_context')|undefined} parent
+   * @param {Record<string, string>} [tags]
+   */
+  function createSpan (parent, tags) {
+    return new Span(tracer, processor, prioritySampler, {
+      operationName: 'test',
+      parent,
+      tags,
+    })
+  }
+
+  it('sets correlation metadata on an active test span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const context = {
+      isRumActive: false,
+      browserVersion: undefined,
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, testSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets correlation metadata on the test ancestor of an active child span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const childSpan = createSpan(testSpan.context())
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, childSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), '1.2.3')
+    assert.strictEqual(childSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(childSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('does not mutate context without an active span', () => {
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, undefined), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+  })
+
+  it('does not mutate context when the active trace has no test span', () => {
+    const span = createSpan()
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, span), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+    assert.strictEqual(span.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(span.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets only the available RUM tags', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+
+    setRumTestTags(testSpan, true, undefined)
+
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('uses a preallocated test execution ID for the test trace', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }, '123456789'), parentSpan)
+    sinon.assert.calledOnceWithExactly(extract, 'text_map', {
+      'x-datadog-trace-id': '123456789',
+      'x-datadog-parent-id': '0000000000000000',
+    })
+  })
+})
+
+describe('getTestOptimizationRequestResults', () => {
+  it('starts known tests, test management, and skippable requests together when enabled', async () => {
+    const startedRequests = []
+    let resolveKnownTests
+    let resolveTestManagementTests
+    let resolveSkippableSuites
+
+    const getKnownTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('known-tests')
+      resolveKnownTests = resolve
+    }))
+    const getTestManagementTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('test-management-tests')
+      resolveTestManagementTests = resolve
+    }))
+    const getSkippableSuites = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('skippable-suites')
+      resolveSkippableSuites = resolve
+    }))
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(startedRequests, ['known-tests', 'test-management-tests', 'skippable-suites'])
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.calledOnce(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+
+    resolveSkippableSuites({ skippableSuites: [] })
+    resolveTestManagementTests({ testManagementTests: { jest: {} } })
+    resolveKnownTests({ knownTests: { jest: {} } })
+
+    assert.deepStrictEqual(await requestResultsPromise, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      testManagementTestsResponse: { testManagementTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+  })
+
+  it('starts each supported request only when its feature is enabled', async () => {
+    const getKnownTests = sinon.stub().resolves({ knownTests: { jest: {} } })
+    const getTestManagementTests = sinon.stub().resolves({ testManagementTests: { jest: {} } })
+    const getSkippableSuites = sinon.stub().resolves({ skippableSuites: [] })
+
+    const requestResults = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: false,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(requestResults, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+  })
+
+  it('does not start skippable requests for frameworks without a skippable request factory', async () => {
+    const getKnownTests = sinon.stub()
+    const getTestManagementTests = sinon.stub()
+
+    assert.deepStrictEqual(
+      await getTestOptimizationRequestResults({
+        isKnownTestsEnabled: false,
+        isTestManagementTestsEnabled: false,
+        isSuitesSkippingEnabled: true,
+        getKnownTests,
+        getTestManagementTests,
+      }),
+      {}
+    )
+
+    sinon.assert.notCalled(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+  })
+
+  it('uses successful responses when another request rejects before the caller awaits results', async () => {
+    const rejection = new Error('test optimization request failed')
+    const getKnownTests = sinon.stub().returns(new Promise(resolve => {
+      setImmediate(() => resolve({ knownTests: { jest: {} } }))
+    }))
+    const getTestManagementTests = sinon.stub().rejects(rejection)
+    const getSkippableSuites = sinon.stub().throws(rejection)
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    await new Promise(resolve => setImmediate(resolve))
+
+    const requestResults = await requestResultsPromise
+    assert.deepStrictEqual(requestResults.knownTestsResponse, { knownTests: { jest: {} } })
+    assert.strictEqual(requestResults.testManagementTestsResponse.err, rejection)
+    assert.strictEqual(requestResults.skippableSuitesResponse.err, rejection)
+  })
+})
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -65,6 +325,31 @@ describe('getTestParametersString', () => {
   })
 })
 
+describe('getTestLevelsMetadataTags', () => {
+  it('keeps only allowlisted CI and Git tags', () => {
+    const testLevelsMetadataTags = getTestLevelsMetadataTags({
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+      'ci.custom': 'custom-ci-value',
+      'git.custom': 'custom-git-value',
+      'test.command': 'npm test',
+    })
+
+    assert.deepStrictEqual(testLevelsMetadataTags, {
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+    })
+  })
+})
+
 describe('getTestSuitePath', () => {
   it('returns sourceRoot if the test path is falsy', () => {
     const sourceRoot = '/users/opt'
@@ -77,6 +362,667 @@ describe('getTestSuitePath', () => {
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     assert.strictEqual(testSuitePath, sourceRoot)
+  })
+})
+
+describe('getTestSessionName', () => {
+  let originalEnv
+
+  function getTestSessionNameWithMajor (ddMajor) {
+    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+    })
+
+    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+      '../../ci-visibility/lage': lage,
+    }).getTestSessionName
+  }
+
+  beforeEach(() => {
+    originalEnv = { ...process.env }
+    delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
+    delete process.env.LAGE_PACKAGE_NAME
+    delete process.env.DD_TEST_SESSION_NAME
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('returns the explicit test optimization session name from config', () => {
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+
+    const testSessionName = getTestSessionName({ DD_TEST_SESSION_NAME: 'explicit-session' }, 'jest', {})
+
+    assert.strictEqual(testSessionName, 'explicit-session')
+  })
+
+  it('returns the current Lage package name when enabled', () => {
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-a'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-a')
+
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+
+  it('returns the current Lage package name by default in v6', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(6)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package')
+  })
+
+  it('does not return the current Lage package name by default in v5', () => {
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+    const getTestSessionName = getTestSessionNameWithMajor(5)
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'jest')
+  })
+})
+
+describe('attempt to fix summary', () => {
+  it('reports when every attempt to fix execution passes', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    assert.strictEqual(
+      formatAttemptToFixSummary(executions),
+      'Attempt to fix passed: all 2 execution(s) passed for 1 test(s).'
+    )
+  })
+
+  it('reports failed executions without error messages', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Error:'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('execution 1:'), `Got: ${inspect(summary)}`)
+  })
+
+  it('reports when quarantine and disabled were ignored for attempt to fix', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+  })
+
+  it('reports ignored quarantine and disabled for passing attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+      isDisabled: true,
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › passes/)
+    assert.match(summary, /Test was marked as disabled but was run because it is attempt to fix\./)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('lists each failed test once', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails sometimes',
+      status: 'fail',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'always fails',
+      status: 'fail',
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 3 of 4 execution\(s\) failed across 2 of 2 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails sometimes/)
+    assert.match(summary, /suite\.js › always fails/)
+    assert.strictEqual(summary.match(/suite\.js › fails sometimes/g).length, 1)
+    assert.doesNotMatch(summary, /execution \d+:/)
+  })
+
+  it('keeps colliding suite and test display names as separate attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
+  })
+
+  it('collects attempt to fix executions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'fail',
+            'test.test_management.is_quarantined': 'true',
+            'error.message': 'worker failure',
+            'error.stack': 'Error: worker failure\n    at worker-suite.js:10:5',
+          },
+        },
+      ],
+    ])
+
+    collectAttemptToFixExecutionsFromTraces(payload, executions)
+
+    const summary = formatAttemptToFixSummary(executions)
+    assert.match(summary, /worker-suite\.js › worker test/)
+    assert.ok(!summary.includes('worker failure'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('worker-suite.js:10:5'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
+    assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
+  })
+
+  it('collects test optimization summaries from worker traces with one parse', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'pass',
+          },
+        },
+        {
+          meta: {
+            '_dd.has_dynamic_name': 'true',
+            'test.suite': 'dynamic-suite.js',
+            'test.name': 'dynamic 123',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, {
+      attemptToFixExecutions: executions,
+      newTestsWithDynamicNames,
+    })
+
+    assert.deepStrictEqual([...newTestsWithDynamicNames], ['dynamic-suite.js › dynamic 123'])
+    assert.match(formatAttemptToFixSummary(executions), /worker-suite\.js › worker test/)
+  })
+
+  it('logs and clears the attempt to fix summary', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Datadog Test Optimization/)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+  })
+
+  it('logs a compact progress line when an attempt to fix execution starts', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name')
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+  })
+
+  it('does not split Unicode test names when truncating the start', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const suite = `a😀${'b'.repeat(58)}`
+    const testName = 'c'.repeat(100)
+
+    try {
+      logAttemptToFixTestExecution(suite, testName)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      `Datadog Test Optimization: attempting to fix …${'b'.repeat(58)} › ` +
+      `${'c'.repeat(48)}…${'c'.repeat(48)}`
+    )
+  })
+
+  it('logs the attempt to fix progress line once for a test effort', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'other test', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+    assert.strictEqual(
+      consoleWarn.secondCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › other test'
+    )
+  })
+
+  it('uses the suite and test tuple to deduplicate attempt to fix progress lines', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('a › b', 'c', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('a', 'b › c', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(loggedAttemptToFixTests.size, 2)
+  })
+
+  it('combines attempt to fix and dynamic name sections into one session report', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set(['dynamic-suite.js › dynamic test 123'])
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions, newTestsWithDynamicNames })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+    assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
+  })
+})
+
+describe('test management summary', () => {
+  it('does not read report configuration for unmanaged tests', () => {
+    const getValueFromEnvSources = sinon.stub()
+    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+      '../../../src/plugins/util/test',
+      {
+        '../../config/helper': {
+          getValueFromEnvSources,
+        },
+      }
+    )
+    const executions = new Map()
+
+    recordExecution({
+      testSuite: 'unmanaged.spec.js',
+      testName: 'passes',
+      status: 'pass',
+    }, executions)
+
+    assert.strictEqual(getValueFromEnvSources.callCount, 0)
+    assert.strictEqual(executions.size, 0)
+  })
+
+  it('reports effective disabled and quarantined actions once per test', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'disabled.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'attempt-to-fix.spec.js',
+      testName: 'takes precedence',
+      status: 'fail',
+      isAttemptToFix: true,
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Disabled: 1 test skipped.\n' +
+      '  Quarantined: 1 test run; 1 failure did not affect the test session.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [disabled] disabled.spec.js › is skipped\n' +
+      '  • [quarantined, failed] quarantined.spec.js › does not fail the session'
+    )
+  })
+
+  it('keeps colliding suite and test display names as separate managed tests', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Disabled: 1 test skipped\./)
+    assert.match(summary, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
+  })
+
+  it('collects disabled and quarantined actions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'disabled.spec.js',
+            'test.name': 'is skipped',
+            'test.status': 'skip',
+          },
+        },
+        {
+          meta: {
+            'test.test_management.is_quarantined': 'true',
+            'test.suite': 'quarantined.spec.js',
+            'test.name': 'fails',
+            'test.status': 'fail',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, { testManagementExecutions: executions })
+
+    assert.match(formatTestManagementSummary(executions), /Disabled: 1 test skipped\./)
+    assert.match(
+      formatTestManagementSummary(executions),
+      /Quarantined: 1 test run; 1 failure did not affect the test session\./
+    )
+  })
+
+  it('reports when every quarantined test passes', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'passes',
+      status: 'pass',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Quarantined: 1 test run; all passed.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [quarantined, passed] quarantined.spec.js › passes'
+    )
+  })
+
+  it('does not report quarantined tests that did not run', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is pending',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(formatTestManagementSummary(executions), '')
+  })
+
+  it('omits names when more than five tests are affected', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    for (let index = 0; index < 6; index++) {
+      recordTestManagementExecution({
+        testSuite: 'suite.js',
+        testName: `disabled ${index}`,
+        status: 'skip',
+        isDisabled: true,
+      }, executions)
+    }
+
+    try {
+      logTestOptimizationSummary({ testManagementExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Disabled: 6 tests skipped\./)
+    assert.match(consoleWarn.firstCall.args[0], /Individual test names omitted because 6 tests were affected\./)
+    assert.doesNotMatch(consoleWarn.firstCall.args[0], /disabled 0/)
+    assert.match(consoleWarn.firstCall.args[0], /DD_TEST_MANAGEMENT_REPORT_ENABLED=false/)
+  })
+
+  it('keeps every displayed test on one bounded line', () => {
+    const executions = new Map()
+    const longSuite = `packages/${'nested/'.repeat(30)}long.spec.js`
+    const longName = `outer context ${'middle '.repeat(30)}\nunique suffix`
+
+    recordTestManagementExecution({
+      testSuite: longSuite,
+      testName: longName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.ok(detailLine)
+    assert.ok(detailLine.length <= 177, `Got line with ${detailLine.length} characters: ${detailLine}`)
+    assert.ok(!detailLine.includes('\n'))
+    assert.match(detailLine, /…/)
+    assert.match(detailLine, /unique suffix/)
+  })
+
+  it('does not split Unicode test names when truncating the middle', () => {
+    const executions = new Map()
+    const testName = `${'a'.repeat(79)}😀${'b'.repeat(80)}`
+
+    recordTestManagementExecution({
+      testName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, `  • [disabled] ${'a'.repeat(79)}…${'b'.repeat(79)}`)
+  })
+
+  it('strips terminal control sequences from displayed test names', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: '\x1b[2Jsuite.js',
+      testName: '\x1b]8;;https://example.com\x07linked\x1b]8;;\x07 \x07name',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, '  • [disabled] suite.js › linked name')
+  })
+
+  it('can disable the end-of-session report without retaining results', () => {
+    const executions = new Map()
+    const attemptToFixExecutions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const consoleWarn = sinon.stub(console, 'warn')
+    process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+
+    recordTestManagementExecution({
+      testSuite: 'suite.js',
+      testName: 'disabled',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    assert.strictEqual(executions.size, 0)
+
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: 'suite.js',
+      testName: 'attempt to fix',
+      status: 'pass',
+    })
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+
+    try {
+      logTestOptimizationSummary({
+        attemptToFixExecutions,
+        newTestsWithDynamicNames,
+        testManagementExecutions: executions,
+      })
+    } finally {
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 0)
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.strictEqual(executions.size, 0)
   })
 })
 
@@ -132,6 +1078,141 @@ describe('getCodeOwnersForFilename', () => {
     assert.strictEqual(codeOwners, null)
   })
 
+  it('matches supported GitHub CODEOWNERS patterns', () => {
+    const patternTests = [
+      {
+        pattern: '*',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+      },
+      {
+        pattern: '*.js',
+        matches: ['index.js', 'packages/dd-trace/src/index.js'],
+        misses: ['index.jsx', 'packages/dd-trace/src/index.js.map'],
+      },
+      {
+        pattern: 'README.md',
+        matches: ['README.md', 'packages/dd-trace/README.md'],
+        misses: ['README.txt', 'packages/dd-trace/readme.md'],
+      },
+      {
+        pattern: '/package.json',
+        matches: ['package.json'],
+        misses: ['packages/dd-trace/package.json'],
+      },
+      {
+        pattern: '/docs/',
+        matches: ['docs/README.md', 'docs/api/reference.md'],
+        misses: ['src/docs/README.md'],
+      },
+      {
+        pattern: 'apps/',
+        matches: ['apps/api/index.js', 'packages/apps/api/index.js'],
+        misses: ['applications/api/index.js'],
+      },
+      {
+        pattern: 'docs/*',
+        matches: ['docs/getting-started.md'],
+        misses: ['docs/build-app/troubleshooting.md', 'src/docs/getting-started.md'],
+      },
+      {
+        pattern: '**/logs',
+        matches: ['logs/app.log', 'build/logs/app.log', 'deeply/nested/logs/app.log'],
+        misses: ['build/logs-old/app.log'],
+      },
+      {
+        pattern: 'logs/**',
+        matches: ['logs/app.log', 'logs/deeply/nested/app.log'],
+        misses: ['src/logs/app.log'],
+      },
+      {
+        pattern: '/packages/**/dsm.spec.js',
+        matches: ['packages/dsm.spec.js', 'packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+        misses: ['src/packages/datadog-plugin-kafkajs/test/dsm.spec.js'],
+      },
+      {
+        pattern: 'file?.js',
+        matches: ['file1.js', 'packages/dd-trace/fileA.js'],
+        misses: ['file10.js', 'packages/dd-trace/file/name.js'],
+      },
+      {
+        pattern: String.raw`file\*.js`,
+        matches: ['file*.js', 'packages/dd-trace/file*.js'],
+        misses: ['file1.js', 'packages/dd-trace/fileA.js'],
+      },
+    ]
+
+    for (const { pattern, matches = [], misses = [] } of patternTests) {
+      const entries = [{ pattern, owners: [`@owner-${pattern}`] }]
+      const expectedCodeOwners = JSON.stringify([`@owner-${pattern}`])
+
+      for (const filename of matches) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), expectedCodeOwners)
+      }
+
+      for (const filename of misses) {
+        assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
+      }
+    }
+  })
+
+  it('treats a trailing backslash as a literal instead of throwing', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'docs\\', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(getCodeOwnersForFilename('docs/README.md', codeOwnersFileEntries), null)
+  })
+
+  it('keeps CODEOWNERS matching case-sensitive', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/Docs/', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(
+      getCodeOwnersForFilename('Docs/reference.md', codeOwnersFileEntries),
+      JSON.stringify(['@datadog-docs'])
+    )
+    assert.strictEqual(getCodeOwnersForFilename('docs/reference.md', codeOwnersFileEntries), null)
+  })
+
+  it('uses the last matching CODEOWNERS entry', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*.js', owners: ['@datadog-default-js'] },
+      { pattern: '/packages/dd-trace/', owners: ['@datadog-dd-trace-js'] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename(
+      'packages/dd-trace/src/index.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-dd-trace-js']))
+  })
+
+  it('preserves multiple CODEOWNERS owners and email owners', () => {
+    const codeOwnersFileEntries = [
+      {
+        pattern: '*.js',
+        owners: ['@datadog-team-a', '@datadog/team-b', 'user@example.com'],
+      },
+    ]
+
+    const codeOwners = getCodeOwnersForFilename('index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify(['@datadog-team-a', '@datadog/team-b', 'user@example.com']))
+  })
+
+  it('supports empty owner overrides', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '*', owners: ['@datadog-default'] },
+      { pattern: '/apps/github', owners: [] },
+    ].reverse()
+
+    const codeOwners = getCodeOwnersForFilename('apps/github/index.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwners, JSON.stringify([]))
+  })
+
   it('returns the code owners for a given file path', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
@@ -149,6 +1230,164 @@ describe('getCodeOwnersForFilename', () => {
     )
 
     assert.strictEqual(codeOwnersForTestSpec, JSON.stringify(['@datadog-ci-app']))
+  })
+
+  it('does not let root-level fallbacks override integration test directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/integration-tests/mocha/', owners: ['@datadog-ci-app-libraries'] },
+      { pattern: '/integration-tests/playwright/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForMochaSpec = getCodeOwnersForFilename(
+      'integration-tests/mocha/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForPlaywrightSpec = getCodeOwnersForFilename(
+      'integration-tests/playwright/codeowners-root-pattern.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename('root-level-codeowners-test.js', codeOwnersFileEntries)
+
+    assert.strictEqual(codeOwnersForMochaSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForPlaywrightSpec, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/src/ci-visibility/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForCiVisibilityFile = getCodeOwnersForFilename(
+      'packages/dd-trace/src/ci-visibility/exporters/agentless/writer.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForCiVisibilityFile, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches wildcard directory patterns against descendants', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+      { pattern: '/packages/datadog-plugin-*/', owners: ['@datadog-apm-idm-js'] },
+    ]
+
+    const codeOwnersForPluginFile = getCodeOwnersForFilename(
+      'packages/datadog-plugin-http/test/codeowners-wildcard-directory.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForPluginFile, JSON.stringify(['@datadog-apm-idm-js']))
+  })
+
+  it('does not match single-star wildcards across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/dd-trace/*/standalone', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForDirectMatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedMismatch = getCodeOwnersForFilename(
+      'packages/dd-trace/src/profiling/standalone/codeowners-single-star.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDirectMatch, JSON.stringify(['@datadog-lang-platform-js']))
+    assert.strictEqual(codeOwnersForNestedMismatch, null)
+  })
+
+  it('matches double-star patterns across directories', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/packages/**/dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+      { pattern: '/packages/**/*.dsm.spec.js', owners: ['@datadog-data-streams-monitoring'] },
+    ]
+
+    const codeOwnersForDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelDsmSpec = getCodeOwnersForFilename(
+      'packages/dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/datadog-plugin-kafkajs/test/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForTopLevelSuffixDsmSpec = getCodeOwnersForFilename(
+      'packages/codeowners.dsm.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+    assert.strictEqual(codeOwnersForTopLevelSuffixDsmSpec, JSON.stringify(['@datadog-data-streams-monitoring']))
+  })
+
+  it('matches slashless patterns in any directory', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'github_event_payload.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+  })
+
+  it('matches patterns with middle slashes from the repository root', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'fixtures/codeowners-middle-slash.json', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForRootFixture = getCodeOwnersForFilename(
+      'fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForNestedFixture = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/fixtures/codeowners-middle-slash.json',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForRootFixture, JSON.stringify(['@datadog-ci-app-libraries']))
+    assert.strictEqual(codeOwnersForNestedFixture, null)
+  })
+
+  it('does not let a root-level wildcard match nested files', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/*', owners: ['@datadog-lang-platform-js'] },
+    ]
+
+    const codeOwnersForNestedFile = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+    const codeOwnersForRootFile = getCodeOwnersForFilename(
+      'root-wildcard-check.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForNestedFile, null)
+    assert.strictEqual(codeOwnersForRootFile, JSON.stringify(['@datadog-lang-platform-js']))
+  })
+
+  it('matches paths with Windows separators', () => {
+    const codeOwnersFileEntries = [
+      { pattern: '/integration-tests/vitest/', owners: ['@datadog-ci-app-libraries'] },
+    ]
+
+    const codeOwnersForWindowsPath = getCodeOwnersForFilename(
+      'integration-tests\\vitest\\vitest.spec.js',
+      codeOwnersFileEntries
+    )
+
+    assert.strictEqual(codeOwnersForWindowsPath, JSON.stringify(['@datadog-ci-app-libraries']))
   })
 })
 
@@ -169,6 +1408,144 @@ describe('coverage utils', () => {
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
       assert.deepStrictEqual(coverageFiles, [])
+    })
+  })
+
+  describe('getCoveredFilesFromCoverage', () => {
+    const getPartialCoverage = (filename = 'file.js') => ({
+      [filename]: {
+        path: filename,
+        statementMap: {
+          0: { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } },
+          1: { start: { line: 2, column: 0 }, end: { line: 2, column: 1 } },
+          2: { start: { line: 3, column: 0 }, end: { line: 3, column: 1 } },
+          3: { start: { line: 4, column: 0 }, end: { line: 4, column: 1 } },
+        },
+        s: {
+          0: 1,
+          1: 0,
+          2: 0,
+          3: 0,
+        },
+        fnMap: {},
+        f: {},
+        branchMap: {},
+        b: {},
+      },
+    })
+
+    it('returns a bitmap for covered lines', () => {
+      const lineCoverage = {
+        30: 1,
+        32: 1,
+        45: 1,
+        46: 1,
+      }
+      const bitmap = getLineCoverageBitmap(lineCoverage, true)
+
+      assert.strictEqual(bitmap.toString('base64'), 'AAAAQAFg')
+    })
+
+    it('returns covered and executable files with bitmaps', () => {
+      const coveredFiles = getCoveredFilesFromCoverage(coverage)
+      const executableFiles = getExecutableFilesFromCoverage(coverage)
+
+      assert.deepStrictEqual(coveredFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.deepStrictEqual(executableFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.ok(coveredFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(coveredFiles))
+      assert.ok(executableFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(executableFiles))
+    })
+
+    it('returns exact covered and executable line bitmaps', () => {
+      const partialCoverage = getPartialCoverage()
+      const [coveredFile] = getCoveredFilesFromCoverage(partialCoverage)
+      const [executableFile] = getExecutableFilesFromCoverage(partialCoverage)
+
+      assert.deepStrictEqual(coveredFile, {
+        filename: 'file.js',
+        bitmap: Buffer.from('Ag==', 'base64'),
+      })
+      assert.deepStrictEqual(executableFile, {
+        filename: 'file.js',
+        bitmap: Buffer.from('Hg==', 'base64'),
+      })
+    })
+
+    it('calculates total coverage using skipped-suite coverage bitmaps', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const coverage = getPartialCoverage(path.join(rootDir, 'file.js'))
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
+    })
+
+    it('ignores skipped coverage for files outside the executable coverage map', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'other-file.js': getLineCoverageBitmap({
+          1: 1,
+          2: 1,
+          3: 1,
+          4: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 25)
+    })
+
+    it('applies skipped-suite coverage to an Istanbul coverage map', () => {
+      const partialCoverage = getPartialCoverage()
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
+    })
+
+    it('reports skipped-suite coverage as applied when covered lines overlap', () => {
+      const partialCoverage = getPartialCoverage()
+      partialCoverage['file.js'].s[1] = 1
+      partialCoverage['file.js'].s[2] = 1
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
+    })
+
+    it('does not alter coverage when skipped coverage is missing', () => {
+      const partialCoverage = getPartialCoverage()
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, {}), false)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 25)
     })
   })
 
@@ -346,6 +1723,51 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
+  })
+})
+
+describe('getEfdRetryCount', () => {
+  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+
+  it('exports the retry thresholds used to select slow test retry buckets', () => {
+    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
+      { limitMs: 5_000, key: '5s' },
+      { limitMs: 10_000, key: '10s' },
+      { limitMs: 30_000, key: '30s' },
+      { limitMs: 300_000, key: '5m' },
+    ])
+  })
+
+  it('returns retries for the matching duration bucket', () => {
+    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
+    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
+    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
+    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
+  })
+
+  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
+    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
+    assert.strictEqual(getEfdRetryCount(0, {}), 0)
+    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
+    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
+  })
+})
+
+describe('getMaxEfdRetryCount', () => {
+  it('returns the largest retry count from slow test retry buckets', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
+  })
+
+  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
+  })
+
+  it('returns undefined when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

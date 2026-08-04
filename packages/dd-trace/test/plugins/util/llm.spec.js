@@ -43,8 +43,8 @@ describe('llm utils', () => {
     beforeEach(() => {
       utils = makeUtilities('langchain', {
         langchain: {
-          spanCharLimit: 100,
-          spanPromptCompletionSampleRate: 0.6,
+          DD_LANGCHAIN_SPAN_CHAR_LIMIT: 100,
+          DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: 0.6,
         },
       })
     })

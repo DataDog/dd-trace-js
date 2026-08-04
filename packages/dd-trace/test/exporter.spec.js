@@ -9,6 +9,7 @@ const sinon = require('sinon')
 require('./setup/core')
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
+const { DATADOG_MINI_AGENT_PATH } = require('../src/constants')
 
 describe('exporter', () => {
   let env
@@ -40,6 +41,17 @@ describe('exporter', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     const stub = sinon.stub(fs, 'existsSync')
     stub.withArgs('/opt/extensions/datadog-agent').returns(true)
+
+    const Exporter = require('../src/exporter')()
+
+    assert.strictEqual(Exporter, AgentExporter)
+    stub.restore()
+  })
+
+  it('should create an AgentExporter when in Lambda environment with mini agent', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    const stub = sinon.stub(fs, 'existsSync')
+    stub.withArgs(DATADOG_MINI_AGENT_PATH).returns(true)
 
     const Exporter = require('../src/exporter')()
 

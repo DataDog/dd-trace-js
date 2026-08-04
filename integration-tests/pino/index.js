@@ -6,8 +6,8 @@ if (process.env.AGENT_PORT) {
   options.port = process.env.AGENT_PORT
 }
 
-if (process.env.lOG_INJECTION) {
-  options.logInjection = process.env.lOG_INJECTION
+if (process.env.TEST_PROGRAMMATIC_DD_LOGS_INJECTION) {
+  options.logInjection = process.env.TEST_PROGRAMMATIC_DD_LOGS_INJECTION === 'true'
 }
 
 const tracer = require('dd-trace').init(options)

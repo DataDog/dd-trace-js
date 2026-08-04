@@ -1,0 +1,23 @@
+{
+  "supportedConfigurations": {
+    "DD_TRACE_PROPAGATION_STYLE": [
+      {
+        "type": "array"
+      }
+    ],
+    "DD_TRACE_PROPAGATION_STYLE_INJECT": [
+      {
+        "configurationNames": [
+          "tracePropagationStyle.inject"
+        ]
+      }
+    ],
+    "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
+      {
+        "configurationNames": [
+          "tracePropagationStyle.extract"
+        ]
+      }
+    ]
+  }
+}

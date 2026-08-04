@@ -13,9 +13,9 @@ const requestChannel = dc.tracingChannel('datadog:apollo:request')
 let HeaderMap
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return function executeHTTPGraphQLRequest () {
+  return function executeHTTPGraphQLRequest (...args) {
     if (!HeaderMap || !requestChannel.start.hasSubscribers) {
-      return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
+      return originalExecuteHTTPGraphQLRequest.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -25,7 +25,7 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
       originalExecuteHTTPGraphQLRequest,
       { abortController, abortData },
       this,
-      ...arguments)
+      ...args)
 
     const abortPromise = new Promise((resolve, reject) => {
       abortController.signal.addEventListener('abort', (event) => {
@@ -89,10 +89,10 @@ function wrapEmit (emit) {
 }
 
 function wrapListen (originalListen) {
-  return function wrappedListen () {
+  return function wrappedListen (...args) {
     shimmer.wrap(this, 'emit', wrapEmit)
 
-    return originalListen.apply(this, arguments)
+    return originalListen.apply(this, args)
   }
 }
 
@@ -112,24 +112,16 @@ function apolloDrainHttpServerHook (drainModule) {
   return drainModule
 }
 
-addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['4'] }, apolloServerHook)
+addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['>=4'] }, apolloServerHook)
 
 addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['4'] }, apolloExpress4Hook)
 
-addHook({ name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['4'] }, apolloHeaderMapHook)
+addHook(
+  { name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['>=4'] },
+  apolloHeaderMapHook
+)
 
 addHook(
   { name: '@apollo/server', file: 'dist/cjs/plugin/drainHttpServer/index.js', versions: ['>=5.0.0'] },
   apolloDrainHttpServerHook
-)
-
-addHook(
-  { name: '@apollo/server', file: 'dist/cjs/runHttpQuery.js', versions: ['>=5.0.0'] },
-  (runHttpQueryModule) => {
-    shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
-      return wrapExecuteHTTPGraphQLRequest(originalRunHttpQuery)
-    })
-
-    return runHttpQueryModule
-  }
 )

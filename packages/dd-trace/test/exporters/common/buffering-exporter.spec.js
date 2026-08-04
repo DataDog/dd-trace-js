@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -36,7 +37,8 @@ describe('BufferingExporter', () => {
 
     sinon.assert.calledWith(writer.append, trace)
     sinon.assert.notCalled(writer.flush)
-    assert.ok(!(exporter.getUncodedTraces()).includes(trace))
+    const uncodedTraces = exporter.getUncodedTraces()
+    assert.ok(!uncodedTraces.includes(trace), `Got: ${inspect(uncodedTraces)}`)
 
     setTimeout(() => {
       sinon.assert.called(writer.flush)

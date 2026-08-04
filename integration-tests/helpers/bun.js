@@ -8,11 +8,10 @@ const BUN = join(PROJECT_ROOT, 'node_modules', '.bin', 'bun')
 
 /**
  * @param {NodeJS.ProcessEnv} [env]
+ * @returns {NodeJS.ProcessEnv & { BUN_INSTALL: string }}
  */
 function withBun (env = process.env) {
-  return /** @type {NodeJS.ProcessEnv & { BUN_INSTALL: string, _DD_IGNORE_ENGINES: boolean }} */ (
-    { ...env, BUN_INSTALL, _DD_IGNORE_ENGINES: true }
-  )
+  return { ...env, BUN_INSTALL }
 }
 
 module.exports = { BUN, withBun }

@@ -25,8 +25,8 @@ describe('Telemetry', () => {
     beforeEach(() => {
       defaultConfig = {
         telemetry: {
-          enabled: true,
-          metrics: true,
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+          DD_TELEMETRY_METRICS_ENABLED: true,
         },
       }
 
@@ -66,7 +66,7 @@ describe('Telemetry', () => {
           '../../../telemetry/metrics': telemetryMetrics,
         })
 
-        const telemetryConfig = { enabled: true, metrics: true }
+        const telemetryConfig = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: true }
         iastTelemetry.configure({
           telemetry: telemetryConfig,
         }, 'OFF')
@@ -77,7 +77,7 @@ describe('Telemetry', () => {
       })
 
       it('should enable telemetry if telemetry.metrics is true', () => {
-        const telemetryConfig = { enabled: true, metrics: true }
+        const telemetryConfig = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: true }
         iastTelemetry.configure({
           telemetry: telemetryConfig,
         })
@@ -88,7 +88,7 @@ describe('Telemetry', () => {
       })
 
       it('should not enable telemetry if telemetry.metrics is false', () => {
-        const telemetryConfig = { enabled: true, metrics: false }
+        const telemetryConfig = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false }
         iastTelemetry.configure({
           telemetry: telemetryConfig,
         })
@@ -127,7 +127,7 @@ describe('Telemetry', () => {
           },
         })
         iastTelemetry.configure({
-          telemetry: { enabled: true },
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true },
         })
 
         const iastContext = {}
@@ -155,7 +155,7 @@ describe('Telemetry', () => {
           },
         })
         iastTelemetry.configure({
-          telemetry: { enabled: true },
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true },
         })
 
         const iastContext = {}

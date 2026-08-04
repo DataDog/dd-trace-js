@@ -30,7 +30,7 @@ describe('Plugin', () => {
         describe(`with tracer config ${JSON.stringify(config)}`, () => {
           before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
-          after(() => agent.close({ ritmReset: false, wipe: true }))
+          after(() => agent.close())
 
           it('should not add code_origin tag on entry spans', (done) => {
             app.get('/user', (req, res) => {
@@ -58,7 +58,7 @@ describe('Plugin', () => {
           describe(`with tracer config ${JSON.stringify(config)}`, () => {
             before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
-            after(() => agent.close({ ritmReset: false, wipe: true }))
+            after(() => agent.close())
 
             it('should add code_origin tag on entry spans when feature is enabled', async function testCase () {
               let line

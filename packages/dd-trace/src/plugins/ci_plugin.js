@@ -1,5 +1,11 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+const realClearTimeout = clearTimeout
+
+const { threadId } = require('node:worker_threads')
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -12,6 +18,7 @@ const {
 } = require('../ci-visibility/telemetry')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
+const { version: tracerVersion } = require('../../../../package.json')
 const id = require('../id')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const {
@@ -31,6 +38,7 @@ const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
 const {
   getTestEnvironmentMetadata,
+  getTestLevelsMetadataTags,
   getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
@@ -40,31 +48,42 @@ const {
   CI_APP_ORIGIN,
   getTestSessionCommonTags,
   getTestModuleCommonTags,
+  TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE_ID,
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_MODULE,
+  TEST_TYPE,
   TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_ENABLED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
+  TEST_SUITE_EXECUTION_ID,
+  getTestSuiteExecutionKey,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags,
+  getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
   getSessionRequestErrorTags,
-  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  getSessionItrSkippingEnabledTags,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_IS_NEW,
   TEST_IS_RUM_ACTIVE,
@@ -74,7 +93,13 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_RETRY,
   TEST_RETRY_REASON,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('./util/test')
+
+const legacyStorage = storage('legacy')
+const DI_OPERATION_TIMEOUT_MS = 2000
+const DI_LOGGER_THREAD_ID = threadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${threadId}`
+const DI_LOGGER_THREAD_NAME = threadId === 0 ? 'MainThread' : `WorkerThread:${threadId}`
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -82,6 +107,7 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
   jest: 'jest',
+  webdriverio: 'wdio',
 }
 
 const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
@@ -99,13 +125,40 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'cucumber',
 ])
 
+function withTimeout (promise, timeoutMs) {
+  return new Promise(resolve => {
+    const timeoutId = realSetTimeout(resolve, timeoutMs)
+
+    const done = () => {
+      realClearTimeout(timeoutId)
+      resolve()
+    }
+    promise.then(done, done)
+  })
+}
+
+function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
+  const testFramework = plugin.testFramework || plugin.constructor.id
+  const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(testFramework, frameworkVersion)
+
+  if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
+    !plugin.libraryConfig ||
+    !plugin.testSessionSpan ||
+    !plugin.testModuleSpan) {
+    return
+  }
+
+  const skippingEnabled = plugin.libraryConfig.isSuitesSkippingEnabled ? 'true' : 'false'
+  plugin.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+  plugin.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, skippingEnabled)
+}
+
 function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   const testSuiteSpanContext = testSuiteSpan.context()
 
   const suiteTags = {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
     [TEST_MODULE]: testFramework,
   }
 
@@ -115,42 +168,82 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
   return suiteTags
 }
 
+/**
+ * Keeps non-TIA settings while disabling suite skipping and per-suite coverage collection.
+ *
+ * @param {object} libraryConfig
+ * @returns {object}
+ */
+function disableTestImpactAnalysis (libraryConfig) {
+  return Object.freeze({
+    ...libraryConfig,
+    isCodeCoverageEnabled: false,
+    isItrEnabled: false,
+    isSuitesSkippingEnabled: false,
+  })
+}
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
     this.fileLineToProbeId = new Map()
+    this.diBreakpointHitPromise = undefined
+    this.diBreakpointHitResolvers = []
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
+    this._pendingWorkerTracesByTestSuite = new Map()
+    this._workerTraceExecutionIds = new WeakMap()
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { onDone, frameworkVersion } = ctx
-      ctx.currentStore = storage('legacy').getStore()
+      const {
+        basicReportingOnly,
+        disableTestImpactAnalysis: shouldDisableTestImpactAnalysis,
+        onDone,
+        frameworkVersion,
+      } = ctx
+      ctx.currentStore = legacyStorage.getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
+        let effectiveLibraryConfig
+        if (!err) {
+          if (basicReportingOnly) {
+            effectiveLibraryConfig = {}
+          } else if (shouldDisableTestImpactAnalysis) {
+            effectiveLibraryConfig = disableTestImpactAnalysis(libraryConfig)
+          } else {
+            effectiveLibraryConfig = libraryConfig
+          }
+        }
         if (err) {
+          this.libraryConfig = undefined
+          this.itrCorrelationId = undefined
+          this.skippableSuitesCoverage = undefined
           log.error('Library configuration could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
-          this.libraryConfig = libraryConfig
+          this.libraryConfig = effectiveLibraryConfig
+          setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
-        const requestErrorTags = this.testSessionSpan
-          ? getSessionRequestErrorTags(this.testSessionSpan)
-          : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
-
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+        const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, ctx)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags,
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, requestErrorTags })
+        onDone({
+          err,
+          isTestDynamicInstrumentationEnabled: this.config.isTestDynamicInstrumentationEnabled,
+          libraryConfig: effectiveLibraryConfig,
+          repositoryRoot: this.repositoryRoot,
+          requestErrorTags: this._getCurrentRequestErrorTags(),
+        })
       })
     })
 
@@ -162,37 +255,55 @@ module.exports = class CiPlugin extends Plugin {
       if (!this.tracer._exporter?.getSkippableSuites) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
-        if (err) {
-          log.error('Skippable suites could not be fetched. %s', err.message)
-        } else {
-          this.itrCorrelationId = itrCorrelationId
+      this.tracer._exporter.getSkippableSuites(
+        {
+          ...this.testConfiguration,
+          isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
+        },
+        (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
+          if (err) {
+            log.error('Skippable suites could not be fetched. %s', err.message)
+            this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
+          } else {
+            this.itrCorrelationId = itrCorrelationId
+            this.skippableSuitesCoverage = skippableSuitesCoverage
+          }
+          onDone({ err, skippableSuites, itrCorrelationId, skippableSuitesCoverage })
         }
-        onDone({ err, skippableSuites, itrCorrelationId })
-      })
+      )
     })
 
-    this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
+    this.addSub(`ci:${this.constructor.id}:session:start`, ({
+      command,
+      frameworkVersion,
+      rootDir,
+      testFramework,
+      testFrameworkAdapter,
+    }) => {
+      const effectiveTestFramework = testFramework || this.constructor.id
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.id)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.id)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, effectiveTestFramework)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, effectiveTestFramework)
 
       this.command = command
       this.frameworkVersion = frameworkVersion
+      this.testFramework = effectiveTestFramework
+      this.testFrameworkAdapter = testFrameworkAdapter
       // only for playwright
       this.rootDir = rootDir
 
       const testSessionName = getTestSessionName(
         this.config,
-        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[effectiveTestFramework],
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
+      const metadataTags = {
+        [TEST_LEVELS_METADATA]: {
+          [TEST_COMMAND]: command,
           [TEST_SESSION_NAME]: testSessionName,
-        }
+          ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+        },
       }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
@@ -225,27 +336,17 @@ module.exports = class CiPlugin extends Plugin {
         },
         integrationName: this.constructor.id,
       })
-      // only for vitest
-      // These are added for the worker threads to use
-      if (this.constructor.id === 'vitest') {
-        // TODO: Figure out alternative ways to pass this information to the worker threads
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
-        // eslint-disable-next-line eslint-rules/eslint-process-env
-        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
-      }
-
+      setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
-          ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
+          ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.testFramework),
           ...getSessionRequestErrorTags(this.testSessionSpan),
+          ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -277,12 +378,16 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, err)
           if (this.libraryConfig) {
-            this.libraryConfig.isEarlyFlakeDetectionEnabled = false
-            this.libraryConfig.isKnownTestsEnabled = false
+            this.libraryConfig = Object.freeze({
+              ...this.libraryConfig,
+              isEarlyFlakeDetectionEnabled: false,
+              isKnownTestsEnabled: false,
+            })
           }
         }
-        onDone({ err, knownTests })
+        onDone({ err, knownTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -297,11 +402,15 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
           log.error('Test management tests could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS, err)
           if (this.libraryConfig) {
-            this.libraryConfig.isTestManagementEnabled = false
+            this.libraryConfig = Object.freeze({
+              ...this.libraryConfig,
+              isTestManagementEnabled: false,
+            })
           }
         }
-        onDone({ err, testManagementTests })
+        onDone({ err, testManagementTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -331,52 +440,18 @@ module.exports = class CiPlugin extends Plugin {
       return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
 
-    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, traces => {
+    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, payload => {
+      const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = typeof payload === 'string'
+        ? { traces: payload }
+        : payload
       const formattedTraces = JSON.parse(traces)
 
       for (const trace of formattedTraces) {
-        for (const span of trace) {
-          span.span_id = id(span.span_id)
-          span.trace_id = id(span.trace_id)
-          span.parent_id = id(span.parent_id)
-
-          if (span.name?.startsWith(`${this.constructor.id}.`)) {
-            span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
-            // augment with git information (since it will not be available in the worker)
-            for (const key in this.testEnvironmentMetadata) {
-              // CAREFUL: this bypasses the metadata/metrics distinction
-              // Be careful not to pass numbers in `meta`
-              if (key.startsWith('git.')) {
-                span.meta[key] = this.testEnvironmentMetadata[key]
-              }
-            }
-          }
-
-          // Only test hooks run in the cucumber worker, so the test events do not have the
-          // test session, test module and test suite ids. We have to update them here.
-          if (span.name === 'cucumber.test' || span.name === 'mocha.test') {
-            const testSuite = span.meta[TEST_SUITE]
-            const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
-            if (!testSuiteSpan) {
-              log.warn('Test suite span not found for test span with test suite %s', testSuite)
-              continue
-            }
-
-            const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
-            span.meta = {
-              ...span.meta,
-              ...testSuiteTags,
-              ...getSessionRequestErrorTags(this.testSessionSpan),
-            }
-          }
-
-          // Jest and Vitest worker test spans are serialized in the worker and may not include
-          // request error tags; add them from the session span in the main process.
-          if ((span.name === 'jest.test' || span.name === 'vitest.test') && this.testSessionSpan) {
-            Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
-          }
+        if (testSuiteExecutionId) {
+          this._workerTraceExecutionIds.set(trace, testSuiteExecutionId)
         }
-        this.tracer._exporter.export(trace)
+        this._prepareWorkerTrace(trace)
+        this._exportWorkerTraceOrBuffer(trace)
       }
     })
 
@@ -385,10 +460,27 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
       }
     })
+
+    this.addSub(`ci:${this.constructor.id}:worker-report:telemetry`, data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
+      }
+    })
   }
 
   get telemetry () {
-    const testFramework = this.constructor.id
+    const testFramework = this.testFramework || this.constructor.id
     const exporter = this.tracer?._exporter
     // TODO: only jest worker supported yet
     const isSupportedWorker = exporter && typeof exporter.exportTelemetry === 'function'
@@ -446,18 +538,73 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Returns library capability metadata tags for this test framework.
+   * @param {string} frameworkVersion - The test framework version.
+   * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.basicReportingOnly] - Whether advanced capabilities must be omitted.
+   * @param {string} [ctx.testFramework] - Effective framework when one framework is hosted by another.
+   * @returns {Record<string, string|undefined>}
+   */
+  getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
+    if (ctx.basicReportingOnly) {
+      return {}
+    }
+    return getDefaultLibraryCapabilitiesTags(
+      ctx.testFramework || this.testFramework || this.constructor.id,
+      frameworkVersion
+    )
+  }
+
+  /**
    * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
-   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR)
+   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
    * @param {Error} err - Request error
    */
   _addRequestErrorTag (tag, err) {
     const value = 'true'
     if (this.testSessionSpan) {
       this.testSessionSpan.setTag(tag, value)
+      if (this.testModuleSpan) {
+        this.testModuleSpan.setTag(tag, value)
+      }
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
+    }
+  }
+
+  /**
+   * Returns the current request error tags, including tags queued before session creation.
+   *
+   * @returns {Record<string, string>}
+   */
+  _getCurrentRequestErrorTags () {
+    if (this.testSessionSpan) {
+      return getSessionRequestErrorTags(this.testSessionSpan)
+    }
+    return Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
+  }
+
+  /**
+   * Updates repository-root-dependent state when a worker receives the root from
+   * the coordinator process after plugin configuration.
+   *
+   * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
+   * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
+   * Parsed CODEOWNERS entries discovered by the coordinator process.
+   * @returns {void}
+   */
+  _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
+    if (codeOwnersEntries !== undefined) {
+      this.codeOwnersEntries = codeOwnersEntries
+    }
+
+    if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
+
+    this.repositoryRoot = repositoryRoot
+    if (codeOwnersEntries === undefined) {
+      this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
     }
   }
 
@@ -469,6 +616,164 @@ module.exports = class CiPlugin extends Plugin {
     return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
+  /**
+   * Returns ITR skipping-enabled tags from the test session span for propagation to child events.
+   *
+   * @returns {Record<string, string>}
+   */
+  getSessionItrSkippingEnabledTags () {
+    return getSessionItrSkippingEnabledTags(this.testSessionSpan)
+  }
+
+  /**
+   * Normalizes worker trace identifiers and adds process-level metadata before exporting or buffering.
+   *
+   * @param {object[]} trace - Worker trace spans decoded from the worker payload.
+   */
+  _prepareWorkerTrace (trace) {
+    for (const span of trace) {
+      span.span_id = id(span.span_id)
+      span.trace_id = id(span.trace_id)
+      span.parent_id = id(span.parent_id)
+
+      if (span.name?.startsWith(`${this.constructor.id}.`)) {
+        span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+        if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
+          Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+        }
+        // augment with git information (since it will not be available in the worker)
+        for (const key in this.testEnvironmentMetadata) {
+          // CAREFUL: this bypasses the metadata/metrics distinction
+          // Be careful not to pass numbers in `meta`
+          if (key.startsWith('git.')) {
+            span.meta[key] = this.testEnvironmentMetadata[key]
+          }
+        }
+      }
+
+      // Jest and Vitest worker test spans are serialized in the worker and may not include
+      // request error tags; add them from the session span in the main process.
+      if ((span.name === 'jest.test' || span.name === 'vitest.test' || span.name === 'vitest.test_suite') &&
+          this.testSessionSpan) {
+        Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
+      }
+    }
+  }
+
+  /**
+   * Adds suite-level CI Visibility tags to worker test spans when their suite span is available.
+   *
+   * @param {object[]} trace - Worker trace spans.
+   * @returns {string|undefined} Missing test suite name, if the trace cannot be exported yet.
+   */
+  _addSuiteTagsToWorkerTrace (trace) {
+    for (const span of trace) {
+      // Only test hooks run in Cucumber and Mocha workers, so the test events do not have the
+      // test session, test module and test suite ids. We have to update them in the main process.
+      if (span.name !== 'cucumber.test' && span.name !== 'mocha.test') continue
+
+      const testFramework = this.testFramework || this.constructor.id
+      span.meta[TEST_FRAMEWORK] = testFramework
+      span.meta[TEST_MODULE] = testFramework
+      const testType = this.testSessionSpan?.context().getTag(TEST_TYPE)
+      if (testType) {
+        span.meta[TEST_TYPE] = testType
+      }
+      if (this.frameworkVersion) {
+        span.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
+      }
+      if (this.testFrameworkAdapter) {
+        span.meta[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
+      }
+
+      const testSuite = span.meta[TEST_SUITE]
+      const testSuiteExecutionId = this._workerTraceExecutionIds.get(trace)
+      const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuiteKey)
+      if (!testSuiteSpan) return testSuiteKey
+
+      const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, testFramework)
+      span.meta = {
+        ...span.meta,
+        ...testSuiteTags,
+        ...getSessionRequestErrorTags(this.testSessionSpan),
+      }
+    }
+    this._workerTraceExecutionIds.delete(trace)
+  }
+
+  /**
+   * Stores a worker trace until the matching test suite span exists in the main process.
+   *
+   * @param {string} testSuite - Test suite path used as the pending trace key.
+   * @param {object[]} trace - Worker trace spans.
+   */
+  _bufferWorkerTrace (testSuite, trace) {
+    let pendingTraces = this._pendingWorkerTracesByTestSuite.get(testSuite)
+    if (!pendingTraces) {
+      pendingTraces = []
+      this._pendingWorkerTracesByTestSuite.set(testSuite, pendingTraces)
+    }
+    pendingTraces.push(trace)
+  }
+
+  /**
+   * Exports a worker trace immediately, or buffers it if suite-level tags cannot be added yet.
+   *
+   * @param {object[]} trace - Worker trace spans.
+   */
+  _exportWorkerTraceOrBuffer (trace) {
+    const missingTestSuite = this._addSuiteTagsToWorkerTrace(trace)
+    if (missingTestSuite) {
+      this._bufferWorkerTrace(missingTestSuite, trace)
+      return
+    }
+    this.tracer._exporter.export(trace)
+  }
+
+  /**
+   * Exports buffered worker traces for a suite after its suite span has been created.
+   *
+   * @param {string} testSuite - Test suite path that may now have pending worker traces.
+   */
+  _exportPendingWorkerTracesForTestSuite (testSuite) {
+    const pendingTraces = this._pendingWorkerTracesByTestSuite.get(testSuite)
+    if (!pendingTraces) return
+
+    this._pendingWorkerTracesByTestSuite.delete(testSuite)
+    for (const trace of pendingTraces) {
+      this._exportWorkerTraceOrBuffer(trace)
+    }
+  }
+
+  /**
+   * Drains all buffered worker traces, falling back to the previous unaugmented export behavior
+   * if a matching suite span never appears.
+   */
+  _exportPendingWorkerTraces () {
+    if (!this._pendingWorkerTracesByTestSuite.size) return
+
+    const pendingTraces = new Set()
+    for (const traces of this._pendingWorkerTracesByTestSuite.values()) {
+      for (const trace of traces) {
+        pendingTraces.add(trace)
+      }
+    }
+    this._pendingWorkerTracesByTestSuite.clear()
+
+    for (const trace of pendingTraces) {
+      const missingTestSuite = this._addSuiteTagsToWorkerTrace(trace)
+      if (missingTestSuite) {
+        log.warn('Test suite span not found for test span with test suite %s', missingTestSuite)
+      }
+      this.tracer._exporter.export(trace)
+    }
+  }
+
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
+   */
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
@@ -488,6 +793,8 @@ module.exports = class CiPlugin extends Plugin {
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
+    const shouldDeferCodeOwnersEntries = workerTestFramework === 'vitest'
+    const shouldDeferRepositoryRoot = workerTestFramework === 'vitest'
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(
       this.constructor.id,
@@ -513,9 +820,10 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
+    this.repositoryRoot = repositoryRoot ||
+      (shouldDeferRepositoryRoot ? process.cwd() : getRepositoryRoot() || process.cwd())
 
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.ciProviderName = ciProviderName
 
@@ -550,18 +858,21 @@ module.exports = class CiPlugin extends Plugin {
     return codeOwners
   }
 
-  startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
-    const childOf = getTestParentSpan(this.tracer)
+  startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}, testExecutionId, startTime) {
+    const childOf = getTestParentSpan(this.tracer, testExecutionId)
 
     let testTags = {
       ...getTestCommonTags(
         testName,
         testSuite,
         this.frameworkVersion,
-        this.constructor.id
+        this.testFramework || this.constructor.id
       ),
       [COMPONENT]: this.constructor.id,
       ...extraTags,
+    }
+    if (this.testFrameworkAdapter) {
+      testTags[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
     }
 
     const codeOwners = this.getCodeOwners(testTags)
@@ -578,8 +889,8 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_MODULE]: this.constructor.id,
+        [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
+        [TEST_MODULE]: this.testFramework || this.constructor.id,
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
       if (testSuiteSpan.context()._parentId) {
@@ -592,11 +903,14 @@ module.exports = class CiPlugin extends Plugin {
       }
     }
 
+    Object.assign(testTags, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+
     this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
     const testSpan = this.tracer
       .startSpan(`${this.constructor.id}.test`, {
         childOf,
+        startTime,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags,
@@ -610,6 +924,11 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+
     if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
       // This is unexpected and is caused by a race condition.
       log.warn('Breakpoint snapshot could not be attached to the active test span')
@@ -633,8 +952,17 @@ module.exports = class CiPlugin extends Plugin {
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
+    const topStackFrame = snapshot.stack?.[0]
 
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      message: '',
+      logger: {
+        name: snapshot.probe.location.file,
+        method: topStackFrame?.function || '',
+        version: tracerVersion,
+        thread_id: DI_LOGGER_THREAD_ID,
+        thread_name: DI_LOGGER_THREAD_NAME,
+      },
       debugger: { snapshot },
       dd: {
         trace_id: activeTestSpanContext.toTraceId(),
@@ -643,23 +971,122 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
+  /**
+   * Wait for a Dynamic Instrumentation operation without blocking test framework progress forever.
+   *
+   * @param {Promise<void>} promise - Dynamic Instrumentation operation promise.
+   * @returns {Promise<void>}
+   */
+  waitForDiOperation (promise) {
+    return withTimeout(promise, DI_OPERATION_TIMEOUT_MS)
+  }
+
+  /**
+   * Resolve any prepared breakpoint-hit wait when no caller still needs it.
+   */
+  cancelDiBreakpointHitWait () {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+  }
+
+  /**
+   * Wait for a prepared breakpoint hit before resolving any unused waiters.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForPreparedDiBreakpointHit () {
+    if (!this.diBreakpointHitPromise) {
+      this.cancelDiBreakpointHitWait()
+      return Promise.resolve()
+    }
+
+    return this.waitForDiOperation(this.diBreakpointHitPromise).then(
+      () => this.cancelDiBreakpointHitWait(),
+      () => this.cancelDiBreakpointHitWait()
+    )
+  }
+
+  /**
+   * Prepare a wait for the next breakpoint hit before the retried test starts.
+   *
+   * @returns {Promise<void>}
+   */
+  prepareDiBreakpointHitWait () {
+    if (!this.di) return Promise.resolve()
+
+    let resolveHit
+    const hitPromise = new Promise(resolve => {
+      resolveHit = resolve
+      this.diBreakpointHitResolvers.push(resolve)
+    })
+
+    const preparedPromise = hitPromise.finally(() => {
+      const resolverIndex = this.diBreakpointHitResolvers.indexOf(resolveHit)
+      if (resolverIndex !== -1) {
+        this.diBreakpointHitResolvers.splice(resolverIndex, 1)
+      }
+      if (this.diBreakpointHitPromise === preparedPromise) {
+        this.diBreakpointHitPromise = undefined
+      }
+    })
+
+    this.diBreakpointHitPromise = preparedPromise
+    return this.diBreakpointHitPromise
+  }
+
+  /**
+   * Wait until the DI worker has posted any breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+    if (this.diBreakpointHitPromise) return this.waitForDiOperation(this.diBreakpointHitPromise)
+
+    return this.waitForInFlightDiBreakpointHits()
+  }
+
+  /**
+   * Wait until the DI worker has posted breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForInFlightDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+
+    return this.waitForDiOperation(this.di.waitForInFlightBreakpointHits())
+  }
+
   removeAllDiProbes () {
     if (this.fileLineToProbeId.size === 0) {
       return Promise.resolve()
     }
     log.debug('Removing all Dynamic Instrumentation probes')
     const promises = []
-    for (const fileLine of this.fileLineToProbeId.keys()) {
-      const [file, line] = fileLine.split(':')
-      promises.push(this.removeDiProbe({ file, line }))
+    for (const [activeProbeKey, probeId] of this.fileLineToProbeId) {
+      promises.push(this.#removeDiProbe(activeProbeKey, probeId))
     }
     return Promise.all(promises)
   }
 
+  /**
+   * @param {{ file: string, line: number }} location
+   */
   removeDiProbe ({ file, line }) {
-    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
-    this.fileLineToProbeId.delete(probeId)
+    const activeProbeKey = `${file}:${line}`
+    const probeId = this.fileLineToProbeId.get(activeProbeKey)
+    return this.#removeDiProbe(activeProbeKey, probeId)
+  }
+
+  /**
+   * @param {string} activeProbeKey
+   * @param {string|undefined} probeId
+   */
+  #removeDiProbe (activeProbeKey, probeId) {
+    log.warn('Removing probe from %s, with id: %s', activeProbeKey, probeId)
+    this.fileLineToProbeId.delete(activeProbeKey)
     return this.di.removeProbe(probeId)
   }
 
@@ -746,11 +1173,11 @@ module.exports = class CiPlugin extends Plugin {
         return
       }
 
-      const { filePath, format } = coverageReports[reportIndex]
+      const { filePath, fileDevice, fileInode, format } = coverageReports[reportIndex]
       reportIndex++
 
       this.tracer._exporter.uploadCoverageReport(
-        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
+        { filePath, fileDevice, fileInode, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
         (err) => {
           if (err) {
             failedCount++
@@ -769,7 +1196,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getTestTelemetryTags (testSpan) {
-    const activeSpanTags = testSpan.context()._tags
+    const activeSpanTags = testSpan.context().getTags()
     return {
       hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
       isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,

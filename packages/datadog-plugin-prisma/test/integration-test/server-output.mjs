@@ -14,3 +14,5 @@ await prismaClient.user.findUnique({
     id: user.id,
   },
 })
+
+await prismaClient.$disconnect()

@@ -1,55 +1,24 @@
 'use strict'
+
 const { inspect } = require('util')
-const { isTrue } = require('../util')
+
 const { getValueFromEnvSources } = require('../config/helper')
+// Eager require restores the original startup module-load order: pulling `config/defaults` here
+// also installs the instrumented `dns` it transitively loads before the tracer/agent connects.
+// `config/defaults` defers its own `dns` require until after it exports, so this no longer hits
+// the `config/defaults` <-> log parse cycle that motivated the lazy require below.
+const { defaults } = require('../config/defaults')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
-const { memoize } = require('./utils')
 
-const config = {
-  enabled: false,
-  logger: undefined,
-  logLevel: 'debug',
-}
-
-// in most places where we know we want to mute a log we use log.error() directly
+// In most places where we know we want to mute a log we use log.error() directly
 const NO_TRANSMIT = new LogConfig(false)
 
 const log = {
   LogConfig,
   NO_TRANSMIT,
   NoTransmitError,
-
-  /**
-   * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
-   */
-  getConfig () {
-    return { ...config }
-  },
-
-  use (logger) {
-    config.logger = logger
-    logWriter.use(logger)
-    return log
-  },
-
-  toggle (enabled, logLevel) {
-    config.enabled = enabled
-    config.logLevel = logLevel
-    logWriter.toggle(enabled, logLevel)
-    return log
-  },
-
-  reset () {
-    logWriter.reset()
-    log._deprecate = memoize((code, message) => {
-      publishFormatted(errorChannel, null, message)
-      return true
-    })
-
-    return log
-  },
 
   trace (...args) {
     if (traceChannel.hasSubscribers) {
@@ -66,6 +35,8 @@ const log = {
 
       publishFormatted(traceChannel, null, stack.join('\n'))
     }
+    // TODO: Why do we allow chaining here? This is likely not used anywhere.
+    // If it is used, that seems like a mistake.
     return log
   },
 
@@ -102,31 +73,18 @@ const log = {
     return log
   },
 
-  deprecate (code, message) {
-    return log._deprecate(code, message)
-  },
+  configure (options) {
+    const logger = options.logger
+    const logLevel = options.logLevel ??
+        getValueFromEnvSources('DD_TRACE_LOG_LEVEL', true) ??
+        defaults?.logLevel
+    const enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
+      // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      (process.env.OTEL_LOG_LEVEL === 'debug' || defaults?.DD_TRACE_DEBUG)
+    logWriter.configure(enabled, logLevel, logger)
 
-  isEnabled (fleetStableConfigValue, localStableConfigValue) {
-    return isTrue(
-      fleetStableConfigValue ??
-      getValueFromEnvSources('DD_TRACE_DEBUG') ??
-      (getValueFromEnvSources('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
-      localStableConfigValue ??
-      config.enabled
-    )
-  },
-
-  getLogLevel (
-    optionsValue,
-    fleetStableConfigValue,
-    localStableConfigValue
-  ) {
-    return optionsValue ??
-      fleetStableConfigValue ??
-      getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
-      getValueFromEnvSources('OTEL_LOG_LEVEL') ??
-      localStableConfigValue ??
-      config.logLevel
+    return enabled
   },
 }
 
@@ -144,14 +102,15 @@ function publishFormatted (ch, formatter, ...args) {
 
 function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
-    const result = err.delegate()
+    const result = err.delegate(...err.args)
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
   }
   return err
 }
 
-log.reset()
-
-log.toggle(log.isEnabled(), log.getLogLevel())
-
+// Assign before the bootstrap configure() call: an invalid DD_TRACE_LOG_LEVEL
+// makes config/defaults re-require this module to warn, which must observe the
+// fully built log object rather than a half-initialized one.
 module.exports = log
+
+log.configure({})

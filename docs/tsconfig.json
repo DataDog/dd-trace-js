@@ -1,13 +1,13 @@
 {
   "compilerOptions": {
     "lib": ["es2017"],
-    "moduleResolution": "node",
-    "module": "commonjs",
-    "baseUrl": ".",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "strict": true,
     "types": ["node"]
   },
   "files": [
-    "../index.d.ts"
+    "../index.d.ts",
+    "test.ts"
   ]
 }

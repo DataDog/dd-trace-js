@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const semver = require('semver')
@@ -81,7 +82,7 @@ describe('RASP - lfi', () => {
       after(() => {
         appsec.disable()
         server.close()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('lfi', () => {
@@ -125,7 +126,7 @@ describe('RASP - lfi', () => {
               const file = args[vulnerableIndex]
               return testBlockingRequest(`/?file=${file}`, undefined, ruleEvalCount)
                 .then(span => {
-                  assert(span.meta['_dd.appsec.json'].includes(file))
+                  assert(span.meta['_dd.appsec.json'].includes(file), `Got: ${inspect(span.meta['_dd.appsec.json'])}`)
                 })
             })
 
@@ -170,7 +171,7 @@ describe('RASP - lfi', () => {
           args.forEach(arg => {
             try {
               fs.unlinkSync(arg)
-            } catch (e) {
+            } catch {
 
             }
           })
@@ -249,7 +250,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
               // some ops are blocked
             }
           })
@@ -263,7 +264,7 @@ describe('RASP - lfi', () => {
             onfinish: (todelete) => {
               try {
                 fs.rmdirSync(todelete)
-              } catch (e) {
+              } catch {
                 // some ops are blocked
               }
             },
@@ -376,7 +377,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
             }
           })
 
@@ -494,7 +495,7 @@ describe('RASP - lfi', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('Should detect threat but not block', async () => {

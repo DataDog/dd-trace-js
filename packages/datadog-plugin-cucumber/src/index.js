@@ -2,11 +2,12 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 
 const {
   addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
+  getRelativeCoverageFiles,
   getTestEndLine,
   getTestSuiteCommonTags,
   getTestSuitePath,
@@ -33,6 +34,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -47,9 +49,6 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
 
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
@@ -66,14 +65,21 @@ class CucumberPlugin extends CiPlugin {
       isSuitesSkipped,
       numSkippedSuites,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      onDone,
     }) => {
-      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
+      this._exportPendingWorkerTraces()
+      const {
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        isCoverageReportUploadEnabled,
+      } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
@@ -88,6 +94,12 @@ class CucumberPlugin extends CiPlugin {
           hasForcedToRunSuites,
         }
       )
+      if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+        this.tracer._exporter.exportCoverage({
+          sessionId: this.testSessionSpan.context()._traceId,
+          files: testSessionCoverageFiles,
+        })
+      }
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
@@ -112,11 +124,11 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:cucumber:test-suite:start', ({
@@ -136,6 +148,7 @@ class CucumberPlugin extends CiPlugin {
           'cucumber'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -168,6 +181,7 @@ class CucumberPlugin extends CiPlugin {
         integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuitePath)
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
@@ -191,8 +205,10 @@ class CucumberPlugin extends CiPlugin {
       }
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
+      const relativeCoverageFiles = [
+        ...getRelativeCoverageFiles(coverageFiles, this.repositoryRoot),
+        getTestSuitePath(suiteFile, this.repositoryRoot),
+      ]
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
@@ -226,17 +242,14 @@ class CucumberPlugin extends CiPlugin {
       ctx.currentStore = { ...store, span }
 
       this.activeTestSpan = span
-      // Time we give the breakpoint to be hit
       if (promises && this.runningTestProbe) {
-        promises.hitBreakpointPromise = new Promise((resolve) => {
-          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-        })
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
       }
 
       return ctx.currentStore
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ span, isFirstAttempt, error, isAtrRetry }) => {
+    this.addSub('ci:cucumber:test:retry', ({ span, isFirstAttempt, error, isAtrRetry, promises, canWaitForDi }) => {
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
         if (isAtrRetry) {
@@ -246,18 +259,18 @@ class CucumberPlugin extends CiPlugin {
         }
       }
       span.setTag('error', error)
-      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
-        const probeInformation = this.addDiProbe(error)
-        if (probeInformation) {
-          const { file, line, stackIndex } = probeInformation
-          this.runningTestProbe = { file, line }
-          this.testErrorStackIndex = stackIndex
-          const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
-          while (Date.now() < waitUntil) {
-            // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
-            // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
-            // fall back to a fixed syncronous delay.
+      if (canWaitForDi !== false && promises && this.di && error && this.libraryConfig?.isDiEnabled) {
+        if (isFirstAttempt) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { file, line, stackIndex, setProbePromise } = probeInformation
+            this.runningTestProbe = { file, line }
+            this.testErrorStackIndex = stackIndex
+            this.prepareDiBreakpointHitWait()
+            promises.setProbePromise = this.waitForDiOperation(setProbePromise)
           }
+        } else if (this.runningTestProbe) {
+          this.prepareDiBreakpointHitWait()
         }
       }
       span.setTag(TEST_STATUS, 'fail')
@@ -303,10 +316,19 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      earlyFlakeAbortReason,
+      finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
+
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
@@ -379,6 +401,7 @@ class CucumberPlugin extends CiPlugin {
           this.tracer._exporter.flush()
         }
         this.activeTestSpan = null
+        this.cancelDiBreakpointHitWait()
         if (this.runningTestProbe) {
           this.removeDiProbe(this.runningTestProbe)
           this.runningTestProbe = null
@@ -416,7 +439,7 @@ class CucumberPlugin extends CiPlugin {
         const isModified = isModifiedTest(
           testScenarioPath,
           scenario.location.line,
-          scenario.steps[scenario.steps.length - 1].location.line,
+          scenario.steps.at(-1).location.line,
           modifiedFiles,
           'cucumber'
         )

@@ -1,5 +1,8 @@
 import 'dd-trace/init.js'
 import kafkaLib from '@confluentinc/kafka-javascript'
+import helpersModule from './helpers.js'
+
+const { waitForTopicReady } = helpersModule
 const { Kafka } = kafkaLib.KafkaJS
 
 const kafka = new Kafka({
@@ -9,18 +12,19 @@ const kafka = new Kafka({
   },
 })
 
-const sendMessage = async (topic, messages) => {
-  try {
-    const producer = kafka.producer()
-    await producer.connect()
-    await producer.send({
-      topic,
-      messages,
-    })
-    await producer.disconnect()
-  } catch (error) {
-    // pass
-  }
+const admin = kafka.admin()
+await admin.connect()
+try {
+  await admin.createTopics({
+    topics: [{ topic: 'test-topic', numPartitions: 1, replicationFactor: 1 }],
+  })
+} catch (err) {
+  if (err.type !== 'TOPIC_ALREADY_EXISTS') throw err
 }
+await waitForTopicReady(admin, 'test-topic')
+await admin.disconnect()
 
-await sendMessage('test-topic', [{ key: 'key1', value: 'test2' }])
+const producer = kafka.producer()
+await producer.connect()
+await producer.send({ topic: 'test-topic', messages: [{ key: 'key1', value: 'test2' }] })
+await producer.disconnect()

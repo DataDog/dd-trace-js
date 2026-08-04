@@ -9,22 +9,36 @@ const sum = require('./di-dependency')
 const intervalId = setInterval(() => {}, 5000)
 
 const diClient = getDiClient(getConfig())
+let hasDrained = false
+let hasSnapshot = false
 
 diClient.start()
 
 diClient.isReady().then(() => {
   const file = path.join(__dirname, 'di-dependency.js')
   const [probeId, breakpointSetPromise] = diClient.addLineProbe(
-    { file, line: 9 },
+    { file, line: 10 },
     ({ snapshot }) => {
       // once the breakpoint is hit, we can grab the snapshot and send it to the parent process
       process.send({ snapshot, probeId })
-      clearInterval(intervalId)
+      hasSnapshot = true
+      clearIntervalIfDone()
     }
   )
 
   // We run the code once the breakpoint is set
   breakpointSetPromise.then(() => {
     sum(1, 2)
+    diClient.waitForInFlightBreakpointHits().then(() => {
+      process.send({ drained: true })
+      hasDrained = true
+      clearIntervalIfDone()
+    })
   })
 })
+
+function clearIntervalIfDone () {
+  if (hasSnapshot && hasDrained) {
+    clearInterval(intervalId)
+  }
+}

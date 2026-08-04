@@ -4,10 +4,7 @@ const zlib = require('zlib')
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { MsgpackEncoder } = require('../msgpack')
-const { getAgentUrl } = require('../agent/url')
-
-const msgpack = new MsgpackEncoder()
+const { encode: encodeMsgpack, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 
 function makeRequest (data, url, cb) {
   const options = {
@@ -31,7 +28,7 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    this._url = getAgentUrl(config)
+    this._url = config.url
   }
 
   flush (payload) {
@@ -39,7 +36,19 @@ class DataStreamsWriter {
       log.debug('Maximum number of active requests reached. Payload discarded: %j', payload)
       return
     }
-    const encodedPayload = msgpack.encode(payload)
+
+    let encodedPayload
+    try {
+      encodedPayload = encodeMsgpack(payload)
+    } catch (error) {
+      if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+      // The msgpack-encoded pipeline-stats payload exceeded the agent
+      // intake cap. Dropping it locally is safer than letting the
+      // RangeError crash the host process; the agent would reject the
+      // oversized payload at the network boundary anyway.
+      log.error('DataStreamsWriter dropped a payload that exceeded the %d byte chunk cap', MAX_CHUNK_SIZE)
+      return
+    }
 
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {

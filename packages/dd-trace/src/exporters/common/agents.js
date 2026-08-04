@@ -4,6 +4,8 @@ const http = require('http')
 const https = require('https')
 const { storage } = require('../../../../datadog-core')
 
+const legacyStorage = storage('legacy')
+
 const keepAlive = true
 const maxSockets = 1
 
@@ -26,7 +28,7 @@ function createAgentClass (BaseAgent) {
     }
 
     _noop (callback) {
-      return storage('legacy').run({ noop: true }, callback)
+      return legacyStorage.run({ noop: true }, callback)
     }
   }
 

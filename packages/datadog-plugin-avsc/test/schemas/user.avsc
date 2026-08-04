@@ -5,7 +5,8 @@
     "fields": [
         {
             "name": "name",
-            "type": "string"
+            "type": "string",
+            "doc": "The user name"
         },
         {
             "name": "favorite_number",

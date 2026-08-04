@@ -23,8 +23,7 @@ describe('LLMObsSpanWriter', () => {
       '../../log': logger,
     })
     config = {
-      port: 8126,
-      hostname: 'localhost',
+      url: new URL('http://localhost:8126'),
       site: 'datadoghq.com',
     }
   })
@@ -71,8 +70,8 @@ describe('LLMObsSpanWriter', () => {
     const event = {
       name: 'test',
       meta: {
-        input: { value: 'a'.repeat(1024 * 1024) },
-        output: { value: 'a'.repeat(1024 * 1024) },
+        input: { value: 'a'.repeat(3 * 1024 * 1024) },
+        output: { value: 'a'.repeat(3 * 1024 * 1024) },
       },
     }
 
@@ -82,8 +81,8 @@ describe('LLMObsSpanWriter', () => {
     assert.deepStrictEqual(bufferEvent, {
       name: 'test',
       meta: {
-        input: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
-        output: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
+        input: { value: "[This value has been dropped because this span's size exceeds the 5MB size limit.]" },
+        output: { value: "[This value has been dropped because this span's size exceeds the 5MB size limit.]" },
       },
       collection_errors: ['dropped_io'],
     })
@@ -116,6 +115,19 @@ describe('LLMObsSpanWriter', () => {
 
     assert.strictEqual(payload[0]['_dd.stage'], 'raw')
     assert.strictEqual(payload[0].event_type, 'span')
+    assert.deepStrictEqual(payload[0].spans, events)
+  })
+
+  it('marks experiment-scoped payload envelopes', () => {
+    writer = new LLMObsSpanWriter(config)
+
+    const events = [
+      { name: 'experiment-row', _dd: { scope: 'experiments' } },
+    ]
+
+    const payload = writer.makePayload(events)
+
+    assert.strictEqual(payload[0]['_dd.scope'], 'experiments')
     assert.deepStrictEqual(payload[0].spans, events)
   })
 })

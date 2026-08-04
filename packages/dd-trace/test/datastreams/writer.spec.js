@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 const pkg = require('../../../../package.json')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 const stubRequest = sinon.stub()
 
@@ -55,5 +56,43 @@ describe('DataStreamWriter unix', () => {
       },
       url: unixConfig.url,
     })
+  })
+
+  it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {
+    const localStubRequest = sinon.stub()
+    const errorLog = sinon.stub()
+    const overflow = new OverflowError(MAX_SIZE + 1)
+
+    const { DataStreamsWriter: GuardedWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localStubRequest,
+        '../msgpack': {
+          encode () { throw overflow },
+          MAX_SIZE,
+        },
+        '../log': { error: errorLog, debug: sinon.stub() },
+        zlib: stubZlib,
+      })
+
+    const guarded = new GuardedWriter(unixConfig)
+    guarded.flush({ pathological: true })
+
+    sinon.assert.notCalled(localStubRequest)
+    sinon.assert.calledOnce(errorLog)
+  })
+
+  it('rethrows non-overflow encoding errors', () => {
+    const { DataStreamsWriter: ThrowingWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': sinon.stub(),
+        '../msgpack': {
+          encode () { throw new Error('not an overflow') },
+          MAX_SIZE: 50 * 1024 * 1024,
+        },
+        zlib: stubZlib,
+      })
+
+    const throwing = new ThrowingWriter(unixConfig)
+    assert.throws(() => throwing.flush({}), /not an overflow/)
   })
 })

@@ -90,7 +90,7 @@ describe('mongoose instrumentations', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         function testCallbacksCalled (methodName, filters, ...args) {

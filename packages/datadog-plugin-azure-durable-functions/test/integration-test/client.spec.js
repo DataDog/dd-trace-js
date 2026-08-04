@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { spawn } = require('child_process')
+const { inspect } = require('node:util')
 const { describe, it } = require('mocha')
 const {
   FakeAgent,
@@ -11,6 +12,7 @@ const {
   useSandbox,
   curlAndAssertMessage,
   assertObjectContains,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -35,10 +37,7 @@ describe('esm', () => {
 
     afterEach(async () => {
       // after each test, kill process and wait for exit before continuing
-      if (proc) {
-        proc.kill('SIGINT')
-        await new Promise(resolve => proc.on('exit', resolve))
-      }
+      await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
 
@@ -46,13 +45,13 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(agent.port)
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
         // should expect spans for http.request, activity.hola, entity.counter.add_n, entity.counter.get_count
         assert.strictEqual(payload.length, 4)
 
         for (const maybeArray of payload) {
-          assert.ok(Array.isArray(maybeArray))
+          assert.ok(Array.isArray(maybeArray), `Expected array, got ${inspect(maybeArray)}`)
         }
 
         const [maybeHttpSpan, maybeHolaActivity, maybeAddNEntity, maybeGetCountEntity] = payload
@@ -109,11 +108,7 @@ async function spawnPluginIntegrationTestProc (agentPort) {
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
     PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
   }
-
-  const options = { cwd, env }
-
-  const proc = await spawnProc('func', ['start'], options)
-  return proc
+  return spawnProc('func', ['start'], { cwd, env })
 }
 
 function spawnProc (command, args, options = {}) {

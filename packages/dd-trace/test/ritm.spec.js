@@ -5,33 +5,22 @@ const Module = require('node:module')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach } = require('mocha')
 
 require('./setup/core')
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
-  const monkeyPatchedModuleName = 'dd-trace-monkey-patched-module'
-  const missingModuleName = 'package-does-not-exist'
-
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, httpHook, relativeHook
+  const mockedModuleName = '@azure/functions-core'
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
-  })
-
-  beforeEach(() => {
-    startListener = sinon.fake()
-    endListener = sinon.fake()
-
-    moduleLoadStartChannel.subscribe(startListener)
-    moduleLoadEndChannel.subscribe(endListener)
 
     Module.prototype.require = new Proxy(Module.prototype.require, {
       apply (target, thisArg, argArray) {
-        if (argArray[0] === monkeyPatchedModuleName) {
+        if (argArray[0] === mockedModuleName) {
           return {
             version: '1.0.0',
             registerHook: () => { },
@@ -42,31 +31,30 @@ describe('Ritm', () => {
       },
     })
 
-    utilHook = Hook('util')
-    aHook = Hook('module-a')
-    bHook = Hook('module-b')
-    httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
+    function onRequire () { }
+    Hook(['util'], onRequire)
+    Hook(['module-a'], onRequire)
+    Hook(['module-b'], onRequire)
+    Hook(['http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
-    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
+    Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
       exports.foo = 1
       return exports
     })
   })
 
-  afterEach(() => {
-    utilHook.unhook()
-    aHook.unhook()
-    bHook.unhook()
-    httpHook.unhook()
-    relativeHook.unhook()
+  beforeEach(() => {
+    startListener = sinon.fake()
+    endListener = sinon.fake()
+
+    moduleLoadStartChannel.subscribe(startListener)
+    moduleLoadEndChannel.subscribe(endListener)
   })
 
   it('should shim util', () => {
-    assert.equal(startListener.callCount, 0)
-    assert.equal(endListener.callCount, 0)
-    require('util')
+    require('node:util')
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
   })
@@ -81,7 +69,7 @@ describe('Ritm', () => {
     // - we don't recurse infinitely on a CJS cycle
     // - we observe module-a and module-b as part of the cycle
     // - start/end counts stay in sync
-    assert.ok(startListener.callCount >= 2)
+    assert.ok(startListener.callCount >= 2, `Expected ${startListener.callCount} >= 2`)
     assert.equal(endListener.callCount, startListener.callCount)
 
     const startRequests = new Set()
@@ -115,16 +103,17 @@ describe('Ritm', () => {
   })
 
   it('should fall back to monkey patched module', () => {
-    const http = /** @type {{ foo?: number }} */ (require('http'))
-    assert.equal(http.foo, 1, 'normal hooking still works')
+    // @ts-expect-error - Patching module works as expected
+    assert.equal(require('node:http').foo, 1, 'normal hooking still works')
 
-    const monkeyPatchedModule = require(monkeyPatchedModuleName)
-    assert.ok(monkeyPatchedModule, 'requiring monkey patched module works')
-    assert.equal(monkeyPatchedModule.version, '1.0.0')
-    assert.equal(typeof monkeyPatchedModule.registerHook, 'function')
+    const fnCore = require(mockedModuleName)
+    assert.ok(fnCore, 'requiring monkey patched in module works')
+    assert.equal(fnCore.version, '1.0.0')
+    assert.equal(typeof fnCore.registerHook, 'function')
 
     assert.throws(
-      () => require(missingModuleName),
+      // @ts-expect-error - Package does not exist
+      () => require('package-does-not-exist'),
       /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'
     )
@@ -134,5 +123,30 @@ describe('Ritm', () => {
     assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+  })
+
+  it('should use moduleId as cache key for node:-prefixed built-ins', () => {
+    // Populate RITM cache keyed by normalized moduleId 'util'
+    require('util')
+
+    // Simulate require.cache having an entry for the node:-prefixed filename.
+    // In Node.js 18+, Module._resolveFilename('node:util') returns 'node:util',
+    // so filename differs from moduleId ('util'). Before the fix, the cache
+    // comparison accessed cache[filename] ('node:util') which was undefined,
+    // causing: TypeError: undefined is not an object (evaluating 'cache[filename].original')
+    const prefixedKey = 'node:util'
+    const saved = require.cache[prefixedKey]
+    require.cache[prefixedKey] = { exports: { patched: true } }
+
+    try {
+      const result = require('node:util')
+      assert.deepStrictEqual(result, { patched: true })
+    } finally {
+      if (saved) {
+        require.cache[prefixedKey] = saved
+      } else {
+        delete require.cache[prefixedKey]
+      }
+    }
   })
 })

@@ -71,9 +71,9 @@ In the event that some existing functionality _does_ need to change, as much as 
 
 ## Indicate intended release targets
 
-When writing major changes we use a series of labels in the form of `dont-land-on-vN.x` where N is the major release line which a PR should not land in. Every PR marked as semver-major should include these tags. These tags allow our [branch-diff](https://github.com/bengl/branch-diff) tooling to work smoothly as we can exclude PRs not intended for the release line we're preparing a release proposal for. The `semver-major` labels on their own are not sufficient as they don't encode any indication of from _which_ releases they are a major change.
+When writing changes that should only land on the next major release line (master) and not on any current stable release line, add the `only-land-on-next` label. This tells our [branch-diff](https://github.com/bengl/branch-diff) tooling to exclude those PRs when preparing a release proposal for a stable line.
 
-For outside contributions we will have the relevant team add these labels when they review and determine when they plan to release it.
+For outside contributions we will have the relevant team add this label when they review and determine the intended release target.
 
 ## Ensure all tests are green
 
@@ -84,6 +84,44 @@ Eventually we plan to look into putting these permission-required tests behind a
 ## Search before creating
 
 Always search the codebase first before creating new code to avoid duplicates. Check for existing utilities, helpers, or patterns that solve similar problems. Reuse existing code when possible rather than reinventing solutions.
+
+## Pull Request Titles
+
+PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+type(scope): description
+```
+
+The `scope` is optional. Valid types are:
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation changes only |
+| `style` | Formatting, missing semicolons, etc. (no logic change) |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `perf` | A code change that improves performance |
+| `test` | Adding or updating tests |
+| `bench` | Adding or updating benchmarks (e.g. under `benchmark/sirun/`) |
+| `build` | Changes to build system or external dependencies |
+| `ci` | Changes to CI configuration files and scripts |
+| `chore` | Other changes that don't modify src or test files |
+| `revert` | Reverts a previous commit |
+
+Revert PRs must embed the original commit's type so the semver impact can be
+determined automatically: `revert: <type>(<scope>)?: <description>`.
+
+Examples:
+
+```
+feat(appsec): add new WAF rule
+fix: handle cross section things
+docs: update contributing guidelines
+chore(deps): bump express to v5
+revert: fix(redis): handle connection timeout
+```
 
 ## Sign your commits
 
@@ -237,7 +275,7 @@ To enable debug logging when running tests or applications:
 DD_TRACE_DEBUG=true node your-app.js
 
 # Run a specific test suite with debug logging
-DD_TRACE_DEBUG=true yarn test:debugger
+DD_TRACE_DEBUG=true npm run test:debugger
 ```
 
 ### JSDoc
@@ -292,8 +330,8 @@ When developing, it's often faster to run individual test files rather than enti
 To target specific tests, use the `--grep` flag with mocha to match test names:
 
 ```sh
-yarn test:debugger --grep "test name pattern"
-yarn test:appsec --grep "specific test"
+npm run test:debugger -- --grep "test name pattern"
+npm run test:appsec -- --grep "specific test"
 ```
 
 **This project uses mocha for testing.**
@@ -364,10 +402,10 @@ Coverage is measured with nyc. To check coverage for your changes, use the `:ci`
 
 ```sh
 # Run tests with coverage for specific components
-yarn test:debugger:ci
-yarn test:appsec:ci
-yarn test:llmobs:sdk:ci
-yarn test:lambda:ci
+npm run test:debugger:ci
+npm run test:appsec:ci
+npm run test:llmobs:sdk:ci
+npm run test:lambda:ci
 ```
 
 **Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
@@ -386,7 +424,7 @@ Instead, you can follow this procedure for the plugin you want to run tests for:
 1. Check the CI config in `.github/workflows/*.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
 2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
 3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
-4. Now, you can run `yarn test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
+4. Now, you can run `npm run test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
 
 To wrap that all up into a simple few lines of shell commands, here is all of the above, for the `amqplib` plugin:
 
@@ -398,14 +436,16 @@ export PLUGINS="amqplib" # retrieved from .github/workflows/apm-integrations.yml
 docker compose up -d $SERVICES
 yarn services
 
-yarn test:plugins # This one actually runs the tests. Can be run many times.
+npm run test:plugins # This one actually runs the tests. Can be run many times.
 ```
 
 You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `bluebird` plugins:
 
 ```sh
-PLUGINS="amqplib|bluebird" yarn test:plugins
+PLUGINS="amqplib|bluebird" npm run test:plugins
 ```
+
+The necessary shell commands for the setup can also be executed at once by the `npm run env` script.
 
 ### Other Unit Tests
 
@@ -414,11 +454,11 @@ following commands may be useful:
 
 ```sh
 # Tracer core tests (i.e. testing `packages/dd-trace`)
-$ yarn test:trace:core
+$ npm run test:trace:core
 # "Core" library tests (i.e. testing `packages/datadog-core`
-$ yarn test:core
+$ npm run test:core
 # Instrumentations tests (i.e. testing `packages/datadog-instrumentations`
-$ yarn test:instrumentations
+$ npm run test:instrumentations
 ```
 
 Several other components have test commands as well. See `package.json` for
@@ -445,7 +485,7 @@ conforms to our coding standards.
 To run the linter, use:
 
 ```sh
-$ yarn lint
+$ npm run lint
 ```
 
 This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
@@ -462,7 +502,248 @@ a benchmark in the `benchmark/index.js` module so that we can keep track of the
 most efficient algorithm. To run your benchmark, use:
 
 ```sh
-$ yarn bench
+$ npm run bench
 ```
 
 [1]: https://docs.datadoghq.com/help
+
+## Working with Configurations
+
+`packages/dd-trace/src/config/supported-configurations.json` is the source of truth for tracer configuration metadata.
+
+When you add a new configuration here, the config system can usually derive:
+
+- default values
+- env var parsing
+- `tracer.init({...})` option mapping
+- generated config types
+- config telemetry
+
+## What A Developer Needs To Know
+
+Each entry defines:
+
+- the canonical env var name
+- the runtime type
+- the default value
+- the programmatic option path
+- optional aliases, validation, and transforms
+
+Minimal example:
+
+```json
+"DD_AGENT_HOST": [{
+  "implementation": "E",
+  "type": "string",
+  "configurationNames": ["hostname"],
+  "default": "127.0.0.1",
+  "aliases": ["DD_TRACE_AGENT_HOSTNAME"]
+}]
+```
+
+Important fields:
+
+- `type`: parser to use for environment variables. Common values are `string`, `boolean`, `int`, `decimal`, `array`, `map`, `json`.
+- `default`: parsed into the runtime type. `null` means `undefined` at runtime.
+- `configurationNames`: programmatic option names. The first entry becomes the main internal property path.
+- `internalPropertyName`: use this instead of `configurationNames` when the runtime property path should differ from the public option name.
+- `transform`: extra conversion after parsing. This applies to both env vars and programmatic options.
+- `allowed`: whitelist of accepted values.
+- `aliases`: old or alternate env var names.
+- `deprecated`: emits a deprecation warning when used.
+- `description`: developer-facing note in the JSON.
+- `implementation`: metadata only in the current flow.
+
+## Runtime Flow
+
+```mermaid
+flowchart LR
+  A["supported-configurations.json"] --> B["defaults.js<br/>build defaults + lookup tables"]
+  A --> C["helper.js<br/>aliases + deprecations"]
+  A --> D["generate-config-types.js<br/>generated-config-types.d.ts"]
+  B --> E["config/index.js"]
+  C --> E
+  E --> F["Config singleton"]
+  E --> G["Config telemetry"]
+  H["remote_config.js"] --> E
+```
+
+Load order in `config/index.js`:
+
+1. defaults
+2. local stable config
+3. env vars
+4. fleet stable config
+5. `tracer.init({...})` options
+6. calculated values
+
+## Examples That Matter
+
+### Simple boolean
+
+```json
+"DD_RUNTIME_METRICS_ENABLED": [{
+  "type": "boolean",
+  "configurationNames": ["runtimeMetrics.enabled", "runtimeMetrics"],
+  "default": "false"
+}]
+```
+
+Both of these work:
+
+```js
+tracer.init({ runtimeMetrics: true })
+```
+
+```js
+tracer.init({
+  runtimeMetrics: {
+    enabled: true
+  }
+})
+```
+
+Result:
+
+```js
+config.runtimeMetrics.enabled === true
+```
+
+### Decimal with transform
+
+```json
+"DD_TRACE_SAMPLE_RATE": [{
+  "type": "decimal",
+  "configurationNames": ["sampleRate", "ingestion.sampleRate"],
+  "default": null,
+  "transform": "sampleRate"
+}]
+```
+
+The `sampleRate` transform validates and clamps the value to the supported `0..1` range.
+
+### Array with transform
+
+```json
+"DD_TRACE_HEADER_TAGS": [{
+  "type": "array",
+  "configurationNames": ["headerTags"],
+  "default": "",
+  "transform": "stripColonWhitespace"
+}]
+```
+
+This matters because the transform is reused for both input styles:
+
+```bash
+DD_TRACE_HEADER_TAGS="x-user-id : user.id, x-team : team"
+```
+
+```js
+tracer.init({
+  headerTags: ['x-user-id : user.id', 'x-team : team']
+})
+```
+
+Both become:
+
+```js
+config.headerTags
+// ['x-user-id:user.id', 'x-team:team']
+```
+
+### JSON with nested output
+
+```json
+"DD_TRACE_SAMPLING_RULES": [{
+  "type": "json",
+  "configurationNames": ["samplingRules"],
+  "default": "[]",
+  "transform": "toCamelCase"
+}]
+```
+
+```bash
+DD_TRACE_SAMPLING_RULES='[{"sample_rate":0.5,"service":"api"}]'
+```
+
+Result:
+
+```js
+config.samplingRules
+// [{ sampleRate: 0.5, service: 'api' }]
+```
+
+### Internal property path
+
+```json
+"DD_API_KEY": [{
+  "type": "string",
+  "default": null,
+  "internalPropertyName": "apiKey"
+}]
+```
+
+Result:
+
+```js
+config.apiKey
+```
+
+## Nested Properties
+
+Dot notation creates nested objects on the config singleton.
+
+```json
+"DD_API_SECURITY_ENABLED": [{
+  "type": "boolean",
+  "configurationNames": [
+    "appsec.apiSecurity.enabled",
+    "experimental.appsec.apiSecurity.enabled"
+  ],
+  "default": "true"
+}]
+```
+
+```js
+tracer.init({
+  appsec: {
+    apiSecurity: {
+      enabled: true
+    }
+  }
+})
+```
+
+Result:
+
+```js
+config.appsec.apiSecurity.enabled === true
+```
+
+## Telemetry And Remote Config
+
+Config telemetry is handled automatically by the standard config flow.
+
+If your config is defined in `supported-configurations.json` and goes through the normal parsing/application path, telemetry usually works without extra code. Telemetry records the canonical name, the normalized value, and the origin such as `default`, `env_var`, `code`, `remote_config`, or `calculated`.
+
+Remote config is not a separate system. `packages/dd-trace/src/config/remote_config.js` translates remote field names into local option names and then applies them through `config.setRemoteConfig(...)`. After that, the normal pipeline runs again: apply options, recompute calculated values, and update telemetry.
+
+## Adding A New Configuration
+
+Use this checklist:
+
+1. Add the new entry to `packages/dd-trace/src/config/supported-configurations.json`.
+2. Pick the correct `type` and `default`.
+3. Add `configurationNames` if the setting should be exposed via `tracer.init({...})`. Add the documentation to `index.d.ts`.
+4. Use `internalPropertyName` if the runtime property path should differ.
+5. Add `transform` or `allowed` only if the raw parsed value is not enough.
+6. Add `aliases` or `deprecated` only for compatibility.
+7. Regenerate types if needed.
+8. Add tests for env vars, programmatic options, and edge cases.
+
+## Mental Model
+
+Think of `supported-configurations.json` as the schema for one config singleton.
+
+You describe the input shape once, and the runtime uses that to build defaults, parse env vars, map programmatic options, generate types, and emit telemetry.

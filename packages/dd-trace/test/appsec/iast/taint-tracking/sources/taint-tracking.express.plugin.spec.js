@@ -34,16 +34,14 @@ describe('URI sourcing with express', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
       iast.enable(getConfigFresh({
-        experimental: {
-          iast: {
-            enabled: true,
-            requestSampling: 100,
-          },
+        iast: {
+          enabled: true,
+          requestSampling: 100,
         },
       }))
 
@@ -111,16 +109,14 @@ describe('Path params sourcing with express', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
       iast.enable(getConfigFresh({
-        experimental: {
-          iast: {
-            enabled: true,
-            requestSampling: 100,
-          },
+        iast: {
+          enabled: true,
+          requestSampling: 100,
         },
       }))
 

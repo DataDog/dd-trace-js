@@ -10,29 +10,28 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
+const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
+const {
+  getMaxAttempts,
+  getRetryDelay,
+  isRetriableNetworkError,
+  markEndpointReached,
+} = require('./retry')
 
-const maxActiveRequests = 8
+const legacyStorage = storage('legacy')
 
-let activeRequests = 0
+const maxActiveBufferSize = 1024 * 1024 * 64
 
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
+let activeBufferSize = 0
 
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  // Special handling if we're using named pipes on Windows
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
-
+/**
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {object} options
+ * @param {(error: Error|null, result?: string|null, statusCode?: number,
+ *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
+ */
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
@@ -50,7 +49,36 @@ function request (data, options, callback) {
     }
   }
 
-  const isReadable = data instanceof Readable
+  // Never put the Datadog API key on a cleartext connection to a non-loopback host; that would
+  // expose it on the wire. Loopback (local agent, dev proxy, tests) is exempt. Strip the key
+  // rather than drop the request: the agent proxies telemetry with its own key, while an https
+  // intake URL is required to authenticate agentless traffic.
+  const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
+  if (hasApiKey && options.protocol === 'http:' && !isLoopbackHost(options.hostname)) {
+    log.error(
+      'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
+      options.hostname
+    )
+    delete options.headers['dd-api-key']
+    delete options.headers['DD-API-KEY']
+  }
+
+  if (data instanceof Readable) {
+    const chunks = []
+
+    data
+      .on('data', (data) => {
+        chunks.push(data)
+      })
+      .on('end', () => {
+        request(Buffer.concat(chunks), options, callback)
+      })
+      .on('error', (err) => {
+        callback(err)
+      })
+
+    return
+  }
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -58,43 +86,59 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!isReadable) {
-    if (!Array.isArray(data)) {
-      dataArray = [data]
-    }
-    options.headers['Content-Length'] = byteLength(dataArray)
+  if (!Array.isArray(data)) {
+    dataArray = [data]
   }
+  options.headers['Content-Length'] = byteLength(dataArray)
 
   docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = (res, finalize) => {
+  /**
+   * @param {import('node:http').IncomingMessage} res
+   * @param {(error: Error|null, result?: string|null, statusCode?: number,
+   *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
+   * @param {(error: Error) => void} handleError
+   */
+  const onResponse = (res, complete, handleError) => {
+    markEndpointReached(options)
+
     const chunks = []
 
     res.setTimeout(timeout)
+
+    res.once('aborted', () => {
+      handleError(Object.assign(new Error('Response aborted'), { code: 'ECONNRESET' }))
+    })
+    res.once('error', handleError)
+    res.once('timeout', () => {
+      const error = Object.assign(new Error('Response timed out'), { code: 'ETIMEDOUT' })
+      res.destroy(error)
+      handleError(error)
+    })
 
     res.on('data', chunk => {
       chunks.push(chunk)
     })
 
     res.once('end', () => {
-      finalize()
       const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
-        const isGzip = res.headers['content-encoding'] === 'gzip'
+        const contentEncoding = res.headers['content-encoding']
+        const isGzip = typeof contentEncoding === 'string' && contentEncoding.toLowerCase() === 'gzip'
         if (isGzip) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error('Could not gunzip response: %s', err.message)
-              callback(null, '', res.statusCode, res.headers)
+              complete(null, '', res.statusCode, res.headers)
             } else {
-              callback(null, result.toString(), res.statusCode, res.headers)
+              complete(null, result.toString(), res.statusCode, res.headers)
             }
           })
         } else {
-          callback(null, buffer.toString(), res.statusCode, res.headers)
+          complete(null, buffer.toString(), res.statusCode, res.headers)
         }
       } else {
         let errorMessage = ''
@@ -115,36 +159,70 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        callback(error, null, res.statusCode, res.headers)
+        complete(error, null, res.statusCode, res.headers)
       }
     })
   }
 
-  const makeRequest = onError => {
+  // Retries always run via setTimeout so the AsyncLocalStorage store survives
+  // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
+  // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
+  /** @param {number} attemptIndex */
+  const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
     }
 
-    activeRequests++
+    activeBufferSize += options.headers['Content-Length'] ?? 0
 
-    storage('legacy').run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       let finished = false
+      let settled = false
       const finalize = () => {
         if (finished) return
         finished = true
-        activeRequests--
+        activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
-      const req = client.request(options, (res) => onResponse(res, finalize))
+      /**
+       * @param {Error | null} error
+       * @param {string | null} [result]
+       * @param {number} [statusCode]
+       * @param {import('node:http').IncomingHttpHeaders} [headers]
+       */
+      const complete = (error, result, statusCode, headers) => {
+        if (settled) return
+        settled = true
+        finalize()
+        callback(error, result, statusCode, headers)
+      }
+
+      /**
+       * @param {Error} error
+       */
+      const handleError = (error) => {
+        if (settled) return
+
+        if (options.retry !== false &&
+            attemptIndex < getMaxAttempts(options) &&
+            isRetriableNetworkError(error)) {
+          settled = true
+          finalize()
+          // Unref so a pending retry never keeps the host process alive past
+          // its natural exit point; long-running apps still retry because the
+          // event loop is held open by their own work.
+          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+        } else {
+          complete(error)
+        }
+      }
+
+      const req = client.request(options, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
       req.once('timeout', finalize)
-
-      req.once('error', err => {
-        finalize()
-        onError(err)
-      })
+      req.once('error', handleError)
 
       req.setTimeout(timeout, () => {
         try {
@@ -158,23 +236,12 @@ function request (data, options, callback) {
         }
       })
 
-      if (isReadable) {
-        data.pipe(req) // TODO: Validate whether this is actually retriable.
-      } else {
-        for (const buffer of dataArray) req.write(buffer)
-        req.end()
-      }
+      for (const buffer of dataArray) req.write(buffer)
+      req.end()
     })
   }
 
-  // The setTimeout is needed to avoid losing the async context in the retry
-  // request before socket.connect() is called. This is a workaround for the
-  // issue that the AsyncLocalStorage.run() method does not call the
-  // AsyncLocalStorage.enterWith() method when not using AsyncContextFrame.
-  //
-  // TODO: Test that this doesn't trace itself on retry when the diagnostics
-  // channel events are available in the agent exporter.
-  makeRequest(() => setTimeout(() => makeRequest(callback)))
+  attempt(1)
 }
 
 function byteLength (data) {
@@ -183,7 +250,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeRequests < maxActiveRequests
+    return activeBufferSize < maxActiveBufferSize
   },
 })
 

@@ -6,18 +6,19 @@ const v8 = require('v8')
 const os = require('os')
 const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { getValueFromEnvSources } = require('../config/helper')
-
-const { NODE_MAJOR } = require('../../../../version')
-const processTags = require('../process-tags')
-// TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
-// It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
-const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
+const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
+const { createMetricsClient } = require('./client')
 
 const eventLoopDelayResolution = 4
+const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
+  (NODE_MAJOR === 26 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 19)
+
+// @datadog/native-metrics is only needed on Node versions where
+// monitorEventLoopDelay's samplePerIteration option is unavailable.
+// TODO: remove @datadog/native-metrics and this branch once all supported Node versions provide this option.
+const NATIVE_METRICS_REQUIRED = !EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE
 
 let nativeMetrics = null
 let gcObserver = null
@@ -35,37 +36,42 @@ let eventLoopDelayObserver = null
 // https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     this.stop()
-    const clientConfig = DogStatsDClient.generateClientConfig(config)
-
-    if (config.propagateProcessTags?.enabled) {
-      for (const tag of processTags.tagsArray) {
-        clientConfig.tags.push(tag)
-      }
-    }
+    // The agent expects a flush every ten seconds, so this is for tests only.
+    const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
+
+    client = createMetricsClient(config)
 
     if (trackGc) {
       startGCObserver()
     }
 
-    // Using no-gc prevents the native gc metrics from being tracked. Not
-    // passing any options means all metrics are tracked.
-    // TODO: This is a workaround. We should find a better solution.
-    const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+    // When per-iteration sampling is available we prefer it over the native
+    // addon: it provides accurate event loop delay measurements and lets us
+    // collect CPU/GC/heap metrics entirely from JS APIs.
+    const useNative = NATIVE_METRICS_REQUIRED && config.runtimeMetrics.native !== false
 
-    try {
-      nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start(...watchers)
-    } catch (error) {
-      log.error('Error starting native metrics', error)
-      nativeMetrics = null
+    if (useNative) {
+      // Using no-gc prevents the native gc metrics from being tracked. Not
+      // passing any options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
+      const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+
+      try {
+        nativeMetrics = require('@datadog/native-metrics')
+        nativeMetrics.start(...watchers)
+      } catch (error) {
+        log.error('Error starting native metrics', error)
+        nativeMetrics = null
+      }
     }
-
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     lastTime = performance.now()
 
@@ -74,12 +80,15 @@ module.exports = {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     } else {
       lastCpuUsage = process.cpuUsage()
 
       if (trackEventLoop) {
-        eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
+        eventLoopDelayObserver = monitorEventLoopDelay({
+          resolution: eventLoopDelayResolution,
+          samplePerIteration: EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE,
+        })
         eventLoopDelayObserver.enable()
       }
 
@@ -88,18 +97,13 @@ module.exports = {
         captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
         if (trackEventLoop) {
-          // Experimental: The Node.js implementation deviates from the native metrics.
-          // We normalize the metrics to the same format but the Node.js values
-          // are that way lower than they should be, while they are still nearer
-          // to the native ones that way.
-          // We use these only as fallback values.
           captureEventLoopDelay()
         }
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     }
 
-    interval.unref()
+    interval.unref?.()
   },
 
   stop () {
@@ -200,12 +204,14 @@ function captureEventLoopDelay () {
   eventLoopDelayObserver.disable()
 
   if (eventLoopDelayObserver.count !== 0) {
-    const minimum = eventLoopDelayResolution * 1e6
+    // Node.js versions without iteration-based metrics use the default sampling method,
+    // which is interval-based and requires normalization because its values are much smaller
+    // than those from the original native implementation and iteration-based metrics.
+    const minimum = EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE ? 0 : eventLoopDelayResolution * 1e6
     const avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
     const sum = Math.round(avg * eventLoopDelayObserver.count)
 
     if (sum !== 0) {
-      // Normalize the metrics to the same format as the native metrics.
       const stats = {
         min: Math.max(eventLoopDelayObserver.min - minimum, 0),
         max: Math.max(eventLoopDelayObserver.max - minimum, 0),
@@ -219,7 +225,7 @@ function captureEventLoopDelay () {
       histogram('runtime.node.event_loop.delay', stats)
     }
   }
-  eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
+  eventLoopDelayObserver.reset()
   eventLoopDelayObserver.enable()
 }
 

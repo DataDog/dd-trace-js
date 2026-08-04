@@ -5,12 +5,18 @@ process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const gc = global.gc ?? (() => {})
+
+if (typeof global.gc !== 'function') {
+  throw new Error('requires --expose-gc flag')
+}
+
+const gc = global.gc
 
 describe('Push Subscription Plugin', () => {
   let appListener
@@ -21,7 +27,7 @@ describe('Push Subscription Plugin', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   beforeEach(() => {
@@ -95,9 +101,12 @@ describe('Push Subscription Plugin', () => {
             })
 
             // Verify delivery_duration_ms
-            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] !== undefined)
-            assert.ok(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'] === 'number')
-            assert.ok(pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0)
+            assert.notStrictEqual(pubsubSpan.metrics['pubsub.delivery_duration_ms'], undefined)
+            assert.strictEqual(typeof pubsubSpan.metrics['pubsub.delivery_duration_ms'], 'number')
+            assert.ok(
+              pubsubSpan.metrics['pubsub.delivery_duration_ms'] >= 0,
+              `Expected ${pubsubSpan.metrics['pubsub.delivery_duration_ms']} >= 0`
+            )
           })
           .then(done)
           .catch(done)
@@ -123,7 +132,7 @@ describe('Push Subscription Plugin', () => {
 
             if (pubsubSpan.meta['_dd.span_links']) {
               const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              assert.ok(Array.isArray(spanLinks))
+              assert.ok(Array.isArray(spanLinks), `Expected array, got ${inspect(spanLinks)}`)
               const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
               assert.strictEqual(hasProducerLink, true)
             }
@@ -242,10 +251,6 @@ describe('Push Subscription Plugin', () => {
     })
 
     describe('garbage collection and memory leaks', function () {
-      if (typeof global.gc !== 'function') {
-        return it.skip('requires --expose-gc flag')
-      }
-
       it('should clean up receiveSpans WeakMap when request is garbage collected', function (done) {
         this.timeout(10000)
 
@@ -272,13 +277,15 @@ describe('Push Subscription Plugin', () => {
             await sendPushRequest(port)
             await wait(100)
 
-            // Force garbage collection multiple times
-            gc()
-            await wait(100)
-            gc()
-            await wait(100)
-            gc()
-            await wait(500)
+            // FinalizationRegistry callbacks are scheduled as microtasks after GC and
+            // V8 may need multiple passes to collect an object. Poll until collected
+            // or the test timeout is reached to avoid flakiness from GC timing variance.
+            const deadline = Date.now() + 8000
+            while (Date.now() < deadline) {
+              gc()
+              await wait(100)
+              if (requestWasCollected) break
+            }
 
             assert.strictEqual(requestWasCollected, true)
             done()

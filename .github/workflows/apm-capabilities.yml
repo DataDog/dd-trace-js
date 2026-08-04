@@ -14,63 +14,70 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
   tracing-macos:
     runs-on: macos-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-macos
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}
 
   tracing-ubuntu:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [oldest, maintenance, active, latest]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-capabilities-tracing-ubuntu
-      - uses: ./.github/actions/push_to_test_optimization
+          flags: apm-capabilities-tracing-ubuntu-${{ matrix.node-version }}
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   tracing-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
         with:
-          cache: "true"
-      - run: yarn test:trace:core:ci
+          version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
+      - uses: ./.github/actions/install
+      - run: npm run test:trace:core:ci
+      - uses: ./.github/actions/node-crash-report
+        if: failure()
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-windows
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          id: ${{ github.job }}

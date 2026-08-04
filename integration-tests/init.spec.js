@@ -14,7 +14,7 @@ const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime',
 const telemetryForced = ['complete', 'injection_forced:true']
 const telemetryGood = ['complete', 'injection_forced:false']
 
-const { engines } = require('../package.json')
+const { engines, nodeMaxMajor: MAX_NODE_MAJOR } = require('../package.json')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
@@ -41,7 +41,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
-      useEnv({ NODE_OPTIONS })
+      useEnv({ DD_TEST_TRACER_ROOT: path.join(__dirname, '..'), NODE_OPTIONS })
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
@@ -62,6 +62,11 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
 
         it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+
+        if (arg === 'import') {
+          it('does not load loader internals after deferring to the app copy', () =>
+            testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
+        }
       })
     })
 
@@ -122,15 +127,15 @@ function testRuntimeVersionChecks (arg, filename) {
     it('should be able to use the engines field', () => {
       const engines = require(`${sandboxCwd()}/node_modules/dd-trace/package.json`).engines.node
 
-      assert.match(engines, /^>=\d+ <\d+$/)
+      assert.match(engines, /^>=\d+$/)
     })
 
-    context('when node version is too recent', () => {
+    context('when node version is too old', () => {
       useEnv({ NODE_OPTIONS })
 
       before(() => {
         const pkg = JSON.parse(pkgStr)
-        pkg.engines.node = `>=${NODE_MAJOR - 1} <${NODE_MAJOR}`
+        pkg.engines.node = `>=${NODE_MAJOR + 1}`
         fs.writeFileSync(pkgPath, JSON.stringify(pkg))
       })
 
@@ -151,14 +156,14 @@ function testRuntimeVersionChecks (arg, filename) {
           it('should not initialize the tracer', () =>
             doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR - 1} <${NODE_MAJOR}.
+>=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 false
 `, telemetryAbort))
 
           it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR - 1} <${NODE_MAJOR}.
+>=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
@@ -167,12 +172,12 @@ true
       })
     })
 
-    context('when node version is too old', () => {
+    context('when node version is too recent', () => {
       useEnv({ NODE_OPTIONS })
 
       before(() => {
         const pkg = JSON.parse(pkgStr)
-        pkg.engines.node = `>=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}`
+        pkg.nodeMaxMajor = NODE_MAJOR
         fs.writeFileSync(pkgPath, JSON.stringify(pkg))
       })
 
@@ -193,14 +198,14 @@ true
           it('should not initialize the tracer', () =>
             doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}.
+${engines.node} <${NODE_MAJOR}.
 false
 `, telemetryAbort))
 
           it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}.
+${engines.node} <${NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
@@ -215,7 +220,8 @@ true
 
         before(() => {
           const pkg = JSON.parse(pkgStr)
-          pkg.engines.node = '>=0 <1000'
+          pkg.engines.node = '>=0'
+          pkg.nodeMaxMajor = 1000
           fs.writeFileSync(pkgPath, JSON.stringify(pkg))
         })
 
@@ -267,13 +273,65 @@ describe('init.js', () => {
 
   testInjectionScenarios('require', 'init.js', false)
   testRuntimeVersionChecks('require', 'init.js')
+
+  describe('PM2 cluster mode', () => {
+    useEnv({ NODE_OPTIONS: '--require dd-trace/init' })
+
+    afterEach(() => {
+      delete process.env.pm2_env
+    })
+
+    function checkEnv (expectedValues) {
+      return testFile('init/pm2-env.js', out => {
+        const env = JSON.parse(out.trim())
+        for (const [key, value] of Object.entries(expectedValues)) {
+          assert.strictEqual(env[key], value, `expected env.${key} to equal ${value}`)
+        }
+      }, [], '')
+    }
+
+    it('applies all env vars from pm2_env blob to process.env', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+      return checkEnv({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+    })
+
+    it('coerces non-string values to strings', () => {
+      process.env.pm2_env = JSON.stringify({ DD_TRACE_SAMPLE_RATE: 0.5 })
+      return checkEnv({ DD_TRACE_SAMPLE_RATE: '0.5' })
+    })
+
+    it('coerces null values to strings', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
+      return checkEnv({ DD_SERVICE: 'null' })
+    })
+
+    it('does not crash on malformed pm2_env JSON', () => {
+      process.env.pm2_env = 'not-valid-json'
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    it('does nothing when pm2_env is absent', () => {
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    describe('when env vars are already set', () => {
+      useEnv({ DD_SERVICE: 'original-service', MY_APP_VAR: 'original' })
+
+      it('overwrites existing env vars with pm2_env values', () => {
+        process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+        return checkEnv({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+      })
+    })
+  })
 })
 
 // ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
 // or on 18.0.0 in particular.
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
-    setShouldKill(false)
+    // Node 20.0.0 can leave short-lived loader-based children alive after they
+    // print the expected output, so terminate them after a short grace period.
+    setShouldKill(process.versions.node === '20.0.0')
     useSandbox()
     stubTracerIfNeeded()
 
@@ -281,10 +339,29 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testInjectionScenarios('loader', 'initialize.mjs',
         process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
+
+      // Only off-thread loaders install the matcher; see initialize.mjs.
+      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
+        context('import-in-the-middle include matcher', () => {
+          useEnv({
+            NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
+            pm2_env: JSON.stringify({
+              DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+                'SANITIZER:*:init/security-control-module.mjs:sanitize',
+            }),
+          })
+
+          it('wraps instrumented and PM2 security control modules and nothing else', () =>
+            testFile('init/loader-matcher.mjs', 'true\n', [], ''))
+        })
+      }
     })
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
+        // The loader hook is skipped on bailout, so --import children exit on their
+        // own; killing them would mask a regression that keeps the process alive.
+        setShouldKill(false)
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('import', 'initialize.mjs')
       })

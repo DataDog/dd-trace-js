@@ -6,7 +6,10 @@ const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
+const { storage } = require('../../datadog-core')
+const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { rawExpectedSchema } = require('./naming')
@@ -36,7 +39,58 @@ describe('Plugin', () => {
         app = null
         clearTimeout(timeout)
         timeout = null
-        return agent.close({ ritmReset: false })
+        return agent.close()
+      })
+
+      describe('with OTel semantics enabled', () => {
+        let otelPort
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          await agent.load('http', { client: false })
+          http = require(pluginToBeLoaded)
+        })
+
+        beforeEach(done => {
+          appListener = new http.Server(listener).listen(0, 'localhost', () => {
+            otelPort = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
+          agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            // OpenTelemetry attribute names are present...
+            assertObjectContains(span, {
+              name: 'web.request',
+              type: 'web',
+              resource: 'GET',
+              meta: {
+                'span.kind': 'server',
+                'http.request.method': 'GET',
+                'url.path': '/user',
+                'url.scheme': 'http',
+                'server.address': 'localhost',
+              },
+              metrics: {
+                'server.port': otelPort,
+                'http.response.status_code': 200,
+              },
+            })
+            // ...and the Datadog ones are absent.
+            assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
+          }).then(done).catch(done)
+
+          axios.get(`http://localhost:${otelPort}/user`).catch(done)
+        })
       })
 
       describe('canceled request', () => {
@@ -150,6 +204,28 @@ describe('Plugin', () => {
           axios.get(`http://localhost:${port}/user`).catch(done)
         })
 
+        it('should preserve request access through child scope activation without strong fields', done => {
+          const spy = sinon.spy()
+          incomingHttpRequestStart.subscribe(spy)
+
+          app = (req, res) => {
+            const childSpan = tracer.startSpan('child')
+
+            tracer.scope().activate(childSpan, () => {
+              const store = storage('legacy').getStore()
+
+              sinon.assert.calledOnce(spy)
+              assert.strictEqual(getRequest(store), req)
+              assert.strictEqual(Object.hasOwn(store, 'req'), false)
+              assert.strictEqual(Object.hasOwn(store, 'res'), false)
+            })
+
+            done()
+          }
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        })
+
         it('should run the request\'s close event in the correct context', done => {
           app = (req, res) => {
             req.on('close', () => {
@@ -234,6 +310,61 @@ describe('Plugin', () => {
         })
       })
 
+      // see https://github.com/DataDog/dd-trace-js/issues/2334
+      describe('with hooks configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', {
+            client: false,
+            server: {
+              hooks: {
+                request: (span, req) => {
+                  span.setTag('test.hook', 'ran')
+                  if (req.url?.startsWith('/products')) {
+                    span.setTag('resource.name', 'GET /products')
+                  }
+                },
+              },
+            },
+          })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
+        })
+
+        it('should let the request hook override the default resource name', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'GET /products')
+              assert.strictEqual(traces[0][0].meta['test.hook'], 'ran')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/products`).catch(done)
+        })
+
+        it('should keep the default resource name when the hook does not touch it', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].meta['test.hook'], 'ran')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/health`).catch(done)
+        })
+      })
+
       describe('with a blocklist configuration', () => {
         beforeEach(() => {
           return agent.load('http', { client: false, blocklist: '/health' })
@@ -249,20 +380,96 @@ describe('Plugin', () => {
         })
 
         it('should drop traces for blocklist route', done => {
-          const spy = sinon.spy(() => {})
-
           agent
-            .assertSomeTraces((traces) => {
-              spy()
-            })
-            .catch(done)
-
-          setTimeout(() => {
-            sinon.assert.notCalled(spy)
-            done()
-          }, 100)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted routes should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           axios.get(`http://localhost:${port}/health`).catch(done)
+        })
+      })
+
+      describe('with a `service` configuration', () => {
+        describe('when the override differs from the tracer service', () => {
+          beforeEach(() => {
+            return agent.load('http', { client: false, server: { service: 'my-http-service' } })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = new http.Server(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should override the service and mark the source as `opt.plugin`', done => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].service, 'my-http-service')
+                assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.plugin')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/users`).catch(done)
+          })
+
+          it('should reuse the cached start config across requests', done => {
+            const expect = traces => {
+              assert.strictEqual(traces[0][0].service, 'my-http-service')
+              assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.plugin')
+            }
+
+            // The first request populates `#startConfig`; the second takes
+            // the cached path. Asserting both ensures the cached value is
+            // not stale and the span shape stays identical.
+            Promise.all([
+              agent.assertSomeTraces(expect),
+              axios.get(`http://localhost:${port}/first`),
+            ])
+              .then(() => Promise.all([
+                agent.assertSomeTraces(expect),
+                axios.get(`http://localhost:${port}/second`),
+              ]))
+              .then(() => done())
+              .catch(done)
+          })
+        })
+
+        describe('when the override matches the tracer service', () => {
+          beforeEach(() => {
+            return agent.load('http', { client: false, server: { service: 'test' } })
+              .then(() => {
+                http = require(pluginToBeLoaded)
+              })
+          })
+
+          beforeEach(done => {
+            const server = new http.Server(listener)
+            appListener = server
+              .listen(0, 'localhost', () => {
+                port = appListener.address().port
+                done()
+              })
+          })
+
+          it('should not add the service source tag when the override matches', done => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].service, 'test')
+                assert.strictEqual(Object.hasOwn(traces[0][0].meta, '_dd.svc_src'), false)
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/users`).catch(done)
+          })
         })
       })
 

@@ -8,7 +8,8 @@ const axios = require('axios')
 
 const { FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('../helpers')
 
-const esbuildVersions = ['latest', '0.16.12']
+const { ESBUILD_VERSION } = process.env
+const esbuildVersions = ESBUILD_VERSION ? [ESBUILD_VERSION] : ['latest', '0.16.12']
 
 function findWebSpan (payload) {
   for (const trace of payload) {

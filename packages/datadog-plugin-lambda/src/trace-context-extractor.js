@@ -12,7 +12,7 @@ const lambdaContextExtractor = require('./extractors/lambda-context')
 const xrayService = require('./xray-service')
 
 function getEventExtractor (event) {
-  if (!event || typeof event !== 'object') return undefined
+  if (!event || typeof event !== 'object') return
 
   const headers = event.headers ?? event.multiValueHeaders
   if (headers !== null && headers !== undefined && typeof headers === 'object') {
@@ -25,8 +25,6 @@ function getEventExtractor (event) {
   if (eventType.isSQSEvent(event)) return sqsExtractor
   if (eventType.isKinesisStreamEvent(event)) return kinesisExtractor
   if (eventType.isEventBridgeEvent(event)) return eventBridgeExtractor
-
-  return undefined
 }
 
 function extractTraceContext (event, context, tracer, config) {
@@ -76,8 +74,7 @@ function extractTraceContext (event, context, tracer, config) {
     if (config?.mergeXrayTraces) {
       carrier['x-datadog-sampling-priority'] = String(xrayContext.sampleMode)
     }
-    const xraySpanContext = tracer.extract('text_map', carrier)
-    return xraySpanContext
+    return tracer.extract('text_map', carrier)
   }
 
   return null
@@ -93,7 +90,7 @@ function addTraceContextToXray (spanContext) {
       xrayService.addMetadata({
         'trace-id': traceId,
         'parent-id': parentId,
-        'sampling-priority': samplingPriority
+        'sampling-priority': samplingPriority,
       })
       log.debug('Added trace context to X-Ray metadata')
     }
@@ -104,5 +101,5 @@ function addTraceContextToXray (spanContext) {
 
 module.exports = {
   extractTraceContext,
-  getEventExtractor
+  getEventExtractor,
 }

@@ -1,0 +1,758 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const dc = require('dc-polyfill')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+require('../setup/core')
+
+const {
+  OS_ARCHITECTURE,
+  OS_PLATFORM,
+  OS_VERSION,
+  RUNTIME_NAME,
+  RUNTIME_VERSION,
+} = require('../../src/plugins/util/env')
+const {
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH,
+  GIT_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
+} = require('../../src/plugins/util/tags')
+const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+} = require('../../src/plugins/util/test')
+
+describe('CiPlugin', () => {
+  let CiPlugin
+  let distributionMetric
+  let getCodeOwnersFileEntries
+  let getRepositoryRoot
+  let getTestEnvironmentMetadata
+  let incrementCountMetric
+
+  beforeEach(() => {
+    distributionMetric = sinon.stub()
+    getCodeOwnersFileEntries = sinon.stub()
+    getRepositoryRoot = sinon.stub()
+    getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
+    incrementCountMetric = sinon.stub()
+
+    CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
+      '../ci-visibility/telemetry': {
+        ...require('../../src/ci-visibility/telemetry'),
+        distributionMetric,
+        incrementCountMetric,
+      },
+      './util/git': {
+        getRepositoryRoot,
+      },
+      './util/test': {
+        ...require('../../src/plugins/util/test'),
+        getCodeOwnersFileEntries,
+        getTestEnvironmentMetadata,
+      },
+    })
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  it('defers repository root and CODEOWNERS discovery in Vitest workers', () => {
+    const cwd = sinon.stub(process, 'cwd').returns('/worker-cwd')
+    const plugin = createPlugin('vitest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, '/worker-cwd')
+    assert.strictEqual(plugin.codeOwnersEntries, null)
+    assert.strictEqual(plugin.shouldSkipGitMetadataExtraction, true)
+    sinon.assert.calledWith(getTestEnvironmentMetadata, 'vitest', sinon.match.object, true)
+    sinon.assert.notCalled(getRepositoryRoot)
+    sinon.assert.notCalled(getCodeOwnersFileEntries)
+    sinon.assert.called(cwd)
+  })
+
+  it('reuses repository root and CODEOWNERS entries received from the Vitest coordinator', () => {
+    const codeOwnersEntries = [{ pattern: '*.js', owners: ['@datadog-dd-trace-js'] }]
+    const plugin = createPlugin('vitest_worker')
+
+    plugin._setRepositoryRoot('/repo-root', codeOwnersEntries)
+
+    assert.strictEqual(plugin.repositoryRoot, '/repo-root')
+    assert.strictEqual(plugin.codeOwnersEntries, codeOwnersEntries)
+    sinon.assert.notCalled(getRepositoryRoot)
+    sinon.assert.notCalled(getCodeOwnersFileEntries)
+  })
+
+  it('keeps repository root discovery for non-Vitest workers', () => {
+    const codeOwnersEntries = [{ pattern: '*.js', owners: ['@datadog-dd-trace-js'] }]
+    getRepositoryRoot.returns('/repo-root')
+    getCodeOwnersFileEntries.returns(codeOwnersEntries)
+
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, '/repo-root')
+    assert.strictEqual(plugin.codeOwnersEntries, codeOwnersEntries)
+    assert.strictEqual(plugin.shouldSkipGitMetadataExtraction, true)
+    sinon.assert.calledOnce(getRepositoryRoot)
+    sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
+  })
+
+  it('clears ITR state when library configuration fails', () => {
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, new Error('settings failed'))
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.libraryConfig = { isSuitesSkippingEnabled: true }
+    plugin.itrCorrelationId = 'correlation-id'
+    plugin.skippableSuitesCoverage = { 'suite.js': 'coverage' }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.strictEqual(plugin.libraryConfig, undefined)
+    assert.strictEqual(plugin.itrCorrelationId, undefined)
+    assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('disables advanced features for basic-reporting library configuration requests', () => {
+    const libraryConfig = {
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      basicReportingOnly: true,
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {})
+    assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('disables only TIA for WebdriverIO library configuration requests', () => {
+    const libraryConfig = {
+      isCodeCoverageEnabled: true,
+      isCoverageReportUploadEnabled: true,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isImpactedTestsEnabled: true,
+      isItrEnabled: true,
+      isKnownTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'mocha',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      disableTestImpactAnalysis: true,
+      frameworkVersion: '9.0.0',
+      onDone,
+      testFramework: 'webdriverio',
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {
+      ...libraryConfig,
+      isCodeCoverageEnabled: false,
+      isItrEnabled: false,
+      isSuitesSkippingEnabled: false,
+    })
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, plugin.libraryConfig)
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], {
+      test: {
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: undefined,
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+        [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+        [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+        [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+      },
+    })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('tags telemetry with the effective test framework', () => {
+    const exportTelemetry = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter.exportTelemetry = exportTelemetry
+
+    plugin.telemetry.ciVisEvent('event_created', 'session')
+    plugin.testFramework = 'webdriverio'
+    plugin.telemetry.ciVisEvent('event_finished', 'session')
+
+    assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
+    assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
+  it('consumes worker telemetry for every test framework', () => {
+    const plugin = createPlugin('vitest_worker', true)
+
+    dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
+      {
+        type: 'ciVisEvent',
+        name: 'code_coverage_started',
+        testLevel: 'suite',
+        testFramework: 'vitest',
+        isUnsupportedCIProvider: false,
+        tags: { library: 'v8' },
+      },
+      {
+        type: 'count',
+        name: 'itr_unskippable',
+        tags: { testLevel: 'suite' },
+        value: 2,
+      },
+      {
+        type: 'distribution',
+        name: 'code_coverage.files',
+        tags: {},
+        measure: 3,
+      },
+    ]))
+    plugin.configure(false)
+
+    sinon.assert.calledWith(incrementCountMetric, 'code_coverage_started', {
+      testLevel: 'suite',
+      testFramework: 'vitest',
+      isUnsupportedCIProvider: false,
+      library: 'v8',
+    })
+    sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
+    sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('uploads regular coverage reports from canonical paths', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const coverageDir = path.join(rootDir, 'coverage')
+    const nestedReportPath = path.join(coverageDir, 'lcov.info')
+    const rootReportPath = path.join(rootDir, 'lcov.info')
+
+    fs.mkdirSync(coverageDir)
+    fs.writeFileSync(nestedReportPath, 'nested coverage')
+    fs.writeFileSync(rootReportPath, 'root coverage')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const nestedReportStats = fs.lstatSync(nestedReportPath, { bigint: true })
+      const rootReportStats = fs.lstatSync(rootReportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: path.relative(process.cwd(), rootDir) })
+
+      sinon.assert.calledTwice(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(nestedReportPath),
+        fileDevice: nestedReportStats.dev,
+        fileInode: nestedReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+      assert.deepStrictEqual(uploadCoverageReport.secondCall.args[0], {
+        filePath: fs.realpathSync(rootReportPath),
+        fileDevice: rootReportStats.dev,
+        fileInode: rootReportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uploads coverage reports through a symlinked root ancestor from canonical paths', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const workspaceDir = path.join(fixtureDir, 'workspace')
+    const rootDir = path.join(workspaceDir, 'root')
+    const linkedWorkspaceDir = path.join(fixtureDir, 'linked-workspace')
+    const linkedRootDir = path.join(linkedWorkspaceDir, 'root')
+    const reportPath = path.join(rootDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir, { recursive: true })
+    fs.writeFileSync(reportPath, 'regular coverage')
+    fs.symlinkSync(workspaceDir, linkedWorkspaceDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+      const reportStats = fs.lstatSync(reportPath, { bigint: true })
+
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.calledOnce(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: fs.realpathSync(reportPath),
+        fileDevice: reportStats.dev,
+        fileInode: reportStats.ino,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores invalid coverage report roots', () => {
+    const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.rmSync(invalidRoot, { recursive: true })
+
+    const plugin = createPlugin('jest_worker')
+    const uploadCoverageReport = sinon.stub().yields()
+    plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+    try {
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      fs.writeFileSync(invalidRoot, 'not a directory')
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      plugin.uploadCoverageReports({ rootDir: Symbol('invalid-root') })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(invalidRoot, { force: true })
+    }
+  })
+
+  it('ignores roots that change while their canonical path is resolved', () => {
+    const lstatSync = sinon.stub()
+    lstatSync.onCall(0).returns({
+      dev: 1,
+      ino: 1,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+    })
+    lstatSync.onCall(1).returns({ dev: 1, ino: 2 })
+    lstatSync.onCall(2).returns({ isSymbolicLink: () => false })
+    lstatSync.onCall(3).returns({
+      dev: 1,
+      ino: 3,
+      isFile: () => true,
+      isSymbolicLink: () => false,
+    })
+    const { discoverCoverageReports } = proxyquire(
+      '../../src/ci-visibility/coverage-report-discovery',
+      {
+        'node:fs': {
+          lstatSync,
+          realpathSync: sinon.stub().returns('/resolved-root'),
+        },
+      }
+    )
+
+    assert.deepStrictEqual(discoverCoverageReports('/root'), [])
+  })
+
+  it('ignores coverage report paths with non-directory components', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.writeFileSync(path.join(rootDir, 'coverage'), 'not a directory')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes coverage reports reached through linked directories', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideDir = path.join(fixtureDir, 'outside')
+    const linkedRootDir = path.join(fixtureDir, 'linked-root')
+    const outsideReportPath = path.join(outsideDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir)
+    fs.mkdirSync(outsideDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideDir, path.join(rootDir, 'coverage'), directoryLinkType)
+    fs.symlinkSync(outsideDir, linkedRootDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  for (const directoryName of ['root', 'nested']) {
+    it(`excludes coverage reports when the ${directoryName} directory becomes a symlink during discovery`, () => {
+      const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+      const rootDir = path.join(fixtureDir, 'root')
+      const coverageDir = path.join(rootDir, 'coverage')
+      const outsideDir = path.join(fixtureDir, 'root-outside')
+      const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+      fs.mkdirSync(coverageDir, { recursive: true })
+      fs.mkdirSync(path.join(outsideDir, 'coverage'), { recursive: true })
+      fs.writeFileSync(path.join(coverageDir, 'lcov.info'), 'regular coverage')
+      fs.writeFileSync(path.join(outsideDir, 'lcov.info'), 'outside coverage')
+      fs.writeFileSync(path.join(outsideDir, 'coverage', 'lcov.info'), 'outside coverage')
+
+      const canonicalRootDir = fs.realpathSync(rootDir)
+      const swapPath = directoryName === 'root' ? canonicalRootDir : path.join(canonicalRootDir, 'coverage')
+      const swapOnCall = directoryName === 'root' && canonicalRootDir === path.resolve(rootDir) ? 2 : 1
+      const displacedPath = `${swapPath}-displaced`
+      const originalLstatSync = fs.lstatSync
+      let matchingCalls = 0
+      let swapped = false
+      const lstatSync = sinon.stub(fs, 'lstatSync').callsFake(
+        /**
+         * @param {import('node:fs').PathLike} checkedPath
+         * @param {import('node:fs').StatSyncOptions} [options]
+         */
+        (checkedPath, options) => {
+          const stats = originalLstatSync(checkedPath, options)
+          if (checkedPath === swapPath && ++matchingCalls === swapOnCall) {
+            fs.renameSync(swapPath, displacedPath)
+            fs.symlinkSync(outsideDir, swapPath, directoryLinkType)
+            swapped = true
+          }
+          return stats
+        }
+      )
+
+      try {
+        const plugin = createPlugin('jest_worker')
+        const uploadCoverageReport = sinon.stub().yields()
+        plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+        plugin.uploadCoverageReports({ rootDir })
+
+        assert.strictEqual(swapped, true)
+        sinon.assert.notCalled(uploadCoverageReport)
+      } finally {
+        lstatSync.restore()
+        fs.rmSync(fixtureDir, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('excludes symlinked coverage report files', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes hard-linked coverage report files', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.linkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {
+      waitForInFlightBreakpointHits: sinon.stub().resolves(),
+    }
+
+    plugin.prepareDiBreakpointHitWait()
+
+    sinon.assert.notCalled(waitForDiOperation)
+
+    const preparedPromise = plugin.diBreakpointHitPromise
+    await plugin.waitForDiBreakpointHits()
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+
+    plugin.cancelDiBreakpointHitWait()
+    await preparedPromise
+
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('cancels a prepared DI breakpoint-hit wait after waiting for it', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {}
+
+    const preparedPromise = plugin.prepareDiBreakpointHitWait()
+
+    await plugin.waitForPreparedDiBreakpointHit()
+    await preparedPromise
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('adds a new DI probe after removing one from the same location', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onFirstCall().returns(['probe-1', setProbePromise])
+      .onSecondCall().returns(['probe-2', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const file = `${plugin.repositoryRoot}/test.js`
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+
+    const firstProbe = plugin.addDiProbe(error)
+    await plugin.removeDiProbe({ file, line })
+    const secondProbe = plugin.addDiProbe(error)
+
+    assert.strictEqual(firstProbe.probeId, 'probe-1')
+    assert.strictEqual(secondProbe.probeId, 'probe-2')
+    sinon.assert.calledTwice(addLineProbe)
+    sinon.assert.calledOnceWithExactly(removeProbe, 'probe-1')
+  })
+
+  it('removes all DI probes with Windows-style file paths', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onCall(0).returns(['probe-1', setProbePromise])
+      .onCall(1).returns(['probe-2', setProbePromise])
+      .onCall(2).returns(['probe-3', setProbePromise])
+      .onCall(3).returns(['probe-4', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const firstFile = 'C:\\repo\\first.spec.js'
+    const secondFile = 'C:\\repo\\second.spec.js'
+    const firstError = { stack: `Error: first failure\n    at first (${firstFile}:23:5)` }
+    const secondError = { stack: `Error: second failure\n    at second (${secondFile}:42:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+    plugin._setRepositoryRoot('C:\\repo', [])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+    await plugin.removeAllDiProbes()
+
+    assert.deepStrictEqual(removeProbe.args, [['probe-1'], ['probe-2']])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+
+    sinon.assert.callCount(addLineProbe, 4)
+  })
+
+  it('exports DI breakpoint hits with the debugger log envelope', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportDiLogs = sinon.spy()
+    const snapshot = {
+      id: 'snapshot-id',
+      probe: {
+        location: {
+          file: 'test.js',
+          lines: ['23'],
+        },
+      },
+      stack: [{ function: 'test function' }],
+    }
+
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    plugin.activeTestSpan = {
+      context: () => ({
+        _isFinished: false,
+        toTraceId: () => 'trace-id',
+        toSpanId: () => 'span-id',
+      }),
+      setTag: sinon.spy(),
+    }
+    plugin.testErrorStackIndex = 0
+
+    plugin.onDiBreakpointHit({ snapshot })
+
+    sinon.assert.calledOnce(exportDiLogs)
+    assert.strictEqual(exportDiLogs.firstCall.args[0], plugin.testEnvironmentMetadata)
+    const logMessage = exportDiLogs.firstCall.args[1]
+    assert.strictEqual(logMessage.message, '')
+    assert.deepStrictEqual(logMessage.debugger, { snapshot })
+    assert.deepStrictEqual(logMessage.dd, {
+      trace_id: 'trace-id',
+      span_id: 'span-id',
+    })
+    assert.strictEqual(logMessage.logger.name, 'test.js')
+    assert.strictEqual(logMessage.logger.method, 'test function')
+    assert.strictEqual(typeof logMessage.logger.version, 'string')
+    assert.match(logMessage.logger.thread_id, /^pid:\d+/)
+    assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
+  })
+
+  function createPlugin (exporter, enabled = false) {
+    class TestPlugin extends CiPlugin {
+      static id = 'vitest'
+    }
+
+    const plugin = new TestPlugin({ _exporter: {} })
+    plugin.configure({
+      enabled,
+      experimental: {
+        exporter,
+      },
+    })
+    return plugin
+  }
+})
+
+function getTestEnvironmentMetadataPayload () {
+  return {
+    [GIT_REPOSITORY_URL]: 'git@github.com:DataDog/dd-trace-js.git',
+    [GIT_COMMIT_SHA]: 'abc123',
+    [OS_VERSION]: 'test-os-version',
+    [OS_PLATFORM]: 'test-os-platform',
+    [OS_ARCHITECTURE]: 'test-os-architecture',
+    [RUNTIME_NAME]: 'node',
+    [RUNTIME_VERSION]: process.version,
+    [GIT_BRANCH]: 'test-branch',
+    [CI_PROVIDER_NAME]: 'github',
+    [CI_WORKSPACE_PATH]: undefined,
+    [GIT_COMMIT_MESSAGE]: 'test commit',
+    [GIT_TAG]: undefined,
+    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: undefined,
+    [GIT_COMMIT_HEAD_SHA]: undefined,
+    [GIT_COMMIT_HEAD_MESSAGE]: undefined,
+  }
+}

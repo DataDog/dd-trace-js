@@ -60,4 +60,4 @@ function runBusySpans () {
   })
 }
 
-tracer.profilerStarted().then(runBusySpans)
+setImmediate(runBusySpans)

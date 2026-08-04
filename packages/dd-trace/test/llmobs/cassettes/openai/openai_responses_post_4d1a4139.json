@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/6.0.208 ai-sdk/provider-utils/4.0.30 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "717"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Tokyo?\"}]},{\"type\":\"function_call\",\"call_id\":\"call_b4NUuswsekH4heYzWQjvPTKA\",\"name\":\"weather\",\"arguments\":\"{\\\"location\\\":\\\"Tokyo\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_b4NUuswsekH4heYzWQjvPTKA\",\"output\":\"{\\\"location\\\":\\\"Tokyo\\\",\\\"temperature\\\":72}\"}],\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"weather\",\"description\":\"Get the weather in a given location\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"location\"]}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Tue, 23 Jun 2026 18:21:10 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a10582bfdf45d961-BOS",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "1464",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999692",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_9f05ee65eae943dc8c69e14a44a7e0c3",
+      "set-cookie": "__cf_bm=yov0wcssNgYyjFcQCF_UA0qgl78NZqEktuxxSzQgWVE-1782238868.4557707-1.0.1.1-vDA1u01aGu2QDFeJIz2_XKJJa5t2oQ9.WUI1.PUFPrLEbsG6VKBog1Ly76VfE8STlSVM4MoImY0fE942YnnZhKjkNO9uHrOqsYcniBtSSKsaRyGcJ6_nTTmVCJVyGDdC; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Tue, 23 Jun 2026 18:51:10 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"resp_0724767efdc07753016a3ace950e3881a08cfab226e12ff789\",\n  \"object\": \"response\",\n  \"created_at\": 1782238869,\n  \"status\": \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\": \"developer\"\n  },\n  \"completed_at\": 1782238870,\n  \"error\": null,\n  \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"moderation\": null,\n  \"output\": [\n    {\n      \"id\": \"msg_0724767efdc07753016a3ace9636f081a0a3387663220a69fd\",\n      \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\": [],\n          \"text\": \"The current temperature in Tokyo is 72\\u00b0F. If you need more specific weather details, let me know!\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": \"in_memory\",\n  \"reasoning\": {\n    \"context\": null,\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Get the weather in a given location\",\n      \"name\": \"weather\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"The location to get the weather for\"\n          }\n        },\n        \"required\": [\n          \"location\"\n        ],\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 90,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 24,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 114\n  },\n  \"user\": null,\n  \"metadata\": {}\n}"
+  }
+}

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
@@ -11,10 +12,10 @@ const RC_PRODUCT = 'FFE_FLAGS'
 
 // Helper function to check exposure event structure
 function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttributes = {}) {
-  assert.ok(Object.hasOwn(event, 'timestamp'))
-  assert.ok(Object.hasOwn(event, 'flag'))
-  assert.ok(Object.hasOwn(event, 'variant'))
-  assert.ok(Object.hasOwn(event, 'subject'))
+  assert.ok(Object.hasOwn(event, 'timestamp'), `Available keys: ${inspect(Object.keys(event))}`)
+  assert.ok(Object.hasOwn(event, 'flag'), `Available keys: ${inspect(Object.keys(event))}`)
+  assert.ok(Object.hasOwn(event, 'variant'), `Available keys: ${inspect(Object.keys(event))}`)
+  assert.ok(Object.hasOwn(event, 'subject'), `Available keys: ${inspect(Object.keys(event))}`)
 
   assert.strictEqual(event.flag.key, expectedFlag)
   assert.strictEqual(event.subject.id, expectedUser)
@@ -59,7 +60,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+            DD_FEATURE_FLAGS_ENABLED: 'true',
+            // Preserve the existing RC exposure path until agentless emission is supported.
+            DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
           },
         })
       })
@@ -76,7 +79,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
-          assert.ok(Object.hasOwn(payload, 'exposures'))
+          assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
           assertObjectContains(payload, {
             context: {
               service: 'ffe-test-service',
@@ -158,7 +161,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+            DD_FEATURE_FLAGS_ENABLED: 'true',
+            DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
           },
         })
       })
@@ -173,7 +177,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         const exposureEvents = []
 
         agent.on('exposures', ({ payload }) => {
-          assert.ok(Object.hasOwn(payload, 'exposures'))
+          assert.ok(Object.hasOwn(payload, 'exposures'), `Available keys: ${inspect(Object.keys(payload))}`)
           assertObjectContains(payload, {
             context: {
               service: 'ffe-test-service',
@@ -241,7 +245,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+          DD_FEATURE_FLAGS_ENABLED: 'true',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
         },
       })
     })
@@ -302,7 +307,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'false',
+          DD_FEATURE_FLAGS_ENABLED: 'false',
         },
       })
     })

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -10,10 +11,11 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const injectCh = channel('dd-trace:span:inject')
 
@@ -24,14 +26,10 @@ describe('sdk', () => {
   let tracer
   let clock
 
-  before(() => {
-    tracer = require('../../../../dd-trace')
-    tracer.init({
+  before(async () => {
+    tracer = await agent.load(null, [], {
       service: 'service',
-      llmobs: {
-        mlApp: 'mlApp',
-        agentlessEnabled: false,
-      },
+      llmobs: { mlApp: 'mlApp', agentlessEnabled: false },
     })
     llmobs = tracer.llmobs
 
@@ -72,10 +70,10 @@ describe('sdk', () => {
     removeDestroyHandler()
   })
 
-  after(() => {
+  after(async () => {
     sinon.restore()
     llmobsModule.disable()
-    agent.wipe() // clear the require cache
+    await agent.close()
   })
 
   describe('enabled', () => {
@@ -84,12 +82,19 @@ describe('sdk', () => {
       [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
+        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: value } })
 
         assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
         enabledOrDisabledLLMObs.disable() // unsubscribe
       })
     }
+  })
+
+  describe('experiments', () => {
+    it('exposes dataset operations only through the experiments facade', () => {
+      assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+      assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
+    })
   })
 
   describe('enable', () => {
@@ -112,6 +117,29 @@ describe('sdk', () => {
       assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
       sinon.assert.called(llmobsModule.enable)
+
+      disabledLLMObs.disable() // unsubscribe
+    })
+
+    it('recreates experiments after enabling llmobs', () => {
+      const config = getConfigFresh({})
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+      const llmobsModule = {
+        enable: sinon.stub(),
+        disable () {},
+      }
+
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.strictEqual(disabledLLMObs.experiments.createDataset('d').name(), 'd')
+
+      disabledLLMObs.enable({
+        mlApp: 'mlApp',
+      })
+
+      assert.strictEqual(typeof disabledLLMObs.experiments.createDataset('d').addRecord, 'function')
 
       disabledLLMObs.disable() // unsubscribe
     })
@@ -150,7 +178,9 @@ describe('sdk', () => {
       }
 
       const config = getConfigFresh({
-        llmobs: {},
+        llmobs: {
+          agentlessEnabled: false,
+        },
       })
 
       const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
@@ -162,9 +192,34 @@ describe('sdk', () => {
       sinon.assert.called(llmobsModule.disable)
     })
 
+    it('recreates experiments after disabling llmobs', () => {
+      const llmobsModule = {
+        disable: sinon.stub(),
+      }
+
+      const config = getConfigFresh({
+        llmobs: {
+          agentlessEnabled: false,
+          mlApp: 'mlApp',
+        },
+      })
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.strictEqual(typeof enabledLLMObs.experiments.createDataset('d').addRecord, 'function')
+
+      enabledLLMObs.disable()
+
+      assert.strictEqual(enabledLLMObs.experiments.createDataset('d').name(), 'd')
+      sinon.assert.called(llmobsModule.disable)
+    })
+
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: false } })
+      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: false } })
       sinon.spy(disabledLLMObs._llmobsModule, 'disable')
 
       disabledLLMObs.disable()
@@ -178,10 +233,11 @@ describe('sdk', () => {
     describe('trace', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
-            assert.ok(LLMObsTagger.tagMap.get(span) == null)
+            const tag = LLMObsTagger.tagMap.get(span)
+            assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
             span.setTag('k', 'v')
             cb()
           })
@@ -189,7 +245,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -262,8 +318,7 @@ describe('sdk', () => {
       })
 
       describe('parentage', () => {
-        // TODO: need to implement custom trace IDs
-        it.skip('starts a span with a distinct trace id', () => {
+        it('starts a span with a distinct trace id', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
             const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
             assert.ok(traceId)
@@ -278,9 +333,11 @@ describe('sdk', () => {
                 LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
                 outerLLMSpan.context().toSpanId()
               )
-              // TODO: need to implement custom trace IDs
-              // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-              //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+
+              assert.equal(
+                LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.trace_id'],
+                LLMObsTagger.tagMap.get(outerLLMSpan)['_ml_obs.trace_id']
+              )
             })
           })
         })
@@ -307,17 +364,16 @@ describe('sdk', () => {
           })
         })
 
-        // TODO: need to implement custom trace IDs
-        it.skip('starts different traces for llmobs spans as child spans of an apm root span', () => {
+        it('starts different traces for llmobs spans as child spans of an apm root span', () => {
           let apmTraceId, traceId1, traceId2
           tracer.trace('apmRootSpan', apmRootSpan => {
             apmTraceId = apmRootSpan.context().toTraceId(true)
-            llmobs.trace('workflow', llmobsSpan1 => {
-              traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
+            llmobs.trace({ kind: 'workflow' }, llmobsSpan1 => {
+              traceId1 = LLMObsTagger.tagMap.get(llmobsSpan1)['_ml_obs.trace_id']
             })
 
-            llmobs.trace('workflow', llmobsSpan2 => {
-              traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
+            llmobs.trace({ kind: 'workflow' }, llmobsSpan2 => {
+              traceId2 = LLMObsTagger.tagMap.get(llmobsSpan2)['_ml_obs.trace_id']
             })
           })
 
@@ -357,7 +413,9 @@ describe('sdk', () => {
           span = _span
         })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
@@ -366,16 +424,71 @@ describe('sdk', () => {
           '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
+
+      describe('bridge tags for otel correlation', () => {
+        it('writes llmobs_trace_id and llmobs_parent_id to _trace.tags on first sdk activate', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceTags = span.context()._trace.tags
+            const llmobsTraceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+
+            assert.strictEqual(traceTags.llmobs_trace_id, llmobsTraceId)
+          })
+        })
+
+        it('does not overwrite bridge tags on nested sdk activates', () => {
+          llmobs.trace({ kind: 'workflow', name: 'outer' }, outer => {
+            const outerTraceId = outer.context()._trace.tags.llmobs_trace_id
+            const outerParentId = outer.context()._trace.tags.llmobs_parent_id
+
+            llmobs.trace({ kind: 'task', name: 'inner' }, inner => {
+              assert.strictEqual(inner.context()._trace.tags.llmobs_trace_id, outerTraceId)
+              assert.strictEqual(inner.context()._trace.tags.llmobs_parent_id, outerParentId)
+              // sanity: the inner sdk span is NOT the bridge parent
+              assert.notStrictEqual(outerParentId, inner.context().toSpanId())
+            })
+          })
+        })
+
+        it('does not overwrite bridge tags on sibling workflows under the same apm root', () => {
+          tracer.trace('apmRoot', () => {
+            let firstTraceId, firstParentId
+            llmobs.trace({ kind: 'workflow', name: 'first' }, span => {
+              firstTraceId = span.context()._trace.tags.llmobs_trace_id
+              firstParentId = span.context()._trace.tags.llmobs_parent_id
+            })
+            llmobs.trace({ kind: 'workflow', name: 'second' }, span => {
+              // sibling workflow keeps the first workflow's bridge tags
+              assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, firstTraceId)
+              assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, firstParentId)
+            })
+          })
+        })
+
+        it('writes bridge tags only when an llmobs span starts (not on plain apm spans)', () => {
+          tracer.trace('plainApm', span => {
+            assert.strictEqual(span.context()._trace.tags.llmobs_trace_id, undefined)
+            assert.strictEqual(span.context()._trace.tags.llmobs_parent_id, undefined)
+          })
+        })
+
+        it('writes the trace id as a 32-char hex string', () => {
+          llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+            const traceId = span.context()._trace.tags.llmobs_trace_id
+            assert.match(traceId, /^[0-9a-f]{32}$/)
+          })
+        })
+      })
     })
 
     describe('wrap', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
-            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
+            const tag = LLMObsTagger.tagMap.get(llmobs._active())
+            assert.ok(tag == null, `Expected no LLMObs tag for active span, got ${inspect(tag)}`)
           })
 
           fn(1)
@@ -383,7 +496,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -432,7 +545,9 @@ describe('sdk', () => {
 
           wrappedMyLLM('input')
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -450,7 +565,9 @@ describe('sdk', () => {
 
           wrappedMyEmbedding('input')
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'embedding',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -469,7 +586,9 @@ describe('sdk', () => {
 
           wrappedMyRetrieval('input')
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'retrieval',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -494,7 +613,9 @@ describe('sdk', () => {
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow(circular)
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -514,7 +635,9 @@ describe('sdk', () => {
 
           assert.throws(() => wrappedMyTask('foo', 'bar'))
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'task',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -533,7 +656,9 @@ describe('sdk', () => {
 
           return wrappedMyTask('foo', 'bar')
             .catch(() => {
-              assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+              assertObjectContains(LLMObsTagger.tagMap.get(span), {
+                '_ml_obs.sample_rate': '1',
+                '_ml_obs.sampling_decision': '1',
                 '_ml_obs.meta.span.kind': 'task',
                 '_ml_obs.meta.ml_app': 'mlApp',
                 '_ml_obs.llmobs_parent_id': 'undefined',
@@ -553,13 +678,15 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err == null)
+            assert.ok(err == null, `Expected ${err} == null`)
             assert.strictEqual(res, 'output')
           })
 
           clock.tick(1000)
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -585,7 +712,9 @@ describe('sdk', () => {
 
           clock.tick(1000)
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -611,7 +740,9 @@ describe('sdk', () => {
 
           clock.tick(1000)
 
-          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -635,7 +766,7 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                assert.ok(err == null)
+                assert.ok(err == null, `Expected ${err} == null`)
                 assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task
@@ -665,17 +796,17 @@ describe('sdk', () => {
       })
 
       describe('parentage', () => {
-        // TODO: need to implement custom trace IDs
-        it.skip('starts a span with a distinct trace id', () => {
-          const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
-            const span = llmobs._active()
-
-            const traceId = span.context()._tags['_ml_obs.trace_id']
-            assert.ok(traceId)
-            assert.notStrictEqual(traceId, span.context().toTraceId(true))
+        it('starts a span with a distinct trace id', () => {
+          let span
+          const fn = llmobs.wrap({ kind: 'workflow', name: 'test' }, () => {
+            span = llmobs._active()
           })
 
           fn()
+
+          const llmobsTraceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+          assert.ok(llmobsTraceId)
+          assert.notStrictEqual(llmobsTraceId, span.context().toTraceId(true))
         })
 
         it('sets span parentage correctly', () => {
@@ -692,9 +823,11 @@ describe('sdk', () => {
               LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
               outerLLMSpan.context().toSpanId()
             )
-            // TODO: need to implement custom trace IDs
-            // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-            //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+
+            assert.equal(
+              LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.trace_id'],
+              LLMObsTagger.tagMap.get(outerLLMSpan)['_ml_obs.trace_id']
+            )
           }
 
           const outerWrapped = llmobs.wrap({ kind: 'workflow' }, outer)
@@ -723,9 +856,11 @@ describe('sdk', () => {
               LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'],
               outerLLMObsSpan.context().toSpanId()
             )
-            // TODO: need to implement custom trace IDs
-            // expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
-            //   .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
+
+            assert.equal(
+              LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.trace_id'],
+              LLMObsTagger.tagMap.get(outerLLMObsSpan)['_ml_obs.trace_id']
+            )
           }
 
           const outerWrapped = llmobs.wrap({ kind: 'workflow' }, outerLLMObs)
@@ -735,8 +870,7 @@ describe('sdk', () => {
           outerWrapped()
         })
 
-        // TODO: need to implement custom trace IDs
-        it.skip('starts different traces for llmobs spans as child spans of an apm root span', () => {
+        it('starts different traces for llmobs spans as child spans of an apm root span', () => {
           let traceId1, traceId2, apmTraceId
           function apm () {
             apmTraceId = tracer.scope().active().context().toTraceId(true)
@@ -813,7 +947,9 @@ describe('sdk', () => {
 
         fn()
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
@@ -827,14 +963,14 @@ describe('sdk', () => {
 
   describe('annotate', () => {
     it('returns if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       sinon.spy(llmobs, '_active')
       llmobs.annotate()
 
       sinon.assert.notCalled(llmobs._active)
       llmobs._active.restore()
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws if no arguments are provided', () => {
@@ -846,7 +982,9 @@ describe('sdk', () => {
         assert.throws(() => llmobs.annotate(span))
 
         // span should still exist in the registry, just with no annotations
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -858,8 +996,8 @@ describe('sdk', () => {
       tracer.trace('test', span => {
         assert.throws(() => llmobs.annotate(span, {}))
 
-        // no span in registry, should not throw
-        assert.ok(LLMObsTagger.tagMap.get(span) == null)
+        const tag = LLMObsTagger.tagMap.get(span)
+        assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
       })
     })
 
@@ -924,12 +1062,49 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.messages': inputData,
           '_ml_obs.meta.output.messages': outputData,
+        })
+      })
+    })
+
+    it('annotates llm io with audio parts for an llm span', () => {
+      const inputData = [
+        { role: 'user', content: 'transcribe this', audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }] },
+      ]
+      const outputData = [
+        { role: 'assistant', content: 'sure', audioParts: [{ mimeType: 'audio/mpeg', attachmentKey: 'key-123' }] },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.messages': [
+            {
+              role: 'user',
+              content: 'transcribe this',
+              audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+            },
+          ],
+          '_ml_obs.meta.output.messages': [
+            {
+              role: 'assistant',
+              content: 'sure',
+              audio_parts: [{ mime_type: 'audio/mpeg', attachment_key: 'key-123' }],
+            },
+          ],
         })
       })
     })
@@ -941,7 +1116,9 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'embedding', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'embedding',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -958,7 +1135,9 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'retrieval', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'retrieval',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -974,7 +1153,9 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metadata })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -989,7 +1170,9 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metrics })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1004,13 +1187,253 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ tags })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.tags': tags,
         })
       })
+    })
+
+    it('annotates costTags if present', () => {
+      const tags = { team: 'ml', feature: 'chatbot', debug_id: 'abc' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags, costTags: ['team', 'feature'] })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': tags,
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+        })
+      })
+    })
+
+    it('dedupes costTags across annotations', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({
+          tags: { team: 'ml', feature: 'chatbot' },
+          costTags: ['team', 'feature', 'team'],
+        })
+        llmobs.annotate({
+          tags: { project: 'alpha' },
+          costTags: ['feature', 'project'],
+        })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml', feature: 'chatbot', project: 'alpha' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature', 'project'],
+        })
+      })
+    })
+
+    it('skips invalid costTags entries', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: ['team', 'missing', 123] })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+        })
+      })
+    })
+
+    it('rejects non-array costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: 'team' })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('does not set costTags for an empty list', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: [] })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('ignores null costTags', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags: { team: 'ml' }, costTags: null })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': { team: 'ml' },
+        })
+      })
+    })
+
+    it('annotates toolDefinitions if present', () => {
+      const toolDefinitions = [
+        { name: 'get_weather', description: 'Gets the weather', schema: { type: 'object' }, version: '1.0' },
+        { name: 'get_time' },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': toolDefinitions,
+        })
+      })
+    })
+
+    it('strips invalid optional fields from toolDefinitions items', () => {
+      const toolDefinitions = [
+        { name: 'get_weather', description: 123, schema: 'not-an-object', version: 456 },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': [{ name: 'get_weather' }],
+        })
+      })
+    })
+
+    it('skips toolDefinitions items missing a name', () => {
+      const toolDefinitions = [
+        { description: 'no name here' },
+        { name: 'valid_tool' },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': [{ name: 'valid_tool' }],
+        })
+      })
+    })
+
+    it('rejects non array toolDefinitions', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: 'not an array' }))
+      })
+    })
+
+    it('rejects empty toolDefinitions array', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: [] }))
+      })
+    })
+
+    it('rejects toolDefinitions where all items are invalid', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: [{ description: 'no name' }, 'not an object'] }))
+      })
+    })
+  })
+
+  describe('annotationContext', () => {
+    it('applies costTags to spans created in the context', () => {
+      llmobs.annotationContext({ tags: { team: 'ml', feature: 'chatbot' }, costTags: ['team', 'feature'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml', feature: 'chatbot' },
+            '_ml_obs.meta.metadata._dd.cost_tags': ['team', 'feature'],
+          })
+        })
+      })
+    })
+
+    it('does not retain costTags for tags added after the span starts', () => {
+      llmobs.annotationContext({ costTags: ['team'] }, () => {
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          llmobs.annotate({ tags: { team: 'ml' } })
+
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.tags': { team: 'ml' },
+          })
+        })
+      })
+    })
+  })
+
+  it('annotates toolDefinitions if present', () => {
+    const toolDefinitions = [
+      { name: 'get_weather', description: 'Gets the weather', schema: { type: 'object' }, version: '1.0' },
+      { name: 'get_time' },
+    ]
+
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      llmobs.annotate({ toolDefinitions })
+      assert.deepStrictEqual(LLMObsTagger.tagMap.get(span)['_ml_obs.meta.tool_definitions'], toolDefinitions)
+    })
+  })
+
+  it('rejects non array toolDefinitions', () => {
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      assert.throws(() => llmobs.annotate({ toolDefinitions: 'not an array' }))
+    })
+  })
+
+  it('rejects empty toolDefinitions array', () => {
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      assert.throws(() => llmobs.annotate({ toolDefinitions: [] }))
     })
   })
 
@@ -1029,7 +1452,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
         const spanCtx = llmobs.exportSpan(span)
 
-        const traceId = span.context().toTraceId(true)
+        const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
         const spanId = span.context().toSpanId()
 
         assert.deepStrictEqual(spanCtx, { traceId, spanId })
@@ -1040,7 +1463,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
         const spanCtx = llmobs.exportSpan()
 
-        const traceId = span.context().toTraceId(true)
+        const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
         const spanId = span.context().toSpanId()
 
         assert.deepStrictEqual(spanCtx, { traceId, spanId })
@@ -1052,21 +1475,11 @@ describe('sdk', () => {
         tracer.trace('apmSpan', () => {
           const spanCtx = llmobs.exportSpan()
 
-          const traceId = llmobsSpan.context().toTraceId(true)
+          const traceId = LLMObsTagger.tagMap.get(llmobsSpan)['_ml_obs.trace_id']
           const spanId = llmobsSpan.context().toSpanId()
 
           assert.deepStrictEqual(spanCtx, { traceId, spanId })
         })
-      })
-    })
-
-    it('returns undefined if the provided span is not a span', () => {
-      llmobs.trace({ kind: 'workflow', name: 'test' }, fakeSpan => {
-        fakeSpan.context().toTraceId = undefined // something that would throw
-        LLMObsTagger.tagMap.set(fakeSpan, {})
-        const spanCtx = llmobs.exportSpan(fakeSpan)
-
-        assert.strictEqual(spanCtx, undefined)
       })
     })
   })
@@ -1076,8 +1489,8 @@ describe('sdk', () => {
     let originalApiKey
 
     before(() => {
-      originalApiKey = tracer._tracer._config.apiKey
-      tracer._tracer._config.apiKey = 'test'
+      originalApiKey = tracer._tracer._config.DD_API_KEY
+      tracer._tracer._config.DD_API_KEY = 'test'
     })
 
     beforeEach(() => {
@@ -1088,16 +1501,16 @@ describe('sdk', () => {
     })
 
     after(() => {
-      tracer._tracer._config.apiKey = originalApiKey
+      tracer._tracer._config.DD_API_KEY = originalApiKey
     })
 
     it('does not submit an evaluation if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.submitEvaluation()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws for an invalid span context', () => {
@@ -1220,18 +1633,29 @@ describe('sdk', () => {
       assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
-    it('defaults to the current time if no timestamp is provided', () => {
-      sinon.stub(Date, 'now').returns(1234)
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        label: 'test',
-        metricType: 'score',
-        value: 0.6,
+    describe('with no timestamp provided', () => {
+      let prevTime
+
+      before(() => {
+        prevTime = clock.now
+        clock.setSystemTime(1234)
       })
 
-      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
-      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
-      Date.now.restore()
+      after(() => {
+        clock.setSystemTime(prevTime)
+      })
+
+      it('defaults to the current time', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+        })
+
+        assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+        assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
+      })
     })
 
     it('submits a boolean evaluation metric', () => {
@@ -1364,16 +1788,24 @@ describe('sdk', () => {
     })
 
     describe('with DD_TRACE_OTEL_ENABLED set', () => {
-      before(() => {
-        process.env.DD_TRACE_OTEL_ENABLED = 'true'
-      })
+      let otelLLMObs
 
-      after(() => {
+      before(() => {
+        // DD_TRACE_OTEL_ENABLED is a launch-time env var captured when `Config` is built.
+        // Build a fresh config with the env set, then wire up a sibling LLMObs SDK that uses it.
+        // The outer `llmobs` is already enabled and its writers are already subscribed to the
+        // channels, so we only need this SDK to hold a config that reports `enabled` and has
+        // `DD_TRACE_OTEL_ENABLED` set - no extra enable()/disable() calls (which would trigger
+        // flush() on the spied writer and pollute unrelated tests).
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+        const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
+        config.llmobs.DD_LLMOBS_ENABLED = true
+        otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       })
 
       it('adds source:otel tag', () => {
-        llmobs.submitEvaluation(spanCtx, {
+        otelLLMObs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',
@@ -1389,12 +1821,12 @@ describe('sdk', () => {
 
   describe('flush', () => {
     it('does not flush if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.flush()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('flushes the evaluation writer and span writer', () => {
@@ -1412,19 +1844,26 @@ describe('sdk', () => {
   })
 
   describe('distributed', () => {
-    it('adds the current llmobs span id to the injection context', () => {
+    it('adds the current llmobs span id and sampling decision to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
-      let parentId, span
+      let parentId, span, traceId
       llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
         span = _span
         parentId = span.context().toSpanId()
+        traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
 
         // simulate injection from http integration or from tracer
         // something that triggers the text_map injection
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      const wireTraceId = BigInt(`0x${traceId}`).toString(10)
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        // eslint-disable-next-line @stylistic/max-len
+        `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${wireTraceId}`
+      )
     })
   })
 })

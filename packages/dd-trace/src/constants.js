@@ -21,7 +21,9 @@ module.exports = {
   SPAN_SAMPLING_MECHANISM: '_dd.span_sampling.mechanism',
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
+  SVC_SRC_KEY: '_dd.svc_src',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
+  DATADOG_MINI_AGENT_PATH: '/tmp/datadog/mini_agent_ready',
   DECISION_MAKER_KEY: '_dd.p.dm',
   SAMPLING_KNUTH_RATE: '_dd.p.ksr',
   PROCESS_ID: 'process_id',
@@ -29,6 +31,13 @@ module.exports = {
   ERROR_MESSAGE: 'error.message',
   ERROR_STACK: 'error.stack',
   IGNORE_OTEL_ERROR: Symbol('ignore.otel.error'),
+  // Marks an `Http2Server` that another instrumentation (currently @grpc/grpc-js)
+  // owns and traces through its own span lifecycle over the raw HTTP/2 stream
+  // API. The http2 server instrumentation reads this to leave such servers
+  // untraced, so a gRPC call keeps a single span with gRPC as the top frame
+  // instead of gaining an extra web.request span. A module-local Symbol keeps
+  // the mark private to dd-trace and unforgeable from user code.
+  FOREIGN_HTTP2_SERVER: Symbol('foreign.http2.server'),
   COMPONENT: 'component',
   CLIENT_PORT_KEY: 'network.destination.port',
   PEER_SERVICE_KEY: 'peer.service',
@@ -59,4 +68,11 @@ module.exports = {
     UPSTREAM: 'span-pointer-up',
     DOWNSTREAM: 'span-pointer-down',
   }),
+  // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+  GRPC_STATUS_NAMES: [
+    'OK', 'CANCELLED', 'UNKNOWN', 'INVALID_ARGUMENT', 'DEADLINE_EXCEEDED',
+    'NOT_FOUND', 'ALREADY_EXISTS', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED',
+    'FAILED_PRECONDITION', 'ABORTED', 'OUT_OF_RANGE', 'UNIMPLEMENTED',
+    'INTERNAL', 'UNAVAILABLE', 'DATA_LOSS', 'UNAUTHENTICATED',
+  ],
 }

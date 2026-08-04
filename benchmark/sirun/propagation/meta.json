@@ -1,0 +1,28 @@
+{
+  "name": "propagation",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 10,
+  "instructions": true,
+  "variants": {
+    "extract": {
+      "env": {
+        "VARIANT": "extract",
+        "OPERATIONS": "300000"
+      }
+    },
+    "inject": {
+      "env": {
+        "VARIANT": "inject",
+        "OPERATIONS": "300000"
+      }
+    },
+    "extract-baggage-percent": {
+      "env": {
+        "VARIANT": "extract-baggage-percent",
+        "OPERATIONS": "300000"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, before, after } = require('mocha')
+const { describe, it, before } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
@@ -16,11 +16,6 @@ describe('Telemetry logs', () => {
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
-  })
-
-  after(() => {
-    clock.restore()
-    telemetry.stop()
   })
 
   it('should be started and send logs when log received via the datadog:telemetry:log channel', () => {
@@ -40,10 +35,14 @@ describe('Telemetry logs', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: 3000, logCollection: true },
+      telemetry: {
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 3000,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
+      },
       version: '1.2.3-beta4',
-      appsec: { enabled: false },
-      profiling: { enabled: false },
+      appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',

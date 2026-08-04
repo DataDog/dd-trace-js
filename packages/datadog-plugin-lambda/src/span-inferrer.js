@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { eventTypes, parseEventSource } = require('./trigger')
 const { parseLambdaARN } = require('./arn')
 
@@ -11,7 +12,7 @@ let serviceMapping = null
 function initServiceMapping () {
   if (serviceMapping !== null) return
   serviceMapping = {}
-  const str = process.env.DD_SERVICE_MAPPING || ''
+  const str = getEnvironmentVariable('DD_SERVICE_MAPPING') || ''
   for (const entry of str.split(',')) {
     const parts = entry.split(':').map(function (p) { return p.trim() })
     if (parts.length === 2 && parts[0] && parts[1] && parts[0] !== parts[1]) {
@@ -31,8 +32,8 @@ function determineServiceName (specificKey, genericKey, extractedKey, fallback) 
   if (mapped) return mapped
 
   if (
-    process.env.DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED === 'false' ||
-    process.env.DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED === '0'
+    getEnvironmentVariable('DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED') === 'false' ||
+    getEnvironmentVariable('DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED') === '0'
   ) {
     return fallback
   }
@@ -52,14 +53,14 @@ function getResourcePath (event) {
   if (routeKey && routeKey.includes('{')) {
     try {
       return routeKey.split(' ')[1]
-    } catch (e) {
+    } catch {
       log.debug('Error parsing routeKey')
     }
   }
   return event.rawPath || event.requestContext?.resourcePath || routeKey
 }
 
-function getEventSubType (event) {
+function getEventSubtype (event) {
   if (event.version === '2.0') return 'v2'
   if (event.requestContext?.messageDirection) return 'websocket'
   return 'v1'
@@ -75,7 +76,7 @@ function getEventSubType (event) {
  */
 function createInferredSpan (event, context, parentSpanContext, tracer, decodeAuthorizerContext) {
   if (decodeAuthorizerContext === undefined) decodeAuthorizerContext = true
-  const service = process.env[DD_SERVICE_ENV_VAR]
+  const service = getEnvironmentVariable(DD_SERVICE_ENV_VAR)
   const eventSource = parseEventSource(event)
 
   if (eventSource === eventTypes.lambdaUrl) {
@@ -102,7 +103,6 @@ function createInferredSpan (event, context, parentSpanContext, tracer, decodeAu
   if (eventSource === eventTypes.eventBridge) {
     return createEventBridgeSpan(event, context, parentSpanContext, tracer, service)
   }
-  return undefined
 }
 
 function createApiGatewaySpan (event, context, parentSpanContext, tracer, service, decodeAuthorizerContext) {
@@ -148,22 +148,22 @@ function createApiGatewaySpan (event, context, parentSpanContext, tracer, servic
   }
 
   let childOf = parentSpanContext
-  const eventSourceSubType = getEventSubType(event)
+  const eventSourceSubtype = getEventSubtype(event)
 
   // Authorizer span decoding
   if (decodeAuthorizerContext) {
     try {
-      const parsedHeaders = getInjectedAuthorizerHeaders(event, eventSourceSubType)
+      const parsedHeaders = getInjectedAuthorizerHeaders(event, eventSourceSubtype)
       if (parsedHeaders) {
         const startTime = parsedHeaders['x-datadog-parent-span-finish-time'] / 1e6
-        if (eventSourceSubType === 'v2') {
+        if (eventSourceSubtype === 'v2') {
           // V2: no authorizer span, just adjust start time
           tags._startTime = startTime
         } else {
           const authSpan = tracer.startSpan('aws.apigateway.authorizer', {
             startTime,
             childOf: parentSpanContext,
-            tags: Object.assign({}, tags),
+            tags: { ...tags },
           })
           const endTime = event.requestContext.requestTimeEpoch + event.requestContext.authorizer.integrationLatency
           authSpan.finish(endTime)
@@ -171,7 +171,7 @@ function createApiGatewaySpan (event, context, parentSpanContext, tracer, servic
           tags._startTime = endTime
         }
       }
-    } catch (error) {
+    } catch {
       log.debug('Error decoding authorizer span')
     }
   }
@@ -179,7 +179,7 @@ function createApiGatewaySpan (event, context, parentSpanContext, tracer, servic
   let startTime = tags._startTime
   delete tags._startTime
   if (!startTime) {
-    if (eventSourceSubType === 'v1' || eventSourceSubType === 'websocket') {
+    if (eventSourceSubtype === 'v1' || eventSourceSubtype === 'websocket') {
       startTime = event.requestContext.requestTimeEpoch
     } else {
       startTime = event.requestContext.timeEpoch
@@ -189,12 +189,12 @@ function createApiGatewaySpan (event, context, parentSpanContext, tracer, servic
   if (context?.invokedFunctionArn && apiId) {
     const { region } = parseLambdaARN(context.invokedFunctionArn)
     if (region) {
-      const apiType = eventSourceSubType === 'v2' ? 'apis' : 'restapis'
+      const apiType = eventSourceSubtype === 'v2' ? 'apis' : 'restapis'
       tags.dd_resource_key = `arn:aws:apigateway:${region}::/${apiType}/${apiId}`
     }
   }
 
-  const spanName = eventSourceSubType === 'v2' ? 'aws.httpapi' : 'aws.apigateway'
+  const spanName = eventSourceSubtype === 'v2' ? 'aws.httpapi' : 'aws.apigateway'
   const span = tracer.startSpan(spanName, { startTime, childOf, tags })
   return { span, isAsync: isApiGatewayAsync(event) === 'async' }
 }
@@ -364,7 +364,7 @@ function createSqsSpan (event, context, parentSpanContext, tracer, service) {
       upstreamSpan = result.span
       upstreamSpan.finish(Number(SentTimestamp))
     }
-  } catch (e) {
+  } catch {
     // Raw SQS message
   }
 
@@ -480,14 +480,14 @@ function createEventBridgeSpan (event, context, parentSpanContext, tracer, servi
 /**
  * Extracts injected authorizer headers from API Gateway events.
  * @param {object} event
- * @param {string} subType - 'v1', 'v2', or 'websocket'
+ * @param {string} subtype - 'v1', 'v2', or 'websocket'
  * @returns {object|null}
  */
-function getInjectedAuthorizerHeaders (event, subType) {
+function getInjectedAuthorizerHeaders (event, subtype) {
   let authorizerHeaders
-  if (subType === 'v1' || subType === 'websocket') {
+  if (subtype === 'v1' || subtype === 'websocket') {
     authorizerHeaders = event.requestContext?.authorizer
-  } else if (subType === 'v2') {
+  } else if (subtype === 'v2') {
     authorizerHeaders = event.requestContext?.authorizer?.lambda
   }
   if (!authorizerHeaders) return null
@@ -497,7 +497,7 @@ function getInjectedAuthorizerHeaders (event, subType) {
   if (ddContext) {
     try {
       return typeof ddContext === 'string' ? JSON.parse(ddContext) : ddContext
-    } catch (e) {
+    } catch {
       return null
     }
   }

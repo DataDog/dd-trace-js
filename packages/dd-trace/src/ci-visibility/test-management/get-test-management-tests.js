@@ -1,8 +1,8 @@
 'use strict'
 
+const getConfig = require('../../config')
 const request = require('../requests/request')
 const id = require('../../id')
-const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
 
 const {
@@ -14,6 +14,9 @@ const {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 } = require('../telemetry')
+
+const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateTestManagementTestsResponse } = require('../test-optimization-http-cache-schema')
 
 // Calculate the number of tests from the test management tests response, which has a shape like:
 // { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
@@ -37,6 +40,19 @@ function getNumFromTestManagementTests (testManagementTests) {
   return totalNumTests
 }
 
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseTestManagementTestsResponse (rawJson, options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateTestManagementTestsResponse(parsedResponse, options)
+  }
+  const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
+  return testManagementTests
+}
+
 function getTestManagementTests ({
   url,
   isEvpProxy,
@@ -48,6 +64,58 @@ function getTestManagementTests ({
   commitHeadSha,
   commitHeadMessage,
   branch,
+}, done) {
+  const effectiveSha = commitHeadSha || sha
+  const cacheKey = buildCacheKey('test-mgmt', [
+    effectiveSha, repositoryUrl, branch,
+  ])
+
+  withCache(cacheKey, (activeCacheKey, cb) => {
+    fetchFromApi({
+      url,
+      isEvpProxy,
+      evpProxyPrefix,
+      isGzipCompatible,
+      repositoryUrl,
+      commitMessage,
+      sha,
+      commitHeadSha,
+      commitHeadMessage,
+      branch,
+      cacheKey: activeCacheKey,
+    }, cb)
+  }, done)
+}
+
+/**
+ * Fetches test management tests from the API and writes the result to cache on success.
+ *
+ * @param {object} params
+ * @param {string} params.url
+ * @param {boolean} params.isEvpProxy
+ * @param {string} params.evpProxyPrefix
+ * @param {boolean} params.isGzipCompatible
+ * @param {string} params.repositoryUrl
+ * @param {string} [params.commitMessage]
+ * @param {string} params.sha
+ * @param {string} [params.commitHeadSha]
+ * @param {string} [params.commitHeadMessage]
+ * @param {string} [params.branch]
+ * @param {string | null} params.cacheKey
+ * @param {Function} done
+ */
+function fetchFromApi ({
+  url,
+  isEvpProxy,
+  evpProxyPrefix,
+  isGzipCompatible,
+  repositoryUrl,
+  commitMessage,
+  sha,
+  commitHeadSha,
+  commitHeadMessage,
+  branch,
+  cacheKey,
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -67,12 +135,12 @@ function getTestManagementTests ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
 
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const data = JSON.stringify({
@@ -101,7 +169,7 @@ function getTestManagementTests ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+        const testManagementTests = parseTestManagementTestsResponse(res)
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
@@ -109,6 +177,8 @@ function getTestManagementTests ({
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Test management tests received: %j', testManagementTests)
+
+        writeToCache(cacheKey, testManagementTests)
 
         done(null, testManagementTests)
       } catch (err) {
@@ -118,4 +188,8 @@ function getTestManagementTests ({
   })
 }
 
-module.exports = { getTestManagementTests }
+module.exports = {
+  getNumFromTestManagementTests, // Exported for later use in the cache
+  getTestManagementTests,
+  parseTestManagementTestsResponse,
+}

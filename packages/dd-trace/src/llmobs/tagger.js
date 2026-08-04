@@ -1,10 +1,13 @@
 'use strict'
 
 const log = require('../log')
+const Sampler = require('../sampler')
+const { formatKnuthRate } = require('../util')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
   INPUT_VALUE,
@@ -12,7 +15,9 @@ const {
   INPUT_DOCUMENTS,
   OUTPUT_VALUE,
   METADATA,
+  COST_TAGS,
   METRICS,
+  TOOL_DEFINITIONS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
@@ -31,6 +36,7 @@ const {
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
@@ -39,18 +45,56 @@ const {
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   INSTRUMENTATION_METHOD_ANNOTATED,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SAMPLING_DECISION_SAMPLED,
+  SAMPLING_DECISION_DROPPED,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const {
+  findGenAIAncestorSpanId,
+  validateCostTags,
+  writeBridgeTags,
+  validateToolDefinitions,
+  generateLlmObsTraceId,
+  normalizeLlmObsTraceId,
+} = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
 
 class LLMObsTagger {
+  /** @type {import('../config/config-base')} */
+  #config
+
+  /** @type {import('../sampler') | null} */
+  #sampler = null
+
   constructor (config, softFail = false) {
-    this._config = config
+    this.#config = config
 
     this.softFail = softFail
+  }
+
+  /**
+   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
+   * changes so decisions reflect the current config, while reusing the existing
+   * sampler when it hasn't.
+   *
+   * @returns {import('../sampler')}
+   */
+  #getSampler () {
+    const rate = this.#config.llmobs?.sampleRate ?? 1
+    if (this.#sampler === null || rate !== this.#sampler.rate()) {
+      this.#sampler = new Sampler(rate)
+    }
+    return this.#sampler
   }
 
   static get tagMap () {
@@ -72,15 +116,15 @@ class LLMObsTagger {
     integration,
     _decorator,
   } = {}) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp ||
-      this._config.service // this should always have a default
+      this.#config.llmobs.mlApp ||
+      this.#config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(
@@ -91,6 +135,21 @@ class LLMObsTagger {
 
     this._register(span)
 
+    const traceTags = span.context()._trace.tags
+
+    const llmobsTraceId =
+      registry.get(parent)?.[TRACE_ID] ??
+      normalizeLlmObsTraceId(traceTags[PROPAGATED_TRACE_ID_KEY]) ??
+      generateLlmObsTraceId(span._startTime)
+    this._setTag(span, TRACE_ID, llmobsTraceId)
+
+    // When the registering span sits below an OTel `gen_ai.*` ancestor, use
+    // that ancestor as the parent_id fallback and suppress the bridge
+    // parent_id tag so the indexer doesn't invert the trace.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null, llmobsTraceId })
+
     this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
@@ -99,7 +158,9 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
+    sessionId ||= registry.get(parent)?.[SESSION_ID] ||
+      traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
+      traceTags[PROPAGATED_SESSION_ID_KEY]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
@@ -107,8 +168,11 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    this.#tagSamplingDecision(span, parent)
 
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
@@ -116,6 +180,11 @@ class LLMObsTagger {
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // apply after tags so only keys present at span start are accepted.
+    if (annotationContext?.costTags != null) {
+      this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
+    }
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
@@ -132,6 +201,32 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  #tagSamplingDecision (span, parent) {
+    const traceTags = span.context()._trace.tags
+    const parentTags = registry.get(parent)
+
+    let sampleRate, samplingDecision
+    if (parentTags) {
+      // Local LLMObs parent: inherit its decision.
+      sampleRate = parentTags[SAMPLE_RATE]
+      samplingDecision = parentTags[SAMPLING_DECISION]
+    } else if (traceTags[PROPAGATED_PARENT_ID_KEY]) {
+      // Distributed LLMObs parent: inherit whatever was propagated. This may be
+      // absent if the upstream service predates sampling propagation, in which
+      // case we make no decision here rather than starting a divergent one.
+      sampleRate = traceTags[PROPAGATED_SAMPLE_RATE_KEY]
+      samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+    } else {
+      // Root span: make the trace's one sampling decision.
+      const sampler = this.#getSampler()
+      sampleRate = formatKnuthRate(sampler.rate())
+      samplingDecision = sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+    }
+
+    if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
+    if (samplingDecision != null) this._setTag(span, SAMPLING_DECISION, samplingDecision)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -154,6 +249,16 @@ class LLMObsTagger {
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
+  }
+
+  tagToolDefinitions (span, toolDefinitions) {
+    const validatedToolDefinitions = validateToolDefinitions(toolDefinitions)
+
+    if (validatedToolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, validatedToolDefinitions)
+    } else {
+      this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
+    }
   }
 
   tagMetadata (span, metadata) {
@@ -219,6 +324,32 @@ class LLMObsTagger {
       Object.assign(currentTags, tags)
     } else {
       this._setTag(span, TAGS, tags)
+    }
+  }
+
+  /**
+   * Validates and tags cost tag keys on an LLMObs span. Cost tag references are validated against
+   * the span's already-applied tags, which are read from the registry.
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} costTags Raw user-provided cost tags; validated here.
+   * @param {'annotate' | 'annotation_context'} source
+   */
+  tagCostTags (span, costTags, source) {
+    const spanTags = registry.get(span)?.[TAGS] || {}
+    const validatedCostTags = validateCostTags(span, costTags, source, spanTags)
+    if (!validatedCostTags.length) return
+
+    // Might consider switching to a `Set` if per-span cost tag cardinality grows large enough that
+    // this `.includes`/`.push` merge becomes a hot spot
+    const currentCostTags = registry.get(span)?.[COST_TAGS]
+    if (currentCostTags) {
+      for (const costTag of validatedCostTags) {
+        if (!currentCostTags.includes(costTag)) {
+          currentCostTags.push(costTag)
+        }
+      }
+    } else {
+      this._setTag(span, COST_TAGS, validatedCostTags)
     }
   }
 
@@ -384,6 +515,10 @@ class LLMObsTagger {
     this._setTag(span, MODEL_NAME, modelName)
   }
 
+  setName (span, name) {
+    this._setTag(span, NAME, name)
+  }
+
   #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
@@ -502,6 +637,65 @@ class LLMObsTagger {
     return filteredToolResults
   }
 
+  // Validates audio segments on a message and emits the snake_case wire shape
+  // `{ mime_type, content | attachment_key }`. Mirrors dd-trace-py's
+  // `_extract_audio_part`: a part requires `mimeType` and exactly one of
+  // `content` (inline base64) or `attachmentKey` (backend-offloaded).
+  #filterAudioParts (audioParts) {
+    if (!Array.isArray(audioParts)) {
+      audioParts = [audioParts]
+    }
+
+    const filteredAudioParts = []
+    for (const audioPart of audioParts) {
+      if (audioPart == null || typeof audioPart !== 'object') {
+        this.#handleFailure('Audio part must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { mimeType, content, attachmentKey } = audioPart
+
+      if (typeof mimeType !== 'string' || !mimeType) {
+        this.#handleFailure('Audio part mimeType must be a non-empty string.', 'invalid_io_messages')
+        continue
+      }
+
+      if (content == null && attachmentKey == null) {
+        this.#handleFailure("Audio part must have either 'content' or 'attachmentKey'.", 'invalid_io_messages')
+        continue
+      }
+
+      if (content != null && attachmentKey != null) {
+        this.#handleFailure(
+          "Audio part must have only one of 'content' or 'attachmentKey', not both.", 'invalid_io_messages'
+        )
+        continue
+      }
+
+      const audioPartObj = { mime_type: mimeType }
+
+      // Exactly one of content / attachmentKey is set here (guarded above). Validate its type
+      // explicitly so the failure carries the `invalid_io_messages` tag for telemetry, instead
+      // of routing through `#tagConditionalString` which omits it.
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Audio part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Audio part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.content = content
+      }
+
+      filteredAudioParts.push(audioPartObj)
+    }
+    return filteredAudioParts
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -528,6 +722,7 @@ class LLMObsTagger {
         toolCalls,
         toolResults,
         toolId,
+        audioParts,
       } = message
       const messageObj = {}
 
@@ -558,6 +753,14 @@ class LLMObsTagger {
 
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
+        }
+      }
+
+      if (audioParts != null) {
+        const filteredAudioParts = this.#filterAudioParts(audioParts)
+
+        if (filteredAudioParts.length) {
+          messageObj.audio_parts = filteredAudioParts
         }
       }
 
@@ -624,7 +827,7 @@ class LLMObsTagger {
   }
 
   _register (span) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
@@ -634,7 +837,7 @@ class LLMObsTagger {
   }
 
   _setTag (span, key, value) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
@@ -642,6 +845,18 @@ class LLMObsTagger {
 
     const tagsCarrier = registry.get(span)
     tagsCarrier[key] = value
+
+    // The first session set in a trace becomes the trace-level default, stored on the trace-shared
+    // tags so later spans (incl. those under a session-less parent) inherit it in-process.
+    // Established here, the single choke point for session writes, so sessions post-populated by
+    // integrations after span start also seed it. First-writer wins, so an explicit session still
+    // overrides locally. Cross-service injection is handled centrally in `handleLLMObsInjection`.
+    if (key === SESSION_ID && value) {
+      const traceTags = span.context()._trace.tags
+      if (traceTags[SESSION_ID_TRACE_DEFAULT_KEY] === undefined) {
+        traceTags[SESSION_ID_TRACE_DEFAULT_KEY] = value
+      }
+    }
   }
 }
 

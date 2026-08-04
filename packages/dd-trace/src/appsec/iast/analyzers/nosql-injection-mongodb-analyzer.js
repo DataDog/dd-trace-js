@@ -15,6 +15,20 @@ const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mq
 const SAFE_OPERATORS = new Set(['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin',
   '$exists', '$type', '$mod', '$bitsAllClear', '$bitsAllSet', '$bitsAnyClear', '$bitsAnySet'])
 
+// Scope a marked child store for a query's deferred execution so the nested mongodb
+// driver query skips re-analysis. `bindStore` enters the child only for that async
+// scope and restores the parent on its own, so no marker can be stranded for a later
+// request to inherit, and two concurrent queries of the same request each branch from
+// the shared parent rather than from each other.
+function markExecStore () {
+  const store = storage('legacy').getStore()
+  if (store && !store.nosqlAnalyzed && getIastContext(store)) {
+    return { ...store, nosqlAnalyzed: true }
+  }
+
+  return store
+}
+
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(NOSQL_MONGODB_INJECTION)
@@ -27,39 +41,25 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     // Anything that accesses the storage is context dependent
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
-      if (store && !store.nosqlAnalyzed && filters?.length) {
+      if (store && !store.nosqlAnalyzed && filters?.length && getIastContext(store)) {
         for (const filter of filters) {
           this.analyze({ filter }, store)
         }
-      }
-
-      return store
-    }
-
-    const onStartAndEnterWithStore = (message) => {
-      const store = onStart(message || {})
-      if (store) {
-        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
-      }
-    }
-
-    // Anything that accesses the storage is context dependent
-    // eslint-disable-next-line unicorn/consistent-function-scoping
-    const onFinish = () => {
-      const store = storage('legacy').getStore()
-      if (store?.nosqlParentStore) {
-        storage('legacy').enterWith(store.nosqlParentStore)
       }
     }
 
     this.addSub('datadog:mongodb:collection:filter:start', onStart)
 
-    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
-    this.addSub('datadog:mongoose:model:filter:finish', onFinish)
+    // A mongoose query builds, executes, and reaches the driver in separate async
+    // steps. The filters are analyzed at the build, but the marker is bound around
+    // the execution channel, where the driver call still runs under the parent store.
+    this.addSub('datadog:mongoose:model:filter:start', onStart)
+    this.addBind('datadog:mongoose:model:filter:exec', markExecStore)
 
+    // mquery analyzes filters at the prepare step and marks the execution scope at
+    // tracing start, where the deferred driver call runs under the marked store.
     this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
-    this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
+    this.addBind('tracing:datadog:mquery:filter:start', markExecStore)
   }
 
   configureSanitizers () {

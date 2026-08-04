@@ -41,7 +41,7 @@ class SchemaManager {
    * @param {string} kind
    * @param {string} plugin
    * @param {object} opts
-   * @returns {string}
+   * @returns {object} {name, source}
    */
   serviceName (type, kind, plugin, opts) {
     const schema = this.shouldUseConsistentServiceNaming

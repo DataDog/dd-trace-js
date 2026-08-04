@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -9,12 +10,12 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('amqp10', 'amqp10', version => {
     useSandbox([`'amqp10@${version}'`, 'rhea'], false, [
@@ -24,20 +25,24 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'amqp', 'Client', 'amqp10')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'amqp',
+      packageName: 'amqp10',
+      defaultExport: true,
+      namedExports: ['Client'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'amqp.send'), true)
         })
 

@@ -2,10 +2,14 @@
 
 const { EventEmitter } = require('node:events')
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 const STREAM_RESPONSE = 'response'
 
-const redactableKeys = ['authorization', 'x-authorization', 'password', 'token']
+const redactableKeys = new Set(['authorization', 'x-authorization', 'password', 'token'])
+
+function noop () {}
 
 /**
  * Converts any Lambda handler (callback, promise, sync, streaming) to a
@@ -22,10 +26,10 @@ function promisifiedHandler (handler) {
   }
 
   return function (event, context) {
-    let modifiedCallback = function () {}
-    let modifiedLegacyDoneCallback = function () {}
-    let modifiedLegacySucceedCallback = function () {}
-    let modifiedLegacyFailCallback = function () {}
+    let modifiedCallback = noop
+    let modifiedLegacyDoneCallback = noop
+    let modifiedLegacySucceedCallback = noop
+    let modifiedLegacyFailCallback = noop
 
     const callbackProm = new Promise(function (resolve, reject) {
       modifiedCallback = function (err, result) {
@@ -58,7 +62,7 @@ function promisifiedHandler (handler) {
     context.fail = modifiedLegacyFailCallback
 
     const asyncProm = handler(event, context, modifiedCallback)
-    let promise = callbackProm
+    let promise
 
     if (asyncProm !== undefined && typeof asyncProm?.then === 'function') {
       promise = Promise.race([callbackProm, asyncProm])
@@ -66,7 +70,7 @@ function promisifiedHandler (handler) {
       promise = callbackProm
     } else {
       const looksLikeArtifact =
-        typeof asyncProm === 'object' &&
+        asyncProm !== null && typeof asyncProm === 'object' &&
         ((typeof asyncProm.listen === 'function' && typeof asyncProm.close === 'function') ||
           (typeof asyncProm.on === 'function' && typeof asyncProm.emit === 'function') ||
           asyncProm instanceof EventEmitter ||
@@ -85,7 +89,7 @@ function promisifiedHandler (handler) {
 /**
  * @param {object} span
  * @param {string} key
- * @param {*} obj
+ * @param {unknown} obj
  * @param {number} [depth]
  * @param {number} [maxDepth]
  */
@@ -101,11 +105,11 @@ function tagObject (span, key, obj, depth, maxDepth) {
     let str
     try {
       str = JSON.stringify(obj)
-    } catch (e) {
+    } catch {
       return
     }
-    if (typeof str === 'undefined') return
-    span.setTag(key, redactVal(key, str.substring(0, 5000)))
+    if (str === undefined) return
+    span.setTag(key, redactVal(key, str.slice(0, 5000)))
     return
   }
   depth += 1
@@ -113,8 +117,8 @@ function tagObject (span, key, obj, depth, maxDepth) {
     let parsed
     try {
       parsed = JSON.parse(obj)
-    } catch (e) {
-      span.setTag(key, redactVal(key, obj.substring(0, 5000)))
+    } catch {
+      span.setTag(key, redactVal(key, obj.slice(0, 5000)))
       return
     }
     tagObject(span, key, parsed, depth, maxDepth)
@@ -129,11 +133,11 @@ function tagObject (span, key, obj, depth, maxDepth) {
       let str
       try {
         str = JSON.stringify(obj)
-      } catch (e) {
+      } catch {
         return
       }
-      if (typeof str === 'undefined') return
-      span.setTag(key, redactVal(key, str.substring(0, 5000)))
+      if (str === undefined) return
+      span.setTag(key, redactVal(key, str.slice(0, 5000)))
       return
     }
     for (const [k, v] of Object.entries(obj)) {
@@ -143,7 +147,7 @@ function tagObject (span, key, obj, depth, maxDepth) {
 }
 
 /**
- * @param {*} lambdaResponse
+ * @param {unknown} lambdaResponse
  * @returns {boolean}
  */
 function isBatchItemFailure (lambdaResponse) {
@@ -156,7 +160,7 @@ function isBatchItemFailure (lambdaResponse) {
 }
 
 /**
- * @param {*} lambdaResponse
+ * @param {unknown} lambdaResponse
  * @returns {number}
  */
 function batchItemFailureCount (lambdaResponse) {
@@ -164,12 +168,12 @@ function batchItemFailureCount (lambdaResponse) {
 }
 
 /**
- * @param {Record<string, *>} [newTags]
- * @returns {Record<string, *>}
+ * @param {Record<string, unknown>} [newTags]
+ * @returns {Record<string, unknown>}
  */
 function updateDDTags (newTags) {
   if (!newTags) newTags = {}
-  const envTags = (process.env.DD_TAGS ?? '')
+  const envTags = (getEnvironmentVariable('DD_TAGS') ?? '')
     .split(',')
     .filter(function (pair) { return pair.includes(':') })
     .reduce(function (acc, pair) {
@@ -178,12 +182,12 @@ function updateDDTags (newTags) {
       return acc
     }, {})
 
-  return Object.assign({}, envTags, newTags)
+  return { ...envTags, ...newTags }
 }
 
 function redactVal (k, v) {
   const splitKey = k.split('.').pop() || k
-  if (redactableKeys.includes(splitKey)) {
+  if (redactableKeys.has(splitKey)) {
     return 'redacted'
   }
   return v

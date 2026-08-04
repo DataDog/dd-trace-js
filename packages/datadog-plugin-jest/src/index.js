@@ -1,8 +1,11 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
@@ -13,16 +16,17 @@ const {
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
-  TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
@@ -56,16 +60,6 @@ const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
-
-function withTimeout (promise, timeoutMs) {
-  return new Promise(resolve => {
-    // Set a timeout to resolve after 1s
-    setTimeout(resolve, timeoutMs)
-
-    // Also resolve if the original promise resolves
-    promise.then(resolve)
-  })
-}
 
 class JestPlugin extends CiPlugin {
   static id = 'jest'
@@ -104,13 +98,16 @@ class JestPlugin extends CiPlugin {
       process.on('message', handler)
     }
     this.testSuiteSpanPerTestSuiteAbsolutePath = new Map()
+    this.pendingTestSuiteFinishes = new Set()
 
     this.addSub('ci:jest:session:finish', ({
       status,
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
+      isCoverageReportUploadEnabled,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasUnskippableSuites,
       hasForcedToRunSuites,
@@ -120,58 +117,73 @@ class JestPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       onDone,
     }) => {
-      this.testSessionSpan.setTag(TEST_STATUS, status)
-      this.testModuleSpan.setTag(TEST_STATUS, status)
+      const finishSession = () => {
+        this.testSessionSpan.setTag(TEST_STATUS, status)
+        this.testModuleSpan.setTag(TEST_STATUS, status)
 
-      if (error) {
-        this.testSessionSpan.setTag('error', error)
-        this.testModuleSpan.setTag('error', error)
-      }
-
-      addIntelligentTestRunnerSpanTags(
-        this.testSessionSpan,
-        this.testModuleSpan,
-        {
-          isSuitesSkipped,
-          isSuitesSkippingEnabled,
-          isCodeCoverageEnabled,
-          testCodeCoverageLinesTotal,
-          skippingType: 'suite',
-          skippingCount: numSkippedSuites,
-          hasUnskippableSuites,
-          hasForcedToRunSuites,
+        if (error) {
+          this.testSessionSpan.setTag('error', error)
+          this.testModuleSpan.setTag('error', error)
         }
-      )
 
-      if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
-      }
-      if (isEarlyFlakeDetectionFaulty) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
-      }
-      if (isTestManagementTestsEnabled) {
-        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
-      }
+        addIntelligentTestRunnerSpanTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          {
+            isSuitesSkipped,
+            isSuitesSkippingEnabled,
+            isCodeCoverageEnabled,
+            testCodeCoverageLinesTotal,
+            skippingType: 'suite',
+            skippingCount: numSkippedSuites,
+            hasUnskippableSuites,
+            hasForcedToRunSuites,
+          }
+        )
 
-      this.testModuleSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
-      this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
-        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
-      })
-      finishAllTraceSpans(this.testSessionSpan)
-
-      this.telemetry.count(TELEMETRY_TEST_SESSION, {
-        provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
-      })
-
-      appClosingTelemetry()
-      this.tracer._exporter.flush(() => {
-        if (onDone) {
-          onDone()
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+          this.tracer._exporter.exportCoverage({
+            sessionId: this.testSessionSpan.context()._traceId,
+            files: testSessionCoverageFiles,
+          })
         }
-      })
+
+        if (isEarlyFlakeDetectionEnabled) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+        }
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+        }
+        if (isTestManagementTestsEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+        }
+
+        this.testModuleSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
+        this.testSessionSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+          hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        })
+        finishAllTraceSpans(this.testSessionSpan)
+
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        })
+
+        appClosingTelemetry()
+        this.tracer._exporter.flush(() => {
+          if (onDone) {
+            onDone()
+          }
+        })
+      }
+
+      if (this.pendingTestSuiteFinishes.size > 0) {
+        Promise.all(this.pendingTestSuiteFinishes).then(finishSession)
+      } else {
+        finishSession()
+      }
     })
 
     // Test suites can be run in a different process from jest's main one.
@@ -181,7 +193,7 @@ class JestPlugin extends CiPlugin {
       for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
-        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestCommand = this.command
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
@@ -194,6 +206,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
+        config._ddItrSkippingEnabledTags = this.getSessionItrSkippingEnabledTags()
       }
     })
 
@@ -214,6 +227,7 @@ class JestPlugin extends CiPlugin {
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
+        _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -223,8 +237,8 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
-        // requestErrorTags from test env options may be undefined
-        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+        ...requestErrorTags,
+        ...itrSkippingEnabledTags,
       }
 
       if (_ddUnskippable) {
@@ -285,27 +299,18 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:worker-report:telemetry', data => {
-      const telemetryEvents = JSON.parse(data)
-      for (const event of telemetryEvents) {
-        if (event.type === 'ciVisEvent') {
-          this.telemetry.ciVisEvent(event.name, event.testLevel, {
-            ...event.tags,
-            testFramework: event.testFramework,
-            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
-          })
-        } else if (event.type === 'count') {
-          this.telemetry.count(event.name, event.tags, event.value)
-        } else if (event.type === 'distribution') {
-          this.telemetry.distribution(event.name, event.tags, event.measure)
-        }
-      }
-    })
-
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
+    this.addSub('ci:jest:test-suite:finish', ({
+      status,
+      errorMessage,
+      error,
+      testSuiteAbsolutePath,
+      waitForFinish,
+      onDone,
+    }) => {
       const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
       if (!testSuiteSpan) {
         log.warn('"ci:jest:test-suite:finish": no span found for test suite absolute path %s', testSuiteAbsolutePath)
+        onDone?.()
         return
       }
       testSuiteSpan.setTag(TEST_STATUS, status)
@@ -316,8 +321,13 @@ class JestPlugin extends CiPlugin {
         testSuiteSpan.setTag('error', new Error(errorMessage))
         testSuiteSpan.setTag(TEST_STATUS, 'fail')
       }
-      // We need to give the potential error in 'ci:jest:test-suite:error' time to be published
-      process.nextTick(() => {
+      let resolvePendingFinish
+      const pendingFinish = new Promise(resolve => {
+        resolvePendingFinish = resolve
+      })
+      this.pendingTestSuiteFinishes.add(pendingFinish)
+
+      const finish = () => {
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,
@@ -331,7 +341,19 @@ class JestPlugin extends CiPlugin {
         }
         this.removeAllDiProbes()
         this.testSuiteSpanPerTestSuiteAbsolutePath.delete(testSuiteAbsolutePath)
-      })
+        this.pendingTestSuiteFinishes.delete(pendingFinish)
+        resolvePendingFinish()
+        if (onDone) {
+          onDone()
+        }
+      }
+
+      if (waitForFinish) {
+        // Give late async work time to run before Jest restarts a worker because of workerIdleMemoryLimit.
+        realSetTimeout(finish)
+      } else {
+        process.nextTick(finish)
+      }
     })
 
     this.addSub('ci:jest:test-suite:error', ({ error, errorMessage, testSuiteAbsolutePath }) => {
@@ -402,6 +424,7 @@ class JestPlugin extends CiPlugin {
       isAtrRetry,
       finalStatus,
       earlyFlakeAbortReason,
+      promises,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -432,12 +455,33 @@ class JestPlugin extends CiPlugin {
         this.getTestTelemetryTags(span)
       )
 
-      span.finish()
-      finishAllTraceSpans(span)
-      this.activeTestSpan = null
+      const finish = () => {
+        span.finish()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
+      }
+
+      if (finalStatus) {
+        if (promises?.hitBreakpointPromise) {
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        if (promises && this.diBreakpointHitPromise) {
+          promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+          return
+        }
+        finish()
+        this.cancelDiBreakpointHitWait()
+        return
+      }
+      finish()
+      if (status === 'fail' && promises?.hitBreakpointPromise) {
+        this.prepareDiBreakpointHitWait()
+      }
     })
 
-    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
+    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, shouldWaitForHitProbe, promises }) => {
       if (error && span) {
         span.setTag(TEST_STATUS, 'fail')
         span.setTag('error', getFormattedError(error, this.repositoryRoot))
@@ -445,8 +489,11 @@ class JestPlugin extends CiPlugin {
           const probeInformation = this.addDiProbe(error)
           if (probeInformation) {
             const { setProbePromise } = probeInformation
-            promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            this.prepareDiBreakpointHitWait()
+            promises.isProbeReady = this.waitForDiOperation(setProbePromise)
           }
+        } else if (shouldWaitForHitProbe && this.di) {
+          promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
         }
       }
     })
@@ -501,6 +548,7 @@ class JestPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
       testSuiteAbsolutePath,
     } = test
 
@@ -549,7 +597,15 @@ class JestPlugin extends CiPlugin {
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
     }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
+    }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
+    const skippingEnabled = testSuiteSpan?.context()?.getTag?.(TEST_ITR_SKIPPING_ENABLED)
+    if (skippingEnabled !== undefined) {
+      extraTags[TEST_ITR_SKIPPING_ENABLED] = skippingEnabled
+    }
 
     return super.startTestSpan(name, suite, testSuiteSpan, extraTags)
   }

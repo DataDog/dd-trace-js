@@ -8,10 +8,11 @@ const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')
 const {
-  startGraphqlResolve,
+  startGraphqlResolver,
   graphqlMiddlewareChannel,
   apolloChannel,
   apolloServerCoreChannel,
@@ -63,7 +64,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
-      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolver.hasSubscribers, false)
 
       graphql.enable()
 
@@ -72,7 +73,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
-      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolver.hasSubscribers, true)
     })
   })
 
@@ -85,7 +86,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
-      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolver.hasSubscribers, true)
 
       graphql.disable()
 
@@ -94,14 +95,14 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
-      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolver.hasSubscribers, false)
     })
   })
 
   describe('onGraphqlStartResolve', () => {
     beforeEach(() => {
       sinon.stub(waf, 'run').returns([''])
-      sinon.stub(storage('legacy'), 'getStore').returns({ req: {} })
+      sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, {}))
       sinon.stub(web, 'root').returns({})
       graphql.enable()
     })
@@ -112,46 +113,35 @@ describe('GraphQL', () => {
     })
 
     it('Should not call waf if resolvers is undefined', () => {
-      const context = {
-        resolver: undefined,
-      }
-
-      startGraphqlResolve.publish({ context })
+      startGraphqlResolver.publish({ resolverInfo: undefined })
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if resolvers is not an object', () => {
-      const context = {
-        resolver: '',
-      }
-
-      startGraphqlResolve.publish({ context })
+      startGraphqlResolver.publish({ resolverInfo: '' })
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if req is unavailable', () => {
-      const context = {}
       const resolverInfo = {
         user: [{ id: '1234' }],
       }
 
-      storage('legacy').getStore().req = undefined
+      storage('legacy').getStore.returns({})
 
-      startGraphqlResolve.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ resolverInfo })
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
-      const context = {}
-
       const resolverInfo = {
         user: [{ id: '1234' }],
       }
 
-      startGraphqlResolve.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -176,7 +166,7 @@ describe('GraphQL', () => {
     let context, rootSpan
 
     beforeEach(() => {
-      sinon.stub(storage('legacy'), 'getStore').returns({ req, res })
+      sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
 
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })
@@ -199,7 +189,7 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns([''])
 
-      startGraphqlResolve.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -225,7 +215,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolve.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -238,7 +228,7 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -257,7 +247,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolve.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
@@ -270,10 +260,39 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
       sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
+    })
+
+    it('Should call abort when apolloChannel is the only seeder (Apollo v5 external Express integration)', () => {
+      // Reproduces Apollo v5 + @as-integrations/express{4,5} without drainHttpServer:
+      // neither graphqlMiddlewareChannel nor apolloHttpServerChannel seeds graphqlRequestData,
+      // so enterInApolloRequest must seed it itself.
+      graphql.disable()
+      graphql.enable()
+      apolloChannel.start.publish()
+
+      const abortController = context.abortController
+
+      sinon.stub(waf, 'run').returns({
+        actions: {
+          block_request: blockParameters,
+        },
+      })
+
+      sinon.stub(web, 'root').returns(rootSpan)
+
+      startGraphqlResolver.publish({ abortController, resolverInfo })
+
+      sinon.assert.called(context.abortController.abort)
+
+      const abortData = {}
+      apolloChannel.asyncEnd.publish({ abortController, abortData })
+
+      sinon.assert.calledWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
+      sinon.assert.calledWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
     })
   })
 })

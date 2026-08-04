@@ -62,7 +62,7 @@ function isSNSSQSEvent (event) {
       if (body.Type === 'Notification' && body.TopicArn) {
         return true
       }
-    } catch (e) {
+    } catch {
       return false
     }
   }
@@ -74,7 +74,7 @@ function isEBSQSEvent (event) {
     try {
       const body = JSON.parse(event.Records[0].body)
       return body['detail-type'] !== undefined
-    } catch (e) {
+    } catch {
       return false
     }
   }
@@ -95,14 +95,16 @@ function isLambdaUrlEvent (event) {
 
 function isStepFunctionsEvent (event) {
   let ev = event
-  if (typeof ev.Payload === 'object') {
+  if (ev.Payload !== null && typeof ev.Payload === 'object') {
     ev = ev.Payload
   }
-  if (typeof ev._datadog === 'object') {
+  if (ev._datadog !== null && typeof ev._datadog === 'object') {
     ev = ev._datadog
   }
   return (
-    typeof ev.Execution === 'object' && typeof ev.State === 'object' && typeof ev.StateMachine === 'object'
+    ev.Execution !== null && typeof ev.Execution === 'object' &&
+    ev.State !== null && typeof ev.State === 'object' &&
+    ev.StateMachine !== null && typeof ev.StateMachine === 'object'
   )
 }
 

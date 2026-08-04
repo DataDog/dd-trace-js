@@ -84,7 +84,7 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(snapshot.evaluationErrors.length, 1)
         assert.deepStrictEqual(Object.keys(snapshot.evaluationErrors[0]), ['expr', 'message'])
         assert.strictEqual(snapshot.evaluationErrors[0].expr, 'invalid')
-        assert.ok(snapshot.evaluationErrors[0].message.startsWith('ReferenceError: invalid is not defined'))
+        assert.match(snapshot.evaluationErrors[0].message, /^ReferenceError: invalid is not defined/)
 
         // Valid expression should still be captured
         assert.deepStrictEqual(snapshot.captures, {

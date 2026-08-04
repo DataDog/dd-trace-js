@@ -1,23 +1,33 @@
 'use strict'
 
 const assert = require('assert')
+const dc = require('node:diagnostics_channel')
+const events = require('node:events')
 const fs = require('fs')
 const { platform } = require('os')
 const path = require('path')
 const util = require('util')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it, Runner } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
+const { engines, nodeMaxMajor } = require('../../../../package.json')
+
 const externals = require('../plugins/externals')
+const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
-const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
+
+// dd-trace's mocha CI Visibility hook adds extra Runner listeners.
+if (dc.channel('ci:mocha:test:finish').hasSubscribers) {
+  Runner.prototype.setMaxListeners(events.defaultMaxListeners + 2)
+}
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
@@ -27,7 +37,11 @@ exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
 exports.insertVersionDep = insertVersionDep
 
-const testedPlugins = agent.testedPlugins
+// Lazily load the fake agent. It pre-warms the tracer module graph on require,
+// which would leak global state (instrumentation hooks, URL shims, etc.) into
+// specs that never use it (e.g. packages/dd-trace/test/ritm.spec.js).
+let _agent
+const getAgent = () => (_agent ??= require('../plugins/agent'))
 
 function withNamingSchema (
   spanProducerFn,
@@ -46,7 +60,11 @@ function withNamingSchema (
   describe(testTitle, () => {
     ['v0', 'v1'].forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        before(() => {
+        // `beforeEach` / `afterEach`: every outer `agent.load` runs
+        // `tracer.init` → `pluginManager.configure` → resets
+        // `Nomenclature.config` back to defaults. The override has
+        // to land after that, per test.
+        beforeEach(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
@@ -55,20 +73,21 @@ function withNamingSchema (
           })
         })
 
-        after(() => {
+        afterEach(() => {
           Nomenclature.configure(fullConfig)
         })
 
         hooks(versionName, false)
 
-        const { opName, serviceName } = expected[versionName]
+        const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
+          // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
           this.retries(3)
           this.timeout(25000)
 
           return new Promise((resolve, reject) => {
-            const agentPromise = agent
+            const agentPromise = getAgent()
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -80,6 +99,22 @@ function withNamingSchema (
 
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
+
+                const tracerService = defaultTracerService || Nomenclature.config.service
+
+                if (span.service !== tracerService) {
+                  assert.notStrictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be present when a service override is active`
+                  )
+                } else {
+                  assert.strictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be absent when the service matches the default`
+                  )
+                }
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -91,7 +126,7 @@ function withNamingSchema (
     })
 
     describe('service naming short-circuit in v0', () => {
-      before(() => {
+      beforeEach(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
@@ -100,26 +135,42 @@ function withNamingSchema (
         })
       })
 
-      after(() => {
+      afterEach(() => {
         Nomenclature.configure(fullConfig)
       })
 
       hooks('v0', true)
 
-      const { serviceName } = expected.v1
+      const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
+        // eslint-disable-next-line sonarjs/stable-tests -- naming-schema assertions race agent flush
         this.retries(3)
         this.timeout(15000)
 
         return new Promise((resolve, reject) => {
-          const agentPromise = agent
+          const agentPromise = getAgent()
             .assertSomeTraces(traces => {
               const span = traces[0][0]
               const expectedServiceName = typeof serviceName === 'function'
                 ? serviceName()
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
+
+              const tracerService = defaultTracerService || Nomenclature.config.service
+              if (span.service !== tracerService) {
+                assert.notStrictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be present when a service override is active`
+                )
+              } else {
+                assert.strictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be absent when the service matches the default`
+                )
+              }
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
@@ -131,13 +182,23 @@ function withNamingSchema (
   })
 }
 
+/**
+ * @param {() => import('../../src/proxy')} tracer
+ * @param {string} pluginName
+ * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
+ * @param {string | (() => string)} service
+ * @param {string} serviceSource
+ * @param {{ component?: string, desc?: string, resource?: string | (() => string) }} [opts]
+ */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
     this.timeout(10000)
     let computePeerServiceSpy
 
     beforeEach(() => {
-      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      // Read the plugin off the live `TracerProxy`; a closure-captured
+      // `tracer()` may point at a torn-down proxy after a gate-fired rebuild.
+      const plugin = global._ddtrace._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
 
@@ -146,32 +207,72 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', async () => {
-      const useCallback = spanGenerationFn.length === 1
-      const spanGenerationPromise = useCallback
-        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
-          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
-          // Some callback based methods are a mixture of callback and promise,
-          // depending on the module version. Await the promises as well.
-          if (util.types.isPromise(result)) {
-            result.then?.(resolve, reject)
+      const currentTracer = global._ddtrace
+      const parentSpan = currentTracer.startSpan('peer-service.test')
+      const traceId = BigInt(parentSpan.context().toTraceId())
+      const component = opts.component ?? pluginName
+      let traceAssertion
+
+      /**
+       * @param {Array<Array<{ trace_id: bigint, resource: string, meta: Record<string, string> }>>} traces
+       */
+      function assertPeerServiceSpan (traces) {
+        const expectedService = typeof service === 'function' ? service() : service
+        const expectedResource = typeof opts.resource === 'function' ? opts.resource() : opts.resource
+
+        for (const trace of traces) {
+          for (const span of trace) {
+            if (
+              span.trace_id === traceId &&
+              span.meta.component === component &&
+              (expectedResource === undefined || span.resource === expectedResource) &&
+              span.meta['peer.service'] === expectedService &&
+              span.meta['_dd.peer.service.source'] === serviceSource
+            ) {
+              return
+            }
           }
+        }
+
+        assert.fail(
+          `No ${component} span in trace ${traceId} had peer.service=${expectedService} and ` +
+          `_dd.peer.service.source=${serviceSource}.\n\nCandidate Traces:\n${util.inspect(traces, { depth: null })}`
+        )
+      }
+
+      try {
+        traceAssertion = getAgent().assertSomeTraces(assertPeerServiceSpan, { timeoutMs: 9000 })
+        const useCallback = spanGenerationFn.length === 1
+        const spanGenerationPromise = currentTracer.scope().activate(parentSpan, () => {
+          return useCallback
+            ? new Promise(/** @type {() => void} */ (resolve, reject) => {
+              const result = spanGenerationFn((error) => error ? reject(error) : resolve())
+              // Some callback based methods are a mixture of callback and promise,
+              // depending on the module version. Await the promises as well.
+              if (util.types.isPromise(result)) {
+                result.then?.(resolve, reject)
+              }
+            })
+            : spanGenerationFn()
         })
-        : spanGenerationFn()
 
-      assert.ok(
-        typeof spanGenerationPromise?.then === 'function',
-        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-        util.inspect(spanGenerationPromise, { depth: 1 })
-      )
+        assert.strictEqual(
+          typeof spanGenerationPromise?.then, 'function',
+          'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+            util.inspect(spanGenerationPromise, { depth: 1 }),
+        )
 
-      await Promise.all([
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
-          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
-        }),
-        spanGenerationPromise,
-      ])
+        await Promise.all([
+          traceAssertion,
+          (async () => {
+            await spanGenerationPromise
+            parentSpan.finish()
+          })(),
+        ])
+      } finally {
+        parentSpan.finish()
+        traceAssertion?.cancel()
+      }
     })
   })
 }
@@ -206,7 +307,17 @@ function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {
     cb = range
     range = undefined
+  } else if (typeof range !== 'string' || range.length === 0) {
+    // A caller passed something in the range slot that is not a version range. The usual culprit is a Node-version
+    // gate written as `NODE_MAJOR >= 25 && '>=1.3.0'`, which evaluates to `false` on older Node and silently filtered
+    // every version through `!range`. Demand a real range string (use `'*'` for "all versions") so the misuse fails
+    // loudly instead of running zero tests.
+    throw new TypeError(`withVersions: the version range must be a non-empty string, got ${util.inspect(range)}. ` +
+      "Use '*' to match every installed version.")
   }
+
+  if (!process.env.DD_INJECT_FORCE &&
+      !semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
 
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
   const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
@@ -228,26 +339,27 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
+    const declarations = []
     for (const instrumentation of instrumentations) {
-      if (instrumentation.name !== moduleName) continue
+      if (instrumentation.name === moduleName) declarations.push(instrumentation)
+    }
 
-      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
-      // Treat those as "not a test target" instead of crashing.
-      const versions = process.env.PACKAGE_VERSION_RANGE
-        ? [process.env.PACKAGE_VERSION_RANGE]
-        : normalizeVersions(instrumentation.versions)
+    // A module no instrumentation declares would silently run zero tests instead of failing.
+    if (declarations.length === 0) {
+      throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
+        `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
+    }
 
-      for (const version of versions) {
-        if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
-        if (version !== '*') {
-          const min = semver.coerce(version)?.version
-          if (!min) throw new Error(`Invalid version: ${version}`)
-          testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
-        }
+    // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+    // Treat those as "not a test target" instead of crashing.
+    // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
+    // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
+    const { versionList } = resolvePluginVersions({ name: moduleName, declarations })
 
-        const max = require(getModulePath(moduleName, version)).version()
-        testVersions.set(max, { versionRange: version, versionKey: version, resolvedVersion: max })
-      }
+    for (const { versionKey, range: declaredRange } of versionList) {
+      // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
+      const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
+      testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
     }
 
     const testCases = Array.from(testVersions.values())
@@ -255,6 +367,16 @@ function withVersions (plugin, modules, range, cb) {
       .sort(({ resolvedVersion }) => resolvedVersion.localeCompare(resolvedVersion))
 
     for (const testCase of testCases) {
+      const brokenReason = brokenVersionReason(moduleName, testCase.resolvedVersion)
+      if (brokenReason) {
+        // The version is installed but deliberately not exercised; surface it as a pending test so the skip is visible
+        // in CI rather than silently absent.
+        describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
+          it.skip(`skipped — known broken: ${brokenReason}`, () => {})
+        })
+        continue
+      }
+
       const absBasePath = path.resolve(__dirname, getModulePath(moduleName, testCase.versionKey))
       const absNodeModulesPath = `${absBasePath}/node_modules`
 
@@ -264,6 +386,7 @@ function withVersions (plugin, modules, range, cb) {
         before(() => {
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
+          const testedPlugins = getAgent().testedPlugins
           const lastPlugin = testedPlugins.at(-1)
           if (
             !lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== testCase.resolvedVersion
@@ -288,11 +411,6 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
-}
-
-function normalizeVersions (versions) {
-  if (!versions) return []
-  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -364,6 +482,12 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
+// The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
+// hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
+// and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
+// runs always exit before it triggers; only a leaked handle — the actual bug — fires it.
+const EXIT_WATCHDOG_MS = 120_000
+
 exports.mochaHooks = {
   beforeAll () {
     process.exit = (code) => {
@@ -372,12 +496,28 @@ exports.mochaHooks = {
   },
   afterAll () {
     process.exit = ORIGINAL_PROCESS_EXIT
+
+    // Arm the watchdog after restoring process.exit so it can call it.
+    const watchdog = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[dd-trace test watchdog] Process did not exit ${EXIT_WATCHDOG_MS / 1000}s after all suites completed.`,
+        'Active handles keeping the event loop alive:',
+        process._getActiveHandles?.()?.map(h => h?.constructor?.name ?? String(h))
+      )
+      ORIGINAL_PROCESS_EXIT(1)
+    }, EXIT_WATCHDOG_MS)
+
+    // Unref so a clean run (no leak) always exits without waiting for the timer.
+    watchdog.unref()
   },
   afterEach () {
-    agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
+    // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
+    // ordering keeps that throw from skipping the unconditional cleanup above.
+    if (_agent) _agent.reset()
   },
 }

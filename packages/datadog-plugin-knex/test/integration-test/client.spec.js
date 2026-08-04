@@ -1,21 +1,35 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const semver = require('semver')
+
 const {
-  sandboxCwd, useSandbox, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  curl,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-withVersions('knex', 'knex', version => {
+withVersions('knex', 'knex', (version, _, resolvedVersion) => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
-    useSandbox([`'knex@${version}'`, 'express', 'sqlite3'], false,
+    // knex 1.x routes the `sqlite3` client through the @vscode/sqlite3 fork; every other major uses sqlite3.
+    const sqlite3Driver = semver.satisfies(resolvedVersion, '1.x') ? '@vscode/sqlite3' : 'sqlite3'
+
+    useSandbox([`'knex@${version}'`, 'express', sqlite3Driver], false,
       ['./packages/datadog-plugin-knex/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'knex')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'knex',
+      packageName: 'knex',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -23,11 +37,11 @@ withVersions('knex', 'knex', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)

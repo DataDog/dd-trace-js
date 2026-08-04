@@ -317,7 +317,7 @@ describe('snapshot-pruner', function () {
       // The algorithm tries to prune to target but may not always hit exactly
       // Just verify significant reduction happened
       const reduction = size - Buffer.byteLength(result)
-      assert.ok(reduction > size * 0.9) // At least 90% reduction
+      assert.ok(reduction > size * 0.9, `Expected ${reduction} > ${size * 0.9}`) // At least 90% reduction
 
       // Should complete in reasonable time
       assert.ok(elapsed < 30, `Expected elapsed time to be less than 30ms, but got ${elapsed}ms`)

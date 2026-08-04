@@ -2,6 +2,7 @@
 
 const LLMObsTagger = require('../../../tagger')
 const { spanHasError } = require('../../../util')
+const { formatIO } = require('../messages')
 const LangChainLLMObsHandler = require('.')
 
 class LangChainLLMObsEmbeddingHandler extends LangChainLLMObsHandler {
@@ -10,7 +11,7 @@ class LangChainLLMObsEmbeddingHandler extends LangChainLLMObsHandler {
     let embeddingInput, embeddingOutput
 
     if (isWorkflow) {
-      embeddingInput = this.formatIO(inputs)
+      embeddingInput = formatIO(inputs)
     } else {
       const input = Array.isArray(inputs) ? inputs : [inputs]
       embeddingInput = input.map(doc => ({ text: doc }))

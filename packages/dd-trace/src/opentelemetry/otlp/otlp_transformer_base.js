@@ -141,8 +141,7 @@ class OtlpTransformerBase {
    */
   serializeToProtobuf (protoType, data) {
     const message = protoType.create(data)
-    const buffer = protoType.encode(message).finish()
-    return buffer
+    return protoType.encode(message).finish()
   }
 
   /**

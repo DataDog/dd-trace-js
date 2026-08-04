@@ -1,15 +1,19 @@
 'use strict'
 
+const assert = require('node:assert')
+
 const { describe, it, before } = require('mocha')
 
-const { withVersions } = require('../../../setup/mocha')
-
-const { assertLlmObsSpanEvent, useLlmObs } = require('../../util')
+const { assertLlmObsSpanEvent, useLlmObs, MOCK_STRING, MOCK_NUMBER } = require('../../util')
+const { withAwsSdkVersions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
 const {
   models,
   modelConfig,
   cacheWriteRequest,
   cacheReadRequest,
+  converseRequest,
+  converseToolResultRequest,
+  converseUnsupportedBlocksRequest,
 } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
@@ -18,13 +22,13 @@ const serviceName = 'bedrock-service-name-test'
 describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     useEnv({
-      AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-      AWS_ACCESS_KEY_ID: '00000000000000000000',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || '0000000000/00000000000000000000000000000',
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || '00000000000000000000',
     })
 
     const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
 
-    withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
+    withAwsSdkVersions('>=3', (version, moduleName) => {
       let AWS
       let bedrockRuntimeClient
 
@@ -33,7 +37,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
+          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
             require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
@@ -85,8 +89,8 @@ describe('Plugin', () => {
                 cache_read_input_tokens: model.response.cacheReadTokens,
                 cache_write_input_tokens: model.response.cacheWriteTokens,
               },
-              modelName: model.modelId.split('.')[1].toLowerCase(),
-              modelProvider: model.provider.toLowerCase(),
+              modelName: model.modelId.toLowerCase(),
+              modelProvider: 'amazon_bedrock',
               metadata: {
                 temperature: modelConfig.temperature,
                 max_tokens: modelConfig.maxTokens,
@@ -134,8 +138,8 @@ describe('Plugin', () => {
                 cache_read_input_tokens: model.response.cacheReadTokens,
                 cache_write_input_tokens: model.response.cacheWriteTokens,
               },
-              modelName: model.modelId.split('.')[1].toLowerCase(),
-              modelProvider: model.provider.toLowerCase(),
+              modelName: model.modelId.toLowerCase(),
+              modelProvider: 'amazon_bedrock',
               metadata: {
                 temperature: modelConfig.temperature,
                 max_tokens: modelConfig.maxTokens,
@@ -181,8 +185,8 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
             },
-            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            modelName: cacheWriteRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheWriteRequest.requestBody.temperature,
               max_tokens: cacheWriteRequest.requestBody.max_tokens,
@@ -226,8 +230,8 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
             },
-            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            modelName: cacheWriteRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheWriteRequest.requestBody.temperature,
               max_tokens: cacheWriteRequest.requestBody.max_tokens,
@@ -274,11 +278,181 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens,
             },
-            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            modelName: cacheReadRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheReadRequest.requestBody.temperature,
               max_tokens: cacheReadRequest.requestBody.max_tokens,
+            },
+            tags: { ml_app: 'test', integration: 'bedrock' },
+          })
+        })
+
+        const converseAssertion = (tokens) => ({
+          spanKind: 'llm',
+          name: 'bedrock-runtime.command',
+          inputMessages: [
+            { content: converseRequest.systemPrompt, role: 'system' },
+            { content: converseRequest.userPrompt, role: 'user' },
+          ],
+          outputMessages: [{
+            role: converseRequest.response.role,
+            tool_calls: [{
+              name: converseRequest.response.toolCall.name,
+              arguments: converseRequest.response.toolCall.arguments,
+              tool_id: MOCK_STRING,
+              type: 'toolUse',
+            }],
+          }],
+          toolDefinitions: converseRequest.request.toolConfig.tools.map(({ toolSpec }) => ({
+            name: toolSpec.name,
+            description: toolSpec.description,
+            schema: toolSpec.inputSchema,
+          })),
+          metrics: {
+            input_tokens: tokens.inputTokens,
+            output_tokens: tokens.outputTokens,
+            total_tokens: tokens.inputTokens + tokens.outputTokens,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+          },
+          modelName: converseRequest.modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          metadata: {
+            temperature: modelConfig.temperature,
+            max_tokens: modelConfig.maxTokens,
+            stop_reason: converseRequest.response.stopReason,
+          },
+          tags: { ml_app: 'test', integration: 'bedrock' },
+        })
+
+        it('should converse', async function () {
+          if (typeof AWS.ConverseCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseCommand({ modelId: converseRequest.modelId, ...converseRequest.request })
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], { ...converseAssertion(converseRequest.response), span: apmSpans[0] })
+        })
+
+        it('should converse-stream', async function () {
+          if (typeof AWS.ConverseStreamCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseStreamCommand({
+            modelId: converseRequest.modelId,
+            ...converseRequest.request,
+          })
+          const result = await bedrockRuntimeClient.send(command)
+          for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
+            // drain
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            ...converseAssertion(converseRequest.streamedResponse),
+            span: apmSpans[0],
+          })
+        })
+
+        it('should converse-stream a text answer after tool results in the history', async function () {
+          if (typeof AWS.ConverseStreamCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseStreamCommand({
+            modelId: converseToolResultRequest.modelId,
+            ...converseToolResultRequest.request,
+          })
+          const result = await bedrockRuntimeClient.send(command)
+          for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
+            // drain
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [
+              { content: converseToolResultRequest.systemPrompt, role: 'system' },
+              { content: converseToolResultRequest.userPrompt, role: 'user' },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  name: 'fetch_concept',
+                  arguments: { concept: 'tracing' },
+                  tool_id: converseToolResultRequest.toolUseId,
+                  type: 'toolUse',
+                }],
+              },
+              {
+                role: 'user',
+                tool_results: [{
+                  name: '',
+                  result: converseToolResultRequest.toolResultText,
+                  tool_id: converseToolResultRequest.toolUseId,
+                  type: 'tool_result',
+                }],
+              },
+            ],
+            outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+            toolDefinitions: converseToolResultRequest.request.toolConfig.tools.map(({ toolSpec }) => ({
+              name: toolSpec.name,
+              description: toolSpec.description,
+              schema: toolSpec.inputSchema,
+            })),
+            metrics: {
+              input_tokens: MOCK_NUMBER,
+              output_tokens: MOCK_NUMBER,
+              total_tokens: MOCK_NUMBER,
+              cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
+            },
+            modelName: converseToolResultRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
+            metadata: {
+              temperature: modelConfig.temperature,
+              max_tokens: modelConfig.maxTokens,
+              stop_reason: MOCK_STRING,
+            },
+            tags: { ml_app: 'test', integration: 'bedrock' },
+          })
+        })
+
+        it('should label unsupported converse content blocks and tool-result items', async function () {
+          if (typeof AWS.ConverseCommand !== 'function') return this.skip()
+          const { response } = converseUnsupportedBlocksRequest
+          const command = new AWS.ConverseCommand({
+            modelId: converseUnsupportedBlocksRequest.modelId,
+            ...converseUnsupportedBlocksRequest.request,
+          })
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: converseUnsupportedBlocksRequest.userPrompt, role: 'user' }],
+            outputMessages: [{
+              role: 'assistant',
+              content: response.unsupportedContent,
+              tool_results: [{
+                name: '',
+                result: response.unsupportedToolResult,
+                tool_id: response.toolResultId,
+                type: 'tool_result',
+              }],
+            }],
+            metrics: {
+              input_tokens: response.inputTokens,
+              output_tokens: response.outputTokens,
+              total_tokens: response.inputTokens + response.outputTokens,
+              cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
+            },
+            modelName: converseUnsupportedBlocksRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
+            metadata: {
+              temperature: modelConfig.temperature,
+              max_tokens: modelConfig.maxTokens,
+              stop_reason: response.stopReason,
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
           })
@@ -319,14 +493,38 @@ describe('Plugin', () => {
               cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
               cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens,
             },
-            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
-            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            modelName: cacheReadRequest.modelId.toLowerCase(),
+            modelProvider: 'amazon_bedrock',
             metadata: {
               temperature: cacheReadRequest.requestBody.temperature,
               max_tokens: cacheReadRequest.requestBody.max_tokens,
             },
             tags: { ml_app: 'test', integration: 'bedrock' },
           })
+        })
+
+        // MLOS-591 regression: `bedrockruntime` registers its LLMObs span from
+        // `setLLMObsTags` rather than the inherited `LLMObsPlugin.start`. The
+        // dd-go LLMObs trace-indexer needs `llmobs_trace_id` /
+        // `llmobs_parent_id` on the local trace tags so OTel `gen_ai.*` spans
+        // share an LLMObs trace with this bedrock span. The first model is
+        // enough — bridge-tag plumbing is not per-model.
+        it('writes otel bridge tags onto the apm span meta', async () => {
+          const model = models[0]
+          const command = new AWS.InvokeModelCommand({
+            body: JSON.stringify(model.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: model.modelId,
+          })
+
+          await bedrockRuntimeClient.send(command)
+
+          const { apmSpans } = await getEvents()
+          const apmMeta = apmSpans[0].meta
+          assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+          assert.ok(apmMeta.llmobs_parent_id)
+          assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
         })
       })
     })

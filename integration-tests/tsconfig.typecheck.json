@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": [
+      "vitest"
+    ]
+  },
+  "include": [
+    "ci-visibility/vitest-tests/typecheck.test-d.ts"
+  ]
+}

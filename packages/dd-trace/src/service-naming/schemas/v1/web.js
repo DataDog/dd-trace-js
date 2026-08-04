@@ -1,6 +1,6 @@
 'use strict'
 
-const { identityService, httpPluginClientService } = require('../util')
+const { identityService, httpPluginClientService, optionServiceSource, awsServiceV1 } = require('../util')
 
 const web = {
   client: {
@@ -15,29 +15,43 @@ const web = {
     http: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
+      serviceSource: optionServiceSource,
     },
     genai: {
       opName: () => 'google_genai.request',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
+    },
+    'modelcontextprotocol-sdk': {
+      opName: () => 'mcp.tool.call',
+      serviceName: identityService,
     },
     fetch: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
+      serviceSource: optionServiceSource,
     },
     http2: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
+      serviceSource: optionServiceSource,
     },
     aws: {
       opName: ({ awsService }) => `aws.${awsService}.request`,
-      serviceName: identityService,
+      serviceName: awsServiceV1,
+      serviceSource: optionServiceSource,
     },
     lambda: {
       opName: () => 'aws.lambda.invoke',
-      serviceName: identityService,
+      serviceName: awsServiceV1,
+      serviceSource: optionServiceSource,
     },
     undici: {
       opName: () => 'undici.request',
+      serviceName: httpPluginClientService,
+    },
+    'electron:net:request': {
+      opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
     },
   },
@@ -45,26 +59,32 @@ const web = {
     'apollo.gateway.request': {
       opName: () => 'apollo.gateway.request',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     'apollo.gateway.plan': {
       opName: () => 'apollo.gateway.plan',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     'apollo.gateway.validate': {
       opName: () => 'apollo.gateway.validate',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     'apollo.gateway.execute': {
       opName: () => 'apollo.gateway.execute',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     'apollo.gateway.fetch': {
       opName: () => 'apollo.gateway.fetch',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     'apollo.gateway.postprocessing': {
       opName: () => 'apollo.gateway.postprocessing',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceSource: optionServiceSource,
     },
     grpc: {
       opName: () => 'grpc.server.request',

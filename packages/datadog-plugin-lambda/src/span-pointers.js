@@ -36,7 +36,7 @@ function processS3Record (record) {
 
     const hash = generatePointerHash(`${bucket}|${key}|${eTag}`)
     return { pointer: { kind: 'aws.s3.object', direction: 'upstream', hash } }
-  } catch (e) {
+  } catch {
     log.debug('Error computing S3 span pointer')
     return null
   }
@@ -60,7 +60,7 @@ function processDynamoDBRecord (record) {
     }
     const hash = generatePointerHash(parts.join('|'))
     return { pointer: { kind: 'aws.dynamodb.item', direction: 'upstream', hash } }
-  } catch (e) {
+  } catch {
     log.debug('Error computing DynamoDB span pointer')
     return null
   }
@@ -73,7 +73,7 @@ function getTableNameFromARN (arn) {
 }
 
 function generatePointerHash (input) {
-  return crypto.createHash('sha256').update(input).digest('hex').substring(0, 32)
+  return crypto.createHash('sha256').update(input).digest('hex').slice(0, 32)
 }
 
 module.exports = {

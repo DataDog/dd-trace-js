@@ -1,21 +1,22 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let sns
     let sqs
     let subParams
@@ -92,7 +93,7 @@ describe('Sns', function () {
     describe('with payload tagging', () => {
       before(async () => {
         await agent.load('aws-sdk')
-        await agent.close({ ritmReset: false, wipe: true })
+        await agent.close()
         await agent.load('aws-sdk', {}, {
           cloudPayloadTagging: {
             request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
@@ -102,7 +103,7 @@ describe('Sns', function () {
         })
       })
 
-      after(() => agent.close({ ritmReset: false, wipe: true }))
+      after(() => agent.close())
 
       before(done => {
         createResources('TestQueue', 'TestTopic', done)
@@ -121,6 +122,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',
@@ -152,6 +154,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',
@@ -183,6 +186,7 @@ describe('Sns', function () {
               resource: `publish ${TopicArn}`,
               meta: {
                 'aws.sns.topic_arn': TopicArn,
+                'messaging.system': 'aws.sns',
                 topicname: 'TestTopic',
                 aws_service: 'SNS',
                 region: 'us-east-1',
@@ -196,7 +200,10 @@ describe('Sns', function () {
               },
             })
 
-            assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
+            assert.ok(
+              Object.hasOwn(span.meta, 'aws.response.body.MessageId'),
+              `Available keys: ${inspect(Object.keys(span.meta))}`
+            )
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.publish({
@@ -216,6 +223,7 @@ describe('Sns', function () {
             resource: `getTopicAttributes ${TopicArn}`,
             meta: {
               'aws.sns.topic_arn': TopicArn,
+              'messaging.system': 'aws.sns',
               topicname: 'TestTopic',
               aws_service: 'SNS',
               region: 'us-east-1',
@@ -296,6 +304,7 @@ describe('Sns', function () {
               meta: {
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
+                'messaging.system': 'aws.sns',
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
@@ -344,7 +353,7 @@ describe('Sns', function () {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       withPeerService(
@@ -421,10 +430,16 @@ describe('Sns', function () {
 
               for (const message in data.Messages) {
                 const recordData = JSON.parse(data.Messages[message].Body)
-                assert.ok(Object.hasOwn(recordData.MessageAttributes, '_datadog'))
+                assert.ok(
+                  Object.hasOwn(recordData.MessageAttributes, '_datadog'),
+                  `Available keys: ${inspect(Object.keys(recordData.MessageAttributes))}`
+                )
 
                 const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
-                assert.ok(Object.hasOwn(attributes, 'x-datadog-trace-id'))
+                assert.ok(
+                  Object.hasOwn(attributes, 'x-datadog-trace-id'),
+                  `Available keys: ${inspect(Object.keys(attributes))}`
+                )
               }
             })
             sns.publishBatch({
@@ -481,6 +496,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',

@@ -15,6 +15,8 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
+const NON_ROUTABLE_HOST = '192.0.2.1'
+
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
@@ -52,7 +54,7 @@ describe('RASP - ssrf', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     describe('ssrf', () => {
@@ -79,17 +81,18 @@ describe('RASP - ssrf', () => {
             const module = require(protocol)
 
             app = (req, res) => {
-              const clientRequest = module.get(`${protocol}://${req.query.host}`, function (incomingResponse) {
-                incomingResponse.resume()
-                res.end('end')
-              })
+              const clientRequest = module.get(`${protocol}://${req.query.host}`)
 
               clientRequest.on('error', noop)
+              setImmediate(() => {
+                clientRequest.destroy()
+                res.end('end')
+              })
             }
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
             ])
           })
 
@@ -130,24 +133,34 @@ describe('RASP - ssrf', () => {
         withVersions('express', 'axios', axiosVersion => {
           let axiosToTest
 
-          beforeEach((done) => {
+          before(async () => {
             axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
 
-            // we preload axios because it's lazyloading a debug dependency
-            // that in turns trigger LFI
-
-            axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop).then(done)
+            // Preload axios to trigger its lazily-loaded debug dependency outside of any
+            // request context, which would otherwise cause a false-positive RASP LFI event.
+            // We drain the resulting span synchronously within this `before` hook so it
+            // cannot bleed into any test's assertion window.
+            const preloadSpanDrained = agent.assertSomeTraces(noop).catch(noop)
+            await Promise.all([
+              axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop),
+              preloadSpanDrained,
+            ])
           })
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`)
+              const abortController = new AbortController()
+              axiosToTest.get(`https://${req.query.host}`, { proxy: false, signal: abortController.signal })
                 .catch(noop) // swallow network error
-                .then(() => res.end('end'))
+
+              setImmediate(() => {
+                abortController.abort()
+                res.end('end')
+              })
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -195,13 +208,17 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              requestToTest.get(`https://${req.query.host}`).on('response', () => {
+              const clientRequest = requestToTest.get(`https://${req.query.host}`, { proxy: false })
+              clientRequest.on('error', noop)
+
+              setImmediate(() => {
+                clientRequest.abort()
                 res.end('end')
               })
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -269,7 +286,7 @@ describe('RASP - ssrf', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('Should detect threat without blocking doing a GET request', async () => {

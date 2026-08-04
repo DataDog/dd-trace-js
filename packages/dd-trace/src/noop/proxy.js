@@ -1,8 +1,8 @@
 'use strict'
 
+const { features } = require('../feature-registry')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
-const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
@@ -11,8 +11,11 @@ const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
-const noopOpenFeatureProvider = new NoopFlaggingProvider()
 const noopAIGuard = new NoopAIGuardSDK()
+const noopProfiling = {
+  setCustomLabelKeys () {},
+  runWithLabels (labels, fn) { return fn() },
+}
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
@@ -21,8 +24,10 @@ class NoopProxy {
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
-    this.openfeature = noopOpenFeatureProvider
     this.aiguard = noopAIGuard
+    for (const { name, noop } of Object.values(features)) {
+      this[name] = noop
+    }
     this.setBaggageItem = (key, value) => {}
     this.getBaggageItem = (key) => {}
     this.getAllBaggageItems = () => {}
@@ -50,7 +55,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return
 
-    options = options || {}
+    options ||= {}
 
     return this._tracer.trace(name, options, fn)
   }
@@ -63,7 +68,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return fn
 
-    options = options || {}
+    options ||= {}
 
     return this._tracer.wrap(name, options, fn)
   }
@@ -78,7 +83,7 @@ class NoopProxy {
   }
 
   inject () {
-    return this._tracer.inject.apply(this._tracer, arguments)
+    this._tracer.inject.apply(this._tracer, arguments)
   }
 
   extract () {
@@ -96,6 +101,10 @@ class NoopProxy {
   setUser (user) {
     this.appsec.setUser(user)
     return this
+  }
+
+  get profiling () {
+    return noopProfiling
   }
 
   get TracerProvider () {

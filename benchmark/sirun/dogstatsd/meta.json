@@ -1,0 +1,22 @@
+{
+  "name": "dogstatsd",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "no-tags": {
+      "env": { "VARIANT": "no-tags", "OPERATIONS": "6000000" }
+    },
+    "with-tags": {
+      "env": { "VARIANT": "with-tags", "OPERATIONS": "8300000" }
+    },
+    "many-tags": {
+      "env": { "VARIANT": "many-tags", "OPERATIONS": "3000000" }
+    },
+    "aggregated": {
+      "env": { "VARIANT": "aggregated", "OPERATIONS": "15000000" }
+    }
+  }
+}

@@ -9,21 +9,20 @@ class Sns extends BaseAwsSdkPlugin {
   static isPayloadReporter = true
 
   generateTags (params, operation, response) {
-    if (!params) return {}
+    if (!params) return
 
-    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
+    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return
     const TopicArn = params.TopicArn || response.data.TopicArn
 
-    // Split the ARN into its parts
-    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
-    const arnParts = TopicArn.split(':')
-
-    // Get the topic name from the last part of the ARN
-    const topicName = arnParts.at(-1)
+    // Get the topic name from the last `:`-delimited segment of the ARN
+    // (e.g. 'my-topic' in 'arn:aws:sns:us-east-1:123456789012:my-topic')
+    // without allocating an intermediate parts array.
+    const topicName = TopicArn.slice(TopicArn.lastIndexOf(':') + 1)
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
+      'messaging.system': 'aws.sns',
       topicname: topicName,
     }
 
@@ -71,6 +70,12 @@ class Sns extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ Message?: string, MessageAttributes?: Record<string, object> }} params
+   * @param {string | undefined} topicArn
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
@@ -79,32 +84,29 @@ class Sns extends BaseAwsSdkPlugin {
       return
     }
 
-    const ddInfo = {}
+    let ddInfo
     // for now, we only want to inject to the first message, this may change for batches in the future
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
-      // add ddInfo before checking DSM so we can include DD attributes in payload size
-      params.MessageAttributes._datadog = {
-        DataType: 'Binary',
-        BinaryValue: ddInfo,
-      }
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
     if (this.config.dsmEnabled) {
-      if (!params.MessageAttributes._datadog) {
-        params.MessageAttributes._datadog = {
-          DataType: 'Binary',
-          BinaryValue: ddInfo,
-        }
+      // Add the placeholder before the checkpoint so its payload size includes DD attributes.
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: ddInfo ?? {},
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
+    if (ddInfo) {
       // BINARY types are automatically base64 encoded
-      params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: Buffer.from(JSON.stringify(ddInfo)),
+      }
     } else if (params.MessageAttributes._datadog) {
       // let's avoid adding any additional information to payload if we failed to inject
       delete params.MessageAttributes._datadog
@@ -115,9 +117,7 @@ class Sns extends BaseAwsSdkPlugin {
     // only set a checkpoint if publishing to a topic
     if (topicArn) {
       const payloadSize = getHeadersSize(params)
-      const dataStreamsContext = this.tracer
-        .setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
-      return dataStreamsContext
+      return this.tracer.setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
     }
   }
 }

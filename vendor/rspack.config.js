@@ -5,7 +5,9 @@
 // TODO: Stop depending on `@openfeature/server-sdk` and `@openfeature/core` and
 //       instead intercept the user version with an instrumentation.
 // TODO: Vendor `@datadog/openfeature-node-server` when the above has been
-//       addressed.
+//       addressed. Until then, `packages/dd-trace/src/openfeature/flagging_provider.js`
+//       loads it through a bundler-opaque require so customer bundles do not
+//       follow the optional peer-of-peer chain (see #8635).
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
@@ -37,6 +39,12 @@ module.exports = {
   // have the same filename as the source files this doesn't matter anyway.
   devtool: 'hidden-source-map',
   context: join(__dirname, 'node_modules'),
+  resolve: {
+    // Node.js does not use the `module` field, so prefer `main` (CJS) to avoid
+    // ESM-only default exports being wrapped in a namespace by rspack's interop,
+    // which would break patterns like `require('esquery').parse`.
+    mainFields: ['main', 'module'],
+  },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
     // default is only deterministic with the same dependencies, but when a
@@ -74,13 +82,6 @@ module.exports = {
     }),
     new CopyRspackPlugin({
       patterns: [
-        // The OpenTracing types are exposed in the public API of dd-trace so
-        // they need to be available in the package.
-        {
-          from: '**/*.d.ts',
-          context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
-          to: 'opentracing'
-        },
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',

@@ -1,5 +1,7 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+
 let functionDidColdStart = true
 let proactiveInitialization = false
 let isColdStartSet = false
@@ -35,12 +37,14 @@ function getSandboxInitTags () {
   return tags
 }
 
+const getInitializationType = () => getEnvironmentVariable('AWS_LAMBDA_INITIALIZATION_TYPE')
+
 function isManagedInstancesMode () {
-  return process.env.AWS_LAMBDA_INITIALIZATION_TYPE === 'lambda-managed-instances'
+  return getInitializationType() === 'lambda-managed-instances'
 }
 
 function isProvisionedConcurrency () {
-  return process.env.AWS_LAMBDA_INITIALIZATION_TYPE === 'provisioned-concurrency'
+  return getInitializationType() === 'provisioned-concurrency'
 }
 
 function _resetColdStart () {

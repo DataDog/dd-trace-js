@@ -35,8 +35,7 @@ describe('LLMObsEvalMetricsWriter', () => {
 
   it('constructs the writer with the correct agent proxy values', () => {
     writer = new LLMObsEvalMetricsWriter({
-      port: 8126,
-      hostname: 'localhost',
+      url: new URL('http://localhost:8126'),
     })
     writer.setAgentless(false)
     assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric')
@@ -46,7 +45,7 @@ describe('LLMObsEvalMetricsWriter', () => {
   it('builds the payload correctly', () => {
     writer = new LLMObsEvalMetricsWriter({
       site: 'datadoghq.com',
-      apiKey: 'test',
+      DD_API_KEY: 'test',
     })
     writer.setAgentless(true)
 

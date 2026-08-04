@@ -11,6 +11,7 @@ enum Status {
 
 message MyMessage {
   string id = 1;
+  /** The message value */
   string value = 2;
   repeated OtherMessage otherMessage = 3;
   Status status = 4;

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const {
@@ -11,6 +12,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -18,7 +20,6 @@ describe('esm', () => {
   let agent
   let proc
   let spawnEnv
-  let variants
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     useSandbox([`'@azure/event-hubs@${version}'`], false, [
@@ -31,19 +32,23 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'EventHubProducerClient', undefined, '@azure/event-hubs', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'EventHubProducerClient',
+      packageName: '@azure/event-hubs',
+      defaultExport: false,
+      namedExports: ['EventHubProducerClient'],
+      namedExportBinding: 'direct',
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
         })
 
