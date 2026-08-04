@@ -1291,7 +1291,8 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.calledOnce(secondSpy)
     })
 
-    it('preserves the ObservableCounter delta baseline across an identity refresh', (done) => {
+    it('preserves the ObservableCounter delta baseline across an identity refresh', () => {
+      const clock = sinon.useFakeTimers()
       const exportedValues = []
       mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
@@ -1303,21 +1304,20 @@ describe('OpenTelemetry Meter Provider', () => {
       let value = 20
       meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
 
-      setTimeout(() => {
-        // Refresh happens after the first export already established a baseline of 20.
-        config.tags['runtime-id'] = 'refreshed-id'
-        identityRefreshChannel.publish(config)
-        value = 25
+      clock.tick(100)
 
-        setTimeout(() => {
-          assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
-          assert.strictEqual(exportedValues[0], 20, 'first export should be the absolute baseline')
-          assert.strictEqual(
-            exportedValues[1], 5, 'delta after refresh should be 5, not the absolute reading of 25'
-          )
-          done()
-        }, 120)
-      }, 120)
+      // Refresh happens after the first export already established a baseline of 20.
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      value = 25
+
+      clock.tick(100)
+
+      assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
+      assert.strictEqual(exportedValues[0], 20, 'first export should be the absolute baseline')
+      assert.strictEqual(
+        exportedValues[1], 5, 'delta after refresh should be 5, not the absolute reading of 25'
+      )
     })
   })
 })
