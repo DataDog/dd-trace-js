@@ -1,27 +1,19 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook } = require('./helpers/instrument')
-const { isOtelAzureInstrumentationEnabled } = require('./helpers/otel-azure-enabled')
 const { wrapAsyncWithTraceContext } = require('./helpers/otel-azure-span')
 
 const TRACER_NAME = '@azure/functions'
 const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
 
-if (isOtelAzureInstrumentationEnabled()) {
-  addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
-    const { app } = azureFunction
-
-    shimmer.wrap(app, 'deleteRequest', wrapHttpHandler)
-    shimmer.wrap(app, 'http', wrapHttpHandler)
-    shimmer.wrap(app, 'get', wrapHttpHandler)
-    shimmer.wrap(app, 'patch', wrapHttpHandler)
-    shimmer.wrap(app, 'post', wrapHttpHandler)
-    shimmer.wrap(app, 'put', wrapHttpHandler)
-    shimmer.wrap(app, 'generic', wrapGeneric)
-
-    return azureFunction
-  })
+function patchApp (app) {
+  shimmer.wrap(app, 'deleteRequest', wrapHttpHandler)
+  shimmer.wrap(app, 'http', wrapHttpHandler)
+  shimmer.wrap(app, 'get', wrapHttpHandler)
+  shimmer.wrap(app, 'patch', wrapHttpHandler)
+  shimmer.wrap(app, 'post', wrapHttpHandler)
+  shimmer.wrap(app, 'put', wrapHttpHandler)
+  shimmer.wrap(app, 'generic', wrapGeneric)
 }
 
 function wrapHttpHandler (method) {
@@ -75,3 +67,5 @@ function traceGenericOrchestrationHandler (handler, functionName) {
       ))
   }
 }
+
+module.exports = { patchApp }

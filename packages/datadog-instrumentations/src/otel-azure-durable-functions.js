@@ -1,9 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook } = require('./helpers/instrument')
 const { extractContext } = require('./helpers/azure-trace-context')
-const { isOtelAzureInstrumentationEnabled } = require('./helpers/otel-azure-enabled')
 const {
   endSpan,
   getTracer,
@@ -14,16 +12,10 @@ const {
 
 const TRACER_NAME = '@azure/durable-functions'
 
-if (isOtelAzureInstrumentationEnabled()) {
-  addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
-    const { app } = df
-
-    shimmer.wrap(app, 'entity', entityWrapper)
-    shimmer.wrap(app, 'activity', activityWrapper)
-    shimmer.wrap(app, 'orchestration', orchestrationWrapper)
-
-    return df
-  })
+function patchApp (app) {
+  shimmer.wrap(app, 'entity', entityWrapper)
+  shimmer.wrap(app, 'activity', activityWrapper)
+  shimmer.wrap(app, 'orchestration', orchestrationWrapper)
 }
 
 function entityWrapper (method) {
@@ -102,3 +94,5 @@ function wrapOrchestrationHandler (handler, functionName) {
     }
   }
 }
+
+module.exports = { patchApp }
