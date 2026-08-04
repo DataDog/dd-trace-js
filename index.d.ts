@@ -4005,6 +4005,11 @@ declare namespace tracer {
        * Audio segments attached to the message (e.g. speech input/output)
        */
       audioParts?: AudioPart[],
+
+      /**
+       * Images attached to the message (e.g. vision input, generated output)
+       */
+      imageParts?: ImagePart[],
     }
 
     /**
@@ -4020,6 +4025,27 @@ declare namespace tracer {
        * The audio content as a base64-encoded string
        */
       content: string,
+    }
+
+    /**
+     * Represents an image attached to an LLM chat model message. Exactly one of
+     * `content` or `attachmentKey` must be set.
+     */
+    interface ImagePart {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The image content as a base64-encoded string
+       */
+      content?: string,
+
+      /**
+       * Key of an already-uploaded image, in place of inline content
+       */
+      attachmentKey?: string,
     }
 
     /**

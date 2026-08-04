@@ -661,6 +661,18 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   cb(new Error('boom'))
 })
 
+// messages carrying image parts, inline and by attachment key
+llmobs.annotate({
+  inputData: [{
+    content: 'what is in this image',
+    imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }]
+  }],
+  outputData: [{
+    content: 'a pixel',
+    imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }]
+  }]
+})
+
 // wrap a function
 llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
