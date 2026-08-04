@@ -12,6 +12,7 @@ require('../../setup/core')
 const configureCh = channel('ci:log-submission:winston:configure')
 const addTransportCh = channel('ci:log-submission:winston:add-transport')
 const logSubmissionCh = channel('ci:log-submission:log')
+const playwrightTestFinishCh = channel('ci:playwright:test:finish')
 const batchFlushInterval = 1000
 const maxBatchBytes = 5 * 1024 * 1024
 const maxBatchLogs = 1000
@@ -180,6 +181,16 @@ describe('LogSubmissionPlugin', () => {
 
     plugin.configure(false)
     assert.strictEqual(beforeExitHandlers.has(beforeExitHandler), false)
+  })
+
+  it('flushes pending batches when a Playwright test finishes', () => {
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+    sinon.assert.notCalled(request)
+
+    playwrightTestFinishCh.publish({})
+
+    sinon.assert.calledOnce(request)
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [{ msg: 'hello' }])
   })
 
   it('encodes service names in submitted log paths', () => {

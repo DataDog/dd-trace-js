@@ -113,6 +113,7 @@ class LogSubmissionPlugin extends Plugin {
     })
 
     this.addSub('ci:log-submission:log', (payload) => this.#enqueueLog(payload))
+    this.addSub('ci:playwright:test:finish', () => this.#flush())
   }
 
   /**
