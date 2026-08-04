@@ -604,13 +604,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
-    const telemetryEnabledPath = 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED'
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
-    // TODO: Should telemetry unconditionally be disabled in Jest workers?
-    if ((getEnvironmentVariable('JEST_WORKER_ID') || isTestOptimizationWorker) &&
-        !trackedConfigOrigins.has(telemetryEnabledPath)) {
-      setAndTrack(this, telemetryEnabledPath, false)
+    if (getEnvironmentVariable('JEST_WORKER_ID') || isTestOptimizationWorker) {
+      setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
     // Experimental agentless APM span intake

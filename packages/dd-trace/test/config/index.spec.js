@@ -3042,18 +3042,18 @@ describe('Config', () => {
 
       assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
-  }
 
-  it('should allow Test Optimization workers to explicitly enable telemetry', () => {
-    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+    it(`should ignore explicit telemetry enablement in the ${exporter} Test Optimization worker`, () => {
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
 
-    const config = getConfig({
-      isCiVisibility: true,
-      experimental: { exporter: exporters.VITEST_WORKER },
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
-
-    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, true)
-  })
+  }
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
     const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
@@ -3800,9 +3800,12 @@ describe('Config', () => {
       }
     })
 
-    it('disables telemetry if inside a jest worker', () => {
+    it('unconditionally disables telemetry inside a Jest worker', () => {
       process.env.JEST_WORKER_ID = '1'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+
       const config = getConfig(options)
+
       assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
