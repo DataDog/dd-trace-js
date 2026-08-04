@@ -861,7 +861,7 @@ function getStaticTestCount (source) {
   const direct = [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g)]
     .filter(match => !/\.(?:skip|todo)\b/.test(match[1]))
   const parameterized = [...source.matchAll(
-    /\b(?:it|test)((?:\.[A-Za-z]+)*)\.each\s*\([^()]*\)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g
+    /\b(?:it|test)((?:\.[A-Za-z]+)*)\.each\s*(?:\([^()]*\)|`(?:\\[\s\S]|[^\\`])*`)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g
   )].filter(match => !/\.(?:skip|todo)\b/.test(`${match[1]}${match[2]}`))
   return direct.length + parameterized.length
 }
