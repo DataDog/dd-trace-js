@@ -109,26 +109,29 @@ if (isNoWorkerInitActive) {
 }
 
 function applyExecutionChanges (suite) {
-  for (const task of suite?.tasks || []) {
-    if (task.type === 'suite') {
-      applyExecutionChanges(task)
-      continue
-    }
+  const tasks = suite?.tasks
+  if (tasks) {
+    for (const task of tasks) {
+      if (task.type === 'suite') {
+        applyExecutionChanges(task)
+        continue
+      }
 
-    const testSuite = getTestSuite(task)
-    const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName]) {
-      task.retry = 0
-      task.repeats = attemptToFixRetries
-      task.meta.__ddTestOptAtfRetries = attemptToFixRetries
-    } else if (disabledTests[testSuite]?.[testName]) {
-      task.mode = 'skip'
-    } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
-      task.retry = 0
-      task.repeats = earlyFlakeDetectionRetries
-      task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      const testSuite = getTestSuite(task)
+      const testName = getTestName(task)
+      if (attemptToFixTests[testSuite]?.[testName]) {
+        task.retry = 0
+        task.repeats = attemptToFixRetries
+        task.meta.__ddTestOptAtfRetries = attemptToFixRetries
+      } else if (disabledTests[testSuite]?.[testName]) {
+        task.mode = 'skip'
+      } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+        task.retry = 0
+        task.repeats = earlyFlakeDetectionRetries
+        task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      }
+      wrapRetryCondition(task)
     }
-    wrapRetryCondition(task)
   }
 }
 

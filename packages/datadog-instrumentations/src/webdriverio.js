@@ -1002,9 +1002,13 @@ launcherStartInstanceCh.subscribe({
 
     const state = getCoordinatorState(localRunner)
     addScheduledFiles(state, context.arguments?.[0] || [])
-    for (const schedule of context.self._schedule || []) {
-      for (const { files } of schedule.specs || []) {
-        addScheduledFiles(state, files)
+    if (context.self._schedule) {
+      for (const schedule of context.self._schedule) {
+        if (schedule.specs) {
+          for (const { files } of schedule.specs) {
+            addScheduledFiles(state, files)
+          }
+        }
       }
     }
   },

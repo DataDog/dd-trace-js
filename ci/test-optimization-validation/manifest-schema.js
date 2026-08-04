@@ -239,21 +239,23 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
     if (runnerInputError) errors.push(`${prefix}.validation runner configuration ${runnerInputError}.`)
   }
   validateStringArray(validation.requiredEnvVars, `${prefix}.validation.requiredEnvVars`, errors)
-  for (const name of validation.requiredEnvVars || []) {
-    if (!ENV_NAME_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
-    }
-    if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
-      errors.push(
-        `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
-          'TS_NODE_PROJECT.'
-      )
-    }
-    if (SECRET_ENV_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)
-    }
-    if (EXECUTION_ENV_PATTERN.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars must not inherit executable-loading environment variables.`)
+  if (validation.requiredEnvVars) {
+    for (const name of validation.requiredEnvVars) {
+      if (!ENV_NAME_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
+      }
+      if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
+        errors.push(
+          `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
+            'TS_NODE_PROJECT.'
+        )
+      }
+      if (SECRET_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)
+      }
+      if (EXECUTION_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit executable-loading environment variables.`)
+      }
     }
   }
   if (!Number.isInteger(validation.timeoutMs) || validation.timeoutMs < 1 || validation.timeoutMs > MAX_TIMEOUT_MS) {

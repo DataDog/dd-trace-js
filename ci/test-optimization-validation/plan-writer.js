@@ -176,7 +176,9 @@ function formatApprovalPlan ({
           ? [`Blocker: ${plain(framework.blockerCategory.replaceAll('_', ' '))}.`]
           : [])
       )
-      for (const note of framework.notes || []) lines.push(`- ${plain(note)}`)
+      if (framework.notes) {
+        for (const note of framework.notes) lines.push(`- ${plain(note)}`)
+      }
       lines.push('')
       continue
     }
