@@ -12,6 +12,7 @@ const Tracer = require('../../dd-trace/src/tracer')
 const getConfig = require('../../dd-trace/src/config')
 
 const logCh = channel('apm:bunyan:log')
+const logSubmissionCh = channel('ci:log-submission:log')
 
 const tracer = new Tracer(getConfig({
   enabled: true,
@@ -40,8 +41,21 @@ describe('BunyanPlugin', () => {
 
   it('preserves a caller-provided dd field', () => {
     const record = { foo: 'bar', dd: { custom: true } }
-    logCh.publish({ message: record })
+    let submittedLog
+    const onLogSubmission = payload => {
+      submittedLog = payload
+    }
+    logSubmissionCh.subscribe(onLogSubmission)
+
+    try {
+      logCh.publish({ message: record })
+    } finally {
+      logSubmissionCh.unsubscribe(onLogSubmission)
+    }
+
     assert.deepStrictEqual(record.dd, { custom: true })
+    assert.strictEqual(submittedLog.source, 'bunyan')
+    assert.strictEqual(submittedLog.message, record)
   })
 
   it('adds trace_id and span_id when a span is active', () => {

@@ -1,41 +1,77 @@
 'use strict'
 
-const Plugin = require('../../plugins/plugin')
+const request = require('../../exporters/common/request')
 const log = require('../../log')
+const Plugin = require('../../plugins/plugin')
 
-function getWinstonLogSubmissionParameters (config) {
-  const { site, service, DD_API_KEY, DD_AGENTLESS_LOG_SUBMISSION_URL } = config
+/**
+ * @typedef {object} LogSubmissionPayload
+ * @property {string} source
+ * @property {string | Record<string, unknown>} message
+ */
 
-  const defaultParameters = {
-    host: `http-intake.logs.${site}`,
-    path: `/api/v2/logs?ddsource=winston&service=${service}`,
-    ssl: true,
-    headers: {
-      'DD-API-KEY': DD_API_KEY,
-    },
-  }
+/**
+ * @param {import('../../config/config-base')} config
+ * @returns {URL}
+ */
+function getLogSubmissionUrl (config) {
+  const defaultUrl = new URL(`https://http-intake.logs.${config.site}`)
 
-  if (!DD_AGENTLESS_LOG_SUBMISSION_URL) {
-    return defaultParameters
+  if (!config.DD_AGENTLESS_LOG_SUBMISSION_URL) {
+    return defaultUrl
   }
 
   try {
-    const url = new URL(DD_AGENTLESS_LOG_SUBMISSION_URL)
-    return {
-      host: url.hostname,
-      port: url.port,
-      ssl: url.protocol === 'https:',
-      path: defaultParameters.path,
-      headers: defaultParameters.headers,
-    }
+    return new URL(config.DD_AGENTLESS_LOG_SUBMISSION_URL)
   } catch {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
-    return defaultParameters
+    return defaultUrl
   }
+}
+
+/**
+ * @param {import('../../config/config-base')} config
+ * @param {URL} url
+ * @returns {object}
+ */
+function getWinstonLogSubmissionParameters (config, url) {
+  const parameters = {
+    host: url.hostname,
+    path: `/api/v2/logs?ddsource=winston&service=${config.service}`,
+    ssl: url.protocol === 'https:',
+    headers: {
+      'DD-API-KEY': config.DD_API_KEY,
+    },
+  }
+
+  if (url.port) {
+    parameters.port = url.port
+  }
+
+  return parameters
+}
+
+/**
+ * @param {string | Record<string, unknown>} message
+ * @returns {string | undefined}
+ */
+function serializeLogMessage (message) {
+  if (typeof message === 'string') return message
+
+  const seen = new WeakSet()
+  return JSON.stringify(message, (key, value) => {
+    if (value === null || typeof value !== 'object') return value
+    if (seen.has(value)) return '[Circular]'
+
+    seen.add(value)
+    return value
+  })
 }
 
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
+
+  #logSubmissionUrl
 
   constructor (...args) {
     super(...args)
@@ -45,7 +81,52 @@ class LogSubmissionPlugin extends Plugin {
     })
 
     this.addSub('ci:log-submission:winston:add-transport', (logger) => {
-      logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config)))
+      logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config, this.#logSubmissionUrl)))
+    })
+
+    this.addSub('ci:log-submission:log', (payload) => this.#submitLog(payload))
+  }
+
+  /**
+   * @param {boolean | (Record<string, unknown> & { enabled: boolean })} config
+   * @returns {void}
+   */
+  configure (config) {
+    super.configure(config)
+    this.#logSubmissionUrl = config !== null && typeof config === 'object' && config.enabled
+      ? getLogSubmissionUrl(config)
+      : undefined
+  }
+
+  /**
+   * @param {LogSubmissionPayload} payload
+   * @returns {void}
+   */
+  #submitLog ({ source, message }) {
+    let serializedMessage
+    try {
+      serializedMessage = serializeLogMessage(message)
+    } catch (error) {
+      log.error('Could not serialize %s log for automatic submission', source, error)
+      return
+    }
+
+    if (serializedMessage === undefined) return
+
+    const options = {
+      path: `/api/v2/logs?ddsource=${source}&service=${this.config.service}`,
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': this.config.DD_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      url: this.#logSubmissionUrl,
+    }
+
+    request(`[${serializedMessage}]`, options, (error) => {
+      if (error) {
+        log.error('Error submitting %s log', source, error)
+      }
     })
   }
 }
