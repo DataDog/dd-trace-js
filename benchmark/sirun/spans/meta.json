@@ -42,7 +42,7 @@
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
         "SHAPE": "tags-and-otel",
-        "OPERATIONS": "100000"
+        "OPERATIONS": "50000"
       }
     }
   }
