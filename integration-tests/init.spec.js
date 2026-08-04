@@ -355,7 +355,7 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testRuntimeVersionChecks('loader', 'initialize.mjs')
 
       // Only off-thread loaders install the matcher; see initialize.mjs.
-      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
+      if (esmWorks && semver.satisfies(process.versions.node, '>=18.19.0')) {
         context('import-in-the-middle include matcher', () => {
           useEnv({
             NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
@@ -384,6 +384,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
             // initializes the tracer in the application realm before the entrypoint runs.
             it('initializes before an ESM entrypoint', () =>
               testFile('init/trace.mjs', 'true\n', [], ''))
+
+            it('does not initialize ESM instrumentation', () =>
+              testFile('init/instrument.mjs', 'false\n', [], ''))
 
             it('initializes inside inherited Workers', () =>
               testFile('init/loader-worker.mjs', 'true\n', [], ''))
