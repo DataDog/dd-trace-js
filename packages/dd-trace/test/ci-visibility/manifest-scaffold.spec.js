@@ -200,6 +200,90 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  for (const [description, requireValue] of [
+    ['nested object', "{ path: 'features/steps.js' }"],
+    ['nested object in an array', "[{ path: 'features/steps.js' }]"],
+  ]) {
+    it(`rejects a ${description} for a Cucumber string option without aborting scaffolding`, () => {
+      withRepositoryFixture({
+        framework: 'cucumber',
+        script: 'cucumber-js --profile default',
+      }, fixture => {
+        fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+          'module.exports = {',
+          `  default: { require: ${requireValue} },`,
+          '}',
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'cucumber')
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+        assert.match(framework.notes.join(' '), /require/)
+        assert.strictEqual(framework.validation, undefined)
+      })
+    })
+  }
+
+  it('decodes standard escapes in literal JavaScript Cucumber object profiles', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      const supportFile = path.join(fixture.root, 'features', 'steps', 'example.js')
+      fs.mkdirSync(path.dirname(supportFile), { recursive: true })
+      fs.writeFileSync(supportFile, 'module.exports = function () {}\n')
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        'module.exports = {',
+        '  default: {',
+        String.raw`    require: ['features/\u0073teps/**/*.js'],`,
+        '    worldParameters: {',
+        String.raw`      unicode: '\u0041', hex: '\x42', codePoint: '\u{43}',`,
+        String.raw`      max: '\u{10FFFF}', line: 'a\nb',`,
+        '    },',
+        '  },',
+        '}',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.validation.runnerArgs, [
+        '--require', supportFile,
+        '--world-parameters', JSON.stringify({
+          unicode: 'A',
+          hex: 'B',
+          codePoint: 'C',
+          max: String.fromCodePoint(1_114_111),
+          line: 'a\nb',
+        }),
+      ])
+    })
+  })
+
+  it('rejects an out-of-range Unicode escape in a JavaScript Cucumber object profile', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        'module.exports = {',
+        String.raw`  default: { worldParameters: { invalid: '\u{110000}' } },`,
+        '}',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /must be a literal string or object/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   it('rejects spread-composed JavaScript Cucumber object profiles', () => {
     withRepositoryFixture({
       framework: 'cucumber',
@@ -1123,6 +1207,68 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.status, 'runnable')
       assert.strictEqual(framework.validation.testFile, selected)
       assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
+    })
+  })
+
+  it('does not bind a Vitest project name from an unrelated object', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --project unit',
+    }, fixture => {
+      const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+        "import { defineConfig } from 'vitest/config'",
+        'export default defineConfig({',
+        "  metadata: { name: 'unit', root: 'unit', include: ['**/*.test.ts'] },",
+        '  test: {',
+        '    projects: [',
+        "      { name: 'integration', root: 'integration' },",
+        '    ],',
+        '  },',
+        '})',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
+  it('binds a standalone literal Vitest defineProject configuration', () => {
+    withRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --config configs/unit.ts --project unit',
+    }, fixture => {
+      const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+      const configFile = path.join(fixture.root, 'configs', 'unit.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.mkdirSync(path.dirname(configFile), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(configFile, [
+        "import { defineProject } from 'vitest/config'",
+        'export default defineProject({',
+        "  name: 'unit',",
+        "  root: '../unit',",
+        "  include: ['**/*.test.ts'],",
+        '})',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'vitest')
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selected)
+      assert.deepStrictEqual(framework.validation.runnerArgs, [
+        '--config', 'configs/unit.ts', '--project', 'unit',
+      ])
     })
   })
 

@@ -55,17 +55,17 @@ function bindLiteralProject ({ configFiles, projectFiles, projectRoot, runnerArg
     if (source === undefined) continue
     for (const property of getLiteralStringProperties(source, 'name')) {
       if (property.value !== name) continue
-      const projectObject = getProjectObject(source, property.index)
-      if (!projectObject) continue
-      const projectName = getLiteralProperty(projectObject, 'name')
+      const project = getProjectObject(source, property.index)
+      if (!project) continue
+      const projectName = getLiteralProperty(project.source, 'name')
       if (projectName.dynamic || projectName.value !== name) continue
       const binding = getBindingFromObject({
         bindingRoot: effectiveRoot,
         configFile,
         projectFiles,
-        projectObject,
+        projectObject: project.source,
         projectRoot,
-        source,
+        standaloneProject: project.standalone,
       })
       if (binding.error) return binding
       bindings.push(binding)
@@ -102,7 +102,14 @@ function getSelectedConfigFiles ({ configFiles, effectiveRoot, projectRoot, runn
   }
 }
 
-function getBindingFromObject ({ bindingRoot, configFile, projectFiles, projectObject, projectRoot, source }) {
+function getBindingFromObject ({
+  bindingRoot,
+  configFile,
+  projectFiles,
+  projectObject,
+  projectRoot,
+  standaloneProject,
+}) {
   if (/\.\.\./.test(maskJavaScriptNonCode(projectObject))) {
     return { error: 'the selected Vitest project uses dynamic spread composition' }
   }
@@ -110,7 +117,6 @@ function getBindingFromObject ({ bindingRoot, configFile, projectFiles, projectO
   const rootProperty = getLiteralProperty(projectObject, 'root')
   if (rootProperty.dynamic) return { error: 'the selected Vitest project has a dynamic root' }
 
-  const standaloneProject = /\bdefineProject\s*\(/.test(maskJavaScriptNonCode(source))
   const rootBase = standaloneProject ? path.dirname(configFile) : bindingRoot
   const root = rootProperty.value
     ? path.resolve(rootBase, rootProperty.value)
@@ -149,8 +155,16 @@ function matchesProjectFile (project, filename) {
   return included && !project.excludePatterns.some(pattern => matchesLiteralGlob(normalized, pattern))
 }
 
+/**
+ * Returns the literal project object that owns a matching name property.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {number} nameIndex matching name property offset
+ * @returns {{source: string, standalone: boolean}|undefined} bounded project object
+ */
 function getProjectObject (source, nameIndex) {
-  const ranges = getObjectRanges(source)
+  const objectRanges = getObjectRanges(source)
+  const ranges = objectRanges
     .filter(range => range.start < nameIndex && range.end > nameIndex)
     .sort((left, right) => (left.end - left.start) - (right.end - right.start))
   if (ranges.length === 0) return
@@ -161,10 +175,76 @@ function getProjectObject (source, nameIndex) {
   const parentPrefix = parent && maskJavaScriptComments(source.slice(parent.start + 1, inner.start))
   const nestedTestObject = /(?:^|,)\s*(?:test|(["'])test\1)\s*:\s*$/.test(parentPrefix || '')
   const selected = nestedTestObject ? parent : inner
-  return source.slice(selected.start + 1, selected.end)
+  const standalone = isStandaloneProjectObject(source, selected)
+  if (!standalone && !isTestProjectsEntry(source, selected, objectRanges)) return
+  return { source: source.slice(selected.start + 1, selected.end), standalone }
 }
 
+/**
+ * Reports whether an object is the direct literal argument to defineProject.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @returns {boolean} whether the object is a standalone project
+ */
+function isStandaloneProjectObject (source, range) {
+  const before = maskJavaScriptNonCode(source.slice(0, range.start))
+  const after = maskJavaScriptNonCode(source.slice(range.end + 1))
+  return /(?:^|[^\w$.])defineProject\s*\(\s*$/.test(before) && /^\s*\)/.test(after)
+}
+
+/**
+ * Reports whether an object is a direct entry in a literal test.projects array.
+ *
+ * @param {string} source Vitest configuration source
+ * @param {{end: number, start: number}} range candidate object range
+ * @param {{end: number, start: number}[]} objectRanges source object ranges
+ * @returns {boolean} whether the object is a bounded project entry
+ */
+function isTestProjectsEntry (source, range, objectRanges) {
+  const arrays = getDelimitedRanges(source, '[', ']')
+    .filter(array => array.start < range.start && array.end > range.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
+  const projectsArray = arrays[0]
+  if (!projectsArray) return false
+
+  const entryPrefix = maskJavaScriptComments(source.slice(projectsArray.start, range.start)).trimEnd()
+  const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, projectsArray.end + 1)).trimStart()
+  if (!['[', ','].includes(entryPrefix.at(-1)) || ![']', ','].includes(entrySuffix[0])) return false
+
+  const containers = objectRanges
+    .filter(object => object.start < projectsArray.start && object.end > projectsArray.end)
+    .sort((left, right) => (left.end - left.start) - (right.end - right.start))
+  const testObject = containers[0]
+  const configObject = containers[1]
+  if (!testObject || !configObject) return false
+
+  const projectsPrefix = maskJavaScriptComments(source.slice(testObject.start + 1, projectsArray.start))
+  if (!/(?:^|,)\s*(?:projects|"projects"|'projects')\s*:\s*$/.test(projectsPrefix)) return false
+
+  const testPrefix = maskJavaScriptComments(source.slice(configObject.start + 1, testObject.start))
+  return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix)
+}
+
+/**
+ * Finds balanced object ranges while ignoring comments and strings.
+ *
+ * @param {string} source JavaScript-like source
+ * @returns {{end: number, start: number}[]} object ranges
+ */
 function getObjectRanges (source) {
+  return getDelimitedRanges(source, '{', '}')
+}
+
+/**
+ * Finds balanced delimiter ranges while ignoring comments and strings.
+ *
+ * @param {string} source JavaScript-like source
+ * @param {string} open opening delimiter
+ * @param {string} close closing delimiter
+ * @returns {{end: number, start: number}[]} delimiter ranges
+ */
+function getDelimitedRanges (source, open, close) {
   const ranges = []
   const stack = []
   let quote
@@ -197,9 +277,9 @@ function getObjectRanges (source) {
       index++
     } else if (character === '"' || character === "'" || character === '`') {
       quote = character
-    } else if (character === '{') {
+    } else if (character === open) {
       stack.push(index)
-    } else if (character === '}') {
+    } else if (character === close) {
       const start = stack.pop()
       if (start !== undefined) ranges.push({ end: index, start })
     }

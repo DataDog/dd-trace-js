@@ -66,6 +66,18 @@ const RETAINED_PROFILE_VALUES = new Set([
   '--require-module',
   '--world-parameters',
 ])
+const JAVASCRIPT_STRING_ESCAPES = Object.freeze({
+  '"': '"',
+  "'": "'",
+  '/': '/',
+  '\\': '\\',
+  b: '\b',
+  f: '\f',
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  v: '\v',
+})
 
 /**
  * Reports whether the installed Cucumber CLI can bypass customer profiles with a validator-owned config.
@@ -506,18 +518,60 @@ function readQuotedString (source, start) {
   const quote = source[start]
   if (quote !== '"' && quote !== "'") return
   let value = ''
-  for (let index = start + 1; index < source.length; index++) {
+  let index = start + 1
+  while (index < source.length) {
     const character = source[index]
     if (character === quote) return { end: index + 1, value }
+    if (character === '\r' || character === '\n') return
     if (character !== '\\') {
       value += character
+      index++
       continue
     }
-    const escaped = source[++index]
-    const escapes = { n: '\n', r: '\r', t: '\t' }
-    if (escaped === quote || escaped === '\\') value += escaped
-    else if (escapes[escaped]) value += escapes[escaped]
-    else return
+    const escaped = readJavascriptStringEscape(source, index + 1)
+    if (!escaped) return
+    value += escaped.value
+    index = escaped.end
+  }
+}
+
+/**
+ * Decodes one bounded JavaScript string escape without evaluating source.
+ *
+ * @param {string} source original JavaScript source
+ * @param {number} start first character after the backslash
+ * @returns {{end: number, value: string}|undefined} decoded character and ending offset
+ */
+function readJavascriptStringEscape (source, start) {
+  const escaped = source[start]
+  if (Object.hasOwn(JAVASCRIPT_STRING_ESCAPES, escaped)) {
+    return { end: start + 1, value: JAVASCRIPT_STRING_ESCAPES[escaped] }
+  }
+  if (escaped === '\n') return { end: start + 1, value: '' }
+  if (escaped === '\r') {
+    return { end: source[start + 1] === '\n' ? start + 2 : start + 1, value: '' }
+  }
+
+  if (escaped === 'x') {
+    const hexadecimal = source.slice(start + 1, start + 3)
+    if (/^[\da-fA-F]{2}$/.test(hexadecimal)) {
+      return { end: start + 3, value: String.fromCharCode(Number.parseInt(hexadecimal, 16)) }
+    }
+    return
+  }
+  if (escaped !== 'u') return
+
+  if (source[start + 1] === '{') {
+    const match = /^\{([\da-fA-F]{1,6})\}/.exec(source.slice(start + 1))
+    if (!match) return
+    const codePoint = Number.parseInt(match[1], 16)
+    if (codePoint > 1_114_111) return
+    return { end: start + 1 + match[0].length, value: String.fromCodePoint(codePoint) }
+  }
+
+  const hexadecimal = source.slice(start + 1, start + 5)
+  if (/^[\da-fA-F]{4}$/.test(hexadecimal)) {
+    return { end: start + 5, value: String.fromCharCode(Number.parseInt(hexadecimal, 16)) }
   }
 }
 
@@ -539,12 +593,21 @@ function getProfileArgs (definition) {
     }
     const option = PROFILE_VALUE_OPTIONS.get(key)
     if (!option) return { error: `contains unsupported option ${key}`, args: [] }
+
+    if (key === 'worldParameters') {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return { error: 'contains non-object worldParameters', args: [] }
+      }
+      args.push(option, JSON.stringify(value))
+      continue
+    }
+
     const values = Array.isArray(value) ? value : [value]
     for (const item of values) {
-      const serialized = key === 'worldParameters' && item !== null && typeof item === 'object'
-        ? JSON.stringify(item)
-        : String(item)
-      args.push(option, serialized)
+      if (item !== null && typeof item === 'object') {
+        return { error: `contains unsupported object value for ${key}`, args: [] }
+      }
+      args.push(option, String(item))
     }
   }
   return { args }
