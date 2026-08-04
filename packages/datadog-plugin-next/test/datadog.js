@@ -15,8 +15,14 @@ const config = {
   },
 }
 
-module.exports = require('../../..').init({
+const tracer = require('../../..').init({
   service: 'test',
   flushInterval: 0,
   plugins: false,
-}).use('next', process.env.WITH_CONFIG ? config : true).use('http')
+}).use('next', process.env.WITH_CONFIG ? config : true)
+
+if (process.env.WITH_HTTP !== 'false') {
+  tracer.use('http')
+}
+
+module.exports = tracer

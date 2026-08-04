@@ -46,6 +46,7 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
   #mediaResponseDelayMs = 0
@@ -101,6 +102,16 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettings (newSettings) {
     this.#settings = newSettings
+  }
+
+  /**
+   * Delays settings responses to exercise initialization ordering.
+   *
+   * @param {number} delayMs
+   * @returns {void}
+   */
+  setSettingsResponseDelay (delayMs) {
+    this.#settingsResponseDelayMs = delayMs
   }
 
   setSettingsResponseCode (statusCode) {
@@ -280,22 +291,30 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
-        this.#settingsResponseStatusCode
-      res.status(settingsResponseStatusCode)
-      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
-        res.send(JSON.stringify({
-          data: {
-            attributes: this.#settings,
-          },
-        }))
-      } else {
-        res.send(JSON.stringify({ errors: ['error'] }))
+      const respond = () => {
+        const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
+          this.#settingsResponseStatusCode
+        res.status(settingsResponseStatusCode)
+        if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+          res.send(JSON.stringify({
+            data: {
+              attributes: this.#settings,
+            },
+          }))
+        } else {
+          res.send(JSON.stringify({ errors: ['error'] }))
+        }
+        this.emit('message', {
+          headers: req.headers,
+          url: req.url,
+        })
       }
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url,
-      })
+
+      if (this.#settingsResponseDelayMs > 0) {
+        setTimeout(respond, this.#settingsResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
@@ -417,6 +436,7 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []
     this.#suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -442,7 +462,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy

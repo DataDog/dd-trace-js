@@ -49,7 +49,11 @@ const setSocketCh = channel('tracing:ws:server:connect:setSocket')
  */
 
 /**
- * @typedef {string | Buffer | ArrayBuffer | ArrayBufferView | Blob | Buffer[]} WebSocketMessageData
+ * @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView
+ */
+
+/**
+ * @typedef {string | Buffer | ArrayBuffer | BufferView | Blob | Buffer[]} WebSocketMessageData
  */
 
 /**

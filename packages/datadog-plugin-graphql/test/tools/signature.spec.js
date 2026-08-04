@@ -260,8 +260,8 @@ describe('extractErrorIntoSpanEvent stack handling', () => {
    *
    * @param {{
    *   message?: string,
-   *   locations?: ReadonlyArray<{ line: number, column: number }>,
-   *   path?: ReadonlyArray<string | number>,
+   *   locations?: Readonly<Array<{ line: number, column: number }>>,
+   *   path?: Readonly<Array<string | number>>,
    *   originalError?: { stack?: string },
    * }} [shape]
    * @returns {{ error: object, getStackReads: () => number }}

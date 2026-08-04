@@ -1586,7 +1586,7 @@ if (requestedVersion === 'latest' &&
      * @param {string} code filesystem error code
      * @param {string} filePath affected path
      * @param {string} [syscall] failed system call
-     * @returns {NodeJS.ErrnoException} filesystem error
+     * @returns {Error & { code: string, path: string, syscall: string }} filesystem error
      */
     function createFileError (code, filePath, syscall = 'open') {
       return Object.assign(new Error(`${code}: ${syscall} ${filePath}`), {

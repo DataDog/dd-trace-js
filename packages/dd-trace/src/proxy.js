@@ -49,6 +49,7 @@ class LazyModule {
 
   /**
    * @param {import('./config/config-base')} config - Tracer configuration
+   * @param {...unknown} args - Extra arguments forwarded to the lazily loaded module
    */
   enable (config, ...args) {
     this.module = this.provider()
