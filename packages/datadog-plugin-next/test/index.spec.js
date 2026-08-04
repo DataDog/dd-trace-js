@@ -1018,8 +1018,10 @@ describe('compiled Next runtimes', () => {
   })
 
   describe('as the first tracing entrypoint', () => {
+    let tracer
+
     before(async () => {
-      await agent.load('next')
+      tracer = await agent.load('next')
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
@@ -1072,6 +1074,36 @@ describe('compiled Next runtimes', () => {
       dc.channel('apm:next:request:start').unsubscribe(onStart)
       dc.channel('apm:next:page:load').unsubscribe(onPage)
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
+    })
+
+    it('preserves the HTTP endpoint when an App Route resolves an HTTP parent', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/http-parent' }
+
+        handle () {
+          return Promise.resolve({ status: 200 })
+        }
+      }
+      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+
+      const httpParentSpan = tracer.startSpan('web.request', {
+        integrationName: 'http',
+        tags: { 'http.method': 'GET' },
+      })
+      const trace = agent.assertSomeTraces(traces => {
+        const httpSpan = traces[0].find(span => span.name === 'web.request')
+        assert.ok(httpSpan)
+        assert.strictEqual(httpSpan.resource, 'GET /api/http-parent')
+        assert.strictEqual(httpSpan.meta['http.route'], '/api/http-parent')
+        assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/http-parent')
+      })
+
+      await storage('legacy').run(
+        { span: httpParentSpan },
+        () => new AppRouteRouteModule().handle({ headers: {}, method: 'GET', url: '/api/http-parent' }, {})
+      )
+      httpParentSpan.finish()
+      await trace
     })
 
     it('records Pages API errors and status without an existing request store', async () => {
