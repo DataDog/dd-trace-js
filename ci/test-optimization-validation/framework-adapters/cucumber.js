@@ -409,9 +409,11 @@ function readJavascriptLiteral (source, syntax, start, depth = 0) {
   )
   if (primitive) {
     const values = { false: false, null: null, true: true }
+    const value = Object.hasOwn(values, primitive[1]) ? values[primitive[1]] : Number(primitive[1])
+    if (typeof value === 'number' && !Number.isFinite(value)) return
     return {
       end: index + primitive[0].length,
-      value: Object.hasOwn(values, primitive[1]) ? values[primitive[1]] : Number(primitive[1]),
+      value,
     }
   }
 

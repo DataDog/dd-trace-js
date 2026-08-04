@@ -251,7 +251,8 @@ function isTestProjectsEntry (source, range, objectRanges) {
 function isExportedConfigObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
-  return DIRECT_EXPORT_PATTERN.test(before) || (CONFIG_CALL_PATTERN.test(before) && /^\s*\)/.test(after))
+  return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
+    (CONFIG_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after))
 }
 
 /**
@@ -288,6 +289,9 @@ function getDirectContainingArray (source, range) {
   const entryPrefix = maskJavaScriptComments(source.slice(directArray.start, range.start)).trimEnd()
   const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, directArray.end + 1)).trimStart()
   if (['[', ','].includes(entryPrefix.at(-1)) && [']', ','].includes(entrySuffix[0])) return directArray
+  if (/(?:^|\[|,)\s*defineProject\s*\(\s*$/.test(entryPrefix) && /^\)\s*[\],]/.test(entrySuffix)) {
+    return directArray
+  }
 }
 
 /**

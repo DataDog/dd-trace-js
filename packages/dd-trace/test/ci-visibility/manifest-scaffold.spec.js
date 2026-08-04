@@ -284,6 +284,27 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  it('rejects non-finite numbers in a JavaScript Cucumber object profile', () => {
+    withRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --profile default',
+    }, fixture => {
+      fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+        'module.exports = {',
+        '  default: { worldParameters: { limit: 1e309 } },',
+        '}',
+        '',
+      ].join('\n'))
+
+      const framework = scaffoldFramework(fixture, 'cucumber')
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+      assert.match(framework.notes.join(' '), /must be a literal string or object/)
+      assert.strictEqual(framework.validation, undefined)
+    })
+  })
+
   it('rejects spread-composed JavaScript Cucumber object profiles', () => {
     withRepositoryFixture({
       framework: 'cucumber',
@@ -1272,6 +1293,71 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  for (const [description, source] of [
+    ['an overwritten CommonJS export', [
+      'module.exports = {',
+      "  test: { projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }] },",
+      '}',
+      'module.exports = {}',
+    ]],
+    ['a transformed defineConfig export', [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      "  test: { projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }] },",
+      '}).test',
+    ]],
+  ]) {
+    it(`does not bind a Vitest project from ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project unit',
+      }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [...source, ''].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+        assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+        assert.strictEqual(framework.validation, undefined)
+      })
+    })
+  }
+
+  for (const [description, project] of [
+    ['direct', "{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }"],
+    ['nested test', "{ test: { name: 'unit', root: 'unit', include: ['**/*.test.ts'] } }"],
+  ]) {
+    it(`binds a ${description} literal defineProject entry in test.projects`, () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project unit',
+      }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+          "import { defineConfig, defineProject } from 'vitest/config'",
+          'export default defineConfig({',
+          `  test: { projects: [defineProject(${project})] },`,
+          '})',
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, selected)
+        assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
+      })
+    })
+  }
+
   it('binds a standalone literal Vitest defineProject configuration', () => {
     withRepositoryFixture({
       framework: 'vitest',
@@ -1661,7 +1747,11 @@ describe('test optimization validation manifest scaffold', () => {
       fs.writeFileSync(selected, "test('selected', () => {})\n")
       fs.writeFileSync(outside, "test('outside', () => {})\n")
       writeVitestProjectConfig(selectedConfig, 'runtime-tests/selected/**/*.test.ts')
-      fs.appendFileSync(selectedConfig, '// defineProject(\nconst description = "defineProject("\n')
+      fs.writeFileSync(selectedConfig, [
+        '// defineProject(',
+        'const description = "defineProject("',
+        fs.readFileSync(selectedConfig, 'utf8'),
+      ].join('\n'))
       writeVitestProjectConfig(
         path.join(fixture.root, 'vitest.config.ts'),
         'runtime-tests/outside/**/*.test.ts'
