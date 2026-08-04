@@ -28,8 +28,14 @@ module.exports = {
   '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution-sdk-js'),
   '@azure/cosmos': { esmFirst: true, fn: () => require('../azure-cosmos') },
   '@azure/event-hubs': () => require('../azure-event-hubs'),
-  '@azure/functions': () => require('../azure-functions'),
-  'durable-functions': () => require('../azure-durable-functions'),
+  '@azure/functions': () => {
+    require('../otel-azure-functions')
+    require('../azure-functions')
+  },
+  'durable-functions': () => {
+    require('../otel-azure-durable-functions')
+    require('../azure-durable-functions')
+  },
   '@azure/service-bus': () => require('../azure-service-bus'),
   '@cucumber/cucumber': () => require('../cucumber'),
   '@playwright/test': () => require('../playwright'),
