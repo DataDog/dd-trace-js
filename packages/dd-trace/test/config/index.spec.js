@@ -14,6 +14,7 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -3024,6 +3025,34 @@ describe('Config', () => {
         DD_TELEMETRY_METRICS_ENABLED: true,
       },
     })
+  })
+
+  for (const exporter of [
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable telemetry by default for the ${exporter} Test Optimization worker`, () => {
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+  }
+
+  it('should allow Test Optimization workers to explicitly enable telemetry', () => {
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+
+    const config = getConfig({
+      isCiVisibility: true,
+      experimental: { exporter: exporters.VITEST_WORKER },
+    })
+
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, true)
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
