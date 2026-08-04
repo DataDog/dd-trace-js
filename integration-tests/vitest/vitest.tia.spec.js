@@ -27,6 +27,7 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   ITR_CORRELATION_ID,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const {
   TELEMETRY_CODE_COVERAGE_STARTED,
@@ -370,6 +371,7 @@ versions.forEach((version) => {
         })
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
       })
 
       it('skips suites with missing line coverage when coverage report upload is enabled', async () => {
@@ -418,6 +420,11 @@ versions.forEach((version) => {
         })
 
         assert.strictEqual(childProcess.exitCode, 0, testOutput)
+        assert.strictEqual(
+          testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+          1,
+          testOutput
+        )
       })
 
       it('does not request skippable suites or report coverage when TIA is disabled', async () => {
