@@ -506,8 +506,10 @@ function checkSupportedFrameworks (results, frameworks) {
       )
     }
 
-    for (const note of framework.notes || []) {
-      addResult(results, 'info', `${framework.name} capability note`, note)
+    if (framework.notes) {
+      for (const note of framework.notes) {
+        addResult(results, 'info', `${framework.name} capability note`, note)
+      }
     }
   }
 }

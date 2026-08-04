@@ -121,8 +121,11 @@ function getExactFrameworkLocations (diagnosis, framework) {
   const locations = new Set()
   addRelativeFrameworkLocation(locations, diagnosis, framework.project?.packageJson)
 
-  for (const configFile of framework.project?.configFiles || []) {
-    addRelativeFrameworkLocation(locations, diagnosis, configFile)
+  const configFiles = framework.project?.configFiles
+  if (configFiles) {
+    for (const configFile of configFiles) {
+      addRelativeFrameworkLocation(locations, diagnosis, configFile)
+    }
   }
 
   return locations

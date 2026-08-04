@@ -645,6 +645,7 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/iteration-fallback-style': 'error',
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-unused-properties': 'error',
 
@@ -699,6 +700,7 @@ export default [
       'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
       'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
       'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
+      'unicorn/single-line-block-comment-style': 'off', // lots | preserve compact JSDoc typedefs
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans

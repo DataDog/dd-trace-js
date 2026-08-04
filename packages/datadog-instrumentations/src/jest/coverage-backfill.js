@@ -14,7 +14,7 @@ const TRANSFORM_OPTIONS = {
 
 function getCoverageBackfillFiles (skippableSuitesCoverage, rootDir, getTestSuitePath) {
   const files = []
-  for (const filename of Object.keys(skippableSuitesCoverage || {})) {
+  for (const filename of Object.keys(skippableSuitesCoverage)) {
     const relativeFilename = path.isAbsolute(filename)
       ? getTestSuitePath(filename, rootDir)
       : filename
