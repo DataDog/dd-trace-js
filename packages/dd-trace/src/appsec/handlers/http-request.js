@@ -1,7 +1,6 @@
 'use strict'
 
 const { HTTP_CLIENT_IP } = require('../../../../../ext/tags')
-const log = require('../../log')
 const web = require('../../plugins/util/web')
 const { extractIp } = require('../../plugins/util/ip_extractor')
 const { isEmpty } = require('../../util')

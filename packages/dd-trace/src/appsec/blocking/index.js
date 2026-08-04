@@ -3,8 +3,8 @@
 const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 const log = require('../../log')
 const web = require('../../plugins/util/web')
-const blockedTemplates = require('./templates')
 const { updateBlockFailureMetric } = require('../telemetry')
+const blockedTemplates = require('./templates')
 
 // Bounded by the LRU as defense-in-depth: getSpecificKey already keys on the
 // resolved route (or the path with the query string stripped) so cardinality
