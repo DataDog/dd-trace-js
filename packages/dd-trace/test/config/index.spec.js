@@ -12,6 +12,7 @@ const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { defaults } = require('../../src/config/defaults')
@@ -5300,6 +5301,108 @@ rules:
       const config = getConfig()
       assert.strictEqual(config.isServiceNameInferred, true)
       assert.strictEqual(config.service, 'node')
+    })
+  })
+
+  describe('refreshRuntimeId', () => {
+    const loadConfigModule = (overrides = {}) => {
+      const uuid = overrides.uuid || require('../../../../vendor/dist/crypto-randomuuid')
+      const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
+      const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
+        './supported-configurations.json': supportedConfigurations,
+        '../log': log,
+        './parsers': parsers,
+        '../../../../version': { DD_MAJOR },
+      })
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': supportedConfigurations,
+      })
+      const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
+      return proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': configDefaults,
+        '../log': log,
+        '../telemetry': { updateConfig },
+        '../serverless': serverless,
+        'node:fs': fs,
+        './helper': configHelper,
+        '../pkg': pkg,
+        '../../../../version': { DD_MAJOR },
+        '../../../../vendor/dist/crypto-randomuuid': uuid,
+      })
+    }
+
+    beforeEach(() => {
+      log = proxyquire('../../src/log', {})
+      sinon.spy(log, 'info')
+      sinon.spy(log, 'warn')
+      sinon.spy(log, 'error')
+    })
+
+    it('should not generate a runtime id until a Config is constructed', () => {
+      const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
+      const configModule = loadConfigModule({ uuid })
+
+      sinon.assert.notCalled(uuid)
+
+      configModule()
+
+      sinon.assert.calledOnce(uuid)
+    })
+
+    it('should update config.tags[runtime-id] to a new UUID', () => {
+      const configModule = loadConfigModule()
+      const config = configModule()
+      const originalId = config.tags['runtime-id']
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.ok(config.tags['runtime-id'])
+      assert.strictEqual(typeof config.tags['runtime-id'], 'string')
+      // runtime-id should have been set
+      assert.notStrictEqual(config.tags['runtime-id'], originalId)
+    })
+
+    it('should call uuid again to regenerate the runtime id', () => {
+      const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
+      const configModule = loadConfigModule({ uuid })
+      const config = configModule()
+
+      channel('datadog:identity:update').publish(config)
+
+      // once at module load for the initial runtimeId, once on refresh
+      sinon.assert.calledTwice(uuid)
+      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
+      assert.deepStrictEqual(uuid.secondCall.args, [{ disableEntropyCache: true }])
+    })
+
+    it('should store new value that differs from original runtimeId', () => {
+      const uuid = sinon.stub()
+      uuid.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
+      uuid.onSecondCall().returns('00000000-0000-4000-8000-000000000002')
+      const configModule = loadConfigModule({ uuid })
+      const config = configModule()
+
+      channel('datadog:identity:update').publish(config)
+      const firstRefresh = config.tags['runtime-id']
+
+      channel('datadog:identity:update').publish(config)
+      const secondRefresh = config.tags['runtime-id']
+
+      assert.notStrictEqual(firstRefresh, secondRefresh)
+    })
+
+    it('should catch and log an error instead of throwing when uuid generation fails', () => {
+      const error = new Error('boom')
+      const uuid = sinon.stub()
+      uuid.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
+      uuid.onSecondCall().throws(error)
+      const configModule = loadConfigModule({ uuid })
+      const config = configModule()
+
+      channel('datadog:identity:update').publish(config)
+
+      sinon.assert.calledWith(log.error, 'Error refreshing runtime ID', error)
     })
   })
 })

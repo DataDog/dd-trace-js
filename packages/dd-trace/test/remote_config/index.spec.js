@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const Capabilities = require('../../src/remote_config/capabilities')
@@ -818,6 +819,159 @@ describe('RemoteConfig', () => {
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       assert.strictEqual(rc.appliedConfigs.size, 0)
+    })
+  })
+
+  describe('live state getters', () => {
+    it('should reflect clientId changes immediately via state.client.id getter', () => {
+      // state.client.id is a live getter so that in-flight RC polls pick up
+      // a refreshed id without the RemoteConfig instance being recreated.
+      const originalId = rc.state.client.id
+
+      uuid.returns('refreshed-client-id')
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
+      assert.notStrictEqual(rc.state.client.id, originalId)
+    })
+
+    it('should reflect runtime-id tag changes immediately via client_tracer.runtime_id getter', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
+
+      config.tags['runtime-id'] = 'runtimeId' // restore for other tests
+    })
+
+    it('should include live runtime_id and id in the JSON payload', () => {
+      config.tags['runtime-id'] = 'live-runtime-id'
+      const payload = JSON.parse(rc.getPayload())
+
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
+      assert.strictEqual(payload.client.id, '1234-5678')
+
+      config.tags['runtime-id'] = 'runtimeId'
+    })
+
+    it('should cache client_tracer.tags and only refresh it on datadog:identity:update', () => {
+      const originalTags = rc.state.client.client_tracer.tags
+
+      config.tags['new-tag'] = 'new-value'
+
+      // unlike runtime_id, tags is a cached string, so a direct config mutation isn't picked up
+      assert.strictEqual(rc.state.client.client_tracer.tags, originalTags)
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.notStrictEqual(rc.state.client.client_tracer.tags, originalTags)
+      assert.ok(rc.state.client.client_tracer.tags.includes('new-tag:new-value'))
+
+      delete config.tags['new-tag']
+    })
+  })
+
+  describe('refreshClientId', () => {
+    let uuidStub
+    let RemoteConfigWithId
+
+    beforeEach(() => {
+      uuidStub = sinon.stub()
+      // first call is the module-load-time `let clientId = uuid()`, second is the refresh
+      uuidStub.onFirstCall().returns('1234-5678')
+      uuidStub.onSecondCall().returns('new-client-id-uuid')
+
+      RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        '../../../../vendor/dist/crypto-randomuuid': uuidStub,
+        './scheduler': Scheduler,
+        '../../../../package.json': { version: '3.0.0' },
+        '../exporters/common/request': request,
+        '../log': log,
+        '../tagger': tagger,
+        '../git_metadata': getGitMetadata,
+        '../service-naming/extra-services': {
+          getExtraServices: () => extraServices,
+        },
+      })
+    })
+
+    it('should update state.client.id on the live instance immediately after refresh', () => {
+      // state.client.id is a live getter — the existing instance reflects the
+      // update without being recreated, so all in-flight RC polls pick up the
+      // new id on the next getPayload() call.
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should set clientId to the value returned by uuid', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      channel('datadog:identity:update').publish(rcConfig)
+
+      // Other RemoteConfig instances accumulated on the shared channel by earlier tests
+      // also react to this publish, so we can't pin the exact winning uuid here — only
+      // that this instance's guard fired and replaced the original value.
+      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old')
+    })
+
+    it('should update config.tags[_dd.rc.client_id] when it exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: {
+          'runtime-id': 'runtimeId',
+          '_dd.rc.client_id': 'old-client-id',
+        },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      channel('datadog:identity:update').publish(rcConfig)
+
+      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old-client-id')
+    })
+
+    it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      channel('datadog:identity:update').publish(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
+    })
+
+    it('should call uuid again to generate the new ID', () => {
+      channel('datadog:identity:update').publish(config)
+
+      // once at module load for the initial clientId, once on refresh
+      sinon.assert.calledTwice(uuidStub)
+      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
+      assert.deepStrictEqual(uuidStub.secondCall.args, [{ disableEntropyCache: true }])
+    })
+
+    it('should catch and log an error instead of throwing when uuid generation fails', () => {
+      const error = new Error('boom')
+      uuidStub.onSecondCall().throws(error)
+
+      channel('datadog:identity:update').publish(config)
+
+      sinon.assert.calledWith(log.error, '[RC] Error refreshing identity', error)
     })
   })
 })

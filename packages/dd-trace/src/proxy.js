@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const NoopProxy = require('./noop/proxy')
 const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
@@ -279,12 +280,35 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
+
+      if (getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN')) {
+        this.#registerMicroVmRunHook(config)
+      }
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
     }
 
     return this
+  }
+
+  /**
+   * Listens for the MicroVM /run lifecycle event and triggers a one-time
+   * identity reset on first fire.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #registerMicroVmRunHook (config) {
+    const ch = channel('http.server.request.start')
+
+    const onHttpRequest = ({ request }) => {
+      if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
+        ch.unsubscribe(onHttpRequest)
+        channel('datadog:identity:update').publish(config)
+      }
+    }
+
+    ch.subscribe(onHttpRequest)
   }
 
   /**

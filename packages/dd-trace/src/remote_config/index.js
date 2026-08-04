@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
@@ -12,7 +14,10 @@ const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-const clientId = uuid()
+let clientId = uuid()
+let tagsString
+
+channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
@@ -38,17 +43,11 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    const tags = repositoryUrl
-      ? {
-          ...config.tags,
-          [GIT_REPOSITORY_URL]: repositoryUrl,
-          [GIT_COMMIT_SHA]: commitSHA,
-        }
-      : config.tags
 
     const appliedConfigs = this.appliedConfigs = new Map()
 
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
+    tagsString = getTagsString(config, repositoryUrl, commitSHA)
 
     this.state = {
       client: {
@@ -73,18 +72,20 @@ class RemoteConfig {
           error: '',
           backend_client_state: '',
         },
-        id: clientId,
+        get id () { return clientId },
         products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
         is_tracer: true,
         client_tracer: {
-          runtime_id: config.tags['runtime-id'],
+          get runtime_id () { return config.tags['runtime-id'] },
           language: 'node',
           tracer_version: tracerVersion,
           service: config.service,
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          get tags () {
+            return tagsString
+          },
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
@@ -573,6 +574,43 @@ function supportsAckCallback (handler) {
   handler[kSupportsAckCallback] = result
 
   return result
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @param {string} repositoryUrl
+ * @param {string} commitSHA
+ * @returns {string[]}
+ */
+function getTagsString (config, repositoryUrl, commitSHA) {
+  const tags = repositoryUrl
+    ? {
+        ...config.tags,
+        [GIT_REPOSITORY_URL]: repositoryUrl,
+        [GIT_COMMIT_SHA]: commitSHA,
+      }
+    : config.tags
+  return Object.entries(tags).map((pair) => pair.join(':'))
+}
+
+/**
+ * Regenerates the RC client ID and refreshes the cached RC tags string.
+ * `state.client.id` and `client_tracer.tags` are live getters, so subsequent RC polls pick up
+ * the new values.
+ *
+ * @param {import('../config/config-base')} config
+ */
+function refreshIdentity (config) {
+  try {
+    clientId = uuid({ disableEntropyCache: true })
+    if (config.tags['_dd.rc.client_id']) {
+      config.tags['_dd.rc.client_id'] = clientId
+    }
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    tagsString = getTagsString(config, repositoryUrl, commitSHA)
+  } catch (e) {
+    log.error('[RC] Error refreshing identity', e)
+  }
 }
 
 module.exports = RemoteConfig
