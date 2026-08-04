@@ -26,8 +26,11 @@ const KNOWN_METHODS = new Set([
 ])
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
+// `http.endpoint` is deliberately absent: it is Datadog-only with no OTel
+// equivalent, and ASM plus endpoint aggregation read it, so it is retained on
+// both the agent and the OTLP payload.
 const DD_HTTP_META_KEYS = new Set([
-  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.endpoint', 'http.url', 'out.host',
+  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
@@ -41,7 +44,8 @@ function stripIpv6Brackets (host) {
  * @typedef {object} ServerUrlParts
  * @property {string} [scheme] value for `url.scheme`
  * @property {string} [address] value for `server.address`
- * @property {number} [port] value for `server.port`
+ * @property {string} [port] value for `server.port`, kept as the digits the URL
+ * already held so no number-to-string round trip is needed at export time
  * @property {string} path value for `url.path`
  * @property {string} [query] value for `url.query` (omitted when empty)
  */
@@ -70,10 +74,10 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
     }
-    if (parsed.port) {
-      const parsedPort = Number.parseInt(parsed.port, 10)
-      if (parsedPort > 0) port = parsedPort
-    }
+    // `URL` rejects a non-numeric port and normalises away the scheme default, so
+    // any value left is valid digits and needs no re-parsing. Port 0 is never a
+    // real listening port, so it stays omitted as it was before.
+    if (parsed.port && parsed.port !== '0') port = parsed.port
     path = parsed.pathname || '/'
   } catch {
     // Malformed or relative URL: fall back to a best-effort path only.
@@ -132,15 +136,16 @@ function redactUrlCredentials (url) {
 /**
  * The scheme's default port, used as the `server.port` fallback for client spans
  * (the attribute is required for clients but the explicit port is absent for
- * default-port requests).
+ * default-port requests). Returned as a string because every attribute leaves on
+ * the agent protocol as a `meta` string.
  *
  * @param {string} [url]
- * @returns {number | undefined}
+ * @returns {string | undefined}
  */
 function defaultPortForUrl (url) {
   if (url === undefined) return
-  if (url.startsWith('https:') || url.startsWith('wss:')) return 443
-  if (url.startsWith('http:') || url.startsWith('ws:')) return 80
+  if (url.startsWith('https:') || url.startsWith('wss:')) return '443'
+  if (url.startsWith('http:') || url.startsWith('ws:')) return '80'
 }
 
 /**
@@ -204,15 +209,11 @@ function applyHttpOtelSemantics (formattedSpan) {
   }
 
   const status = meta['http.status_code']
-  let statusCode
-  if (status !== undefined) {
-    // OTel types http.response.status_code as an int, so emit it as a numeric
-    // metric (the OTLP exporter serializes meta as stringValue but metrics as
-    // intValue) — mirroring how server.port is handled below. Guard against a
-    // non-numeric status, which would otherwise write a NaN metric.
-    statusCode = Number.parseInt(status, 10)
-    if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
-  }
+  // Every attribute leaves on the agent protocol as a `meta` string, so the
+  // already-stringified status is reused verbatim. OTel types the attribute as an
+  // int, which only matters on the OTLP path: `otlp_transformer` promotes this key
+  // to `intValue` from its own allowlist, so no numeric copy is needed here.
+  if (status !== undefined) newMeta[HTTP_RESPONSE_STATUS_CODE] = status
 
   const userAgent = meta['http.useragent']
   if (userAgent !== undefined) newMeta[USER_AGENT_ORIGINAL] = userAgent
@@ -223,11 +224,10 @@ function applyHttpOtelSemantics (formattedSpan) {
   // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
   if (kind === 'server') {
-    // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)
-    // never populate `http.url`, so the OTel `url.*` / `server.*` attributes below
-    // can't be derived and are omitted for those spans. This needs a fix; the
-    // short-term option is to set `http.url` in those integrations so they emit
-    // the full server attribute set.
+    // A server integration that does not populate `http.url` gets no `url.*` /
+    // `server.*` attributes, since there is nothing here to derive them from. The
+    // fix belongs in the integration: see `packages/datadog-plugin-next`, which
+    // sets `http.url` under the flag for exactly this reason.
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
       const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
@@ -235,7 +235,8 @@ function applyHttpOtelSemantics (formattedSpan) {
       if (scheme !== undefined) newMeta[URL_SCHEME] = toHttpScheme(scheme)
       if (query !== undefined) newMeta[URL_QUERY] = query
       if (address !== undefined) newMeta[SERVER_ADDRESS] = address
-      if (port !== undefined) newMetrics[SERVER_PORT] = port
+      // Already a string of digits from the URL, so no conversion is needed.
+      if (port !== undefined) newMeta[SERVER_PORT] = port
     }
   } else {
     if (url !== undefined) {
@@ -248,21 +249,22 @@ function applyHttpOtelSemantics (formattedSpan) {
     if (clientPort === undefined) {
       // server.port is required for client spans; fall back to the scheme default.
       const defaultPort = defaultPortForUrl(url)
-      if (defaultPort !== undefined) newMetrics[SERVER_PORT] = defaultPort
+      if (defaultPort !== undefined) newMeta[SERVER_PORT] = defaultPort
     } else {
-      newMetrics[SERVER_PORT] = clientPort
+      newMeta[SERVER_PORT] = String(clientPort)
     }
   }
 
-  // OTel error semantics for an error response (no-clobber on an exception-derived
-  // type): server spans are errors on 5xx only (4xx MUST be left unset per the
-  // spec); client spans on any status >= 400.
-  if (status !== undefined && newMeta[ERROR_TYPE] === undefined) {
-    const isError = statusCode >= (kind === 'server' ? 500 : 400)
-    if (isError) {
-      newMeta[ERROR_TYPE] = status
-      formattedSpan.error = 1
-    }
+  // `error.type` describes an error the span already recorded; it never decides
+  // whether the span is an error. The status-code rules live at capture time
+  // (`web.addStatusError` for servers, the client plugins' `validateStatus`), which
+  // is the only place they can live: trace stats read the span before this runs, so
+  // flipping `error` here would make the span and its stats disagree. The
+  // configured error-status ranges therefore apply, and they take precedence over
+  // the OTel defaults.
+  // No-clobber: an exception already put its class name here.
+  if (status !== undefined && formattedSpan.error && newMeta[ERROR_TYPE] === undefined) {
+    newMeta[ERROR_TYPE] = status
   }
 
   formattedSpan.meta = newMeta

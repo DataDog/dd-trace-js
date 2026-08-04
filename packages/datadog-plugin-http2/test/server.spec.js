@@ -269,9 +269,7 @@ describe('Plugin', () => {
                 'url.path': '/user',
                 'url.scheme': 'http',
                 'server.address': 'localhost',
-              },
-              metrics: {
-                'http.response.status_code': 200,
+                'http.response.status_code': '200',
               },
             })
             assert.ok(!Object.hasOwn(span.meta, 'http.method'))
