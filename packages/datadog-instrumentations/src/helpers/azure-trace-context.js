@@ -31,12 +31,11 @@ function getInvocationContext (args, trigger) {
     return args[0]
   }
   if (trigger === 'durable-activity') {
-    return args[args.length - 1]
+    return args.at(-1)
   }
   if (trigger === 'orchestration-generic') {
     return args[1]
   }
-  return undefined
 }
 
 function runWithInvocationContext (args, trigger, fn) {

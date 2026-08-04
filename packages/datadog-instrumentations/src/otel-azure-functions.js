@@ -49,7 +49,7 @@ function wrapGeneric (method) {
 }
 
 function traceGenericOrchestrationHandler (handler, functionName) {
-  return async function (...args) {
+  return function (...args) {
     const orchestrationBinding = args[0]
     if (orchestrationBinding?.isReplaying) {
       return handler.apply(this, args)

@@ -73,10 +73,10 @@ function orchestrationWrapper (method) {
 }
 
 function wrapOrchestrationHandler (handler, functionName) {
-  return function* (...args) {
+  return function * (...args) {
     const invocationContext = args[0]
     if (invocationContext?.df?.isReplaying) {
-      yield* handler.apply(this, args)
+      yield * handler.apply(this, args)
       return
     }
 

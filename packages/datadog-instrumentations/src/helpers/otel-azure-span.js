@@ -45,7 +45,7 @@ function wrapSyncWithTraceContext (tracerName, trigger, handler, functionName, o
 }
 
 function wrapAsyncWithTraceContext (tracerName, trigger, handler, functionName) {
-  return async function (...args) {
+  return function (...args) {
     const { runWithInvocationContext } = require('./azure-trace-context')
     return runWithInvocationContext(args, trigger, () =>
       getTracer(tracerName).startActiveSpan(
