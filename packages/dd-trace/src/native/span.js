@@ -227,7 +227,6 @@ class NativeDatadogSpan extends DatadogSpan {
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
-        tracerService,
         tracerServiceLower,
       })
 
@@ -243,7 +242,6 @@ class NativeDatadogSpan extends DatadogSpan {
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate,
-        tracerService,
         tracerServiceLower,
       })
 
@@ -257,7 +255,6 @@ class NativeDatadogSpan extends DatadogSpan {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: spanId,
         spanId,
-        tracerService,
         tracerServiceLower,
       })
       spanContext._trace.startTime = startTime

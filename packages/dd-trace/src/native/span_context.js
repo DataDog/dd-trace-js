@@ -33,7 +33,7 @@ const PROCESS_TAGS_META_KEY = '_dd.tags.process'
  * Span context with an authoritative JS tag cache and final native sync.
  * Final formatting handles deletion and type replacement that WASM cannot.
  */
-const { MEASURED } = tags
+const { BASE_SERVICE, MEASURED } = tags
 const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
 
 function truncateWithEllipsis (value, max) {
@@ -88,8 +88,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {object} [props.baggageItems] - Baggage items
    * @param {object} [props.trace] - Shared trace object
    * @param {object} [props.tracestate] - W3C tracestate
-   * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
-   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for extra-service registration
+   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for base-service inference
    */
   constructor (nativeSpans, props) {
     // Native sync begins after parent construction.
@@ -109,7 +108,6 @@ class NativeSpanContext extends DatadogSpanContext {
     leId[6] = beBuf[1]
     leId[7] = beBuf[0]
     this._nativeSpanId = leId
-    this._tracerService = props.tracerService // Store for BASE_SERVICE check
     this._tracerServiceLower = props.tracerServiceLower || ''
   }
 
@@ -195,6 +193,7 @@ class NativeSpanContext extends DatadogSpanContext {
     let service
     let type = ''
     let extraService
+    let baseService
 
     for (const key of Object.keys(tags)) {
       const value = tags[key]
@@ -213,6 +212,9 @@ class NativeSpanContext extends DatadogSpanContext {
         case 'resource.name':
           if (typeof value !== 'string') return false
           resource = truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+          break
+        case BASE_SERVICE:
+          baseService = value
           break
         case 'span.type':
           if (typeof value !== 'string') return false
@@ -261,7 +263,15 @@ class NativeSpanContext extends DatadogSpanContext {
     service = normalizeService(service)
     type = normalizeType(type)
 
-    if (extraService !== undefined) registerExtraService(extraService)
+    if (extraService !== undefined) {
+      baseService = this._tracerServiceLower
+      this.setTag(BASE_SERVICE, baseService)
+      registerExtraService(extraService)
+    }
+    if (baseService !== undefined) {
+      if (typeof baseService !== 'string') return false
+      metaBatch.push(BASE_SERVICE, truncateWithEllipsis(baseService, MAX_META_VALUE_LENGTH))
+    }
     this.#syncCoreFields(name, resource, service, type, 0)
     const spanId = this._nativeSpanId
     if (metaBatch.length > 0) this.#nativeSpans.queueBatchMetaFlat(spanId, metaBatch)

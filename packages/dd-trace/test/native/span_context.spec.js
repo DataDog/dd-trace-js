@@ -255,6 +255,7 @@ describe('NativeSpanContext', () => {
       spanContext.setTag('service.name', 'api')
       spanContext.setTag('resource.name', 'GET /users')
       spanContext.setTag('span.type', 'web')
+      spanContext.setTag('_dd.base_service', 'stale')
 
       assert.strictEqual(spanContext.tryFastFinalTagsToNative(), true)
 
@@ -263,6 +264,20 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetServiceName, leSpanId, 'api')
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetType, leSpanId, 'web')
       sinon.assert.calledOnceWithExactly(registerExtraService, 'api')
+      assert.strictEqual(spanContext.getTag('_dd.base_service'), 'svc')
+      sinon.assert.calledWith(nativeSpans.queueBatchMetaFlat, leSpanId, ['_dd.base_service', 'svc'])
+      sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
+    })
+
+    it('falls back for a non-string explicit base service', () => {
+      spanContext._name = 'operation'
+      spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext.setTag('service.name', 'svc')
+      spanContext.setTag('_dd.base_service', 1)
+
+      assert.strictEqual(spanContext.tryFastFinalTagsToNative(), false)
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
       sinon.assert.notCalled(nativeSpans.queueBatchMetaFlat)
       sinon.assert.notCalled(nativeSpans.queueBatchMetricsFlat)
     })
