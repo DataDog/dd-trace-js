@@ -10,7 +10,6 @@ const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   getScreenshotCapturedAtMs,
-  getScreenshotUploadResult,
   getScreenshotUploadTag,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
 
@@ -547,7 +546,7 @@ class PlaywrightPlugin extends CiPlugin {
   }
 
   /**
-   * Uploads automatic failure screenshots for a Playwright test attempt.
+   * Uploads the first automatic failure screenshot for a Playwright test attempt.
    *
    * @param {object} options - Upload options
    * @param {Array<object>} options.screenshots - Playwright test attachments
@@ -563,36 +562,27 @@ class PlaywrightPlugin extends CiPlugin {
       return false
     }
 
-    const screenshotPaths = new Set()
+    let filePath
     for (const screenshot of screenshots) {
       if (isPlaywrightFailureScreenshot(screenshot)) {
-        screenshotPaths.add(screenshot.path)
+        filePath = screenshot.path
+        break
       }
     }
-    if (!screenshotPaths.size) return false
+    if (!filePath) return false
 
-    const uploadResults = new Array(screenshotPaths.size)
-    let pendingUploads = screenshotPaths.size
-    let index = 0
-    for (const filePath of screenshotPaths) {
-      const resultIndex = index++
-      exporter.uploadTestScreenshot({
-        filePath,
-        traceId,
-        idempotencyKey: `${traceId}:${basename(filePath)}`,
-        capturedAtMs: getScreenshotCapturedAtMs(filePath, filePath),
-      }, (error, uploaded = true) => {
-        if (uploaded) {
-          uploadResults[resultIndex] = error
-            ? SCREENSHOT_UPLOAD_RESULT_ERROR
-            : SCREENSHOT_UPLOAD_RESULT_UPLOADED
-        }
-        pendingUploads--
-        if (pendingUploads === 0) {
-          onDone(getScreenshotUploadResult(uploadResults))
-        }
-      })
-    }
+    exporter.uploadTestScreenshot({
+      filePath,
+      traceId,
+      idempotencyKey: `${traceId}:${basename(filePath)}`,
+      capturedAtMs: getScreenshotCapturedAtMs(filePath, filePath),
+    }, (error, uploaded = true) => {
+      if (!uploaded) {
+        onDone()
+        return
+      }
+      onDone(error ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
+    })
     return true
   }
 
