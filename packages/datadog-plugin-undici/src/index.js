@@ -9,6 +9,11 @@ const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/st
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const {
   HTTP_STATUS_CODE,
@@ -68,21 +73,28 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    let resource = method
     const childOf = store && allowed ? store.span : null
+
+    const meta = {
+      'span.kind': 'client',
+      'http.method': method,
+      'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+      'out.host': hostname,
+    }
+    if (otelSemantics) {
+      resource = otelHttpResourceName(method)
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
 
     const span = this.startSpan(this.operationName(), {
       childOf,
-      meta: {
-        'span.kind': 'client',
-        'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
-        'out.host': hostname,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
       },
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
-      resource: method,
+      resource,
       type: 'http',
     }, false)
 
@@ -150,6 +162,9 @@ class UndiciPlugin extends HttpClientPlugin {
 
       if (!this.config.validateStatus(statusCode)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, String(statusCode))
+        }
       }
     }
 
