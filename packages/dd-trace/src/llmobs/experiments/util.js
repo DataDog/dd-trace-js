@@ -23,6 +23,16 @@ function hasEntries (value) {
 }
 
 /**
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {number}
+ */
+function normalizePositiveInteger (value, name) {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return value
+}
+
+/**
  * @param {string} name
  */
 function validateEvaluatorName (name) {
@@ -212,6 +222,7 @@ module.exports = {
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  normalizePositiveInteger,
   sleep,
   stringify,
   validateEvaluatorName,
