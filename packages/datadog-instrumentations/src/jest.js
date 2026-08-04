@@ -38,6 +38,7 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   getTestOptimizationRequestResults,
@@ -362,11 +363,15 @@ function formatIgnoredFailuresSummary (ignoredFailures) {
  *   efdFailureCount: number
  * } | undefined} ignoredFailures
  * @param {NonNullable<TestOptimizationSummary['attemptToFixExecutions']>} attemptToFixExecutions
+ * @param {boolean} allTestsSkipped
  */
-function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+function logSessionSummary (ignoredFailures, attemptToFixExecutions, allTestsSkipped) {
   logTestOptimizationSummary({
     attemptToFixExecutions,
-    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
+    extraSections: [
+      formatIgnoredFailuresSummary(ignoredFailures),
+      allTestsSkipped ? TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE : '',
+    ],
     newTestsWithDynamicNames,
   })
   loggedAttemptToFixTests.clear()
@@ -2574,8 +2579,8 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
-  isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
-  numSkippedSuites = jestSuitesToRun.skippedSuites.length
+  isSuitesSkipped ||= jestSuitesToRun.suitesToRun.length !== originalTests.length
+  numSkippedSuites += jestSuitesToRun.skippedSuites.length
   skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
     ? skippableSuitesCoverage
     : {}
@@ -3208,7 +3213,12 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       recordTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
-      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
+      const allTestsSkipped = isSuitesSkipped && numTotalTests === 0 && numTotalTestSuites === 0
+      logSessionSummary(
+        ignoredFailuresSummary,
+        getAttemptToFixExecutionsFromJestResults(result),
+        allTestsSkipped
+      )
 
       resetSuiteSkippingRunState()
 
