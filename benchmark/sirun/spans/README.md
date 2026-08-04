@@ -1,5 +1,2 @@
-This test initializes a tracer with the no-op scope manager. It then creates
-many spans, and depending on the variant, either finishes all of them as they
-are created, or later on once they're all created. Prior to creating any spans,
-it modifies the processor instance so that no span processing (or exporting) is
-done, and it simply stops storing the spans.
+This benchmark measures span construction and finish with the no-op scope manager. Ordinary native mutations are
+discarded before processing or export; native events are drained because libdatadog applies them directly.
