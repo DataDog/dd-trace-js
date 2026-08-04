@@ -166,8 +166,10 @@ function stringify (value) {
  */
 function buildTags (userTags, autoTags) {
   const tags = new Map()
-  for (const [key, value] of Object.entries(userTags ?? {})) {
-    tags.set(key, `${key}:${value}`)
+  if ((userTags) != null) {
+    for (const [key, value] of Object.entries(userTags)) {
+      tags.set(key, `${key}:${value}`)
+    }
   }
   for (const [key, value] of Object.entries(autoTags)) {
     if (value !== undefined && value !== null && value !== '') tags.set(key, `${key}:${value}`)

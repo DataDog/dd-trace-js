@@ -154,10 +154,16 @@ function getCoveredFilesManifest (material) {
   }
   for (const executable of material.executables) {
     if (executable.path && executable.sha256) files.set(executable.path, executable.sha256)
-    for (const delegated of executable.delegated || []) files.set(delegated.path, delegated.sha256)
-    for (const entrypoint of executable.entrypoints || []) files.set(entrypoint.path, entrypoint.sha256)
+    if (executable.delegated) {
+      for (const delegated of executable.delegated) files.set(delegated.path, delegated.sha256)
+    }
+    if (executable.entrypoints) {
+      for (const entrypoint of executable.entrypoints) files.set(entrypoint.path, entrypoint.sha256)
+    }
   }
-  for (const projectFile of material.projectFiles || []) files.set(projectFile.path, projectFile.sha256)
+  if (material.projectFiles) {
+    for (const projectFile of material.projectFiles) files.set(projectFile.path, projectFile.sha256)
+  }
 
   return [...files]
     .sort(([left], [right]) => left.localeCompare(right))
