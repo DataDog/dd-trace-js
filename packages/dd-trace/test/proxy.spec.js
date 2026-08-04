@@ -732,6 +732,25 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnce(profiler.start)
       })
 
+      it('should retry a failed profiler start after an intervening disable via remote config', () => {
+        config.profiling = { DD_PROFILING_ENABLED: 'false' }
+        profiler.start.returns(false)
+
+        proxy.init()
+
+        config.profiling.DD_PROFILING_ENABLED = 'true'
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+        sinon.assert.calledOnce(profiler.start)
+
+        config.profiling.DD_PROFILING_ENABLED = 'false'
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+        sinon.assert.calledOnce(profiler.start)
+
+        config.profiling.DD_PROFILING_ENABLED = 'true'
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {}))
+        sinon.assert.calledTwice(profiler.start)
+      })
+
       it('should not start the profiler via remote config when still disabled', () => {
         config.profiling = { DD_PROFILING_ENABLED: 'false' }
 
