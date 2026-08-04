@@ -79,6 +79,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -1058,6 +1059,48 @@ describe(`cucumber@${version} commonJS`, () => {
               }
             )
           })
+
+        it('prints a message when every suite is skipped', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: false,
+            tests_skipping: true,
+          })
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            },
+          ])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature',
+            { cwd, env: envVars }
+          )
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [, [exitCode]] = await Promise.all([
+            eventsPromise,
+            once(childProcess, 'close'),
+          ])
+
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.strictEqual(
+            testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+            1,
+            testOutput
+          )
+        })
 
         it('does not skip tests if git metadata upload fails', (done) => {
           receiver.setSuitesToSkip([{
