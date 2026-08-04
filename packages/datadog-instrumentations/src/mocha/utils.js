@@ -31,6 +31,8 @@ const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 const testToContext = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
@@ -818,7 +820,7 @@ function finishDeferredHookEnd (test) {
  * @param {object} test - Mocha test currently owning the hook.
  * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
  * @param {unknown} hookThis - Callback receiver.
- * @param {IArguments} args - Arguments passed by Mocha.
+ * @param {ArgumentsLike} args - Arguments passed by Mocha.
  * @returns {unknown}
  */
 function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {

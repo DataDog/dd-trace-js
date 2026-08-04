@@ -462,7 +462,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy

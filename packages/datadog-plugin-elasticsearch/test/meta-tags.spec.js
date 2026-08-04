@@ -13,6 +13,7 @@ const OpenSearchPlugin = require('../../datadog-plugin-opensearch/src')
  * four logical permutations of the params gate can be pinned in isolation.
  *
  * @param {typeof ElasticsearchPlugin} PluginCtor
+ * @param {{ path?: string, method?: string, querystring?: object, query?: object }} params
  */
 function captureMeta (PluginCtor, params) {
   const plugin = new PluginCtor({}, {})

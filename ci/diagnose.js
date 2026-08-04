@@ -224,7 +224,7 @@ const UNSUPPORTED_FRAMEWORKS = [
  *
  * @param {object} [options] diagnosis options
  * @param {string} [options.root] repository path to inspect
- * @param {NodeJS.ProcessEnv} [options.env] environment to inspect
+ * @param {typeof process.env} [options.env] environment to inspect
  * @param {Function} [options.execFile] command runner used for git checks
  * @param {string} [options.gitExecutable] trusted git executable used for git checks
  * @param {number} [options.maxFiles] maximum number of text files to scan
@@ -544,7 +544,7 @@ function checkUnsupportedFrameworks (results, unsupported, supported) {
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} frameworks detected supported frameworks
  * @param {object} evidence repository evidence
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkInitialization (results, frameworks, evidence, env) {
   if (!frameworks.length) return
@@ -772,7 +772,7 @@ function checkCypressConfiguration (results, evidence) {
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} workflowFiles scanned CI workflow files
  * @param {object} evidence repository evidence
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkCiConfiguration (results, workflowFiles, evidence, env) {
   if (!workflowFiles.length) {
@@ -878,7 +878,7 @@ function checkCiConfiguration (results, workflowFiles, evidence, env) {
  *
  * @param {Array<object>} results mutable result list
  * @param {string} root repository root
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @param {Function} execFile command runner
  * @param {string|undefined} gitExecutable trusted git executable
  */
@@ -961,7 +961,7 @@ function checkGit (results, root, env, execFile, gitExecutable) {
  * Checks current environment variables relevant to Test Optimization.
  *
  * @param {Array<object>} results mutable result list
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @param {object} evidence repository evidence
  */
 function checkCurrentEnvironment (results, env, evidence) {
@@ -1041,7 +1041,7 @@ function checkCurrentEnvironment (results, env, evidence) {
  * Checks current CI provider metadata.
  *
  * @param {Array<object>} results mutable result list
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  */
 function checkCurrentCiMetadata (results, env) {
   const providerDetected = CURRENT_ENV_PROVIDER_KEYS.some(key => env[key])
@@ -1374,7 +1374,7 @@ function detectUnsupportedFrameworks (definitions, manifests, scripts) {
  * Collects useful boolean evidence from scanned files and environment.
  *
  * @param {Array<object>} textFiles scanned text files
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {object} evidence object
  */
 function collectEvidence (textFiles, env) {
@@ -1890,7 +1890,7 @@ function isTestSetupOrCiFile (file) {
  * @param {Function} execFile command runner
  * @param {string} root repository root
  * @param {string|undefined} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @param {typeof process.env} env credential-free git environment
  * @returns {boolean} true if git runs
  */
 function canRunGit (execFile, root, gitExecutable, env) {
@@ -1910,7 +1910,7 @@ function canRunGit (execFile, root, gitExecutable, env) {
  * @param {Function} execFile command runner
  * @param {string} root repository root
  * @param {string} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @param {typeof process.env} env credential-free git environment
  * @param {string[]} args git arguments
  * @returns {string} command output
  */
@@ -1954,8 +1954,8 @@ function findTrustedGitExecutable () {
  * Creates the minimal environment needed by read-only local git metadata commands.
  *
  * @param {string|undefined} gitExecutable trusted git executable
- * @param {NodeJS.ProcessEnv} sourceEnv source environment
- * @returns {NodeJS.ProcessEnv} credential-free git environment
+ * @param {typeof process.env} sourceEnv source environment
+ * @returns {typeof process.env} credential-free git environment
  */
 function getGitEnvironment (gitExecutable, sourceEnv) {
   const env = {
@@ -2067,7 +2067,7 @@ function hasRegisterInNodeOptions (nodeOptions) {
 /**
  * Checks whether environment contains branch or tag metadata.
  *
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {boolean} true if branch metadata exists
  */
 function hasBranchMetadata (env) {
@@ -2091,7 +2091,7 @@ function hasBranchMetadata (env) {
 /**
  * Checks whether environment contains commit SHA metadata.
  *
- * @param {NodeJS.ProcessEnv} env environment
+ * @param {typeof process.env} env environment
  * @returns {boolean} true if SHA metadata exists
  */
 function hasShaMetadata (env) {
