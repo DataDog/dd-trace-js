@@ -26,20 +26,19 @@ const identityRefreshChannel = channel('datadog:identity:refresh')
 // The Custom Metrics client (see `proxy.js`'s lazily-constructed `dogstatsd` property) has no
 // start()/stop() hook for identity-refresh to subscribe/unsubscribe around, so it registers
 // itself here instead. Runtime-metrics clients use an explicit subscribe/unsubscribe tied to
-// their own start()/stop() (see `runtime_metrics/client.js`). Entries are held as WeakRefs, and
-// dead ones are only pruned when this fires (i.e. never outside a MicroVM) — fine in practice
-// since `dogstatsd` is effectively a singleton per process, and a dead entry only holds onto the
-// WeakRef itself, not the client/config it pointed to.
+// their own start()/stop() (see `runtime_metrics/client.js`). Entries are held as WeakRefs to the
+// CustomMetrics instances themselves, and dead ones are only pruned when this fires (i.e. never
+// outside a MicroVM) — fine in practice since `dogstatsd` is effectively a singleton per process.
 const customMetricsClients = new Set()
 
 identityRefreshChannel.subscribe(() => {
   for (const ref of customMetricsClients) {
-    const entry = ref.deref()
-    if (entry === undefined) {
+    const client = ref.deref()
+    if (client === undefined) {
       customMetricsClients.delete(ref)
       continue
     }
-    entry.client.updateTags(DogStatsDClient.generateClientConfig(entry.config).tags)
+    client.refreshTags()
   }
 })
 
@@ -437,15 +436,12 @@ class MetricsAggregationClient {
  */
 class CustomMetrics {
   #client
-  // Keeps the registry entry alive for exactly as long as this instance is reachable.
-  #registryEntry
+  #config
   constructor (config) {
+    this.#config = config
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
-    // Registers the aggregator (not the raw client) since that's the public-facing instance,
-    // and MetricsAggregationClient#updateTags forwards the refreshed tags to the wrapped client.
-    this.#registryEntry = { client: this.#client, config }
-    customMetricsClients.add(new WeakRef(this.#registryEntry))
+    customMetricsClients.add(new WeakRef(this))
 
     const flush = this.flush.bind(this)
 
@@ -454,6 +450,15 @@ class CustomMetrics {
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
     registerTelemetryFlusher(done => this.flush(done))
+  }
+
+  /**
+   * Recomputes tags from the live `config` reference (mutated in place on MicroVM clone
+   * resume) and pushes them into the wrapped client.
+   * @returns {void}
+   */
+  refreshTags () {
+    this.#client.updateTags(DogStatsDClient.generateClientConfig(this.#config).tags)
   }
 
   increment (stat, value = 1, tags) {
