@@ -101,9 +101,8 @@ describe('NativeDatadogSpan', () => {
     }
 
     // Create a mock NativeSpanContext that tracks tags. The real
-    // class adds syncToNativeOnly / syncOneTagToNative /
-    // _setNameLocal — provide stubs so the production span code can call
-    // them without TypeErrors.
+    // class adds syncToNativeOnly / syncOneTagToNative — provide stubs so the
+    // production span code can call them without TypeErrors.
     NativeSpanContext = function (ns, props) {
       this._nativeSpans = ns
       this._nativeSpanId = props.spanId.toBuffer()
@@ -120,29 +119,10 @@ describe('NativeDatadogSpan', () => {
       // Backing store renamed away from `_tags` so the
       // `eslint-no-private-tags-access` rule does not flag mock-internal access.
       this.tagStore = { ...(props.tags || {}) }
-      // Mirror the production NativeSpanContext shape: `_name` is a getter/setter
-      // pair, and the setter fires `_syncNameToNative` once the context is
-      // `[NATIVE_READY]`. The mock starts ready so `setOperationName` writes
-      // are observed via the stub.
-      let nameValue
-      Object.defineProperty(this, '_name', {
-        configurable: true,
-        get () { return nameValue },
-        set (v) {
-          nameValue = v
-          this._syncNameToNative(v)
-        },
-      })
+      // Production keeps `_name` local until the final snapshot is synchronized.
+      this._name = undefined
       this._hostname = undefined
       this._isFinished = false
-      // Per-instance call tracker. The production NativeDatadogSpan
-      // shadows the prototype's `_syncNameToNative` with a no-op on
-      // the instance during construction (to suppress the parent's
-      // double-SetName), then deletes the shadow once super() returns.
-      // We keep the underlying tracker as `_syncNameToNativeStub` so
-      // tests can still assert against it post-construction.
-      this._syncNameToNativeStub = sinon.stub()
-      this._setNameLocal = (name) => { nameValue = name }
       // Initial tags are seeded into `_tags` by the parent
       // DatadogSpanContext via Object.assign in `getTags()`; the native
       // span constructor then calls `syncToNativeOnly(fields.tags)` to
@@ -170,14 +150,6 @@ describe('NativeDatadogSpan', () => {
         return this.tagStore
       }
     }
-    // `_syncNameToNative` lives on the prototype so the production
-    // `delete spanContext._syncNameToNative` (which removes only the
-    // instance shadow installed during construction) leaves a usable
-    // method behind for post-construction `setOperationName` calls.
-    NativeSpanContext.prototype._syncNameToNative = function (v) {
-      this._syncNameToNativeStub(v)
-    }
-
     // Mock DatadogSpan parent — exercises the relevant constructor
     // surface (calls `_createContext`, sets `_spanContext`, `_name`,
     // tags, hostname, trace.started.push, `_startTime`, `_links`),
@@ -390,12 +362,8 @@ describe('NativeDatadogSpan', () => {
     })
 
     it('should NOT also issue a separate SetName op on init', () => {
-      // CreateSpan already carries the name; the subclass shadows
-      // `_syncNameToNative` with a no-op so the parent constructor's
-      // `_spanContext._name = operationName` line doesn't double-emit.
-      // We assert at the WASM-op level (no SetName op queued) rather
-      // than against the `_syncNameToNative` stub directly, since the
-      // shadow replaces the instance property during construction.
+      // CreateSpan already carries the name. The parent constructor stores it
+      // locally, so construction must not also queue a SetName operation.
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',
       }, false, nativeSpans)
@@ -424,7 +392,7 @@ describe('NativeDatadogSpan', () => {
   })
 
   describe('setOperationName', () => {
-    it('should update operation name and sync to native', () => {
+    it('should update operation name locally for final synchronization', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'original-name',
       }, false, nativeSpans)
@@ -432,10 +400,7 @@ describe('NativeDatadogSpan', () => {
       span.setOperationName('new-name')
 
       assert.strictEqual(span.context()._name, 'new-name')
-      // The prototype `_syncNameToNative` delegates to the per-instance
-      // `_syncNameToNativeStub` (so the construction-time shadow doesn't
-      // erase call history). See the NativeSpanContext mock definition.
-      sinon.assert.calledWith(span.context()._syncNameToNativeStub, 'new-name')
+      sinon.assert.notCalled(nativeSpans.queueOp)
     })
   })
 

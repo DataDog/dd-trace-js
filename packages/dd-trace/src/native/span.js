@@ -176,14 +176,6 @@ function encodeSpanEventAttrs (attributes) {
 // guard below).
 let pendingNativeSpans = null
 
-// Shadows `NativeSpanContext.prototype._syncNameToNative` on the
-// instance during construction so the parent's
-// `this._spanContext._name = operationName` line (opentracing/span.js)
-// does not emit a redundant SetName WASM op alongside the combined
-// CreateSpan op we queue ourselves. The subclass constructor deletes
-// the shadow once super() returns.
-const noopSyncName = () => {}
-
 /**
  * NativeDatadogSpan stores span data in native Rust storage via
  * NativeSpansInterface, replacing the JS-side trace buffer. It inherits
@@ -217,11 +209,6 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore the prototype `_syncNameToNative` (shadowed in
-    // `_createContext`) so later `setOperationName` calls reach the
-    // real WASM-syncing method.
-    delete this._spanContext._syncNameToNative
-
     // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
     // which bypasses NativeSpanContext.setTag's native-sync path. Push
     // them to WASM now (no JS-cache write — the parent already did it).
@@ -235,9 +222,8 @@ class NativeDatadogSpan extends DatadogSpan {
   /**
    * Allocate a native slot, build a NativeSpanContext, queue the
    * combined CreateSpan op (Create + SetName + SetStart in one WASM
-   * call), and silently set the initial name. The subclass constructor
-   * (after super) restores the prototype `_syncNameToNative` so future
-   * name changes reach WASM normally.
+   * call). The inherited constructor stores the initial name locally after
+   * this returns; final synchronization owns subsequent name changes.
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -351,9 +337,6 @@ class NativeDatadogSpan extends DatadogSpan {
     // CreateSpanFull carries the common immutable/default core fields natively
     // (name, service, resource, type, start), so final sync can skip no-op
     // overwrites unless user tags changed them.
-    spanContext._setNameLocal(operationName)
-    spanContext._syncNameToNative = noopSyncName
-
     // One segment id per local trace, shared by all its spans via the
     // shared `_trace` object (the local root allocates; children reuse).
     // Required by the native chunk flush, which keys a chunk by segment.

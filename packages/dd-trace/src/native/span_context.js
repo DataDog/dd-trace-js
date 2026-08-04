@@ -455,30 +455,6 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Set the name locally without syncing to native storage.
-   * Used during construction when CreateSpan already set the name natively.
-   * @param {string} name - Span name
-   */
-  _setNameLocal (name) {
-    this[NAME_VALUE] = name
-  }
-
-  /**
-   * Sync the span name to native storage.
-   * Called from NativeDatadogSpan.
-   * @param {string} name - Span name
-   */
-  _syncNameToNative (name) {
-    const stringName = String(name)
-    this.#nativeSpans.queueOp(
-      OpCode.SetName,
-      this._nativeSpanId,
-      stringName
-    )
-    this.#nativeName = stringName
-  }
-
-  /**
    * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
    * native output at finish. Datadog HTTP tags are skipped by
    * syncFinalTagsToNative(), so build a formatted view from the JS tag cache,
