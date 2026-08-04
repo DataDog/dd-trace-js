@@ -1608,16 +1608,69 @@ describe(`cucumber@${version} commonJS`, () => {
                 )
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              const diagnosticTests = tests.map(test => ({
-                status: test.meta[TEST_STATUS],
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-              }))
-              assert.deepStrictEqual(diagnosticTests, [
-                { status: 'fail', isRetry: undefined, retryReason: undefined },
-                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-              ])
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass', 'fail'])
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              for (const retryTest of tests.slice(1)) {
+                assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-flaky/flaky.feature --retry 1',
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
+        })
+
+        it('preserves manual Cucumber retries when the EFD retry budget is zero', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 0,
+                '10s': 0,
+                '30s': 0,
+                '5m': 0,
+              },
+              faulty_session_threshold: 100,
+            },
+            flaky_test_retries_enabled: false,
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({
+            cucumber: {},
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/features-flaky/flaky.feature' &&
+                  test.meta[TEST_NAME] === 'Say flaky'
+                )
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              const expectedStatuses = version === 'latest' ? ['fail', 'pass'] : ['pass']
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expectedStatuses)
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
+              if (version === 'latest') {
+                assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
             })
 
           childProcess = exec(

@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
+const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+
 describe('vitest main instrumentation', () => {
   it('keeps no-worker capabilities active after Browser Mode setup', async () => {
     const hooks = []
@@ -36,7 +38,7 @@ describe('vitest main instrumentation', () => {
             libraryConfigurationRequests.push(data)
             return Promise.resolve({
               libraryConfig: {
-                earlyFlakeDetectionSlowTestRetries: {},
+                earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
               },
             })
           }

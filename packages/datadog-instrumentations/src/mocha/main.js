@@ -11,6 +11,7 @@ const {
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
@@ -73,7 +74,9 @@ let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -499,8 +502,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+    config.earlyFlakeDetectionRetryPolicy =
+      libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -1141,8 +1144,7 @@ addHook({
     if (config.isKnownTestsEnabled) {
       if (config.knownTests?.mocha) {
         const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
-        newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
-        newWorkerArgs._ddEfdSlowTestRetries = config.earlyFlakeDetectionSlowTestRetries
+        newWorkerArgs._ddEfdRetryPolicy = config.earlyFlakeDetectionRetryPolicy
         newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {

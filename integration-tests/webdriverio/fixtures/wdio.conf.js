@@ -1,6 +1,7 @@
 'use strict'
 
 const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
+const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
 
 const baseConfig = {
   runner: 'local',
@@ -18,8 +19,12 @@ const baseConfig = {
   path: '/',
   connectionRetryCount: 0,
   services: [],
-  framework: 'mocha',
+  framework,
   reporters: [],
+  jasmineOpts: {
+    defaultTimeoutInterval: 10_000,
+    random: false,
+  },
   mochaOpts: {
     ui: 'bdd',
     timeout: 10_000,
@@ -100,6 +105,13 @@ const scenarioConfig = {
       './second.e2e.js',
     ]],
   },
+  groupedEmpty: {
+    maxInstances: 1,
+    specs: [[
+      './empty.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
   hookFailure: {
     maxInstances: 1,
     specs: [[
@@ -110,6 +122,29 @@ const scenarioConfig = {
   impacted: {
     maxInstances: 1,
     specs: ['./impacted.e2e.js'],
+  },
+  jasmineStatuses: {
+    maxInstances: 1,
+    specs: ['./jasmine-statuses.e2e.js'],
+  },
+  jasmineAfterAllFailure: {
+    maxInstances: 1,
+    specs: ['./jasmine-after-all-fail.e2e.js'],
+  },
+  jasmineDelayedSettings: {
+    maxInstances: 1,
+    specs: ['./first.e2e.js'],
+  },
+  jasmineGlobalAfterAllFailure: {
+    maxInstances: 1,
+    specs: [[
+      './jasmine-global-after-all-fail.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  jasmineHooks: {
+    maxInstances: 1,
+    specs: ['./jasmine-hooks.e2e.js'],
   },
   loadFailure: {
     maxInstances: 1,

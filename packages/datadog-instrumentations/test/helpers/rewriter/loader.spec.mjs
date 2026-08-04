@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -13,6 +13,11 @@ const require = createRequire(import.meta.url)
 const source = 'export function getTracer () { return "tracer" }\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(testDirectory, '../../../../..')
+const jasmineSourcePath = resolve(testDirectory, '../../fixtures/webdriverio-jasmine-framework.mjs')
+const jasmineModulePath = resolve(
+  testDirectory,
+  '../../fixtures/node_modules/@wdio/jasmine-framework/build/index.js'
+)
 
 describe('rewriter loader', () => {
   let load
@@ -89,6 +94,28 @@ describe('rewriter loader', () => {
     const result = loadSync(url, { format: 'module' }, () => ({ format: 'module', source }))
 
     assertRewritten(result.source)
+  })
+
+  it('rewrites binary sync loader results', () => {
+    const sourceText = readFileSync(jasmineSourcePath, 'utf8')
+    const buffer = Buffer.from(sourceText)
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    const sources = [
+      buffer,
+      arrayBuffer,
+      new Uint8Array(arrayBuffer),
+    ]
+
+    for (const binarySource of sources) {
+      const result = loadSync(
+        pathToFileURL(jasmineModulePath).href,
+        { format: 'module' },
+        () => ({ format: 'module', source: binarySource })
+      )
+
+      assert.match(result.source, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_init/)
+      assert.match(result.source, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specStarted/)
+    }
   })
 
   it('does not rewrite CommonJS require loads in the sync loader hook', () => {
