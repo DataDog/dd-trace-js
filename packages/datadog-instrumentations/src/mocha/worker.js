@@ -23,7 +23,7 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
-  createWebdriverioWorkerMessage,
+  sendWebdriverioWorkerMessage,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
@@ -50,19 +50,12 @@ let configurationRequestId = 0
  * @returns {void}
  */
 function sendWebdriverioMessage (message, onError, onDone) {
-  if (!process.send || !process.connected) {
-    onError?.()
-    onDone?.()
-    return
-  }
-
-  process.send(createWebdriverioWorkerMessage(message), (error) => {
+  sendWebdriverioWorkerMessage(message, error => {
     if (error) {
       log.error('WebdriverIO Test Optimization IPC error', error)
-      onError?.()
     }
-    onDone?.()
-  })
+    onError?.()
+  }, onDone)
 }
 
 /**
