@@ -429,7 +429,9 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
     isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
-    areAllSuitesSkipped = runner.suite.suites.length > 0 && suitesToRun.length === 0
+    areAllSuitesSkipped = runner.suite.tests.length === 0 &&
+      runner.suite.suites.length > 0 &&
+      suitesToRun.length === 0
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
