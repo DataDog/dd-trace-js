@@ -847,6 +847,42 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
   })
 
+  describe('HTTP server error statuses', () => {
+    it('should default to 500-599', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES', value: '400-499', origin: 'env_var' },
+      ])
+    })
+
+    it('should fall back to DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+    })
+
+    it('should prefer DD_TRACE_HTTP_SERVER_ERROR_STATUSES over DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
