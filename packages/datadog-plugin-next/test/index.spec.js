@@ -18,7 +18,6 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 require('../../datadog-instrumentations/src/next')
-const web = require('../../dd-trace/src/plugins/util/web')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
@@ -734,17 +733,22 @@ describe('Plugin', function () {
                 const spans = traces[0]
                 const requestSpans = spans.filter(span => span.name === 'next.request')
                 const routeSpan = requestSpans.find(span => span.resource === 'GET /api/appRouteTrace/[name]')
+                const httpSpan = spans.find(span => span.name === 'web.request')
                 const downstreamSpan = spans.find(span => span.name === 'http.request' &&
                   span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/downstream`)
 
                 assert.strictEqual(requestSpans.length, 1)
                 assert.ok(routeSpan)
+                assert.ok(httpSpan)
+                assert.strictEqual(httpSpan.resource, 'GET /api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.route'], '/api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/appRouteTrace/{param:int}')
                 assert.ok(downstreamSpan)
                 assert.strictEqual(downstreamSpan.parent_id.toString(), routeSpan.span_id.toString())
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/hello`),
+                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
                 tracePromise,
               ])
             })
@@ -1075,43 +1079,6 @@ describe('compiled Next runtimes', () => {
       dc.channel('apm:next:request:start').unsubscribe(onStart)
       dc.channel('apm:next:page:load').unsubscribe(onPage)
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
-    })
-
-    it('uses HTTP resource renaming for dynamic App Routes', async () => {
-      class AppRouteRouteModule {
-        definition = { pathname: '/api/users/[id]' }
-
-        handle () {
-          return Promise.resolve({ status: 200 })
-        }
-      }
-      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
-
-      const routeModule = new AppRouteRouteModule()
-      const nodeRequest = { headers: {}, method: 'GET', url: '/api/users/123' }
-      const nodeResponse = {
-        getHeader: () => undefined,
-        getHeaders: () => ({}),
-        statusCode: 200,
-      }
-      const httpParentSpan = web.startSpan(
-        tracer,
-        web.normalizeConfig({ resourceRenamingEnabled: true }),
-        nodeRequest,
-        nodeResponse,
-        'web.request'
-      )
-      httpParentSpan._integrationName = 'http'
-
-      await storage('legacy').run({ span: httpParentSpan }, () => {
-        const request = new Request('http://127.0.0.1/api/users/123', { method: 'GET' })
-        return routeModule.handle(request, {})
-      })
-
-      assert.strictEqual(httpParentSpan.context().getTag('resource.name'), 'GET /api/users/[id]')
-      assert.strictEqual(httpParentSpan.context().getTag('http.route'), '/api/users/[id]')
-      assert.strictEqual(httpParentSpan.context().getTag('http.endpoint'), '/api/users/{param:int}')
-      web.finishAll(web.getContext(nodeRequest))
     })
 
     it('records Pages API errors and status without an existing request store', async () => {
