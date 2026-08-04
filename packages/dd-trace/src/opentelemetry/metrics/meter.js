@@ -9,6 +9,8 @@ const { METRIC_TYPES } = require('./constants')
 /**
  * @typedef {import('@opentelemetry/api').MetricOptions} MetricOptions
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
+ * @typedef {Counter | UpDownCounter | Histogram | Gauge |
+ *   ObservableGauge | ObservableCounter | ObservableUpDownCounter} Instrument
  */
 
 /**
@@ -25,7 +27,7 @@ class Meter {
   /**
    * Creates a new Meter instance.
    *
-   * @param {MeterProvider} meterProvider - Parent meter provider
+   * @param {import('./meter_provider')} meterProvider - Parent meter provider
    * @param {InstrumentationScope} instrumentationScope - Instrumentation scope information
    * @param {string} [instrumentationScope.name] - Meter name (defaults to 'dd-trace-js')
    * @param {string} [instrumentationScope.version] - Meter version (defaults to tracer version)
@@ -50,11 +52,13 @@ class Meter {
    * Instruments are cached by type and normalized (lowercase) name.
    *
    *
+   * @template {Instrument} T
    * @param {string} name - Instrument name (will be normalized to lowercase)
    * @param {string} type - Instrument type (e.g., 'counter', 'histogram', 'gauge')
-   * @param {Function} InstrumentClass - Constructor for the instrument type
-   * @param {MetricOptions} [options] - Instrument options (description, unit, etc.)
-   * @returns {Instrument} The instrument instance (new or cached)
+   * @param {new (name: string, options: object, instrumentationScope: InstrumentationScope,
+   *   reader: object) => T} InstrumentClass - Constructor for the instrument type
+   * @param {MetricOptions} options - Instrument options (description, unit, etc.)
+   * @returns {T} The instrument instance (new or cached)
    */
   #getOrCreateInstrument (name, type, InstrumentClass, options) {
     const normalizedName = name.toLowerCase()

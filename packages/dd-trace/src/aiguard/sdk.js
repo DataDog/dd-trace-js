@@ -121,6 +121,9 @@ class AIGuard extends NoopAIGuard {
    *
    * - Clones each message so callers cannot mutate the data set in the meta struct.
    * - Truncates the list of messages and `content` fields emitting metrics accordingly.
+   *
+   * @param {import('../../../../index').aiguard.Message[]} messages
+   * @param {{ source: string, integration: string }} telemetryTags
    */
   #buildMessagesForMetaStruct (messages, telemetryTags) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
