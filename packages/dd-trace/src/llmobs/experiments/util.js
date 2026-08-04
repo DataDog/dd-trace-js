@@ -1,5 +1,7 @@
 'use strict'
 
+const { randomUUID } = require('node:crypto')
+
 const log = require('../../log')
 
 // Matches the backend and dd-trace-py evaluator metric label contract.
@@ -30,6 +32,13 @@ function hasEntries (value) {
 function normalizePositiveInteger (value, name) {
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
   return value
+}
+
+/**
+ * @returns {string}
+ */
+function generateRunId () {
+  return randomUUID()
 }
 
 /**
@@ -218,6 +227,7 @@ module.exports = {
   buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  generateRunId,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,

@@ -8,6 +8,7 @@ const {
   buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  generateRunId,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
@@ -443,7 +444,7 @@ class Experiment {
       let hasRunError = false
 
       for (let runIndex = 0; runIndex < this.#runs; runIndex++) {
-        const runId = id().toString(16).padStart(16, '0')
+        const runId = generateRunId()
         const runIteration = runIndex + 1
         // eslint-disable-next-line no-await-in-loop
         const result = await this.#runSingle({
