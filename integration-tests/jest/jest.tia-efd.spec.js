@@ -795,11 +795,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
 
             const skippedSuites = testSuites.filter(
               suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
             )
             assert.strictEqual(skippedSuites.length, 2)
+            assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
             skippedSuites.forEach(skippedSuite => {
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
@@ -850,6 +852,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.deepStrictEqual(tests.map(event => event.content.resource), [])
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
         })
 
       childProcess = exec(
