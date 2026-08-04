@@ -189,6 +189,8 @@ function getProjectObject (source, nameIndex, workspaceConfig) {
   const parent = ranges[1]
   const parentPrefix = parent && maskJavaScriptComments(source.slice(parent.start + 1, inner.start))
   const nestedTestObject = /(?:^|,)\s*(?:test|(["'])test\1)\s*:\s*$/.test(parentPrefix || '')
+  if (nestedTestObject &&
+    getDirectPropertyPositions(source.slice(parent.start + 1, parent.end), 'test').length !== 1) return
   const selected = nestedTestObject ? parent : inner
   const standalone = isStandaloneProjectObject(source, selected)
   if (!standalone &&
@@ -211,7 +213,7 @@ function getProjectObject (source, nameIndex, workspaceConfig) {
 function isStandaloneProjectObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
-  return PROJECT_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after)
+  return PROJECT_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after)
 }
 
 /**
@@ -234,10 +236,15 @@ function isTestProjectsEntry (source, range, objectRanges) {
   if (!testObject || !configObject) return false
 
   const projectsPrefix = maskJavaScriptComments(source.slice(testObject.start + 1, projectsArray.start))
-  if (!/(?:^|,)\s*(?:projects|"projects"|'projects')\s*:\s*$/.test(projectsPrefix)) return false
+  if (!/(?:^|,)\s*(?:projects|"projects"|'projects')\s*:\s*$/.test(projectsPrefix) ||
+    getDirectPropertyPositions(
+      source.slice(testObject.start + 1, testObject.end),
+      'projects'
+    ).length !== 1) return false
 
   const testPrefix = maskJavaScriptComments(source.slice(configObject.start + 1, testObject.start))
   return /(?:^|,)\s*(?:test|"test"|'test')\s*:\s*$/.test(testPrefix) &&
+    getDirectPropertyPositions(source.slice(configObject.start + 1, configObject.end), 'test').length === 1 &&
     isExportedConfigObject(source, configObject)
 }
 
@@ -252,7 +259,7 @@ function isExportedConfigObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
   return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
-    (CONFIG_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after))
+    (CONFIG_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
 }
 
 /**
@@ -269,7 +276,7 @@ function isWorkspaceProjectEntry (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, workspaceArray.start))
   const after = maskJavaScriptNonCode(source.slice(workspaceArray.end + 1))
   return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
-    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*\)[\s;]*$/.test(after))
+    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
 }
 
 /**
@@ -289,7 +296,7 @@ function getDirectContainingArray (source, range) {
   const entryPrefix = maskJavaScriptComments(source.slice(directArray.start, range.start)).trimEnd()
   const entrySuffix = maskJavaScriptComments(source.slice(range.end + 1, directArray.end + 1)).trimStart()
   if (['[', ','].includes(entryPrefix.at(-1)) && [']', ','].includes(entrySuffix[0])) return directArray
-  if (/(?:^|\[|,)\s*defineProject\s*\(\s*$/.test(entryPrefix) && /^\)\s*[\],]/.test(entrySuffix)) {
+  if (/(?:^|\[|,)\s*defineProject\s*\(\s*$/.test(entryPrefix) && /^,?\s*\)\s*[\],]/.test(entrySuffix)) {
     return directArray
   }
 }

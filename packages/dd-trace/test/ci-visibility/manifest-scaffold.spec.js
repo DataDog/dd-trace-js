@@ -305,6 +305,32 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  for (const [description, worldParameters] of [
+    ['negative zero', '{ offset: -0 }'],
+    ['a __proto__ object-literal key', "{ payload: { __proto__: { role: 'admin' } } }"],
+  ]) {
+    it(`rejects ${description} in JavaScript Cucumber world parameters`, () => {
+      withRepositoryFixture({
+        framework: 'cucumber',
+        script: 'cucumber-js --profile default',
+      }, fixture => {
+        fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
+          'module.exports = {',
+          `  default: { worldParameters: ${worldParameters} },`,
+          '}',
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'cucumber')
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+        assert.match(framework.notes.join(' '), /must be a literal string or object/)
+        assert.strictEqual(framework.validation, undefined)
+      })
+    })
+  }
+
   it('rejects spread-composed JavaScript Cucumber object profiles', () => {
     withRepositoryFixture({
       framework: 'cucumber',
@@ -1354,6 +1380,95 @@ describe('test optimization validation manifest scaffold', () => {
         assert.strictEqual(framework.status, 'runnable')
         assert.strictEqual(framework.validation.testFile, selected)
         assert.deepStrictEqual(framework.validation.runnerArgs, ['--project', 'unit'])
+      })
+    })
+  }
+
+  for (const [description, body] of [
+    ['project test object', [
+      '  test: { projects: [{',
+      "    test: { name: 'unit', root: 'unit', include: ['**/*.test.ts'] },",
+      "    test: { name: 'integration', root: 'integration' },",
+      '  }] },',
+    ]],
+    ['configuration test object', [
+      "  test: { projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }] },",
+      "  test: { projects: [{ name: 'integration', root: 'integration' }] },",
+    ]],
+    ['configuration projects array', [
+      '  test: {',
+      "    projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }],",
+      "    projects: [{ name: 'integration', root: 'integration' }],",
+      '  },',
+    ]],
+  ]) {
+    it(`does not bind a shadowed Vitest ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'vitest',
+        script: 'vitest --run --project unit',
+      }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(path.join(fixture.root, 'vitest.config.ts'), [
+          "import { defineConfig } from 'vitest/config'",
+          'export default defineConfig({',
+          ...body,
+          '})',
+          '',
+        ].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.strictEqual(framework.blockerCategory, 'VALIDATOR_LIMITATION')
+        assert.match(framework.notes.join(' '), /does not map to one statically named Vitest project/)
+        assert.strictEqual(framework.validation, undefined)
+      })
+    })
+  }
+
+  for (const [description, script, configFile, source] of [
+    ['defineConfig', 'vitest --run --project unit', 'vitest.config.ts', [
+      "import { defineConfig } from 'vitest/config'",
+      'export default defineConfig({',
+      "  test: { projects: [{ name: 'unit', root: 'unit', include: ['**/*.test.ts'] }] },",
+      '},)',
+    ]],
+    ['defineWorkspace', 'vitest --run --project unit', 'vitest.workspace.ts', [
+      "import { defineWorkspace } from 'vitest/config'",
+      'export default defineWorkspace([',
+      "  { test: { name: 'unit', root: 'unit', include: ['**/*.test.ts'] } },",
+      '],)',
+    ]],
+    ['standalone defineProject', 'vitest --run --config configs/unit.ts --project unit', 'configs/unit.ts', [
+      "import { defineProject } from 'vitest/config'",
+      'export default defineProject({',
+      "  name: 'unit', root: '../unit', include: ['**/*.test.ts'],",
+      '},)',
+    ]],
+    ['array defineProject', 'vitest --run --project unit', 'vitest.config.ts', [
+      "import { defineConfig, defineProject } from 'vitest/config'",
+      'export default defineConfig({',
+      "  test: { projects: [defineProject({ name: 'unit', root: 'unit', include: ['**/*.test.ts'] },)] },",
+      '})',
+    ]],
+  ]) {
+    it(`binds a Vitest project with a trailing comma in ${description}`, () => {
+      withRepositoryFixture({ framework: 'vitest', script }, fixture => {
+        const selected = path.join(fixture.root, 'unit', 'selected.test.ts')
+        const filename = path.join(fixture.root, configFile)
+        fs.rmSync(fixture.testFile)
+        fs.mkdirSync(path.dirname(selected), { recursive: true })
+        fs.mkdirSync(path.dirname(filename), { recursive: true })
+        fs.writeFileSync(selected, "test('selected', () => {})\n")
+        fs.writeFileSync(filename, [...source, ''].join('\n'))
+
+        const framework = scaffoldFramework(fixture, 'vitest')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, selected)
       })
     })
   }

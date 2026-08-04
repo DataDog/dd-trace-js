@@ -410,7 +410,7 @@ function readJavascriptLiteral (source, syntax, start, depth = 0) {
   if (primitive) {
     const values = { false: false, null: null, true: true }
     const value = Object.hasOwn(values, primitive[1]) ? values[primitive[1]] : Number(primitive[1])
-    if (typeof value === 'number' && !Number.isFinite(value)) return
+    if (typeof value === 'number' && (!Number.isFinite(value) || Object.is(value, -0))) return
     return {
       end: index + primitive[0].length,
       value,
@@ -433,7 +433,7 @@ function readJavascriptLiteral (source, syntax, start, depth = 0) {
       value.push(item.value)
     } else {
       const property = readJavascriptPropertyName(source, syntax, index)
-      if (!property || Object.hasOwn(value, property.value)) return
+      if (!property || property.value === '__proto__' || Object.hasOwn(value, property.value)) return
       index = skipWhitespace(syntax, property.end)
       if (syntax[index] !== ':') return
       item = readJavascriptLiteral(source, syntax, index + 1, depth + 1)
