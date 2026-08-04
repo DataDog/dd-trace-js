@@ -1,6 +1,7 @@
 'use strict'
 
 const id = require('../../id')
+const log = require('../../log')
 
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
@@ -329,7 +330,8 @@ class Experiment {
       validateEvaluatorName(metric.label)
       const metricError = errorMessage(metric.error)
       if (metric.value === undefined && metricError === null) {
-        throw new Error(`Metric '${metric.label}' must include value or error`)
+        log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
+        continue
       }
       payload.push(toMetric(
         metric.label,
@@ -344,6 +346,7 @@ class Experiment {
       ))
     }
 
+    if (payload.length === 0) return
     await this.#postEvents(experimentId, [], payload)
   }
 
