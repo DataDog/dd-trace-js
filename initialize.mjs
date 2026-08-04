@@ -30,6 +30,8 @@ let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href
 // `--loader` only reliably influences ESM entrypoints; for CJS apps use `--import`/`--require`.
 
+// `globalPreload` is deprecated in favor of the `initialize` hook, but `initialize` only exists
+// from Node 20.6 on, so it is the only way to run code in the application realm on Node 20.0.
 export const globalPreload = isNode20LoaderWorker
   ? () => `if (getBuiltin('module').createRequire(${JSON.stringify(import.meta.url)})('./init.js')) {
   process.emitWarning('dd-trace cannot instrument ES modules on Node.js 20.0.0. Upgrade to Node.js 20.1.0 or newer.')
@@ -75,6 +77,11 @@ function insertInit (result, _url_, context) {
 // before Node 18.19 share the application thread, where `loader-hook.mjs` builds no matcher.
 let needsHookInitialize = !isMainThread && !useDefaultLoader
 
+/**
+ * @param {string} url
+ * @param {import('node:module').LoadHookContext & { isMain?: boolean }} context
+ * @param {Parameters<import('node:module').LoadHook>[2]} nextLoad
+ */
 async function loadWithInit (url, context, nextLoad) {
   if (needsHookInitialize) {
     needsHookInitialize = false

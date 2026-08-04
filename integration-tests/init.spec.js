@@ -330,6 +330,23 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
     useSandbox()
     stubTracerIfNeeded()
 
+    context('globalPreload', () => {
+      useEnv({ DD_TEST_NODE_VERSION: '20.0.0', NODE_OPTIONS: '' })
+
+      /**
+       * @param {string} out
+       */
+      function checkGlobalPreload (out) {
+        assert.match(out,
+          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) {\n/)
+        assert.match(out,
+          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n}\n$/)
+      }
+
+      it('provides application-realm preload source', () =>
+        testFile('init/loader-worker.mjs', checkGlobalPreload, [], ''))
+    })
+
     context('as --loader', () => {
       const esmWorks = process.versions.node !== '18.0.0' && process.versions.node !== '20.0.0'
 
@@ -362,6 +379,11 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
 
             it('initializes before a CommonJS entrypoint', () =>
               testFile('init/trace.js', 'true\n', [], ''))
+
+            // The loader worker cannot instrument ESM here, but globalPreload still
+            // initializes the tracer in the application realm before the entrypoint runs.
+            it('initializes before an ESM entrypoint', () =>
+              testFile('init/trace.mjs', 'true\n', [], ''))
 
             it('initializes inside inherited Workers', () =>
               testFile('init/loader-worker.mjs', 'true\n', [], ''))
