@@ -541,7 +541,10 @@ describe('LLMObs Experiments facade', () => {
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
 
       await assert.rejects(
-        () => recorder.submitEvaluationMetrics(span, [{ label: 'bad name', value: 1 }]),
+        () => recorder.submitEvaluationMetrics(span, [
+          { label: 'score', value: 1 },
+          { label: 'bad name', value: 1 },
+        ]),
         /Evaluator name 'bad name' is invalid/
       )
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
@@ -564,8 +567,9 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
     })
 
-    it('rejects external metrics without a value or error before posting events', async () => {
+    it('skips external metrics without a value or error', async () => {
       stubExperimentRecorderClient()
+      const warn = sinon.spy(log, 'warn')
 
       const recorder = await createExperiments(enabledConfig()).startExperiment({
         name: 'metric-shape-run',
@@ -574,11 +578,25 @@ describe('LLMObs Experiments facade', () => {
       const span = await recorder.submitSpan({ input: 'x' })
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
 
-      await assert.rejects(
-        () => recorder.submitEvaluationMetrics(span, [{ label: 'score' }]),
-        /Metric 'score' must include value or error/
+      await recorder.submitEvaluationMetrics(span, [
+        { label: 'valid_metric', value: 1 },
+        { label: 'score' },
+      ])
+      sinon.assert.calledOnce(ExperimentsClient.prototype.postExperimentEvents)
+      assert.deepEqual(
+        ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].metrics.map(metric => metric.label),
+        ['valid_metric']
       )
+
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+      await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+      sinon.assert.calledTwice(warn)
+      sinon.assert.alwaysCalledWith(
+        warn,
+        'LLMObs experiments: skipping external metric %s because it has neither value nor error',
+        'score'
+      )
     })
 
     it('omits null dataset versions when starting external experiments', async () => {
