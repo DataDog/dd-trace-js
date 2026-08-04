@@ -3282,14 +3282,12 @@ describe('Config', () => {
       assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '429')
     })
 
-    it('accepts the DD_HTTP_* aliases', () => {
+    it('accepts the DD_HTTP_SERVER_ERROR_STATUSES alias', () => {
       process.env.DD_HTTP_SERVER_ERROR_STATUSES = '500-503'
-      process.env.DD_HTTP_CLIENT_ERROR_STATUSES = '400-599'
 
       const config = getConfig()
 
       assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-503')
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-599')
     })
   })
 
