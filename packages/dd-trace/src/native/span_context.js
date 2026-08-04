@@ -408,30 +408,20 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Set a construction-time name without a native operation.
-   * @param {string} name Span name
-   */
-  _setNameLocal (name) {
-    this[NAME_VALUE] = name
-  }
-
-  /**
-   * Sync a changed span name.
-   * @param {string} name Span name
-   */
-  _syncNameToNative (name) {
-    const stringName = String(name)
-    this.#nativeSpans.queueOp(
-      OpCode.SetName,
-      this._nativeSpanId,
-      stringName
-    )
-    this.#nativeName = stringName
-  }
-
-  /**
-   * Apply shared OTel HTTP remapping to the final native representation.
-   * Native stats consequently observe the remapped keys under this opt-in.
+   * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
+   * native output at finish. Datadog HTTP tags are skipped by
+   * syncFinalTagsToNative(), so build a formatted view from the JS tag cache,
+   * run the shared `applyHttpOtelSemantics`, and sync the resulting OTel
+   * meta/metrics (plus any error/resource change) into WASM. No-op for
+   * non-HTTP spans. Only invoked when the tracer runs with
+   * DD_TRACE_OTEL_SEMANTICS_ENABLED.
+   *
+   * Divergence from master: because the DD HTTP tags are held out of WASM
+   * entirely (not just renamed at serialization), the native trace-stats
+   * concentrator (which runs in WASM at flush) sees the OTel names rather than
+   * the DD `http.status_code`/etc. Master kept the DD tags on the span so stats
+   * were unaffected. This only matters for the OTEL-semantics + native-stats
+   * intersection and is an accepted limitation of the opt-in flag.
    */
   applyOtelHttpSemantics () {
     const tags = this.getTags()

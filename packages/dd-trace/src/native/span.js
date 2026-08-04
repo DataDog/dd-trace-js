@@ -141,9 +141,6 @@ function encodeSpanEventAttrs (attributes) {
 // module-local handoff is safe because construction is synchronous.
 let pendingNativeSpans = null
 
-// Suppress the parent constructor's redundant SetName operation.
-const noopSyncName = () => {}
-
 /**
  * DatadogSpan backed by native storage.
  */
@@ -174,10 +171,9 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore name synchronization, then copy initial tags that the parent
-    // constructor wrote directly into the JS cache.
-    delete this._spanContext._syncNameToNative
-
+    // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
+    // which bypasses NativeSpanContext.setTag's native-sync path. Push
+    // them to WASM now (no JS-cache write — the parent already did it).
     if (fields.tags) {
       this._spanContext.syncToNativeOnly(fields.tags)
     }
@@ -186,7 +182,10 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Construct the native span context and initial combined create operation.
+   * Allocate a native slot, build a NativeSpanContext, queue the
+   * combined CreateSpan op (Create + SetName + SetStart in one WASM
+   * call). The inherited constructor stores the initial name locally after
+   * this returns; final synchronization owns subsequent name changes.
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -286,11 +285,12 @@ class NativeDatadogSpan extends DatadogSpan {
       : fields.startTime
     fields.startTime = createStartTime
 
-    // Seed immutable/default fields so final sync can skip unchanged values.
-    spanContext._setNameLocal(operationName)
-    spanContext._syncNameToNative = noopSyncName
-
-    // Share one native segment id across the local trace.
+    // CreateSpanFull carries the common immutable/default core fields natively
+    // (name, service, resource, type, start), so final sync can skip no-op
+    // overwrites unless user tags changed them.
+    // One segment id per local trace, shared by all its spans via the
+    // shared `_trace` object (the local root allocates; children reuse).
+    // Required by the native chunk flush, which keys a chunk by segment.
     const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
     const nativeService = typeof fields.tags?.['service.name'] === 'string'
       ? fields.tags['service.name']

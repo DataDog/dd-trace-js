@@ -224,7 +224,7 @@ describe('NativeSpanContext', () => {
     })
 
     it('fast-syncs primitive tags without a formatted snapshot', () => {
-      spanContext._setNameLocal('operation')
+      spanContext._name = 'operation'
       spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
       spanContext.setTag('service.name', 'svc')
       spanContext._sampling.priority = 1
@@ -250,14 +250,15 @@ describe('NativeSpanContext', () => {
     })
 
     it('fast-syncs supported core tag changes', () => {
-      spanContext._setNameLocal('operation')
       spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
+      spanContext._name = 'renamed-operation'
       spanContext.setTag('service.name', 'api')
       spanContext.setTag('resource.name', 'GET /users')
       spanContext.setTag('span.type', 'web')
 
       assert.strictEqual(spanContext.tryFastFinalTagsToNative(), true)
 
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetName, leSpanId, 'renamed-operation')
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetResourceName, leSpanId, 'GET /users')
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetServiceName, leSpanId, 'api')
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetType, leSpanId, 'web')
@@ -267,7 +268,7 @@ describe('NativeSpanContext', () => {
     })
 
     it('falls back without writing for unsupported final tags', () => {
-      spanContext._setNameLocal('operation')
+      spanContext._name = 'operation'
       spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
       spanContext.setTag('object.tag', { nested: true })
 
@@ -280,7 +281,7 @@ describe('NativeSpanContext', () => {
 
     it('falls back before DD HTTP tags when OTel remapping is enabled', () => {
       nativeSpans.otelSemanticsEnabled = true
-      spanContext._setNameLocal('operation')
+      spanContext._name = 'operation'
       spanContext._recordNativeCoreFields('operation', 'operation', 'svc', '')
       spanContext.setTag('http.method', 'GET')
 
@@ -311,26 +312,6 @@ describe('NativeSpanContext', () => {
   // covered by `packages/dd-trace/test/opentracing/span_context.spec.js`. The
   // native subclass adds native-storage sync on setTag (tested above) but
   // doesn't override the read-side accessors, so we don't re-test them here.
-
-  describe('_syncNameToNative', () => {
-    beforeEach(() => {
-      spanContext = new NativeSpanContext(nativeSpans, {
-        traceId: id,
-        spanId: id,
-      })
-    })
-
-    it('should queue SetName operation', () => {
-      spanContext._syncNameToNative('my-operation')
-
-      sinon.assert.calledWith(
-        nativeSpans.queueOp,
-        OpCode.SetName,
-        leSpanId,
-        'my-operation'
-      )
-    })
-  })
 
   describe('OTEL semantics (DD_TRACE_OTEL_SEMANTICS_ENABLED)', () => {
     beforeEach(() => {
