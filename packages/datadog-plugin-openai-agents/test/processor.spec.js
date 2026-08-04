@@ -25,7 +25,7 @@ describe('DDOpenAIAgentsProcessor', () => {
       startSpan: sinon.stub(),
       endSpan: sinon.stub(),
       recordUntracedSpan: sinon.stub(),
-      forgetUntracedSpan: sinon.stub(),
+      endUntracedSpan: sinon.stub(),
       clearState: sinon.stub(),
       ...overrides,
     }
@@ -74,9 +74,9 @@ describe('DDOpenAIAgentsProcessor', () => {
       sinon.assert.notCalled(integration.startSpan)
     })
 
-    it('records ancestry instead of starting a span for types that have no LLMObs kind', async () => {
+    it('records ancestry instead of starting a span for structural types', async () => {
       // agents-core >=0.14 wraps real work in structural `task` / `turn` spans.
-      for (const type of ['unknown', 'task', 'turn']) {
+      for (const type of ['task', 'turn']) {
         integration.startSpan.resetHistory()
         integration.recordUntracedSpan.resetHistory()
         const oaiSpan = { spanId: `s-${type}`, traceId: 't1', parentId: 'p1', spanData: { type } }
@@ -86,6 +86,15 @@ describe('DDOpenAIAgentsProcessor', () => {
         sinon.assert.notCalled(integration.startSpan)
         sinon.assert.calledOnceWithExactly(integration.recordUntracedSpan, oaiSpan)
       }
+    })
+
+    it('ignores unknown span types', async () => {
+      integration.startSpan.resetHistory()
+      integration.recordUntracedSpan.resetHistory()
+      await processor.onSpanStart({ spanId: 'unknown', traceId: 't1', spanData: { type: 'unknown' } })
+
+      sinon.assert.notCalled(integration.startSpan)
+      sinon.assert.notCalled(integration.recordUntracedSpan)
     })
 
     it('maps recognised span types to the expected LLMObs kind', async () => {
@@ -116,19 +125,20 @@ describe('DDOpenAIAgentsProcessor', () => {
       sinon.assert.notCalled(integration.endSpan)
     })
 
-    it('drops remembered ancestry instead of ending a span for untraced types', async () => {
-      await processor.onSpanEnd({ spanId: 'turn-1', traceId: 't1', spanData: { type: 'turn' } })
+    it('ends structural spans without ending a dd-trace span', async () => {
+      const oaiSpan = { spanId: 'turn-1', traceId: 't1', spanData: { type: 'turn' } }
+      await processor.onSpanEnd(oaiSpan)
       sinon.assert.notCalled(integration.endSpan)
-      sinon.assert.calledOnceWithExactly(integration.forgetUntracedSpan, 'turn-1')
+      sinon.assert.calledOnceWithExactly(integration.endUntracedSpan, oaiSpan)
     })
 
     it('ends traced spans without touching the untraced ancestry map', async () => {
       integration.endSpan.resetHistory()
-      integration.forgetUntracedSpan.resetHistory()
+      integration.endUntracedSpan.resetHistory()
       const oaiSpan = { spanId: 'a-1', traceId: 't1', spanData: { type: 'agent' } }
       await processor.onSpanEnd(oaiSpan)
       sinon.assert.calledOnceWithExactly(integration.endSpan, oaiSpan)
-      sinon.assert.notCalled(integration.forgetUntracedSpan)
+      sinon.assert.notCalled(integration.endUntracedSpan)
     })
   })
 

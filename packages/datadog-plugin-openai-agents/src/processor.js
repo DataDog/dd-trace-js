@@ -66,13 +66,13 @@ class DDOpenAIAgentsProcessor {
     const integration = this._getIntegration()
     if (!integration?.enabled) return RESOLVED
     if (!oaiSpan?.spanData) return RESOLVED // guard NoopSpan
-    const kind = SPAN_KIND_BY_TYPE[oaiSpan.spanData.type]
+    const type = oaiSpan.spanData.type
+    const kind = SPAN_KIND_BY_TYPE[type]
     try {
       if (kind) {
         integration.startSpan(oaiSpan, kind)
-      } else {
-        // Span types without an LLMObs kind get no dd span, but agents-core
-        // >=0.14 nests real work under structural `task` / `turn` spans, so
+      } else if (type === 'task' || type === 'turn') {
+        // agents-core >=0.14 nests real work under these structural spans, so
         // their ancestry still has to be walkable for parent resolution.
         integration.recordUntracedSpan(oaiSpan)
       }
@@ -86,14 +86,13 @@ class DDOpenAIAgentsProcessor {
     const integration = this._getIntegration()
     if (!integration?.enabled) return RESOLVED
     if (!oaiSpan?.spanData) return RESOLVED
-    const kind = SPAN_KIND_BY_TYPE[oaiSpan.spanData.type]
+    const type = oaiSpan.spanData.type
+    const kind = SPAN_KIND_BY_TYPE[type]
     try {
       if (kind) {
         integration.endSpan(oaiSpan)
-      } else {
-        // An untraced span's descendants have all ended by now, so its
-        // remembered ancestry can be dropped.
-        integration.forgetUntracedSpan(oaiSpan.spanId)
+      } else if (type === 'task' || type === 'turn') {
+        integration.endUntracedSpan(oaiSpan)
       }
     } catch (err) {
       log.warn('[openai-agents] onSpanEnd failed: %s', err)

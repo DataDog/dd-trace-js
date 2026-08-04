@@ -577,7 +577,9 @@ describe('OpenAIAgentsIntegration', () => {
 
       // agents-core's withTrace skips Trace.end() when its callback throws, so
       // no onTraceEnd arrives — the errored agent is the last chance to finish
-      // the workflow span.
+      // the workflow span. An earlier processor may let task end reach us first.
+      processor.onSpanEnd(taskSpan)
+      sinon.assert.notCalled(workflowSpan.finish)
       processor.onSpanEnd({ ...agentASpan, error: { message: 'boom' } })
 
       sinon.assert.calledWith(workflowSpan.setTag, 'error', true)
@@ -609,9 +611,17 @@ describe('OpenAIAgentsIntegration', () => {
           _response: { model: 'gpt-4o', output_text: 'sunny' },
         },
       })
-      processor.onSpanEnd(oaiResponse)
-      processor.onSpanEnd(agentASpan)
+      // Earlier processors can delay one callback without blocking later ones.
+      // Keep the workflow and structural ancestry until the delayed response
+      // has supplied the workflow output and every observed span has ended.
       integration.endTrace({ traceId: 't1' })
+      processor.onSpanEnd(taskSpan)
+      processor.onSpanEnd(turnSpan)
+      sinon.assert.notCalled(workflowSpan.finish)
+      processor.onSpanEnd(oaiResponse)
+      sinon.assert.notCalled(workflowSpan.finish)
+      processor.onSpanEnd(agentASpan)
+      sinon.assert.calledOnce(workflowSpan.finish)
 
       const responseTags = LLMObsTagger.tagMap.get(responseSpan)
       assert.strictEqual(responseTags['_ml_obs.name'], 'agent_a (LLM)')
@@ -625,7 +635,7 @@ describe('OpenAIAgentsIntegration', () => {
       assert.strictEqual(workflowTags['_ml_obs.meta.output.value'], 'sunny')
     })
 
-    it('drops an untraced span from the ancestry map once it ends', () => {
+    it('keeps ended structural ancestry until the trace becomes quiescent', () => {
       const workflowSpan = makeFakeSpan('workflow')
       const agentSpan = makeFakeSpan('agent-a-dd')
       const { integration, processor } = buildWithProcessor({ tracerSpans: [workflowSpan, agentSpan] })
@@ -638,7 +648,60 @@ describe('OpenAIAgentsIntegration', () => {
 
       processor.onSpanEnd(turnSpan)
 
+      assert.strictEqual(integration.getDDSpan('turn-1'), agentSpan)
+
+      processor.onSpanEnd(agentASpan)
+      processor.onSpanEnd(taskSpan)
+
       assert.strictEqual(integration.getDDSpan('turn-1'), undefined)
+    })
+
+    it('completes and cleans concurrent traces independently', () => {
+      const workflowOne = makeFakeSpan('workflow-1')
+      const agentOne = makeFakeSpan('agent-1')
+      const workflowTwo = makeFakeSpan('workflow-2')
+      const agentTwo = makeFakeSpan('agent-2')
+      const { integration, processor } = buildWithProcessor({
+        tracerSpans: [workflowOne, agentOne, workflowTwo, agentTwo],
+      })
+      const taskOne = { spanId: 'task-1', traceId: 't1', parentId: null, spanData: { type: 'task' } }
+      const agentOneOai = {
+        spanId: 'agent-1',
+        traceId: 't1',
+        parentId: 'task-1',
+        spanData: { type: 'agent' },
+      }
+      const taskTwo = { spanId: 'task-2', traceId: 't2', parentId: null, spanData: { type: 'task' } }
+      const agentTwoOai = {
+        spanId: 'agent-2',
+        traceId: 't2',
+        parentId: 'task-2',
+        spanData: { type: 'agent' },
+      }
+      const turnTwo = { spanId: 'turn-2', traceId: 't2', parentId: 'agent-2', spanData: { type: 'turn' } }
+
+      integration.startTrace({ traceId: 't1' })
+      driveSpan(processor, taskOne)
+      driveSpan(processor, agentOneOai)
+      integration.startTrace({ traceId: 't2' })
+      driveSpan(processor, taskTwo)
+      driveSpan(processor, agentTwoOai)
+      driveSpan(processor, turnTwo)
+
+      integration.endTrace({ traceId: 't1' })
+      processor.onSpanEnd(taskOne)
+      processor.onSpanEnd(agentOneOai)
+
+      sinon.assert.calledOnce(workflowOne.finish)
+      sinon.assert.notCalled(workflowTwo.finish)
+      assert.strictEqual(integration.getDDSpan('turn-2'), agentTwo)
+
+      integration.endTrace({ traceId: 't2' })
+      processor.onSpanEnd(agentTwoOai)
+      processor.onSpanEnd(taskTwo)
+      processor.onSpanEnd(turnTwo)
+
+      sinon.assert.calledOnce(workflowTwo.finish)
     })
 
     it('keeps the pre-0.14 flat hierarchy unchanged', () => {
