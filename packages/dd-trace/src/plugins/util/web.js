@@ -14,6 +14,7 @@ const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
+const { getStatusValidator } = require('./http-error-statuses')
 const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
 const WEB = types.WEB
@@ -59,7 +60,7 @@ const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
-    const validateStatus = getStatusValidator(config)
+    const validateStatus = getStatusValidator(config, SERVER)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
@@ -531,19 +532,6 @@ function getHeadersToRecord (config) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
-}
-
-function isNot500ErrorCode (code) {
-  return code < 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return isNot500ErrorCode
 }
 
 const noop = () => {}

@@ -4,6 +4,9 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { getStatusValidator } = require('../../dd-trace/src/plugins/util/http-error-statuses')
+const { NETWORK_PEER_ADDRESS } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const { extractURL, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
@@ -37,6 +40,17 @@ class NextPlugin extends ServerPlugin {
       },
       integrationName: this.constructor.id,
     })
+
+    // Next.js does not set `http.url` on its own, so the export-time OTel rename
+    // had nothing to derive `url.path` / `url.scheme` / `server.*` from. Set it
+    // (and the socket peer, which is only reachable here) exactly as
+    // `web.addRequestTags` does, but only under the flag so the default output
+    // stays unchanged.
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      span.setTag('http.url', obfuscateQs(this.config, extractURL(req)))
+      const peerAddress = req.socket?.remoteAddress
+      if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
+    }
 
     this.stampIntegrationService(span, serviceName)
 
@@ -133,11 +147,10 @@ class NextPlugin extends ServerPlugin {
 
 function normalizeConfig (config) {
   const hooks = getHooks(config)
-  const validateStatus = typeof config.validateStatus === 'function'
-    ? config.validateStatus
-    : code => code < 500
+  const validateStatus = getStatusValidator(config, 'server')
+  const queryStringObfuscation = getQsObfuscator(config)
 
-  return { ...config, hooks, validateStatus }
+  return { ...config, hooks, validateStatus, queryStringObfuscation }
 }
 
 const noop = () => {}
