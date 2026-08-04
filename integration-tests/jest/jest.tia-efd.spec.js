@@ -47,6 +47,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -445,8 +446,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
-      childProcess.on('exit', () => {
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.on('close', () => {
         eventsPromise.then(() => {
+          assert.strictEqual(
+            testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+            1,
+            testOutput
+          )
           done()
         }).catch(done)
       })
@@ -787,11 +795,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
 
             const skippedSuites = testSuites.filter(
               suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
             )
             assert.strictEqual(skippedSuites.length, 2)
+            assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
             skippedSuites.forEach(skippedSuite => {
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
@@ -801,6 +811,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         )
 
       assert.strictEqual(childProcess.exitCode, 0)
+    })
+
+    it('prints a message when TIA skips every suite across multiple projects', async () => {
+      const skippedSuite = 'ci-visibility/test/ci-visibility-test.js'
+      const projects = [
+        {
+          displayName: 'skipped',
+          rootDir: 'ci-visibility/test',
+          testPathIgnorePatterns: ['/node_modules/', '/efd-parallel/'],
+          cache: false,
+          testMatch: ['**/ci-visibility-test.js'],
+          testRunner: 'jest-circus/runner',
+          testEnvironment: 'node',
+        },
+        {
+          displayName: 'empty',
+          rootDir: 'ci-visibility/test',
+          testPathIgnorePatterns: ['/node_modules/', '/efd-parallel/'],
+          cache: false,
+          testMatch: ['**/does-not-exist.js'],
+          testRunner: 'jest-circus/runner',
+          testEnvironment: 'node',
+        },
+      ]
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: skippedSuite },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.deepStrictEqual(tests.map(event => event.content.resource), [])
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        })
+
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --config config-jest.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify(projects),
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
     })
 
     it('does not run coverage reporters when TIA forces coverage collection', async () => {
