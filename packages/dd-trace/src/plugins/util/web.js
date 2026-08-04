@@ -313,6 +313,7 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context, spanType)
+    requests.delete(context.span)
 
     finishInferredProxySpan(context)
   },
