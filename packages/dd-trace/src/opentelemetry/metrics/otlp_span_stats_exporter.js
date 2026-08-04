@@ -12,14 +12,12 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {string} protocol
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes
    * @param {boolean} [otelSemanticsEnabled]
-   * @param {string} [defaultService]
    * @param {Record<string, string>} [headers]
    * @param {number} [timeout]
    */
-  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, defaultService = '',
-    headers, timeout = 10_000) {
+  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, headers, timeout = 10_000) {
     super(url, headers, timeout, protocol, 'span-stats')
-    this.#transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled, defaultService)
+    this.#transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled)
   }
 
   /**

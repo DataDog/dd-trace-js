@@ -115,7 +115,6 @@ function createOtlpSpanStatsExporter (config) {
     protocol,
     resourceAttributes,
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
-    config.service,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )

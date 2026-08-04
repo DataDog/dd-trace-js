@@ -54,18 +54,15 @@ const STATUS_CODE_ERROR_ATTR = { key: 'status.code', value: { stringValue: 'STAT
 
 class OtlpStatsTransformer extends OtlpTransformerBase {
   #otelSemanticsEnabled
-  #defaultService
 
   /**
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes
    * @param {string} protocol
    * @param {boolean} [otelSemanticsEnabled]
-   * @param {string} [defaultService]
    */
-  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false, defaultService = '') {
+  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false) {
     super(resourceAttributes, protocol, 'span-stats')
     this.#otelSemanticsEnabled = otelSemanticsEnabled
-    this.#defaultService = defaultService
   }
 
   /**
@@ -153,11 +150,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @param {import('../../span_stats').SpanAggKey} aggKey
    */
   #buildAttributes (aggKey) {
-    const raw = { 'span.name': aggKey.resource }
-
-    if (aggKey.service && aggKey.service !== this.#defaultService) {
-      raw['service.name'] = aggKey.service
-    }
+    const raw = { 'span.name': aggKey.resource, 'service.name': aggKey.service }
 
     if (aggKey.spanKind) raw['span.kind'] = SPAN_KIND_METRIC_MAP[aggKey.spanKind] ?? aggKey.spanKind
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)

@@ -20,7 +20,6 @@ const RESOURCE_ATTRS = {
   'service.version': '1.2.3',
   'deployment.environment.name': 'test',
 }
-const DEFAULT_SERVICE = 'svc'
 const BUCKET_SIZE_NS = 10 * 1e9
 
 function makeSpan (overrides = {}) {
@@ -81,7 +80,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false, DEFAULT_SERVICE)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false)
     })
 
     it('emits a single histogram metric with the correct name, unit and temporality', () => {
@@ -110,6 +109,7 @@ describe('OtlpStatsTransformer', () => {
 
       assert.deepStrictEqual(attrMapOf(dataPointsOf(payload)[0]), {
         'span.name': 'GET /foo',
+        'service.name': 'svc',
         'span.kind': 'SPAN_KIND_SERVER',
         'http.response.status_code': 404,
         'http.request.method': 'POST',
@@ -223,7 +223,7 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(resourceAttrs['deployment.environment.name'], 'test')
     })
 
-    it('emits a single scopeMetrics and tags data points whose service differs from the default', () => {
+    it('emits a single scopeMetrics and tags every data point with service.name, including the default service', () => {
       const drained = makeDrained(12340000000000, [
         makeSpan({ service: 'svc', resource: 'GET /foo' }),
         makeSpan({ service: 'svc-other', resource: 'GET /bar' }),
@@ -236,7 +236,7 @@ describe('OtlpStatsTransformer', () => {
       const serviceByResource = Object.fromEntries(
         dataPointsOf(payload).map(dp => [attrMapOf(dp)['span.name'], attrMapOf(dp)['service.name']])
       )
-      assert.strictEqual(serviceByResource['GET /foo'], undefined)
+      assert.strictEqual(serviceByResource['GET /foo'], 'svc')
       assert.strictEqual(serviceByResource['GET /bar'], 'svc-other')
     })
 
@@ -264,7 +264,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true, DEFAULT_SERVICE)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true)
     })
 
     it('emits only OTel attributes (no dd.*) while keeping status.code on errors', () => {
@@ -290,7 +290,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf', false, DEFAULT_SERVICE)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf', false)
     })
 
     it('emits a valid ExportMetricsServiceRequest with a single duration metric', () => {
