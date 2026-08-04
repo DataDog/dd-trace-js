@@ -142,8 +142,14 @@ describe('rewriter loader', () => {
       { format: 'commonjs' },
       () => ({ format: 'commonjs', source: commonJSSource })
     )
+    const resultFromConditions = await load(
+      url,
+      { conditions: ['require'] },
+      () => ({ source: commonJSSource })
+    )
 
     assert.strictEqual(result.source, commonJSSource)
+    assert.strictEqual(resultFromConditions.source, commonJSSource)
   })
 
   it('rewrites CommonJS in the sync loader', () => {
@@ -163,13 +169,30 @@ describe('rewriter loader', () => {
       { format: 'commonjs' },
       () => ({ format: 'commonjs', source: decoratedCommonJSSource })
     )
+    const rewrittenFromConditions = loadSync(
+      url,
+      { conditions: ['require'] },
+      () => ({ source: decoratedCommonJSSource })
+    )
 
     assertCommonJSRewritten(rewritten.source)
     assertCommonJSRewritten(rewrittenFromContext.source)
     assertCommonJSRewritten(rewrittenWithPreamble.source)
+    assertCommonJSRewritten(rewrittenFromConditions.source)
     assert.strictEqual(rewrittenWithPreamble.source.split('\n')[0], '#!/usr/bin/env node')
+    assert.strictEqual(rewrittenFromConditions.source.split('\n')[0], '#!/usr/bin/env node')
     assert.match(rewrittenWithPreamble.source.split('\n')[1], /^'use strict';$/)
     assert.match(rewrittenWithPreamble.source.trimEnd().split('\n').at(-1), /^\/\/# sourceMappingURL=/)
+  })
+
+  it('trusts an ESM result format over the require condition', () => {
+    const result = loadSync(
+      createAiModuleUrl(),
+      { conditions: ['require'] },
+      () => ({ format: 'module', source })
+    )
+
+    assertRewritten(result.source)
   })
 
   it('rewrites a CommonJS package once without installing the compile hook', function () {

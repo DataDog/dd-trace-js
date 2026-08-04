@@ -6,28 +6,27 @@ let rewriter
 
 async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
-  const format = result.format || context.format
+  const format = getFormat(result, context)
 
   // The asynchronous loader keeps using Module._compile for CommonJS until all
   // supported runtimes can use synchronous hooks.
   if (format === 'commonjs') return result
 
-  return rewriteResult(result, url, context)
+  return rewriteResult(result, url, format)
 }
 
 function loadSync (url, context, nextLoad) {
   const result = nextLoad(url, context)
 
-  return rewriteResult(result, url, context)
+  return rewriteResult(result, url, getFormat(result, context))
 }
 
 /**
  * @param {{ format?: string, source?: unknown }} result
  * @param {string} url
- * @param {{ format?: string }} context
+ * @param {string|undefined} format
  */
-function rewriteResult (result, url, context) {
-  const format = result.format || context.format
+function rewriteResult (result, url, format) {
   const { source } = result
   let hashbang
 
@@ -53,6 +52,23 @@ function rewriteResult (result, url, context) {
   }
 
   return result
+}
+
+/**
+ * @param {{ format?: string }} result
+ * @param {{ format?: string, conditions?: string[] }} context
+ * @returns {string|undefined}
+ */
+function getFormat (result, context) {
+  const format = result.format || context.format
+  if (format) return format
+
+  const { conditions } = context
+  if (!conditions) return
+
+  for (let i = 0; i < conditions.length; i++) {
+    if (conditions[i] === 'require') return 'commonjs'
+  }
 }
 
 export { load, loadSync }
