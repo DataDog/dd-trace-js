@@ -46,6 +46,15 @@ const KIND_TO_SPAN_KIND = {
  */
 
 /**
+ * @typedef {{
+ *   parentId: string | null,
+ *   traceId?: string,
+ *   activeChildCount: number,
+ *   ended: boolean,
+ * }} UntracedSpanInfo
+ */
+
+/**
  * Owns tracer/tagger refs, maps agents-core span ids → dd-trace spans, and
  * reconstructs workflow-level input/output from the first and last response
  * spans of the top-level agent.
@@ -65,10 +74,9 @@ class OpenAIAgentsIntegration {
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
   /**
-   * agents-core spans we deliberately don't trace (`task` / `turn`). Keeping
-   * the existing span object makes both its parent and trace available without
-   * allocating a wrapper or maintaining a second index.
-   * @type {Map<string, object>}
+   * agents-core spans we deliberately don't trace (`task` / `turn`). Ended
+   * nodes stay walkable only while an observed child callback is still active.
+   * @type {Map<string, UntracedSpanInfo>}
    */
   #untracedSpans = new Map()
   /** @type {Map<string, LLMObsTraceInfo>} */
@@ -115,19 +123,31 @@ class OpenAIAgentsIntegration {
   recordUntracedSpan (oaiSpan) {
     const { spanId } = oaiSpan
     if (!spanId || this.#untracedSpans.has(spanId)) return
-    this.#untracedSpans.set(spanId, oaiSpan)
+
+    const parentId = oaiSpan.parentId ?? null
+    this.#untracedSpans.set(spanId, {
+      parentId,
+      traceId: oaiSpan.traceId,
+      activeChildCount: 0,
+      ended: false,
+    })
+    this.#retainUntracedParent(parentId)
     this.#spanStarted(oaiSpan.traceId)
   }
 
   /**
    * Mark an untraced span callback complete. Its ancestry remains available
-   * until every callback already observed for the trace has completed.
+   * until every observed child callback has completed.
    *
    * @param {object} oaiSpan
    */
   endUntracedSpan (oaiSpan) {
-    if (!this.#untracedSpans.has(oaiSpan.spanId)) return
-    this.#spanEnded(oaiSpan.traceId)
+    const info = this.#untracedSpans.get(oaiSpan.spanId)
+    if (!info || info.ended) return
+
+    info.ended = true
+    this.#pruneUntracedSpan(oaiSpan.spanId, info)
+    this.#spanEnded(info.traceId)
   }
 
   /**
@@ -246,7 +266,6 @@ class OpenAIAgentsIntegration {
     }
     this.#oaiToDdSpan.delete(traceId)
     this.#traceInfo.delete(traceId)
-    this.#forgetUntracedSpansForTrace(traceId)
   }
 
   // ── Span lifecycle ──────────────────────────────────────────────────────────
@@ -264,6 +283,7 @@ class OpenAIAgentsIntegration {
     })
 
     this.#oaiToDdSpan.set(spanId, ddSpan)
+    this.#retainUntracedParent(oaiSpan.parentId)
     this.#spanStarted(oaiSpan.traceId)
 
     if (this.#isLLMObsEnabled()) {
@@ -338,6 +358,7 @@ class OpenAIAgentsIntegration {
         ddSpan.finish()
       } finally {
         this.#oaiToDdSpan.delete(spanId)
+        this.#releaseUntracedParent(oaiSpan.parentId)
         this.#spanEnded(oaiSpan.traceId)
       }
     }
@@ -551,11 +572,53 @@ class OpenAIAgentsIntegration {
     let currentId = oaiSpan.parentId
     for (let depth = 0; depth < MAX_ANCESTOR_WALK; depth++) {
       if (currentId == null) return true
-      const parentSpan = this.#untracedSpans.get(currentId)
-      if (!parentSpan) return false
-      currentId = parentSpan.parentId
+      const info = this.#untracedSpans.get(currentId)
+      if (!info) return false
+      currentId = info.parentId
     }
     return false
+  }
+
+  /**
+   * Keep a structural parent alive until this child callback completes.
+   *
+   * @param {string | undefined | null} parentId
+   */
+  #retainUntracedParent (parentId) {
+    const info = this.#untracedSpans.get(parentId)
+    if (info) info.activeChildCount++
+  }
+
+  /**
+   * Release a structural parent and iteratively prune any ended, childless
+   * ancestors. The walk is bounded for the same reason as ancestry lookup.
+   *
+   * @param {string | undefined | null} parentId
+   */
+  #releaseUntracedParent (parentId) {
+    let currentId = parentId
+    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+      const info = this.#untracedSpans.get(currentId)
+      if (!info || info.activeChildCount === 0) return
+
+      info.activeChildCount--
+      if (!info.ended || info.activeChildCount > 0) return
+
+      this.#untracedSpans.delete(currentId)
+      currentId = info.parentId
+    }
+  }
+
+  /**
+   * Remove an ended structural span once no observed child still needs it.
+   *
+   * @param {string} spanId
+   * @param {UntracedSpanInfo} info
+   */
+  #pruneUntracedSpan (spanId, info) {
+    if (info.activeChildCount > 0) return
+    this.#untracedSpans.delete(spanId)
+    this.#releaseUntracedParent(info.parentId)
   }
 
   /**
@@ -569,8 +632,8 @@ class OpenAIAgentsIntegration {
   }
 
   /**
-   * Release one observed span callback and complete or prune the trace when it
-   * becomes quiescent.
+   * Release one observed span callback and complete the trace when it becomes
+   * quiescent. Structural ancestry prunes independently with each subtree.
    *
    * @param {string | undefined} traceId
    */
@@ -580,23 +643,7 @@ class OpenAIAgentsIntegration {
     if (info.activeSpanCount > 0) info.activeSpanCount--
     if (info.activeSpanCount > 0) return
 
-    if (info.completionRequested) {
-      this.#completeWorkflowSpan(traceId)
-    } else {
-      this.#forgetUntracedSpansForTrace(traceId)
-    }
-  }
-
-  /**
-   * Drop structural ancestry for one trace without allocating a trace-local
-   * collection. This only runs after all callbacks observed for that trace end.
-   *
-   * @param {string} traceId
-   */
-  #forgetUntracedSpansForTrace (traceId) {
-    for (const [spanId, oaiSpan] of this.#untracedSpans) {
-      if (oaiSpan.traceId === traceId) this.#untracedSpans.delete(spanId)
-    }
+    if (info.completionRequested) this.#completeWorkflowSpan(traceId)
   }
 
   /**

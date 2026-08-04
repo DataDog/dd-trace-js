@@ -635,7 +635,117 @@ describe('OpenAIAgentsIntegration', () => {
       assert.strictEqual(workflowTags['_ml_obs.meta.output.value'], 'sunny')
     })
 
-    it('keeps ended structural ancestry until the trace becomes quiescent', () => {
+    it('keeps ended structural ancestry until its delayed child completes', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      const agentSpan = makeFakeSpan('agent-a-dd')
+      const responseSpan = makeFakeSpan('response-dd')
+      const { integration, processor } = buildWithProcessor({
+        tracerSpans: [workflowSpan, agentSpan, responseSpan],
+      })
+
+      integration.startTrace({ traceId: 't1' })
+      driveSpan(processor, taskSpan)
+      driveSpan(processor, agentASpan)
+      driveSpan(processor, turnSpan)
+      const response = driveSpan(processor, {
+        spanId: 'resp-1',
+        traceId: 't1',
+        parentId: 'turn-1',
+        spanData: { type: 'response' },
+      })
+      assert.strictEqual(integration.getDDSpan('turn-1'), agentSpan)
+
+      processor.onSpanEnd(turnSpan)
+
+      assert.strictEqual(integration.getDDSpan('turn-1'), agentSpan)
+
+      processor.onSpanEnd(response)
+
+      assert.strictEqual(integration.getDDSpan('turn-1'), undefined)
+      assert.strictEqual(integration.getDDSpan('agent-a'), agentSpan)
+
+      processor.onSpanEnd(agentASpan)
+      processor.onSpanEnd(taskSpan)
+    })
+
+    it('prunes completed turns while their task and agent remain active', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      const agentSpan = makeFakeSpan('agent-a-dd')
+      const { integration, processor } = buildWithProcessor({ tracerSpans: [workflowSpan, agentSpan] })
+
+      integration.startTrace({ traceId: 't1' })
+      driveSpan(processor, taskSpan)
+      driveSpan(processor, agentASpan)
+
+      for (let turn = 1; turn <= 3; turn++) {
+        const spanId = `turn-${turn}`
+        const turnOaiSpan = driveSpan(processor, {
+          spanId,
+          traceId: 't1',
+          parentId: 'agent-a',
+          spanData: { type: 'turn' },
+        })
+        assert.strictEqual(integration.getDDSpan(spanId), agentSpan)
+
+        processor.onSpanEnd(turnOaiSpan)
+
+        assert.strictEqual(integration.getDDSpan(spanId), undefined)
+        assert.strictEqual(integration.getDDSpan('agent-a'), agentSpan)
+      }
+
+      processor.onSpanEnd(agentASpan)
+      processor.onSpanEnd(taskSpan)
+    })
+
+    it('prunes a nested ended structural chain after its delayed descendant completes', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      const agentSpan = makeFakeSpan('agent-a-dd')
+      const responseSpan = makeFakeSpan('response-dd')
+      const { integration, processor } = buildWithProcessor({
+        tracerSpans: [workflowSpan, agentSpan, responseSpan],
+      })
+      const outerTurn = {
+        spanId: 'turn-outer',
+        traceId: 't1',
+        parentId: 'agent-a',
+        spanData: { type: 'turn' },
+      }
+      const innerTurn = {
+        spanId: 'turn-inner',
+        traceId: 't1',
+        parentId: 'turn-outer',
+        spanData: { type: 'turn' },
+      }
+      const response = {
+        spanId: 'resp-1',
+        traceId: 't1',
+        parentId: 'turn-inner',
+        spanData: { type: 'response' },
+      }
+
+      integration.startTrace({ traceId: 't1' })
+      driveSpan(processor, taskSpan)
+      driveSpan(processor, agentASpan)
+      driveSpan(processor, outerTurn)
+      driveSpan(processor, innerTurn)
+      driveSpan(processor, response)
+
+      processor.onSpanEnd(outerTurn)
+      processor.onSpanEnd(innerTurn)
+
+      assert.strictEqual(integration.getDDSpan('turn-outer'), agentSpan)
+      assert.strictEqual(integration.getDDSpan('turn-inner'), agentSpan)
+
+      processor.onSpanEnd(response)
+
+      assert.strictEqual(integration.getDDSpan('turn-outer'), undefined)
+      assert.strictEqual(integration.getDDSpan('turn-inner'), undefined)
+
+      processor.onSpanEnd(agentASpan)
+      processor.onSpanEnd(taskSpan)
+    })
+
+    it('ignores a duplicate structural end without completing the workflow early', () => {
       const workflowSpan = makeFakeSpan('workflow')
       const agentSpan = makeFakeSpan('agent-a-dd')
       const { integration, processor } = buildWithProcessor({ tracerSpans: [workflowSpan, agentSpan] })
@@ -644,16 +754,17 @@ describe('OpenAIAgentsIntegration', () => {
       driveSpan(processor, taskSpan)
       driveSpan(processor, agentASpan)
       driveSpan(processor, turnSpan)
-      assert.strictEqual(integration.getDDSpan('turn-1'), agentSpan)
 
       processor.onSpanEnd(turnSpan)
-
-      assert.strictEqual(integration.getDDSpan('turn-1'), agentSpan)
-
-      processor.onSpanEnd(agentASpan)
+      processor.onSpanEnd(turnSpan)
+      integration.endTrace({ traceId: 't1' })
       processor.onSpanEnd(taskSpan)
 
-      assert.strictEqual(integration.getDDSpan('turn-1'), undefined)
+      sinon.assert.notCalled(workflowSpan.finish)
+
+      processor.onSpanEnd(agentASpan)
+
+      sinon.assert.calledOnce(workflowSpan.finish)
     })
 
     it('completes and cleans concurrent traces independently', () => {
