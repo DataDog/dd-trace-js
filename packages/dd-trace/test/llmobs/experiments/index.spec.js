@@ -174,7 +174,13 @@ describe('LLMObs Experiments facade', () => {
 
       const experiment = exp.experiment({ name: 'exp' })
       assert.equal(experiment.name(), 'exp')
-      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      assert.deepEqual(await experiment.run(), {
+        experimentId: null,
+        rows: [],
+        summaryEvaluations: {},
+        runs: [],
+        url: null,
+      })
       sinon.assert.calledThrice(warn)
     })
 
@@ -220,7 +226,13 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(experiment.name(), '')
       assert.equal(experiment.experimentId(), null)
       assert.equal(experiment.url(), null)
-      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      assert.deepEqual(await experiment.run(), {
+        experimentId: null,
+        rows: [],
+        summaryEvaluations: {},
+        runs: [],
+        url: null,
+      })
       sinon.assert.callCount(warn, 4)
     })
   })
@@ -314,9 +326,16 @@ describe('LLMObs Experiments facade', () => {
   })
 
   describe('experiment run', () => {
+    function stubDynamicExperimentEvents () {
+      // Event payloads include generated span/trace ids; experiment.spec.js covers their shape.
+      // Keep these facade tests focused on control-plane VCR calls and returned result plumbing.
+      return sinon.stub(ExperimentsClient.prototype, 'postExperimentEvents').resolves()
+    }
+
     it('runs a multi-row experiment and returns rows, ids, metric values, and dashboard URLs', async function () {
       this.timeout(60_000)
 
+      const postExperimentEvents = stubDynamicExperimentEvents()
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
@@ -346,6 +365,7 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(result.rows.length, 2)
       assert.equal(result.runs.length, 1)
       assert.equal(result.runs[0].rows, result.rows)
+      sinon.assert.calledOnce(postExperimentEvents)
       assert.match(dataset.id(), /\S+/)
       assert.match(dataset.url(), /^https:\/\//)
       assert.equal(dataset.recordIds().length, 2)
@@ -373,6 +393,7 @@ describe('LLMObs Experiments facade', () => {
     it('creates an experiment, submits row events, and marks the experiment completed', async function () {
       this.timeout(60_000)
 
+      const postExperimentEvents = stubDynamicExperimentEvents()
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
@@ -392,6 +413,7 @@ describe('LLMObs Experiments facade', () => {
       assert.match(result.url, /^https:\/\//)
       assert.equal(result.rows.length, 1)
       assert.deepEqual(result.rows[0].evaluations, { exact: true })
+      sinon.assert.calledOnce(postExperimentEvents)
       // eslint-disable-next-line no-console
       console.log(`Datadog experiment URL: ${result.url}`)
     })
