@@ -320,9 +320,16 @@ async function validateFramework ({ framework, manifest, options, out, packageCh
 
   const unavailable = getUnavailableExecutable(getBasicCommand(framework))
   if (unavailable) {
-    results.push(getUnavailableRunnerResult(framework, unavailable))
+    const unavailableResult = getUnavailableRunnerResult(framework, unavailable)
+    results.push(unavailableResult)
     if (ciResult) results.push(ciResult)
-    addNotReachedLocalResults(results, framework, options.scenarios, 'runner-unavailable')
+    addNotReachedLocalResults(
+      results,
+      framework,
+      options.scenarios,
+      'runner-unavailable',
+      unavailableResult.evidence.blockerCategory
+    )
     return
   }
 
@@ -640,10 +647,11 @@ function addAdvancedNotReached (results, framework, scenarios, blocker) {
  * @param {object} framework framework entry
  * @param {Set<string>} scenarios selected scenarios
  * @param {string} reasonCode blocker id
+ * @param {string} [blockerCategoryOverride] blocker category supplied by a runtime result
  * @returns {void}
  */
-function addNotReachedLocalResults (results, framework, scenarios, reasonCode) {
-  const blockerCategory = framework.blockerCategory || (
+function addNotReachedLocalResults (results, framework, scenarios, reasonCode, blockerCategoryOverride) {
+  const blockerCategory = blockerCategoryOverride || framework.blockerCategory || (
     framework.status === 'requires_manual_setup'
       ? BLOCKER_CATEGORIES.PROJECT_SETUP_REQUIRED
       : BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
