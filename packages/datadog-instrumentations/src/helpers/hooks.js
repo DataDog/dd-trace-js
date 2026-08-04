@@ -29,12 +29,12 @@ module.exports = {
   '@azure/cosmos': { esmFirst: true, fn: () => require('../azure-cosmos') },
   '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => {
-    require('../otel-azure-functions')
     require('../azure-functions')
+    require('../otel-azure-functions')
   },
   'durable-functions': () => {
-    require('../otel-azure-durable-functions')
     require('../azure-durable-functions')
+    require('../otel-azure-durable-functions')
   },
   '@azure/service-bus': () => require('../azure-service-bus'),
   '@cucumber/cucumber': () => require('../cucumber'),

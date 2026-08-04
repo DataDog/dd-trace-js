@@ -81,7 +81,12 @@ describe('otel-azure-functions', () => {
   it('wraps HTTP and generic registration methods', () => {
     const { capturedTransforms } = loadWithEnabled(true)
     const app = {
+      deleteRequest (name, arg) { return arg },
       http (name, arg) { return arg },
+      get (name, arg) { return arg },
+      patch (name, arg) { return arg },
+      post (name, arg) { return arg },
+      put (name, arg) { return arg },
       generic (name, options) { return options },
     }
 
