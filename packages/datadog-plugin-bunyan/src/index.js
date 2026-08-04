@@ -1,11 +1,7 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
 const { buildLogHolder } = require('../../dd-trace/src/plugins/log_injection')
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
-
-const logSubmissionCh = channel('ci:log-submission:log')
 
 class BunyanPlugin extends LogPlugin {
   static id = 'bunyan'
@@ -28,18 +24,12 @@ class BunyanPlugin extends LogPlugin {
    */
   handleLog (arg) {
     const rec = arg.message
-    if (rec === null || typeof rec !== 'object') return
+    if (rec === null || typeof rec !== 'object' || Object.hasOwn(rec, 'dd')) return
 
-    if (!Object.hasOwn(rec, 'dd')) {
-      const logHolder = buildLogHolder(this.tracer)
-      if (logHolder) {
-        rec.dd = logHolder.dd
-      }
-    }
+    const logHolder = buildLogHolder(this.tracer)
+    if (!logHolder) return
 
-    if (logSubmissionCh.hasSubscribers) {
-      logSubmissionCh.publish({ source: 'bunyan', message: rec })
-    }
+    rec.dd = logHolder.dd
   }
 }
 

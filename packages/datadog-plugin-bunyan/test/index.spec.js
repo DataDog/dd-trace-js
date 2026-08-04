@@ -75,9 +75,9 @@ describe('Plugin', () => {
         })
 
         it('should add the trace identifiers to logger instances', () => {
-          let submittedLog
+          const submittedLogs = []
           const onLogSubmission = payload => {
-            submittedLog = payload
+            submittedLogs.push(payload)
           }
           logSubmissionCh.subscribe(onLogSubmission)
 
@@ -97,10 +97,37 @@ describe('Plugin', () => {
               span_id: span.context().toSpanId(),
             })
 
+            assert.strictEqual(submittedLogs.length, 1)
+            const [submittedLog] = submittedLogs
             assert.strictEqual(submittedLog.source, 'bunyan')
             assert.strictEqual(submittedLog.message.msg, 'message')
             assertObjectContains(submittedLog.message.dd, record.dd)
           })
+        })
+
+        it('should submit a caller-supplied dd field without overwriting it', () => {
+          let submittedLog
+          const onLogSubmission = payload => {
+            submittedLog = payload
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          tracer.scope().activate(span, () => {
+            try {
+              logger.info({ dd: { custom: 'value' } }, 'message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
+          })
+
+          sinon.assert.called(stream.write)
+
+          const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+          assert.deepStrictEqual(record.dd, { custom: 'value' })
+          assert.strictEqual(submittedLog.source, 'bunyan')
+          assert.strictEqual(submittedLog.message.msg, 'message')
+          assert.deepStrictEqual(submittedLog.message.dd, { custom: 'value' })
         })
 
         it('should not mutate the original record', () => {

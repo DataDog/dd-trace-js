@@ -6,6 +6,8 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+const logSubmissionCh = channel('ci:log-submission:log')
+
 addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
   const logCh = channel('apm:bunyan:log')
   shimmer.wrap(Logger.prototype, '_emit', emit => {
@@ -13,7 +15,10 @@ addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
       if (logCh.hasSubscribers) {
         const payload = { message: rec }
         logCh.publish(payload)
-        arguments[0] = payload.message
+        rec = arguments[0] = payload.message
+      }
+      if (logSubmissionCh.hasSubscribers) {
+        logSubmissionCh.publish({ source: 'bunyan', message: rec })
       }
       return emit.apply(this, arguments)
     }
