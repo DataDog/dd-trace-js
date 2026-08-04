@@ -13,6 +13,7 @@ const configureCh = channel('ci:log-submission:winston:configure')
 const addTransportCh = channel('ci:log-submission:winston:add-transport')
 const logSubmissionCh = channel('ci:log-submission:log')
 const playwrightTestFinishCh = channel('ci:playwright:test:finish')
+const playwrightWorkerFinishCh = channel('ci:playwright:worker:finish')
 const batchFlushInterval = 1000
 const maxBatchBytes = 5 * 1024 * 1024
 const maxBatchLogs = 1000
@@ -183,29 +184,36 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(beforeExitHandlers.has(beforeExitHandler), false)
   })
 
-  it('waits for pending batches to finish when a Playwright test finishes', async () => {
+  it('batches across Playwright tests and waits for submission when the worker finishes', async () => {
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
       Promise.resolve().then(() => callback(null))
     })
-    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
-    sinon.assert.notCalled(request)
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"first"}\n' })
 
-    playwrightTestFinishCh.publish({
+    playwrightTestFinishCh.publish()
+
+    sinon.assert.notCalled(request)
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
+
+    playwrightWorkerFinishCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
     })
 
     sinon.assert.calledOnce(request)
-    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [{ msg: 'hello' }])
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [
+      { msg: 'first' },
+      { msg: 'last' },
+    ])
     assert.strictEqual(hasCompleted, false)
 
     await Promise.resolve()
     assert.strictEqual(hasCompleted, true)
   })
 
-  it('waits for batches already in flight when a Playwright test finishes', () => {
+  it('waits for batches already in flight when a Playwright worker finishes', () => {
     const finishRequests = []
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
@@ -216,7 +224,7 @@ describe('LogSubmissionPlugin', () => {
     clock.tick(batchFlushInterval)
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
 
-    playwrightTestFinishCh.publish({
+    playwrightWorkerFinishCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -232,7 +240,7 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(hasCompleted, true)
   })
 
-  it('completes a Playwright test when log submission fails', async () => {
+  it('completes a Playwright worker when log submission fails', async () => {
     const error = new Error('boom')
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
@@ -240,7 +248,7 @@ describe('LogSubmissionPlugin', () => {
     })
     logSubmissionCh.publish({ source: 'bunyan', message: { msg: 'hello' } })
 
-    playwrightTestFinishCh.publish({
+    playwrightWorkerFinishCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -253,13 +261,13 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.calledWithExactly(errorLog, 'Error submitting %s logs', 'bunyan', error)
   })
 
-  it('completes a Playwright test when starting log submission throws', () => {
+  it('completes a Playwright worker when starting log submission throws', () => {
     const error = new Error('boom')
     let hasCompleted = false
     request.throws(error)
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
 
-    playwrightTestFinishCh.publish({
+    playwrightWorkerFinishCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },

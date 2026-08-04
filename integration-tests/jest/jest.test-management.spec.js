@@ -3142,6 +3142,31 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   }
 
   for (const loggerName of ['pino', 'bunyan']) {
+    it(`should respect Jest automocking for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/automock-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
     for (const mockMethod of ['doMock', 'setMock']) {
       it(`should allow ${loggerName} to be mocked with jest.${mockMethod}`, async () => {
         childProcess = exec(

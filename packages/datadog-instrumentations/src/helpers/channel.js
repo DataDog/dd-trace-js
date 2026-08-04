@@ -103,5 +103,6 @@ module.exports = {
   getChannelPromise,
   getRunStoresPromise,
   publishWithCompletion,
+  publishWithCompletionBarrier,
   runStoresWithCompletion,
 }
