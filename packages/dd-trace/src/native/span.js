@@ -258,7 +258,6 @@ class NativeDatadogSpan extends DatadogSpan {
 
     let spanContext
     let startTime
-    let traceId
     let parentId
 
     let baggage = {}
@@ -290,7 +289,6 @@ class NativeDatadogSpan extends DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = buildNativeTraceId(existingContext._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = existingContext._parentId
     } else if (parent) {
       const spanId = id()
@@ -307,7 +305,6 @@ class NativeDatadogSpan extends DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = buildNativeTraceId(parent._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = parent._spanId
     } else {
       // Root span - generate new trace ID and span ID.
@@ -327,9 +324,6 @@ class NativeDatadogSpan extends DatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
         spanContext._trace.tags['_dd.p.tid'] = tidHex
-        traceId = buildNativeTraceId(spanId, tidHex)
-      } else {
-        traceId = spanId
       }
       parentId = null
 
@@ -373,6 +367,13 @@ class NativeDatadogSpan extends DatadogSpan {
     const nativeType = typeof fields.tags?.['span.type'] === 'string'
       ? fields.tags['span.type']
       : ''
+    // A trace ID is immutable and the trace object is shared by every local
+    // span. Reuse the full 128-bit byte representation instead of rebuilding
+    // its high half and allocating a 16-entry array for every child.
+    const traceId = (spanContext._trace._nativeTraceId ??= buildNativeTraceId(
+      spanContext._traceId,
+      spanContext._trace.tags['_dd.p.tid']
+    ))
 
     nativeSpans.queueCreateSpanFull(
       spanContext._nativeSpanId,
