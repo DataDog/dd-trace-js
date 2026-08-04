@@ -78,7 +78,7 @@ addHook({
  * @typedef {object} WebdriverioRunnerConfig
  * @property {string} framework
  * @property {string|undefined} rootDir
- * @property {NodeJS.ProcessEnv|undefined} runnerEnv
+ * @property {typeof process.env|undefined} runnerEnv
  */
 
 /**

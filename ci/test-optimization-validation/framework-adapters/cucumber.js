@@ -152,6 +152,7 @@ function getGeneratedStepsPath (testDirectory) {
  * Returns Cucumber arguments that select one existing feature.
  *
  * @param {string} filename selected Cucumber feature
+ * @param {string} cwd project working directory
  * @returns {string[]} focused Cucumber arguments
  */
 function getFocusedTestArgs (filename, cwd) {
@@ -163,6 +164,7 @@ function getFocusedTestArgs (filename, cwd) {
  *
  * @param {string} filename generated Cucumber feature
  * @param {string} stepsFile generated Cucumber step definitions
+ * @param {string} cwd project working directory
  * @returns {string[]} generated scenario arguments
  */
 function getGeneratedTestArgs (filename, stepsFile, cwd) {
