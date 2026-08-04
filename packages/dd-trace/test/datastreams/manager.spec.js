@@ -69,14 +69,13 @@ describe('DataStreamsManager', () => {
     assert.deepStrictEqual(parentHashesForBatch([producerCarrier()]), [PRODUCER_HASH_HEX])
   })
 
-  it(`starts a new pathway for a message that carries a carrier without a pathway`, async () => {
+  it('starts a new pathway for a message that carries a carrier without a pathway', async () => {
     assert.deepStrictEqual(
       parentHashesForBatch([producerCarrier(), { 'x-datadog-trace-id': '1' }]),
       [PRODUCER_HASH_HEX, ENTRY_PARENT_HASH_HEX]
     )
   })
-  
-  it(`starts a new pathway for a message that carries no carrier at all`, async () => {
+  it('starts a new pathway for a message that carries no carrier at all', async () => {
     assert.deepStrictEqual(
       parentHashesForBatch([producerCarrier(), undefined]),
       [PRODUCER_HASH_HEX, ENTRY_PARENT_HASH_HEX]
