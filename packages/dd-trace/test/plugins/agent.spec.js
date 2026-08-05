@@ -2,10 +2,12 @@
 
 const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { httpAgent } = require('../../src/exporters/common/agents')
 const propagationHash = require('../../src/propagation-hash')
 const agent = require('./agent')
 
@@ -39,6 +41,24 @@ describe('test agent helper', () => {
       await agent.load([])
       const secondId = global._ddtrace._tracer._config.tags['runtime-id']
       assert.notStrictEqual(secondId, firstId)
+    })
+
+    it('removes the exporter keep-alive socket from the shared pool on close', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      await agent.close()
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
     })
 
     it('rebuilds the tracer when tracerConfig differs between consecutive loads', async () => {

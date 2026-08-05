@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { once } = require('node:events')
 const http = require('http')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
@@ -12,6 +13,7 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const { httpAgent } = require('../../src/exporters/common/agents')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -132,6 +134,15 @@ function envChangedSince (snapshot) {
     if (!seen.has(key)) return true
   }
   return false
+}
+
+/**
+ * @param {string} origin
+ */
+async function waitForExporterIdle (origin) {
+  while (httpAgent.sockets[origin] || httpAgent.requests[origin]) {
+    await once(httpAgent, 'free')
+  }
 }
 
 // Captured at agent.js evaluation, before any `before` hook runs.
@@ -857,17 +868,15 @@ module.exports = {
    * The next `agent.load` decides for itself whether to reuse the cached
    * tracer or rebuild it; tests do not pass options here.
    */
-  close () {
+  async close () {
     if (listener === null) {
-      return Promise.resolve()
+      return
     }
 
-    listener.close()
+    const closingListener = listener
+    const closingServer = this.server
+    const origin = httpAgent.getName({ host: '127.0.0.1', port: this.port })
     listener = null
-    for (const socket of sockets) {
-      socket.end()
-    }
-    sockets = []
     agent = null
     disarmHandlers(traceHandlers)
     disarmHandlers(statsHandlers)
@@ -891,14 +900,21 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
-      this.server.on('close', () => {
-        this.server = null
-        this.port = null
+    await waitForExporterIdle(origin)
 
-        resolve()
-      })
-    }))
+    const exporterSockets = httpAgent.freeSockets[origin] ?? []
+    const exporterSocketsClosed = exporterSockets.map(socket => once(socket, 'close'))
+    const serverClosed = once(closingServer, 'close')
+
+    closingListener.close()
+    for (const socket of sockets) {
+      socket.end()
+    }
+    sockets = []
+
+    await Promise.all([serverClosed, ...exporterSocketsClosed])
+    this.server = null
+    this.port = null
   },
 
   setAvailableEndpoints (newEndpoints) {
