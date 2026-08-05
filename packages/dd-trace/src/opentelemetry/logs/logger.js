@@ -126,12 +126,13 @@ class Logger {
       ...logRecord,
       timestamp: normalizeTimestamp(logRecord.timestamp),
       context: logRecord.context || context.active(),
-      ...(logRecord.observedTimestamp !== undefined && {
-        observedTimestamp: normalizeTimestamp(logRecord.observedTimestamp),
-      }),
-      ...(logRecord.attributes && {
-        attributes: sanitizeAttributes(logRecord.attributes),
-      }),
+    }
+
+    if (logRecord.observedTimestamp !== undefined) {
+      record.observedTimestamp = normalizeTimestamp(logRecord.observedTimestamp)
+    }
+    if (logRecord.attributes) {
+      record.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
     this.loggerProvider.processor.onEmit(record, this.#instrumentationScope)
