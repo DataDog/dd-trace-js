@@ -19,7 +19,7 @@ Configure the intended Datadog Builder once in `vercel.json`, as shown in
 own this configuration so the customer only enables APM and deploys.
 
 The Builder never overwrites an existing root or `src/instrumentation.*` file.
-It fails before installation and asks the customer to add `dd-trace/init` to
+It fails before installation and asks the customer to add `import 'dd-trace/initialize.mjs'` to
 their own hook instead. This avoids composing arbitrary customer code.
 
 Current Next.js automatically treats `dd-trace` as a server external. This is
