@@ -14,6 +14,7 @@ const {
   logAttemptToFixTestExecution,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getTestName,
@@ -47,6 +48,8 @@ const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTI
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
 const VITEST_NO_WORKER_INIT_MINIMUM_VERSION = '3.2.6'
 const VITEST_DEFAULT_POOL = 'forks'
+const VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND = '__dd_vitest_efd_suite_admission'
+const VITEST_EFD_SUITE_ADMISSION_LOG_MARKER = '__ddVitestEfdSuiteAdmission'
 const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -69,6 +72,7 @@ const VITEST_BROWSER_URL_RE = /https?:\/\/[^\s)"'>\]]+/g
 let hasWarnedDisabledIsolate = false
 let hasWarnedUnsupportedVersion = false
 let nodeOptionsBeforeNoWorkerInit
+let reserveEarlyFlakeDetectionSuite
 
 function noop () {}
 
@@ -322,6 +326,7 @@ function isEarlyFlakeDetectionActive (state) {
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
   const { shouldReportTestModule, state } = options
+  reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
   addVitestBrowserSetupFileAccess(testSpecifications)
 
@@ -341,6 +346,12 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
       earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
+      efdSuiteAdmissionBrowserCommand: VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND,
+      efdSuiteAdmissionDirectory: setupData.efdSuiteAdmissionDirectory,
+      efdSuiteAdmissionLogMarker: satisfies(frameworkVersion, '<4.0.0')
+        ? VITEST_EFD_SUITE_ADMISSION_LOG_MARKER
+        : undefined,
+      efdSuiteAdmissionRequestCode: VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
@@ -353,6 +364,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
   }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
 
   installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state, {
+    acknowledgeEfdSuiteAdmission: options.acknowledgeEfdSuiteAdmission,
     shouldReportTestModule,
   })
 }
@@ -444,6 +456,18 @@ function configureVitestBrowserSetupFile (viteConfig) {
 }
 
 /**
+ * Reserves EFD retries for a suite executing in Vitest Browser Mode.
+ *
+ * @param {unknown} _context
+ * @param {string} testSuite
+ * @param {unknown} hasNewTest
+ * @returns {boolean}
+ */
+function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
+  return reserveEarlyFlakeDetectionSuite?.(testSuite, hasNewTest === true) === true
+}
+
+/**
  * Allows Vite to serve the Datadog setup file after its default workspace detection has run.
  *
  * @param {{ server?: { fs?: { allow?: string[] } } }} viteConfig
@@ -471,15 +495,34 @@ function addVitestBrowserSetupFileAccess (testSpecifications) {
     if (!isBrowserTestSpecification(testSpecification)) continue
 
     const browserServerProject = project?._parent || project
-    if (!browserServerProject || configuredProjects.has(browserServerProject)) continue
+    if (!browserServerProject) continue
+
+    addVitestBrowserCommand(safeConfig(project))
+    if (configuredProjects.has(browserServerProject)) continue
 
     configuredProjects.add(browserServerProject)
+    addVitestBrowserCommand(safeConfig(browserServerProject))
+    addVitestBrowserCommand(browserServerProject.options)
     browserServerProject.options ||= {}
     browserServerProject.options.plugins ||= []
     if (!browserServerProject.options.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
       browserServerProject.options.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
     }
   }
+}
+
+/**
+ * Adds the private EFD admission command to a Vitest Browser Mode configuration.
+ *
+ * @param {object|undefined} config
+ * @returns {void}
+ */
+function addVitestBrowserCommand (config) {
+  const browserConfig = config?.browser
+  if (!browserConfig) return
+
+  browserConfig.commands ||= {}
+  browserConfig.commands[VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND] = handleBrowserEfdSuiteAdmission
 }
 
 function getNoWorkerInitVitestConfigs (ctx, testSpecifications) {
@@ -536,6 +579,7 @@ function installMainProcessReporter (
   if (!ctx?.reporters) return
 
   const reporterState = {
+    acknowledgeEfdSuiteAdmission: options.acknowledgeEfdSuiteAdmission,
     frameworkVersion,
     isActive: true,
     shouldReportTestModule: options.shouldReportTestModule,
@@ -590,6 +634,10 @@ function createMainProcessReporter (reporterState) {
       }
     },
 
+    onUserConsoleLog (consoleLog) {
+      if (handleLegacyEfdSuiteAdmission(consoleLog)) return false
+    },
+
     onWatcherRerun () {
       for (const testSuiteCtx of testSuiteContexts.values()) {
         testSuiteFinishCh.publish({
@@ -625,6 +673,20 @@ function createMainProcessReporter (reporterState) {
   function shouldReport (testModule) {
     return isReporterActive() &&
       (!reporterState.shouldReportTestModule || reporterState.shouldReportTestModule(testModule))
+  }
+
+  /**
+   * Handles EFD admission requests encoded as Vitest 3 console-log RPC messages.
+   *
+   * @param {object} consoleLog
+   * @returns {boolean}
+   */
+  function handleLegacyEfdSuiteAdmission (consoleLog) {
+    if (consoleLog?.[VITEST_EFD_SUITE_ADMISSION_LOG_MARKER] !== true) return false
+
+    const { hasNewTest, requestId, testSuite } = consoleLog
+    reporterState.acknowledgeEfdSuiteAdmission?.(testSuite, hasNewTest === true, requestId)
+    return true
   }
 
   function recordTaskAttemptStatus (taskId, status, attemptCount) {
@@ -847,7 +909,6 @@ function createMainProcessReporter (reporterState) {
       !isAttemptToFix &&
       state.isKnownTestsEnabled &&
       knownTests &&
-      !state.isEarlyFlakeDetectionFaulty &&
       !knownTests.includes(testName)
     )
     const isModified = testProperties?.isModified === true
@@ -861,7 +922,7 @@ function createMainProcessReporter (reporterState) {
     return {
       isAttemptToFix,
       isDisabled: testManagementProperties.isDisabled,
-      isEarlyFlakeDetection: (isNew || isModified) && isEarlyFlakeDetectionActive(state),
+      isEarlyFlakeDetection: task.meta?.__ddTestOptEfdRetries !== undefined,
       isFlakyTestRetries,
       isQuarantined: testManagementProperties.isQuarantined,
       isModified,

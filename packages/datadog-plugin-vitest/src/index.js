@@ -13,7 +13,6 @@ const {
   getTestSuiteCommonTags,
   getTestLevelsMetadataTags,
   getTestSessionName,
-  getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -105,19 +104,6 @@ class VitestPlugin extends CiPlugin {
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
       })
-    })
-
-    this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
-      knownTests,
-      testFilepaths,
-      onDone,
-    }) => {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
-        testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
-        knownTests,
-        this.libraryConfig.earlyFlakeDetectionFaultyThreshold
-      )
-      onDone(isFaulty)
     })
 
     this.addBind('ci:vitest:test:start', (ctx) => {

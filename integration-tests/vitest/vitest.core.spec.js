@@ -2161,8 +2161,7 @@ versions.forEach((version) => {
             const newTests = tests.filter(
               test => test.meta[TEST_IS_NEW] === 'true'
             )
-            // no new tests
-            assert.strictEqual(newTests.length, 0)
+            assert.strictEqual(newTests.length, 4)
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
@@ -2186,6 +2185,53 @@ versions.forEach((version) => {
             done()
           }).catch(done)
         })
+      })
+
+      it('stops EFD retries after too many suites with new tests are detected', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 1,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 4)
+            assert.strictEqual(new Set(tests.map(test => test.meta[TEST_SUITE])).size, 2)
+            tests.forEach(test => assert.strictEqual(test.meta[TEST_IS_NEW], 'true'))
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, 2)
+            assert.strictEqual(new Set(retriedTests.map(test => test.meta[TEST_SUITE])).size, 1)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              POOL_CONFIG: 'threads',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
       })
 
       it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {

@@ -1754,6 +1754,41 @@ describe('impacted test', () => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
+    it('stops no-worker EFD retries when the new-suite threshold is exceeded', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+          },
+          faulty_session_threshold: 0,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+        assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
+        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-first.mjs',
+          POOL_CONFIG: 'threads',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     it('normalizes no-worker setup data when the repository root is a symlink', async () => {
       const testSuite = 'ci-visibility/vitest-tests/early-flake-detection.mjs'
       receiver.setSettings({
