@@ -4,9 +4,9 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
-const satisfies = require('../../../vendor/dist/semifies')
-const instrumentations = require('../src/helpers/instrumentations')
-const { getParse, getMatch } = require('../src/path-to-regexp')
+const satisfies = require('../../../../vendor/dist/semifies')
+const instrumentations = require('../../src/helpers/instrumentations')
+const { getParse, getMatch } = require('../../src/path-to-regexp')
 
 // Run the hooks the loader would run for `version`, exactly as register.js selects them.
 function applyHooksFor (version, moduleExports) {
