@@ -324,8 +324,6 @@ describe('LLMObs Experiments facade', () => {
 
   describe('experiment run', () => {
     it('runs a multi-row experiment and returns rows, ids, metric values, and dashboard URLs', async function () {
-      this.timeout(60_000)
-
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
@@ -375,13 +373,9 @@ describe('LLMObs Experiments facade', () => {
         label: 'match',
         details: { actual: 'CAR', expected: 'CAR' },
       })
-      // eslint-disable-next-line no-console
-      console.log(`Datadog rich experiment URL: ${result.url}`)
     })
 
     it('creates an experiment, submits row events, and marks the experiment completed', async function () {
-      this.timeout(60_000)
-
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
@@ -401,8 +395,6 @@ describe('LLMObs Experiments facade', () => {
       assert.match(result.url, /^https:\/\//)
       assert.equal(result.rows.length, 1)
       assert.deepEqual(result.rows[0].evaluations, { exact: true })
-      // eslint-disable-next-line no-console
-      console.log(`Datadog experiment URL: ${result.url}`)
     })
   })
 })

@@ -53,8 +53,8 @@ function datasetFromResource (client, projectId, resource) {
 }
 
 function experimentFromResource (client, resource) {
-  const id = resource?.id ?? null
-  return new ExperimentResult(id, [], id === null ? null : `${client.appBase}/llm/experiments/${id}`)
+  const id = resource?.id
+  return new ExperimentResult(id, [], id == null ? null : `${client.appBase}/llm/experiments/${id}`)
 }
 
 class ExperimentsClient {
@@ -155,8 +155,7 @@ class ExperimentsClient {
   async listDatasets (projectId, options = {}) {
     const query = new URLSearchParams()
     if (options.name !== undefined) query.set('filter[name]', options.name)
-    const queryString = query.toString() ? `?${query.toString()}` : ''
-    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets${queryString}`)
+    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets?${query.toString()}`)
     const resources = Array.isArray(response?.data) ? response.data : []
     return resources.map(resource => datasetFromResource(this, projectId, resource))
   }
@@ -181,10 +180,9 @@ class ExperimentsClient {
     const query = new URLSearchParams()
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
-    const queryString = query.toString() ? `?${query.toString()}` : ''
     const response = await this.request(
       'GET',
-      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
     )
     const records = Array.isArray(response?.data) ? response.data.map(datasetRecordFromResource) : []
     return { records, after: response?.meta?.after ?? '' }

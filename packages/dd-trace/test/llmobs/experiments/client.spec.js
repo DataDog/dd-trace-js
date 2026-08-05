@@ -80,8 +80,6 @@ describe('LLMObs Experiments control-plane client', () => {
   })
 
   it('creates, appends, lists, reads, and deletes dataset resources', async function () {
-    this.timeout(180_000)
-
     const client = backendClient()
     const projectId = await client.ensureProjectId()
     const dataset = await client.createDataset(projectId, {
@@ -123,8 +121,6 @@ describe('LLMObs Experiments control-plane client', () => {
   })
 
   it('submits custom record ids with append responses', async function () {
-    this.timeout(180_000)
-
     const client = backendClient()
     const projectId = await client.ensureProjectId()
     const dataset = await client.createDataset(projectId, {
@@ -167,8 +163,6 @@ describe('LLMObs Experiments control-plane client', () => {
   })
 
   it('creates an experiment, posts events, and marks it completed', async function () {
-    this.timeout(60_000)
-
     const client = backendClient()
     const projectId = await client.ensureProjectId()
     const dataset = await client.createDataset(projectId, {
