@@ -618,9 +618,9 @@ describe('OpenAIAgentsIntegration', () => {
       processor.onSpanEnd(taskSpan)
       processor.onSpanEnd(turnSpan)
       sinon.assert.notCalled(workflowSpan.finish)
-      processor.onSpanEnd(oaiResponse)
-      sinon.assert.notCalled(workflowSpan.finish)
       processor.onSpanEnd(agentASpan)
+      sinon.assert.notCalled(workflowSpan.finish)
+      processor.onSpanEnd(oaiResponse)
       sinon.assert.calledOnce(workflowSpan.finish)
 
       const responseTags = LLMObsTagger.tagMap.get(responseSpan)

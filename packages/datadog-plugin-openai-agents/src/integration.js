@@ -449,7 +449,7 @@ class OpenAIAgentsIntegration {
   #llmSpanParentAgentName (oaiSpan) {
     const traceInfo = this.#traceInfo.get(oaiSpan.traceId)
     if (!traceInfo?.currentTopLevelAgentSpanId) return
-    if (this.#nearestTracedAncestorId(oaiSpan.parentId) !== traceInfo.currentTopLevelAgentSpanId) return
+    if (!this.#hasUntracedPathToAncestor(oaiSpan.parentId, traceInfo.currentTopLevelAgentSpanId)) return
     return traceInfo.currentTopLevelAgentName
   }
 
@@ -501,7 +501,6 @@ class OpenAIAgentsIntegration {
     const info = this.#traceInfo.get(oaiSpan.traceId)
     if (!info) return
 
-    const parentId = this.#nearestTracedAncestorId(oaiSpan.parentId)
     const type = oaiSpan.spanData?.type
 
     // Identify the first top-level agent span under the root trace and
@@ -516,9 +515,9 @@ class OpenAIAgentsIntegration {
     // as the workflow-level input source.
     if (
       (type === 'response' || type === 'generation') &&
-      parentId &&
+      info.currentTopLevelAgentSpanId &&
       !info.inputOaiSpan &&
-      parentId === info.currentTopLevelAgentSpanId
+      this.#hasUntracedPathToAncestor(oaiSpan.parentId, info.currentTopLevelAgentSpanId)
     ) {
       info.inputOaiSpan = oaiSpan
     }
@@ -530,7 +529,7 @@ class OpenAIAgentsIntegration {
 
     if (
       info.currentTopLevelAgentSpanId &&
-      this.#nearestTracedAncestorId(oaiSpan.parentId) === info.currentTopLevelAgentSpanId
+      this.#hasUntracedPathToAncestor(oaiSpan.parentId, info.currentTopLevelAgentSpanId)
     ) {
       info.outputOaiSpan = oaiSpan
     }
@@ -557,6 +556,24 @@ class OpenAIAgentsIntegration {
       if (this.#oaiToDdSpan.has(currentId)) return currentId
       currentId = this.#untracedSpans.get(currentId)?.parentId
     }
+  }
+
+  /**
+   * True when `spanId` reaches `ancestorId` through only untraced structural
+   * spans. Unlike #nearestTracedAncestorId, this still recognizes an ancestor
+   * whose dd-trace span has already finished and been removed from the live map.
+   *
+   * @param {string | undefined | null} spanId agents-core spanId to start from
+   * @param {string} ancestorId agents-core ancestor spanId
+   * @returns {boolean}
+   */
+  #hasUntracedPathToAncestor (spanId, ancestorId) {
+    let currentId = spanId
+    for (let depth = 0; currentId != null && depth < MAX_ANCESTOR_WALK; depth++) {
+      if (currentId === ancestorId) return true
+      currentId = this.#untracedSpans.get(currentId)?.parentId
+    }
+    return false
   }
 
   /**
