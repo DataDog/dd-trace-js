@@ -651,11 +651,7 @@ describe(`cucumber@${version} commonJS`, () => {
           })
       })
 
-      const runModes = ['serial']
-
-      if (version !== '7.0.0') { // only on latest or 9 if node is old
-        runModes.push('parallel')
-      }
+      const runModes = ['serial', 'parallel']
 
       runModes.forEach((runMode) => {
         it(`(${runMode}) can run and report tests`, (done) => {

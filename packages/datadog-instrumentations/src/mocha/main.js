@@ -1131,8 +1131,33 @@ addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/buffered-worker-pool.js',
-}, (BufferedWorkerPoolPackage) => {
+}, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
+
+  if (satisfies(frameworkVersion, '<9.2.0')) {
+    // Shimmer is required because the worker environment must be changed before workerpool forks,
+    // before any test lifecycle hook can run. Mocha added this worker ID itself in 9.2.0.
+    shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
+      const pool = create.apply(this, arguments)
+
+      if (!testFinishCh.hasSubscribers) return pool
+
+      let workerId = 0
+      shimmer.wrap(pool._pool, '_createWorkerHandler', createWorkerHandler => function () {
+        this.forkOpts = {
+          ...this.forkOpts,
+          env: {
+            // eslint-disable-next-line eslint-rules/eslint-process-env
+            ...(this.forkOpts.env || process.env),
+            MOCHA_WORKER_ID: String(workerId++),
+          },
+        }
+        return createWorkerHandler.apply(this, arguments)
+      })
+
+      return pool
+    })
+  }
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
