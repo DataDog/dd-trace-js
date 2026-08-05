@@ -1282,8 +1282,9 @@ function getTestSpecificationOptions (testSpecification) {
 function getTestSpecificationPool (testSpecification) {
   const options = getTestSpecificationOptions(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
-    testSpecification?.pool
+  const filePool = Array.isArray(testSpecification) ? testSpecification[1]?.pool : undefined
+  return options?.pool || filePool || project?.config?.pool || project?.serializedConfig?.pool ||
+    project?.pool || testSpecification?.pool
 }
 
 /**

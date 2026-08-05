@@ -134,8 +134,8 @@ describe('vitest main instrumentation', () => {
     await typechecker.prepareResults()
 
     await sequencer.sort([[
-      { config: { pool: 'vmThreads' } },
-      { filepath: '/repo/vm.mjs' },
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/vm.mjs', pool: 'vmThreads' },
     ]])
 
     assert.deepStrictEqual(
