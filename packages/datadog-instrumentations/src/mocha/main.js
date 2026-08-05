@@ -398,6 +398,57 @@ function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
 }
 
+/**
+ * @typedef {object} MochaSuite
+ * @property {MochaSuite[]} suites
+ * @property {import('mocha').Test[]} tests
+ * @property {MochaSuite[]} _onlySuites
+ * @property {import('mocha').Test[]} _onlyTests
+ */
+
+/**
+ * Mirrors Mocha 5's private exclusivity check.
+ *
+ * @param {MochaSuite} suite
+ * @returns {boolean}
+ */
+function hasOnly (suite) {
+  if (suite._onlyTests.length || suite._onlySuites.length) return true
+
+  for (const childSuite of suite.suites) {
+    if (hasOnly(childSuite)) return true
+  }
+  return false
+}
+
+/**
+ * Mirrors Mocha 5's private exclusivity filter.
+ *
+ * @param {MochaSuite} suite
+ * @returns {boolean}
+ */
+function filterOnly (suite) {
+  if (suite._onlyTests.length) {
+    suite.tests = suite._onlyTests
+    suite.suites = []
+  } else {
+    suite.tests = []
+
+    for (const onlySuite of suite._onlySuites) {
+      if (hasOnly(onlySuite)) filterOnly(onlySuite)
+    }
+
+    const filteredSuites = []
+    for (const childSuite of suite.suites) {
+      if (suite._onlySuites.includes(childSuite) || filterOnly(childSuite)) {
+        filteredSuites.push(childSuite)
+      }
+    }
+    suite.suites = filteredSuites
+  }
+  return suite.tests.length > 0 || suite.suites.length > 0
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
@@ -431,8 +482,10 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
-    if (typeof runner.suite.hasOnly === 'function' && runner.suite.hasOnly()) {
-      runner.suite.filterOnly()
+    if (typeof runner.suite.hasOnly === 'function') {
+      if (runner.suite.hasOnly()) runner.suite.filterOnly()
+    } else if (hasOnly(runner.suite)) {
+      filterOnly(runner.suite)
     }
     const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)

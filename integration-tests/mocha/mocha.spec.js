@@ -122,7 +122,6 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
-const suiteFilteringIt = mochaMajor >= 6 ? it : it.skip
 // Mocha 8.0 through 8.2 use workerpool 6.0.x, which cannot start process workers on supported Node versions.
 const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
 
@@ -2414,7 +2413,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
     })
 
-    suiteFilteringIt('says TIA skipped all tests when it skips the exclusive suite', async () => {
+    it('says TIA skipped all tests when it skips the exclusive suite', async () => {
       const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-only.js'
       receiver.setSettings({
         itr_enabled: true,
