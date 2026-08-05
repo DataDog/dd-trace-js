@@ -9,7 +9,7 @@ const { channel } = require('dc-polyfill')
 require('../../setup/core')
 
 const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_span_stats_exporter')
-const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
+const { createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
 
@@ -41,29 +41,6 @@ function makeDrained (spans) {
   return [{ timeNs: 12340000000000, bucket }]
 }
 
-describe('buildResourceAttributes', () => {
-  it('includes sdk identity and maps service/env/version to OTel attributes', () => {
-    const attrs = buildResourceAttributes({}, { service: 'my-svc', env: 'prod', serviceVersion: '1.0.0' })
-
-    assert.strictEqual(attrs['telemetry.sdk.name'], 'datadog')
-    assert.strictEqual(attrs['telemetry.sdk.language'], 'nodejs')
-    assert.strictEqual(typeof attrs['telemetry.sdk.version'], 'string')
-    assert.strictEqual(attrs['service.name'], 'my-svc')
-    assert.strictEqual(attrs['deployment.environment.name'], 'prod')
-    assert.strictEqual(attrs['service.version'], '1.0.0')
-  })
-
-  it('includes datadog.runtime_id from tags when otelSemanticsEnabled is false', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: false })
-    assert.strictEqual(attrs['datadog.runtime_id'], 'abc-123')
-  })
-
-  it('omits dd.* attributes when otelSemanticsEnabled is true', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: true })
-    assert.ok(!Object.keys(attrs).some(k => k.startsWith('datadog.')))
-  })
-})
-
 describe('createOtlpSpanStatsExporter', () => {
   let httpStub
 
@@ -83,40 +60,48 @@ describe('createOtlpSpanStatsExporter', () => {
     assert.ok(exporter instanceof OtlpStatsExporter)
   })
 
-  it('recomputes resource attributes when the identity-refresh channel fires', () => {
+  it('exports resource attributes rebuilt after identity refresh', () => {
     const config = {
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       service: 'svc',
+      version: '1.0.0',
+      env: 'prod',
       tags: { 'runtime-id': 'initial-id' },
     }
     const exporter = createOtlpSpanStatsExporter(config)
-    const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
 
-    // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-    // then publishing to the shared identity-refresh channel (MicroVM clone resume).
     config.tags['runtime-id'] = 'refreshed-id'
     identityRefreshChannel.publish(config)
+    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
 
-    sinon.assert.calledOnce(updateSpy)
-    assert.strictEqual(updateSpy.firstCall.args[0]['datadog.runtime_id'], 'refreshed-id')
+    const request = httpStub.firstCall.returnValue
+    const payload = JSON.parse(request.write.firstCall.args[0].toString())
+    const resourceAttributes = Object.fromEntries(
+      payload.resourceMetrics[0].resource.attributes.map(attribute => [attribute.key, attribute.value.stringValue])
+    )
+    assert.strictEqual(resourceAttributes['telemetry.sdk.name'], 'datadog')
+    assert.strictEqual(resourceAttributes['telemetry.sdk.language'], 'nodejs')
+    assert.strictEqual(typeof resourceAttributes['telemetry.sdk.version'], 'string')
+    assert.strictEqual(resourceAttributes['service.name'], 'svc')
+    assert.strictEqual(resourceAttributes['service.version'], '1.0.0')
+    assert.strictEqual(resourceAttributes['deployment.environment.name'], 'prod')
+    assert.strictEqual(resourceAttributes['datadog.runtime_id'], 'refreshed-id')
   })
 
-  it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-    const config = {
+  it('omits Datadog resource attributes with OpenTelemetry semantics', () => {
+    const exporter = createOtlpSpanStatsExporter({
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
       service: 'svc',
-      tags: { 'runtime-id': 'a' },
-    }
-    const firstExporter = createOtlpSpanStatsExporter(config)
-    const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+      tags: { 'runtime-id': 'runtime-id' },
+    })
 
-    const secondExporter = createOtlpSpanStatsExporter(config)
-    const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
 
-    identityRefreshChannel.publish(config)
-
-    sinon.assert.notCalled(firstSpy)
-    sinon.assert.calledOnce(secondSpy)
+    const request = httpStub.firstCall.returnValue
+    const payload = JSON.parse(request.write.firstCall.args[0].toString())
+    const resourceAttributes = payload.resourceMetrics[0].resource.attributes
+    assert.ok(!resourceAttributes.some(attribute => attribute.key.startsWith('datadog.')))
   })
 })
 

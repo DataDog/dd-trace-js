@@ -804,40 +804,20 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Identity refresh', () => {
-    it('recomputes resource attributes when the identity-refresh channel fires', () => {
-      const { config, loggerProvider } = setupLogs()
-      const exporter = loggerProvider.processor.exporter
-      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
-
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(updateSpy)
-      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
-    })
-
-    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-      // One proxyquired instance for both calls, so the unsubscribe guard is actually exercised -
-      // setupLogs() reloads the module fresh each time, which would give each its own guard.
-      const { initializeOpenTelemetryLogs } = proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
-      const config = getConfigFresh()
-
-      initializeOpenTelemetryLogs(config)
-      const firstExporter = logs.getLoggerProvider().processor.exporter
-      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
-
-      logs.disable()
-      initializeOpenTelemetryLogs(config)
-      const secondExporter = logs.getLoggerProvider().processor.exporter
-      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+    it('exports resource attributes rebuilt after identity refresh', () => {
+      const validator = mockOtlpExport((decoded) => {
+        const runtimeId = decoded.resourceLogs[0].resource.attributes.find(
+          attribute => attribute.key === 'runtime-id'
+        )
+        assert.strictEqual(runtimeId.value.stringValue, 'refreshed-id')
+      })
+      const { config, logs } = setupLogs()
 
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
+      logs.getLogger('test-logger').emit({ body: 'test' })
 
-      sinon.assert.notCalled(firstSpy)
-      sinon.assert.calledOnce(secondSpy)
+      validator()
     })
   })
 })
