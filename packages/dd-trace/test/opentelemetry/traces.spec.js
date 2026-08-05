@@ -10,10 +10,13 @@ const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
+const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
+const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
+const { SpanBuckets } = require('../../src/span_stats')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
 
@@ -60,6 +63,23 @@ describe('OpenTelemetry Traces', () => {
       duration: 50000000, // 50ms in nanoseconds
       ...overrides,
     }
+  }
+
+  function createSpanStatsDrain () {
+    const span = {
+      startTime: 12345 * 1e9,
+      duration: 1000,
+      error: 0,
+      name: 'op',
+      service: 'svc',
+      resource: 'res',
+      type: 'web',
+      meta: { [HTTP_STATUS_CODE]: 200 },
+      metrics: {},
+    }
+    const bucket = new SpanBuckets()
+    bucket.forSpan(span).record(span)
+    return [{ timeNs: 12340000000000, bucket }]
   }
 
   function mockOtlpExport (validator) {
@@ -950,32 +970,91 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Identity refresh', () => {
-    it('recomputes resource attributes when the identity-refresh channel fires', () => {
+    it('exports resource attributes rebuilt after identity refresh', () => {
+      const validator = mockOtlpExport((decoded) => {
+        const runtimeId = decoded.resourceSpans[0].resource.attributes.find(
+          attribute => attribute.key === 'runtime-id'
+        )
+        assert.strictEqual(runtimeId.value.stringValue, 'refreshed-id')
+      })
       const config = getConfigFresh()
       const exporter = createOtlpTraceExporter(config)
-      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
 
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
+      exporter.export([createMockSpan()])
 
-      sinon.assert.calledOnce(updateSpy)
-      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
+      validator()
     })
 
-    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-      const firstExporter = createOtlpTraceExporter(getConfigFresh())
-      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+    it('updates only the active exporter after identity refresh', () => {
+      const runtimeIds = []
+      const validator = mockOtlpExport((decoded) => {
+        const runtimeId = decoded.resourceSpans[0].resource.attributes.find(
+          attribute => attribute.key === 'runtime-id'
+        )
+        runtimeIds.push(runtimeId.value.stringValue)
+      })
+      const firstConfig = getConfigFresh()
+      firstConfig.tags['runtime-id'] = 'first-initial-id'
+      const firstExporter = createOtlpTraceExporter(firstConfig)
 
-      const config = getConfigFresh()
-      const secondExporter = createOtlpTraceExporter(config)
-      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+      const secondConfig = getConfigFresh()
+      secondConfig.tags['runtime-id'] = 'second-initial-id'
+      const secondExporter = createOtlpTraceExporter(secondConfig)
 
-      identityRefreshChannel.publish(config)
+      firstConfig.tags['runtime-id'] = 'stale-first-id'
+      secondConfig.tags['runtime-id'] = 'second-refreshed-id'
+      identityRefreshChannel.publish(secondConfig)
+      firstExporter.export([createMockSpan()])
+      secondExporter.export([createMockSpan()])
 
-      sinon.assert.notCalled(firstSpy)
-      sinon.assert.calledOnce(secondSpy)
+      assert.deepStrictEqual(runtimeIds, ['first-initial-id', 'second-refreshed-id'])
+      validator()
+    })
+
+    it('refreshes every active signal exporter', () => {
+      const payloads = new Map()
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        const response = {
+          statusCode: 200,
+          on: () => response,
+          once: () => response,
+        }
+        const request = {
+          write: data => payloads.set(options.path, JSON.parse(data.toString())),
+          end: () => {},
+          on: () => request,
+          once: () => request,
+        }
+        callback(response)
+        return request
+      })
+
+      const traceConfig = getConfigFresh()
+      traceConfig.tags['runtime-id'] = 'initial-trace-id'
+      const traceExporter = createOtlpTraceExporter(traceConfig)
+      const statsConfig = {
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        service: 'svc',
+        tags: { 'runtime-id': 'initial-stats-id' },
+      }
+      const statsExporter = createOtlpSpanStatsExporter(statsConfig)
+
+      traceConfig.tags['runtime-id'] = 'refreshed-trace-id'
+      statsConfig.tags['runtime-id'] = 'refreshed-stats-id'
+      identityRefreshChannel.publish(traceConfig)
+      traceExporter.export([createMockSpan()])
+      statsExporter.export(createSpanStatsDrain(), 10 * 1e9)
+
+      const traceRuntimeId = payloads.get('/v1/traces').resourceSpans[0].resource.attributes.find(
+        attribute => attribute.key === 'runtime-id'
+      )
+      const statsRuntimeId = payloads.get('/v1/metrics').resourceMetrics[0].resource.attributes.find(
+        attribute => attribute.key === 'datadog.runtime_id'
+      )
+      assert.strictEqual(traceRuntimeId.value.stringValue, 'refreshed-trace-id')
+      assert.strictEqual(statsRuntimeId.value.stringValue, 'refreshed-stats-id')
     })
   })
 })

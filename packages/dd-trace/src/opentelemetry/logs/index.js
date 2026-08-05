@@ -1,17 +1,10 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
-const buildResourceAttributes = require('../resource-attributes')
+const { buildResourceAttributes, registerResourceAttributeRefresh } = require('../resource-attributes')
 
 /**
  * @typedef {import('../../config')} Config
  */
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
-
-// Replaces the previous subscription on each call, so restarting doesn't accumulate listeners.
-let unsubscribeLogsIdentityRefresh = null
 
 /**
  * OpenTelemetry Logs Implementation for `dd-trace-js`
@@ -65,10 +58,7 @@ function initializeOpenTelemetryLogs (config) {
   // Register the logger provider globally with OpenTelemetry API
   loggerProvider.register()
 
-  unsubscribeLogsIdentityRefresh?.()
-  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildResourceAttributes(config))
-  identityRefreshChannel.subscribe(onIdentityRefresh)
-  unsubscribeLogsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+  registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
 }
 
 module.exports = {

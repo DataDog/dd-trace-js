@@ -2,25 +2,19 @@
 
 const os = require('os')
 
-const { channel } = require('dc-polyfill')
 const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
-const buildGeneralResourceAttributes = require('../resource-attributes')
+const {
+  buildResourceAttributes: buildGeneralResourceAttributes,
+  registerResourceAttributeRefresh,
+} = require('../resource-attributes')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
-const identityRefreshChannel = channel('datadog:identity:refresh')
-
-// Only one general-metrics exporter and one span-stats exporter are active at a time; each
-// `initializeOpenTelemetryMetrics`/`createOtlpSpanStatsExporter` call replaces the previous
-// subscription so restarts don't accumulate listeners.
-let unsubscribeMetricsIdentityRefresh = null
-let unsubscribeSpanStatsIdentityRefresh = null
-
 /**
  * @typedef {import('../../config')} Config
  */
@@ -70,10 +64,7 @@ function initializeOpenTelemetryMetrics (config) {
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
 
-  unsubscribeMetricsIdentityRefresh?.()
-  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildGeneralResourceAttributes(config))
-  identityRefreshChannel.subscribe(onIdentityRefresh)
-  unsubscribeMetricsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+  registerResourceAttributeRefresh(exporter, () => buildGeneralResourceAttributes(config))
 }
 
 /**
@@ -130,10 +121,7 @@ function createOtlpSpanStatsExporter (config) {
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )
 
-  unsubscribeSpanStatsIdentityRefresh?.()
-  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildSpanStatsResourceAttributes())
-  identityRefreshChannel.subscribe(onIdentityRefresh)
-  unsubscribeSpanStatsIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+  registerResourceAttributeRefresh(exporter, buildSpanStatsResourceAttributes)
 
   return exporter
 }
