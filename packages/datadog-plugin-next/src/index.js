@@ -145,7 +145,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   configure (config) {
-    return super.configure(normalizeConfig(config))
+    return super.configure(web.normalizeConfig(config))
   }
 }
 
@@ -178,22 +178,4 @@ function setHttpParentRoute (span, method, page, isStatic) {
   span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
   nextParentRoutes.set(span, page)
 }
-
-function normalizeConfig (config) {
-  const hooks = getHooks(config)
-  const validateStatus = typeof config.validateStatus === 'function'
-    ? config.validateStatus
-    : code => code < 500
-
-  return { ...config, hooks, validateStatus }
-}
-
-const noop = () => {}
-
-function getHooks (config) {
-  const request = config.hooks?.request ?? noop
-
-  return { request }
-}
-
 module.exports = NextPlugin
