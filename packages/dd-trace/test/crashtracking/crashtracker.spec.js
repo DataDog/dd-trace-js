@@ -6,10 +6,7 @@ const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { channel } = require('dc-polyfill')
 require('../setup/core')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
 
@@ -17,6 +14,7 @@ describeNotWindows('crashtracker', () => {
   let crashtracker
   let binding
   let config
+  let identityRefreshChannel
   let libdatadog
   let log
 
@@ -39,6 +37,9 @@ describeNotWindows('crashtracker', () => {
     log = {
       error: sinon.stub(),
     }
+    identityRefreshChannel = {
+      subscribe: sinon.stub(),
+    }
 
     sinon.stub(binding, 'init')
     sinon.stub(binding, 'updateConfig')
@@ -46,6 +47,7 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
+      'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
       '../log': log,
     })
   })
@@ -142,11 +144,19 @@ describeNotWindows('crashtracker', () => {
       crashtracker.start(config)
 
       const refreshedConfig = { ...config, tags: { foo: 'baz' } }
-      identityRefreshChannel.publish(refreshedConfig)
+      identityRefreshChannel.subscribe.firstCall.args[0](refreshedConfig)
 
       sinon.assert.called(binding.updateMetadata)
       const metadata = binding.updateMetadata.lastCall.args[0]
       assert.ok(metadata.tags.includes('foo:baz'), `Expected tags to include foo:baz, got ${inspect(metadata.tags)}`)
+    })
+
+    it('should subscribe only after successful initialization', () => {
+      binding.init.throws(new Error('init failed'))
+
+      crashtracker.start(config)
+
+      sinon.assert.notCalled(identityRefreshChannel.subscribe)
     })
   })
 
