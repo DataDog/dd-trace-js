@@ -13,6 +13,7 @@ const {
   TRACE_ID,
 } = require('./constants/tags')
 const {
+  FEEDBACK_METRIC_TYPES,
   FEEDBACK_TARGET_KEYS,
   buildMetricTags,
   validateAssessment,
@@ -481,19 +482,27 @@ class LLMObs extends NoopLLMObs {
 
     let err = ''
     let targetType = 'other'
+    let metricTypeTag = 'other'
     try {
       const { span, spanId, traceId, sessionId, feedbackJoinKey, submitter } = options
 
-      // The intake keys feedback off a single top-level identifier, so more than one target
-      // would be ambiguous and none would leave the feedback unattached.
-      const providedTargets = []
-      if (span != null) providedTargets.push('span')
-      if (spanId != null) providedTargets.push('spanId')
-      if (traceId != null) providedTargets.push('traceId')
-      if (sessionId != null) providedTargets.push('sessionId')
-      if (feedbackJoinKey != null) providedTargets.push('feedbackJoinKey')
+      // Resolved before any validation so telemetry still reports the metric type of a
+      // submission that fails on an unrelated field.
+      const metricType = options.metricType?.toLowerCase()
+      if (FEEDBACK_METRIC_TYPES.includes(metricType)) metricTypeTag = metricType
 
-      if (providedTargets.length !== 1) {
+      // The intake keys feedback off a single top-level identifier, so more than one target
+      // would be ambiguous and none would leave the feedback unattached. `span` also carries a
+      // traceId, but passing it is wire-equivalent to passing its `spanId` directly.
+      let targetName, targetValue
+      let targetCount = 0
+      if (span != null) { targetName = 'span'; targetValue = span.spanId; targetCount++ }
+      if (spanId != null) { targetName = 'spanId'; targetValue = spanId; targetCount++ }
+      if (traceId != null) { targetName = 'traceId'; targetValue = traceId; targetCount++ }
+      if (sessionId != null) { targetName = 'sessionId'; targetValue = sessionId; targetCount++ }
+      if (feedbackJoinKey != null) { targetName = 'feedbackJoinKey'; targetValue = feedbackJoinKey; targetCount++ }
+
+      if (targetCount !== 1) {
         err = 'invalid_target_count'
         throw new Error(
           'Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` ' +
@@ -501,11 +510,7 @@ class LLMObs extends NoopLLMObs {
         )
       }
 
-      const targetName = providedTargets[0]
       targetType = FEEDBACK_TARGET_KEYS[targetName]
-      // `span` also carries a traceId, but feedback targets a single identifier: passing
-      // `span` is wire-equivalent to passing its `spanId` directly.
-      const targetValue = targetName === 'span' ? span?.spanId : options[targetName]
       if (typeof targetValue !== 'string' || !targetValue) {
         if (targetName === 'span') {
           err = 'invalid_span'
@@ -537,7 +542,6 @@ class LLMObs extends NoopLLMObs {
       validateTimestamp(timestampMs, 'feedback')
 
       const { label, value, tags, reasoning, assessment } = options
-      const metricType = options.metricType?.toLowerCase()
       const labelValue = validateLabel(label, 'feedback')
       validateMetricType(metricType, 'feedback')
       validateMetricValue(metricType, value)
@@ -569,7 +573,7 @@ class LLMObs extends NoopLLMObs {
       if (e.ddErrorTag) err = e.ddErrorTag
       throw e
     } finally {
-      telemetry.recordSubmitFeedback(options, targetType, err)
+      telemetry.recordSubmitFeedback(metricTypeTag, targetType, err)
     }
   }
 

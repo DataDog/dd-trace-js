@@ -1550,20 +1550,19 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('throws for a dotted label', () => {
-      assert.throws(() => {
-        llmobs.submitEvaluation(spanCtx, {
-          mlApp: 'test',
-          timestampMs: 1234,
-          label: 'has.toxicity',
-          metricType: 'score',
-          value: 0.6,
-        })
-      }, { message: 'label value must not contain a "."' })
-      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    it('sends a dotted label as-is', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'has.toxicity',
+        metricType: 'score',
+        value: 0.6,
+      })
+
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, 'has.toxicity')
     })
 
-    it('sends a non-string label as a string', () => {
+    it('sends a non-string label as-is', () => {
       llmobs.submitEvaluation(spanCtx, {
         mlApp: 'test',
         timestampMs: 1234,
@@ -1572,7 +1571,7 @@ describe('sdk', () => {
         value: 0.6,
       })
 
-      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, '1234')
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, 1234)
     })
 
     it('throws for non-object tags', () => {
@@ -1589,7 +1588,7 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('throws for a nullish tag value', () => {
+    it('throws for a tag value that cannot be coerced to a string', () => {
       assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
@@ -1597,10 +1596,26 @@ describe('sdk', () => {
           label: 'test',
           metricType: 'score',
           value: 0.6,
-          tags: { host: null },
+          tags: { host: Object.create(null) },
         })
       }, { message: 'Failed to parse tags. Tags for evaluation metrics must be strings' })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('serializes nullish tag values', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'test',
+        metricType: 'score',
+        value: 0.6,
+        tags: { host: null, port: undefined },
+      })
+
+      assert.deepStrictEqual(
+        LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].tags,
+        [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:null', 'port:undefined']
+      )
     })
 
     it('coerces non-string tag values', () => {
@@ -1899,15 +1914,6 @@ describe('sdk', () => {
       submitter = { id: 'user-1', type: 'user' }
     })
 
-    it('does not submit feedback if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
-      llmobs.submitFeedback()
-
-      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
-
-      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
-    })
-
     it('throws when no target is provided', () => {
       assert.throws(() => llmobs.submitFeedback({
         label: 'thumbs_up',
@@ -1921,13 +1927,30 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('throws when more than one target is provided', () => {
+    it('throws when two targets are provided', () => {
       assert.throws(() => llmobs.submitFeedback({
         label: 'thumbs_up',
         metricType: 'boolean',
         value: true,
         submitter,
         spanId: '5678',
+        sessionId: 'session-1',
+      }), {
+        message: 'Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` ' +
+          'must be specified to submit feedback.',
+      })
+      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    // An odd target count is what a parity check (`^`) would wrongly accept.
+    it('throws when three targets are provided', () => {
+      assert.throws(() => llmobs.submitFeedback({
+        label: 'thumbs_up',
+        metricType: 'boolean',
+        value: true,
+        submitter,
+        spanId: '5678',
+        traceId: '1234',
         sessionId: 'session-1',
       }), {
         message: 'Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` ' +
@@ -2005,22 +2028,6 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('throws for a missing mlApp', () => {
-      const mlApp = tracer._tracer._config.llmobs.mlApp
-      delete tracer._tracer._config.llmobs.mlApp
-
-      assert.throws(() => llmobs.submitFeedback({
-        label: 'thumbs_up',
-        metricType: 'boolean',
-        value: true,
-        submitter,
-        spanId: '5678',
-      }), { message: 'ML App name is required for sending feedback. Feedback data will not be sent.' })
-      sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
-
-      tracer._tracer._config.llmobs.mlApp = mlApp
-    })
-
     it('throws for an invalid timestamp', () => {
       assert.throws(() => llmobs.submitFeedback({
         label: 'thumbs_up',
@@ -2079,16 +2086,33 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('throws for a nullish tag value', () => {
+    it('throws for a tag value that cannot be coerced to a string', () => {
       assert.throws(() => llmobs.submitFeedback({
         label: 'thumbs_up',
         metricType: 'boolean',
         value: true,
         submitter,
         spanId: '5678',
-        tags: { host: undefined },
+        tags: { host: Object.create(null) },
       }), { message: 'Failed to parse tags. Tags for feedback metrics must be strings' })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+    })
+
+    it('serializes nullish tag values', () => {
+      llmobs.submitFeedback({
+        label: 'thumbs_up',
+        metricType: 'boolean',
+        value: true,
+        submitter,
+        spanId: '5678',
+        timestampMs: 1234,
+        tags: { host: null, port: undefined },
+      })
+
+      assert.deepStrictEqual(
+        LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].tags,
+        [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp', 'host:null', 'port:undefined']
+      )
     })
 
     it('throws for an invalid metric type', () => {
@@ -2292,6 +2316,46 @@ describe('sdk', () => {
         })
 
         assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
+      })
+    })
+
+    describe('with no mlApp configured', () => {
+      let mlApp
+
+      before(() => {
+        mlApp = tracer._tracer._config.llmobs.mlApp
+        delete tracer._tracer._config.llmobs.mlApp
+      })
+
+      after(() => {
+        tracer._tracer._config.llmobs.mlApp = mlApp
+      })
+
+      it('throws', () => {
+        assert.throws(() => llmobs.submitFeedback({
+          label: 'thumbs_up',
+          metricType: 'boolean',
+          value: true,
+          submitter,
+          spanId: '5678',
+        }), { message: 'ML App name is required for sending feedback. Feedback data will not be sent.' })
+        sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
+      })
+    })
+
+    describe('with llmobs disabled', () => {
+      before(() => {
+        tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
+      })
+
+      after(() => {
+        tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
+      })
+
+      it('does not submit feedback', () => {
+        llmobs.submitFeedback()
+
+        sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
       })
     })
   })

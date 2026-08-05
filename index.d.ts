@@ -4026,8 +4026,9 @@ declare namespace tracer {
 
       /**
        * An object of string key-value pairs to tag the feedback with.
+       * A `null` or `undefined` value is sent as the string `"null"` or `"undefined"`.
        */
-      tags?: { [key: string]: any },
+      tags?: { [key: string]: string | null | undefined },
 
       /**
        * The name of the ML application

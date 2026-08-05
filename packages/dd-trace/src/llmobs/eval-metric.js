@@ -10,8 +10,9 @@ const tracerVersion = require('../../../../package.json').version
  */
 
 /**
- * Tag value the intake accepts: a string, or anything the SDK can coerce through `toString()`.
- * @typedef {string | { toString?: unknown }} MetricTagValue
+ * Tag value the intake accepts: a string, a nullish value, or anything the SDK can coerce
+ * through `toString()`.
+ * @typedef {string | null | undefined | { toString?: unknown }} MetricTagValue
  */
 
 /** @type {string[]} */
@@ -110,17 +111,21 @@ function validateTimestamp (timestampMs, kind) {
 }
 
 /**
- * Validates the label and returns it coerced to the string the intake expects.
+ * Validates the label and returns it as sent on the wire.
  * @param {unknown} label
  * @param {MetricEventKind} kind
- * @returns {string} the label, as sent on the wire.
+ * @returns {unknown} the label, coerced to a string for feedback and left untouched for evaluations.
  */
 function validateLabel (label, kind) {
   if (!label) {
     throw taggedError('invalid_metric_label', `label must be the specified name of the ${TERMS[kind].metric}`)
   }
 
-  // A dot makes the label unusable as a facet key, for both kinds.
+  // Evaluations keep the looser check they shipped with: a dotted or non-string label reaches the
+  // intake as-is. Aligning them with feedback rejects calls that succeed today, so it is deferred.
+  if (kind === 'evaluation') return label
+
+  // A dot makes the label unusable as a facet key.
   const labelValue = String(label)
   if (labelValue.includes('.')) {
     throw taggedError('invalid_label_value', 'label value must not contain a "."')
@@ -209,12 +214,16 @@ function buildMetricTags (tags, mlApp, kind, otelEnabled = false) {
       const tag = tags[key]
       if (typeof tag === 'string') {
         metricTags[key] = tag
-      } else if (tag == null || typeof tag.toString !== 'function') {
-        // Nullish values have no meaningful string form, and every other value in JS carries a
-        // `toString` — either its own or the one inherited from `Object.prototype`.
-        throw invalidTagsError(kind)
-      } else {
+      } else if (tag == null) {
+        // A nullish value can be intentional, so it is serialized rather than rejected. Checked
+        // before the `toString` lookup below, which would throw a raw TypeError on it.
+        metricTags[key] = String(tag)
+      } else if (typeof tag.toString === 'function') {
         metricTags[key] = tag.toString()
+      } else {
+        // Every other value carries a `toString`, either its own or the one inherited from
+        // `Object.prototype`, so this is only reached for a null-prototype object.
+        throw invalidTagsError(kind)
       }
     }
   }

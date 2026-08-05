@@ -15,13 +15,9 @@ const {
   DECORATOR,
 } = require('./constants/tags')
 
-const { FEEDBACK_METRIC_TYPES, FEEDBACK_TARGET_KEYS } = require('./eval-metric')
 const LLMObsTagger = require('./tagger')
 
 const llmobsMetrics = telemetryMetrics.manager.namespace('mlobs')
-
-// `span` and `spanId` both report as `span_id`, hence the deduplication by the Set.
-const FEEDBACK_TARGET_TYPES = new Set(Object.values(FEEDBACK_TARGET_KEYS))
 
 function extractIntegrationFromTags (tags) {
   if (!Array.isArray(tags)) return null
@@ -188,18 +184,17 @@ function recordSubmitEvaluation (options, err, value = 1) {
 }
 
 /**
- * @param {object | undefined} options - The options `submitFeedback` was called with.
+ * @param {string} metricType - The submitted metric type, `'other'` if unrecognized.
  * @param {string} targetType - The payload key the feedback was attached to, `'other'` if unresolved.
  * @param {string} err - The telemetry error tag, empty when the submission succeeded.
  * @param {number} [value]
  * @returns {void}
  */
-function recordSubmitFeedback (options, targetType, err, value = 1) {
-  const metricType = options?.metricType?.toLowerCase()
+function recordSubmitFeedback (metricType, targetType, err, value = 1) {
   const tags = {
     error: Number(!!err),
-    metric_type: FEEDBACK_METRIC_TYPES.includes(metricType) ? metricType : 'other',
-    target_type: FEEDBACK_TARGET_TYPES.has(targetType) ? targetType : 'other',
+    metric_type: metricType,
+    target_type: targetType,
   }
   if (err) tags.error_type = err
   llmobsMetrics.count('feedback_submitted', tags).inc(value)
