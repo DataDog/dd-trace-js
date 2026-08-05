@@ -499,8 +499,9 @@ function addVitestBrowserSetupFileAccess (testSpecifications) {
 
     configuredProjects.add(browserServerProject)
     addVitestBrowserCommand(safeConfig(browserServerProject))
-    addVitestBrowserCommand(browserServerProject.options)
     browserServerProject.options ||= {}
+    browserServerProject.options.browser ||= {}
+    addVitestBrowserCommand(browserServerProject.options)
     browserServerProject.options.plugins ||= []
     if (!browserServerProject.options.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
       browserServerProject.options.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)

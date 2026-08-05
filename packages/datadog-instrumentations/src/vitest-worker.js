@@ -2,7 +2,7 @@
 
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
-const { fileURLToPath } = require('node:url')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -70,14 +70,14 @@ let isPreciseCoverageUnavailable = false
 let vitestCoverageSnapshot
 const wrappedCoverageWorkerStates = new WeakSet()
 const nonIsolatedCoverageFiles = new Set()
-const VITEST_EFD_SUITE_ADMISSION_FILE = path.join(
+const VITEST_EFD_SUITE_ADMISSION_URL = pathToFileURL(path.join(
   __dirname,
   '..',
   '..',
   '..',
   'ci',
   'vitest-efd-suite-admission.mjs'
-)
+)).href
 
 /**
  * Sends a command to a Node.js inspector session.
@@ -391,7 +391,7 @@ function isEfdSuiteAdmissionAllowed (task, providedContext, testSuite) {
   let admission = fileToEfdSuiteAdmission.get(task.file)
   if (admission) return admission
 
-  requestEfdSuiteAdmission ||= import(VITEST_EFD_SUITE_ADMISSION_FILE)
+  requestEfdSuiteAdmission ||= import(VITEST_EFD_SUITE_ADMISSION_URL)
     .then(module => module.requestEfdSuiteAdmission)
   admission = requestEfdSuiteAdmission.then(request => request({
     hasNewTest: hasRunnableNewTest(task.file, providedContext),

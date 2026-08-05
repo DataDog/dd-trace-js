@@ -455,6 +455,10 @@ describe('vitest no-worker init instrumentation selection', () => {
         configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
 
         assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
+        assert.strictEqual(
+          typeof project.options.browser.commands.__dd_vitest_efd_suite_admission,
+          'function'
+        )
       })
     }
 

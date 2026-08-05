@@ -250,10 +250,22 @@ function resetEfdSuiteTracker () {
  * Returns whether Vitest exposes the worker transports used for runtime EFD suite admission.
  *
  * @param {string} frameworkVersion
+ * @param {object[]|undefined} testSpecifications
+ * @param {object} ctx
  * @returns {boolean}
  */
-function supportsEfdSuiteAdmission (frameworkVersion) {
-  return satisfies(frameworkVersion, '>=4.0.0')
+function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
+  if (!satisfies(frameworkVersion, '>=4.0.0')) return false
+  const defaultPool = ctx?.config?.pool
+  if (!Array.isArray(testSpecifications)) {
+    return defaultPool !== 'vmForks' && defaultPool !== 'vmThreads'
+  }
+
+  for (const testSpecification of testSpecifications) {
+    const pool = getTestSpecificationPool(testSpecification) || defaultPool
+    if (pool === 'vmForks' || pool === 'vmThreads') return false
+  }
+  return true
 }
 
 /**
@@ -821,7 +833,7 @@ async function runMainProcessSetup (
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
-        if (supportsEfdSuiteAdmission(frameworkVersion)) {
+        if (supportsEfdSuiteAdmission(frameworkVersion, testSpecifications, ctx)) {
           configureEfdSuiteTracker(currentTestFilepaths, repositoryRoot)
         } else {
           const projectSuites = currentTestFilepaths.map(testFilepath => getTestSuitePath(testFilepath, repositoryRoot))

@@ -4,13 +4,13 @@ const assert = require('node:assert/strict')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
-const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
-
 describe('vitest main instrumentation', () => {
-  it('keeps no-worker capabilities active after Browser Mode setup', async () => {
+  it('keeps no-worker capabilities active and uses legacy EFD faultiness detection for VM pools', async () => {
     const hooks = []
     const libraryConfigurationRequests = []
     const libraryConfigurationCh = {}
+    const knownTestsCh = {}
+    const providedContexts = []
     const testSuiteFinishCh = {
       hasSubscribers: true,
     }
@@ -38,9 +38,20 @@ describe('vitest main instrumentation', () => {
             libraryConfigurationRequests.push(data)
             return Promise.resolve({
               libraryConfig: {
-                earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+                earlyFlakeDetectionFaultyThreshold: 100,
+                earlyFlakeDetectionRetryPolicy: {
+                  durationRetryCounts: [
+                    { durationLimitMs: 5000, retryCount: 2 },
+                  ],
+                  schedulingRetryCount: 2,
+                },
+                isEarlyFlakeDetectionEnabled: true,
+                isKnownTestsEnabled: true,
               },
             })
+          }
+          if (currentChannel === knownTestsCh) {
+            return Promise.resolve({ knownTests: { vitest: {} } })
           }
           return Promise.resolve()
         },
@@ -77,10 +88,12 @@ describe('vitest main instrumentation', () => {
           }
         },
         isEarlyFlakeDetectionFaultyCh: channel,
-        knownTestsCh: channel,
+        knownTestsCh,
         libraryConfigurationCh,
         modifiedFilesCh: channel,
-        setProvidedContext () {},
+        setProvidedContext (_ctx, providedContext) {
+          providedContexts.push(providedContext)
+        },
         testManagementTestsCh: channel,
         testSessionConfigurationCh,
         testSessionFinishCh,
@@ -100,6 +113,9 @@ describe('vitest main instrumentation', () => {
       close () {},
       config: {},
       exit () {},
+      getTestFilepaths () {
+        return []
+      },
     }
     const sequencer = new BaseSequencer()
     sequencer.ctx = ctx
@@ -117,9 +133,17 @@ describe('vitest main instrumentation', () => {
     typechecker.ctx = ctx
     await typechecker.prepareResults()
 
+    await sequencer.sort([[
+      { config: { pool: 'vmThreads' } },
+      { filepath: '/repo/vm.mjs' },
+    ]])
+
     assert.deepStrictEqual(
       libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),
-      [true, true]
+      [true, true, true]
     )
+    const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
+    assert.strictEqual(efdAdmissionContexts[efdAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
   })
 })
