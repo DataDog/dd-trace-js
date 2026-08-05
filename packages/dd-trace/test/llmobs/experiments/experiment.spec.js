@@ -126,6 +126,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const append = requests.find(request => request.method === 'appendDatasetRecords')
     assert.deepEqual(append.records[0].tags, ['source:synthetic'])
     assert.deepEqual(dataset.records()[0].tags, ['source:synthetic'])
+    assert.equal(dataset.records()[0].version(), 2)
   })
 
   it('updates tags on existing dataset records with backend tag operations', async () => {
@@ -152,6 +153,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       { id: 'rec-1', tag_operations: { set: ['segment:final'] } },
     ])
     assert.deepEqual(dataset.records()[0].tags, ['segment:final'])
+    assert.equal(dataset.records()[0].version(), 3)
     assert.equal(dataset.version(), 3)
   })
 

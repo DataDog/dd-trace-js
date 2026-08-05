@@ -40,15 +40,24 @@ class DatasetRecord {
   version () {
     return this.#version
   }
+
+  _setVersion (version) {
+    this.#version = version ?? null
+    return this
+  }
 }
 
 function recordIdFromCreatedRecord (record) {
   return String(record?.id ?? '')
 }
 
+function recordVersionFromCreatedRecord (record) {
+  return typeof record?.version === 'function' ? record.version() : null
+}
+
 function versionFromCreatedRecords (records) {
   const versions = records
-    .map(record => record.version())
+    .map(recordVersionFromCreatedRecord)
     .filter(version => version != null)
     .map(Number)
     .filter(Number.isFinite)
@@ -277,6 +286,8 @@ class Dataset {
         pushedCount++
         pending[index].id = recordId
       }
+      const recordVersion = recordVersionFromCreatedRecord(node)
+      if (recordVersion !== null) pending[index]._setVersion(recordVersion)
       this.#recordIds.push(recordId)
     }
     for (let i = response.length; i < pending.length; i++) this.#recordIds.push('')
@@ -310,6 +321,7 @@ class Dataset {
     }
 
     this.#updateVersionFromRecords(response)
+    this.#updateRecordVersions(response)
     this.#pendingTagOperations.clear()
   }
 
@@ -322,6 +334,20 @@ class Dataset {
     } else {
       this.#version = pushedVersion
       this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
+    }
+  }
+
+  #updateRecordVersions (records) {
+    const versionsById = new Map()
+    for (const record of records) {
+      const recordId = recordIdFromCreatedRecord(record)
+      const recordVersion = recordVersionFromCreatedRecord(record)
+      if (recordId !== '' && recordVersion !== null) versionsById.set(recordId, recordVersion)
+    }
+
+    for (const record of this.#records) {
+      const recordVersion = versionsById.get(record.id)
+      if (recordVersion !== undefined) record._setVersion(recordVersion)
     }
   }
 
