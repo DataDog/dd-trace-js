@@ -147,6 +147,31 @@ versions.forEach((version) => {
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
+
+      it('does not request the page fixture from instrumented hooks', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
+
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          })
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js no-page-fixture-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
+
+        assert.strictEqual(exitCode, 0)
+      })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
