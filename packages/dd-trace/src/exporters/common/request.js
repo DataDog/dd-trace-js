@@ -10,6 +10,7 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const { trackExport } = require('../../serverless/pending_exports')
 const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
@@ -78,6 +79,12 @@ function request (data, options, callback) {
       })
 
     return
+  }
+
+  const finishExport = trackExport()
+  const done = (...args) => {
+    finishExport()
+    callback(...args)
   }
 
   // The timeout should be kept low to avoid excessive queueing.
@@ -171,7 +178,7 @@ function request (data, options, callback) {
   const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+      return done(null)
     }
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
@@ -195,7 +202,7 @@ function request (data, options, callback) {
         if (settled) return
         settled = true
         finalize()
-        callback(error, result, statusCode, headers)
+        done(error, result, statusCode, headers)
       }
 
       /**
@@ -241,7 +248,12 @@ function request (data, options, callback) {
     })
   }
 
-  attempt(1)
+  try {
+    attempt(1)
+  } catch (error) {
+    finishExport()
+    throw error
+  }
 }
 
 function byteLength (data) {
