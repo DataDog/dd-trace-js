@@ -85,7 +85,7 @@ describe('Plugin', function () {
       after(done => downstreamServer.close(done))
 
       const startServer = (
-        { withConfig, standalone, withHttp = true, serverFile = 'server' },
+        { withConfig, standalone, withHttp = true, httpResourceRenamingEnabled = false, serverFile = 'server' },
         schemaVersion = 'v0',
         defaultToGlobalService = false
       ) => {
@@ -110,6 +110,7 @@ describe('Plugin', function () {
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               WITH_HTTP: String(withHttp),
+              WITH_HTTP_RESOURCE_RENAMING: String(httpResourceRenamingEnabled),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               // eslint-disable-next-line n/no-path-concat
@@ -364,6 +365,7 @@ describe('Plugin', function () {
 
                 assert.strictEqual(spans[0].name, 'web.request')
                 assert.strictEqual(spans[0].resource, 'GET /api/hello/[name]')
+                assert.strictEqual(spans[0].meta['http.endpoint'], undefined)
                 assert.strictEqual(spans[1].name, 'next.request')
                 assert.strictEqual(spans[1].parent_id.toString(), spans[0].span_id.toString())
               })
@@ -694,7 +696,7 @@ describe('Plugin', function () {
 
       if (satisfies(pkg.version, '>=13.4.0')) {
         describe('with app directory', () => {
-          startServer({ withConfig: false, standalone: false })
+          startServer({ withConfig: false, standalone: false, httpResourceRenamingEnabled: true })
 
           it('should infer the correct resource path for appDir routes', done => {
             agent
@@ -733,17 +735,22 @@ describe('Plugin', function () {
                 const spans = traces[0]
                 const requestSpans = spans.filter(span => span.name === 'next.request')
                 const routeSpan = requestSpans.find(span => span.resource === 'GET /api/appRouteTrace/[name]')
+                const httpSpan = spans.find(span => span.name === 'web.request')
                 const downstreamSpan = spans.find(span => span.name === 'http.request' &&
                   span.meta['http.url'] === `http://127.0.0.1:${downstreamPort}/downstream`)
 
                 assert.strictEqual(requestSpans.length, 1)
                 assert.ok(routeSpan)
+                assert.ok(httpSpan)
+                assert.strictEqual(httpSpan.resource, 'GET /api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.route'], '/api/appRouteTrace/[name]')
+                assert.strictEqual(httpSpan.meta['http.endpoint'], '/api/appRouteTrace/{param:int}')
                 assert.ok(downstreamSpan)
                 assert.strictEqual(downstreamSpan.parent_id.toString(), routeSpan.span_id.toString())
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/hello`),
+                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
                 tracePromise,
               ])
             })
