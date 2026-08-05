@@ -1,6 +1,12 @@
 'use strict'
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+const { waitForPendingExports } = require('./serverless/pending_exports')
+
+const VERCEL_REQUEST_CONTEXTS = [
+  Symbol.for('@next/request-context'),
+  Symbol.for('@vercel/request-context'),
+]
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -42,10 +48,33 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
+function retainVercelRequest (promise) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return false
+
+  for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
+    try {
+      const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+      if (typeof waitUntil !== 'function') continue
+      waitUntil(promise)
+      return true
+    } catch {
+      // The other request-context implementation may still be available.
+    }
+  }
+
+  return false
+}
+
+function onRequestEnd () {
+  return retainVercelRequest(waitForPendingExports())
+}
+
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  retainVercelRequest,
+  onRequestEnd,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }
