@@ -22,6 +22,7 @@ const {
 } = require('../src/mocha/utils')
 const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_HAS_DYNAMIC_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
@@ -488,6 +489,7 @@ describe('webdriverio instrumentation', () => {
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
     const testManagementTestsCh = channel('ci:mocha:test-management-tests')
     const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
+    const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
     const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
     const sessionStarts = []
@@ -495,6 +497,7 @@ describe('webdriverio instrumentation', () => {
     const suiteStarts = []
     const suiteFinishes = []
     const workerLogPayloads = []
+    const workerTelemetryPayloads = []
     const workerTracePayloads = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
@@ -584,6 +587,9 @@ describe('webdriverio instrumentation', () => {
     function onWorkerLogs (event) {
       workerLogPayloads.push(event)
     }
+    function onWorkerTelemetry (event) {
+      workerTelemetryPayloads.push(event)
+    }
 
     testFinishCh.subscribe(onTestFinish)
     knownTestsCh.subscribe(onKnownTestsRequest)
@@ -596,6 +602,7 @@ describe('webdriverio instrumentation', () => {
     testSuiteFinishCh.subscribe(onSuiteFinish)
     testManagementTestsCh.subscribe(onTestManagementTestsRequest)
     workerReportLogsCh.subscribe(onWorkerLogs)
+    workerReportTelemetryCh.subscribe(onWorkerTelemetry)
     workerReportTraceCh.subscribe(onWorkerTrace)
 
     try {
@@ -678,6 +685,11 @@ describe('webdriverio instrumentation', () => {
         name: 'workerEvent',
         args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, 'first-logs'],
       })
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, 'first-telemetry'],
+      })
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
@@ -755,6 +767,7 @@ describe('webdriverio instrumentation', () => {
         },
       ])
       assert.deepStrictEqual(workerLogPayloads, ['first-logs'])
+      assert.deepStrictEqual(workerTelemetryPayloads, ['first-telemetry'])
       assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
       assert.strictEqual(consoleWarn.callCount, 1)
       assert.match(consoleWarn.firstCall.args[0], /Attempt to fix failed/)
@@ -771,6 +784,7 @@ describe('webdriverio instrumentation', () => {
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
       testManagementTestsCh.unsubscribe(onTestManagementTestsRequest)
       workerReportLogsCh.unsubscribe(onWorkerLogs)
+      workerReportTelemetryCh.unsubscribe(onWorkerTelemetry)
       workerReportTraceCh.unsubscribe(onWorkerTrace)
       consoleWarn.restore()
       if (originalNodeOptions === undefined) {
