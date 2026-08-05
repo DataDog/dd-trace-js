@@ -4,11 +4,10 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
-const { flushVercelOtlp } = require('../../dd-trace/src/serverless')
+const { onRequestEnd } = require('../../dd-trace/src/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
-const NEEDS_OTLP_FLUSH = Symbol('needsOtlpFlush')
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
@@ -44,7 +43,8 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    return { ...store, span, req, [NEEDS_OTLP_FLUSH]: childOf?._integrationName !== 'http' }
+    const httpPluginWillFlush = childOf?._integrationName === 'http'
+    return { ...store, span, req, shouldFlushOtlp: !httpPluginWillFlush }
   }
 
   error ({ span, error }) {
@@ -88,7 +88,7 @@ class NextPlugin extends ServerPlugin {
     this.config.hooks.request(span, req, res)
 
     span.finish()
-    if (store[NEEDS_OTLP_FLUSH]) flushVercelOtlp(this.tracer)
+    if (store.shouldFlushOtlp) onRequestEnd(this.tracer)
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {

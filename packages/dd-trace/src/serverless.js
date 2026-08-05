@@ -64,9 +64,13 @@ function retainVercelRequest (promise) {
   return false
 }
 
-function flushVercelOtlp (tracer) {
-  if (getEnvironmentVariable('VERCEL') !== '1') return false
-
+/**
+ * Force-flushes configured OTLP signal exporters.
+ *
+ * @param {object} tracer tracer instance or public tracer wrapper
+ * @returns {Promise<void> | undefined} settles after every configured exporter completes
+ */
+function forceFlush (tracer) {
   tracer = tracer?._tracer || tracer
   const flushes = []
 
@@ -86,16 +90,28 @@ function flushVercelOtlp (tracer) {
     if (typeof metricReader?.forceFlush === 'function') flushes.push(() => metricReader.forceFlush())
   }
 
-  if (flushes.length === 0) return false
+  if (flushes.length === 0) return
 
-  const pending = flushes.map(flush => {
+  return Promise.allSettled(flushes.map(flush => {
     try {
       return flush()
     } catch (error) {
       return Promise.reject(error)
     }
-  })
-  return retainVercelRequest(Promise.allSettled(pending))
+  }))
+}
+
+/**
+ * Retains configured OTLP exports when a Vercel request completes.
+ *
+ * @param {object} tracer tracer instance or public tracer wrapper
+ * @returns {boolean} whether a Vercel request context retained the flush
+ */
+function onRequestEnd (tracer) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return false
+
+  const pending = forceFlush(tracer)
+  return pending ? retainVercelRequest(pending) : false
 }
 
 module.exports = {
@@ -103,7 +119,8 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
-  flushVercelOtlp,
+  forceFlush,
   retainVercelRequest,
+  onRequestEnd,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

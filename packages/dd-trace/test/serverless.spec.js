@@ -8,7 +8,7 @@ const { logs } = require('@opentelemetry/api-logs')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription, flushVercelOtlp, retainVercelRequest } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, onRequestEnd, retainVercelRequest } = require('../src/serverless')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -89,7 +89,7 @@ describe('retainVercelRequest', () => {
       reader: { forceFlush: pendingFlush },
     })
 
-    assert.strictEqual(flushVercelOtlp({
+    assert.strictEqual(onRequestEnd({
       _config: {
         DD_LOGS_OTEL_ENABLED: true,
         DD_METRICS_OTEL_ENABLED: true,
