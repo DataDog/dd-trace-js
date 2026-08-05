@@ -71,7 +71,7 @@ describe('OpenTelemetry Logs', () => {
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
-    sinon.stub(http, 'request').callsFake((options, callback) => {
+    sinon.stub(http, 'request').callsFake((options, onResponse) => {
       // Only intercept OTLP logs requests
       if (options.path && options.path.includes('/v1/logs')) {
         capturedHeaders = options.headers
@@ -93,7 +93,7 @@ describe('OpenTelemetry Logs', () => {
           once: () => {},
           setTimeout: () => {},
         }
-        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+        onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
 
@@ -105,7 +105,7 @@ describe('OpenTelemetry Logs', () => {
         once: () => {},
         setTimeout: () => {},
       }
-      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+      onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
