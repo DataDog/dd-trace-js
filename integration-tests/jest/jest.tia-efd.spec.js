@@ -70,10 +70,12 @@ const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
+const jestMajor = JEST_VERSION === 'latest' ? Infinity : Number(JEST_VERSION.split('.')[0])
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
-const onlyBeforeJest30It = JEST_VERSION !== 'latest' && Number(JEST_VERSION.split('.')[0]) < 30 ? it : it.skip
-const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
-const isJestCoverageBackfillSupported = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const onlyJest28Before30It = jestMajor >= 28 && jestMajor < 30 ? it : it.skip
+const onlyJest28AndLaterIt = jestMajor >= 28 ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = jestMajor >= 28
+const isJestCoverageBackfillSupported = jestMajor >= 28
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -1807,7 +1809,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('keeps concurrent originals and EFD retries concurrent', async () => {
+    onlyJest28AndLaterIt('keeps concurrent originals and EFD retries concurrent', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-sibling-test.js'
       const newTestName = 'early flake detection concurrent siblings new test waits for its known sibling'
@@ -1901,7 +1903,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('retries a concurrent test after its original times out', async () => {
+    onlyJest28AndLaterIt('retries a concurrent test after its original times out', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-timeout-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -1955,7 +1957,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    onlyBeforeJest30It('applies the Jest timeout to concurrent EFD retry bodies', async () => {
+    onlyJest28Before30It('applies the Jest timeout to concurrent EFD retry bodies', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-retry-timeout-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -2059,7 +2061,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('retries a concurrent test after its original throws synchronously', async () => {
+    onlyJest28AndLaterIt('retries a concurrent test after its original throws synchronously', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-throw-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -3987,7 +3989,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it('picks the retry budget of a concurrent test from its own execution time', async () => {
+    onlyJest28AndLaterIt('picks the retry budget of a concurrent test from its own execution time', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       receiver.setKnownTests({ jest: {} })
       receiver.setSettings({

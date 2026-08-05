@@ -262,6 +262,13 @@ jobs:
           - jest.core
           - jest.tia-efd
           - jest.test-management
+        test-pattern:
+          - ''
+        include:
+          - version: oldest
+            jest-version: 25.5.1
+            spec: jest.tia-efd
+            test-pattern: '^jest@25[.]5[.]1 commonJS early flake detection retries new tests$'
     name: integration-jest (${{ matrix.jest-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
@@ -278,10 +285,14 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: npm run test:integration:jest:coverage
+      - name: Simulate the v5 release line for Jest 25 compatibility
+        if: matrix.jest-version == '25.5.1'
+        run: npm pkg set version=5.0.0
+      - run: npm run test:integration:jest:coverage -- --grep "$JEST_TEST_PATTERN"
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
+          JEST_TEST_PATTERN: ${{ matrix.test-pattern }}
           SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
