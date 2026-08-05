@@ -42,7 +42,8 @@ class BatchLogRecordProcessor {
    */
   onEmit (logRecord, instrumentationScope) {
     // Store the log record (already enriched by Logger.emit)
-    this.#logRecords.push({ ...logRecord, instrumentationScope })
+    logRecord.instrumentationScope = instrumentationScope
+    this.#logRecords.push(logRecord)
 
     if (this.#logRecords.length >= this.#maxExportBatchSize) {
       this.#export()
