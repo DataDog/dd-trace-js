@@ -241,15 +241,34 @@ describe('OpenTelemetry Logs', () => {
       assert.deepStrictEqual(emittedRecord.attributes, { key: 'value' })
     })
 
+    it('warns once when replacing invalid timestamps', () => {
+      const { logs } = setupLogs()
+      const log = require('../../src/log')
+      const warn = sinon.stub(log, 'warn')
+      const logger = logs.getLogger('test')
+
+      logger.emit({ body: 'invalid timestamp', timestamp: null })
+      logger.emit({ body: 'another invalid timestamp', timestamp: NaN })
+
+      sinon.assert.calledOnceWithExactly(warn, 'Invalid OpenTelemetry log timestamp; using the current time instead')
+    })
+
     for (const invalidTimestamp of [null, NaN, Infinity, new Date('invalid'), [], [1], [1, NaN]]) {
-      it(`rejects invalid timestamps: ${String(invalidTimestamp)}`, () => {
+      it(`uses the current time for invalid timestamps: ${String(invalidTimestamp)}`, () => {
         const { logs, loggerProvider } = setupLogs()
         const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
         const logger = logs.getLogger('test')
+        const now = new Date('2023-11-14T22:13:20.123Z')
+        sinon.useFakeTimers({ now })
 
-        assert.throws(() => logger.emit({ body: 'invalid timestamp', timestamp: invalidTimestamp }), TypeError)
-        assert.throws(() => logger.emit({ body: 'invalid observed timestamp', observedTimestamp: invalidTimestamp }), TypeError)
-        sinon.assert.notCalled(onEmit)
+        logger.emit({ body: 'invalid timestamp', timestamp: invalidTimestamp })
+        logger.emit({ body: 'invalid observed timestamp', observedTimestamp: invalidTimestamp })
+
+        sinon.assert.calledTwice(onEmit)
+        for (const emittedRecord of onEmit.args.map(args => args[0])) {
+          assert.deepStrictEqual(emittedRecord.timestamp, [1700000000, 123000000])
+        }
+        assert.deepStrictEqual(onEmit.secondCall.args[0].observedTimestamp, [1700000000, 123000000])
       })
     }
 

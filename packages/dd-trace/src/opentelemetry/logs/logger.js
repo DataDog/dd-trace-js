@@ -9,9 +9,11 @@ const {
   timeInputToHrTime,
 } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
+const log = require('../../log')
 
 const MAX_DATE_MILLISECONDS = 8.64e15
 const NANOSECONDS_PER_SECOND = 1e9
+let invalidTimestampWarningLogged = false
 
 function isValidHrTime (hrTime) {
   return Array.isArray(hrTime) &&
@@ -23,32 +25,43 @@ function isValidHrTime (hrTime) {
 }
 
 function toHrTime (timestamp) {
-  let hrTime
-  if (typeof timestamp === 'number') {
-    if (!Number.isFinite(timestamp)) {
-      throw new TypeError('Invalid timestamp')
-    }
-
+  if (Number.isFinite(timestamp)) {
     // Older versions documented numeric timestamps as Unix nanoseconds.
     if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
       const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
-      hrTime = [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
-    } else if (timestamp >= 0 && timestamp <= performance.now()) {
-      // A number within this process's elapsed time is a performance timestamp.
-      hrTime = timeInputToHrTime(timestamp)
-    } else {
-      // All other numbers are Unix milliseconds, including historical dates.
-      hrTime = millisToHrTime(timestamp)
+      const hrTime = [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
+      return isValidHrTime(hrTime) ? hrTime : undefined
     }
-  } else {
-    hrTime = timeInputToHrTime(timestamp)
+
+    if (timestamp >= 0 && timestamp <= performance.now()) {
+      // A number within this process's elapsed time is a performance timestamp.
+      return timeInputToHrTime(timestamp)
+    }
+
+    // All other numbers are Unix milliseconds, including historical dates.
+    return millisToHrTime(timestamp)
   }
 
-  if (!isValidHrTime(hrTime)) {
-    throw new TypeError('Invalid timestamp')
+  if (timestamp instanceof Date) {
+    const hrTime = millisToHrTime(timestamp.getTime())
+    return isValidHrTime(hrTime) ? hrTime : undefined
   }
 
-  return hrTime
+  return isValidHrTime(timestamp) ? timestamp : undefined
+}
+
+function normalizeTimestamp (timestamp) {
+  if (timestamp !== undefined) {
+    const hrTime = toHrTime(timestamp)
+    if (hrTime) return hrTime
+
+    if (!invalidTimestampWarningLogged) {
+      invalidTimestampWarningLogged = true
+      log.warn('Invalid OpenTelemetry log timestamp; using the current time instead')
+    }
+  }
+
+  return millisToHrTime(Date.now())
 }
 
 /**
@@ -109,19 +122,16 @@ class Logger {
       return
     }
 
-    const record = { ...logRecord }
-    const timestamp = logRecord.timestamp === undefined
-      ? millisToHrTime(Date.now())
-      : toHrTime(logRecord.timestamp)
-    record.timestamp = timestamp
-    record.context = logRecord.context || context.active()
-
-    if (logRecord.observedTimestamp !== undefined) {
-      record.observedTimestamp = toHrTime(logRecord.observedTimestamp)
-    }
-
-    if (logRecord.attributes) {
-      record.attributes = sanitizeAttributes(logRecord.attributes)
+    const record = {
+      ...logRecord,
+      timestamp: normalizeTimestamp(logRecord.timestamp),
+      context: logRecord.context || context.active(),
+      ...(logRecord.observedTimestamp !== undefined && {
+        observedTimestamp: normalizeTimestamp(logRecord.observedTimestamp),
+      }),
+      ...(logRecord.attributes && {
+        attributes: sanitizeAttributes(logRecord.attributes),
+      }),
     }
 
     this.loggerProvider.processor.onEmit(record, this.#instrumentationScope)
