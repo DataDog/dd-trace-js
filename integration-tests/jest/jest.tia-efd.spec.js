@@ -33,6 +33,7 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
+  TEST_PARAMETERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -4280,6 +4281,73 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('preserves parameterized test identity between automatic retries', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const testSuite = 'ci-visibility/jest-flaky/parameterized-fails.js'
+      const testName = 'test-flaky-test-retries preserves parameters between retries'
+      const passingAttempt = {
+        isRetry: false,
+        parameters: { arguments: ['passing row', true], metadata: {} },
+        retryReason: undefined,
+        status: 'pass',
+      }
+      const failingAttempt = {
+        isRetry: false,
+        parameters: { arguments: ['failing row', false], metadata: {} },
+        retryReason: undefined,
+        status: 'fail',
+      }
+      const retryAttempt = {
+        isRetry: true,
+        parameters: { arguments: ['failing row', false], metadata: {} },
+        retryReason: TEST_RETRY_REASON_TYPES.atr,
+        status: 'fail',
+      }
+      const expectedAttempts = JEST_VERSION === 'latest'
+        ? [failingAttempt, passingAttempt, retryAttempt]
+        : [passingAttempt, failingAttempt, retryAttempt]
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite && test.meta[TEST_NAME] === testName)
+            .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+
+          assert.deepStrictEqual(tests.map(test => ({
+            isRetry: test.meta[TEST_IS_RETRY] === 'true',
+            parameters: JSON.parse(test.meta[TEST_PARAMETERS]),
+            retryReason: test.meta[TEST_RETRY_REASON],
+            status: test.meta[TEST_STATUS],
+          })), expectedAttempts)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/parameterized-fails',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            ...(JEST_VERSION === 'latest' ? { JEST_RANDOMIZE: '1', JEST_SEED: '4' } : {}),
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
     it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
