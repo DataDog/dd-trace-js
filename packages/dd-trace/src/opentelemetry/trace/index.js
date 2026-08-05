@@ -1,19 +1,13 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
 const { VERSION } = require('../../../../../version')
+const { registerResourceAttributeRefresh } = require('../resource-attributes')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
  * @typedef {import('../../config/config-base')} Config
  * @typedef {import('../../opentracing/tracer')} DatadogTracer
  */
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
-
-// Replaces the previous subscription on each call, so restarting doesn't accumulate listeners.
-let unsubscribeTraceIdentityRefresh = null
 
 /**
  * OpenTelemetry Trace Export for dd-trace-js
@@ -74,10 +68,7 @@ function createOtlpTraceExporter (config) {
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
 
-  unsubscribeTraceIdentityRefresh?.()
-  const onIdentityRefresh = () => exporter.updateResourceAttributes(buildResourceAttributes(config))
-  identityRefreshChannel.subscribe(onIdentityRefresh)
-  unsubscribeTraceIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+  registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
 
   return exporter
 }

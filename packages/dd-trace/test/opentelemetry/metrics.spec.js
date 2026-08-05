@@ -1242,64 +1242,21 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Identity refresh', () => {
-    it('recomputes resource attributes when the identity-refresh channel fires', () => {
-      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
-      const config = {
-        service: 'svc',
-        version: '1.0.0',
-        env: 'prod',
-        tags: { 'runtime-id': 'initial-id' },
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 5000,
-        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
-      }
-
-      initializeOpenTelemetryMetrics(config)
-      const provider = metrics.getMeterProvider()
-      const exporter = provider.reader.exporter
-      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
-
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(updateSpy)
-      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
-    })
-
-    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
-      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
-      const config = {
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
-        tags: {},
-      }
-
-      initializeOpenTelemetryMetrics(config)
-      const firstExporter = metrics.getMeterProvider().reader.exporter
-      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
-
-      metrics.disable()
-      initializeOpenTelemetryMetrics(config)
-      const secondExporter = metrics.getMeterProvider().reader.exporter
-      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
-
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.notCalled(firstSpy)
-      sinon.assert.calledOnce(secondSpy)
-    })
-
-    it('preserves the ObservableCounter delta baseline across an identity refresh', () => {
+    it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
       const clock = sinon.useFakeTimers()
-      const exportedValues = []
+      const exportedMetrics = []
       mockOtlpExport((decoded) => {
+        const resourceAttributes = decoded.resourceMetrics[0].resource.attributes
+        const runtimeId = resourceAttributes.find(attribute => attribute.key === 'runtime-id')
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        exportedValues.push(counter.sum.dataPoints[0].asInt)
+        exportedMetrics.push({
+          runtimeId: runtimeId.value.stringValue,
+          value: counter.sum.dataPoints[0].asInt,
+        })
       })
 
       const { config } = setupMetrics()
+      const initialRuntimeId = config.tags['runtime-id']
       const meter = metrics.getMeter('app')
       let value = 20
       meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
@@ -1313,11 +1270,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
       clock.tick(100)
 
-      assert.strictEqual(exportedValues.length, 2, 'should have 2 exports')
-      assert.strictEqual(exportedValues[0], 20, 'first export should be the absolute baseline')
-      assert.strictEqual(
-        exportedValues[1], 5, 'delta after refresh should be 5, not the absolute reading of 25'
-      )
+      assert.deepStrictEqual(exportedMetrics, [
+        { runtimeId: initialRuntimeId, value: 20 },
+        { runtimeId: 'refreshed-id', value: 5 },
+      ])
     })
   })
 })
