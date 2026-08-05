@@ -585,7 +585,7 @@ function isJestTestSkipped (test, hasFocusedTests, testNamePattern) {
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   const hasConcurrentTestsStartEvent = satisfies(jestVersion, '>=30.0.0')
-  const hasTestsInChildren = satisfies(jestVersion, '>=25.0.0')
+  const hasTestsInChildren = satisfies(jestVersion, '>=26.0.0')
 
   /**
    * @param {object} describeBlock
