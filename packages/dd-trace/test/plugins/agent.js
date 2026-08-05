@@ -137,11 +137,33 @@ function envChangedSince (snapshot) {
 }
 
 /**
+ * @param {import('node:net').Socket[]} sockets
+ */
+function waitForExporterTransition (sockets) {
+  return new Promise(resolve => {
+    function done () {
+      httpAgent.removeListener('free', done)
+      for (const socket of sockets) {
+        socket.removeListener('close', done)
+        socket.removeListener('free', done)
+      }
+      resolve()
+    }
+
+    httpAgent.once('free', done)
+    for (const socket of sockets) {
+      socket.once('close', done)
+      socket.once('free', done)
+    }
+  })
+}
+
+/**
  * @param {string} origin
  */
 async function waitForExporterIdle (origin) {
-  while (httpAgent.sockets[origin] || httpAgent.requests[origin]) {
-    await once(httpAgent, 'free')
+  while (httpAgent.sockets[origin]) {
+    await waitForExporterTransition(httpAgent.sockets[origin].slice())
   }
 }
 
