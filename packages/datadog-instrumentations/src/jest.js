@@ -632,6 +632,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.concurrentTestContexts = new Map()
       this.concurrentTestStates = new WeakMap()
       this.concurrentTestSourceFns = new WeakMap()
+      this.testParametersByFunction = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
       this.#activeDetachedEfdRetries = 0
@@ -708,6 +709,53 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
         return result
+      }
+    }
+
+    /**
+     * Rebuilds serial `test.each` so every generated row function keeps its parameters.
+     *
+     * @param {Function|undefined} test
+     * @returns {void}
+     */
+    bindTestEach (test) {
+      if (typeof test?.each !== 'function') return
+
+      const bind = this.getJestEachBind()
+      if (typeof bind !== 'function') {
+        const environment = this
+        shimmer.wrap(test, 'each', each => function (...args) {
+          const testParameters = getFormattedJestTestParameters(args)
+          const eachBind = each.apply(this, args)
+          return function (...args) {
+            const [testName] = args
+            environment.setNameToParams(testName, testParameters)
+            return eachBind.apply(this, args)
+          }
+        })
+        return
+      }
+
+      // Jest creates each row function at runtime, so Orchestrion cannot associate parameters statically.
+      const environment = this
+      test.each = function wrappedTestEach (...eachArgs) {
+        const testParameters = getFormattedJestTestParameters(eachArgs)
+        return function (...testArgs) {
+          let parameterIndex = 0
+          const eachTest = function (testName, testFn, ...callArgs) {
+            const parameters = testParameters?.[parameterIndex++]
+            if (parameters !== undefined && typeof testFn === 'function') {
+              environment.appendNameToParams(testName, parameters)
+              environment.testParametersByFunction.set(
+                testFn,
+                getTestParametersString(environment.nameToParams, testName)
+              )
+            }
+            return test.call(this, testName, testFn, ...callArgs)
+          }
+          const eachBind = bind(eachTest).apply(this, eachArgs)
+          return eachBind.apply(this, testArgs)
+        }
       }
     }
 
@@ -1816,18 +1864,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
-      }
-      if (event.name === 'setup' && this.global.test) {
-        const environment = this
-        shimmer.wrap(this.global.test, 'each', each => function (...args) {
-          const testParameters = getFormattedJestTestParameters(args)
-          const eachBind = each.apply(this, args)
-          return function (...args) {
-            const [testName] = args
-            environment.setNameToParams(testName, testParameters)
-            return eachBind.apply(this, args)
-          }
-        })
+        this.bindTestEach(this.global.test)
       }
       if (
         event.name === 'run_describe_start' &&
@@ -1888,6 +1925,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let numOfAttemptsToFixRetries = null
         const testParameters = concurrentCtx?.testParameters ||
           concurrentTestState?.ctx?.testParameters ||
+          this.testParametersByFunction.get(event.test.fn) ||
           getTestParametersString(this.nameToParams, event.test.name)
 
         if (isAttemptToFix) {
