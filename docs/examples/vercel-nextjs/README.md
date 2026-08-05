@@ -1,10 +1,11 @@
 # Datadog APM for Next.js on Vercel
 
 This prototype shows the Builder boundary required to initialize `dd-trace`
-before Next.js in Vercel Node functions. It delegates the framework build to
-Vercel's official `@vercel/next` Builder, then packages the tracer and configures
-an early Node preload in each public Node `.func`. Edge functions are left
-unchanged.
+through Next.js's supported instrumentation hook. Before delegating to Vercel's
+official `@vercel/next` Builder, it adds `dd-trace` as a production dependency
+and writes `instrumentation.ts`. Next then builds and traces its normal Node
+function output. It also prepends the early `dd-trace/initialize.mjs` preload
+to each Node function's local `NODE_OPTIONS`. Edge initialization is skipped.
 
 ## Application Setup
 
@@ -18,19 +19,20 @@ Configure the intended Datadog Builder once in `vercel.json`, as shown in
 [`vercel.json`](./vercel.json). The Datadog Vercel integration should eventually
 own this configuration so the customer only enables APM and deploys.
 
-The Builder copies `dd-trace/initialize.mjs` into every Node function and uses
-Vercel's Node File Trace to include the initialization entrypoint's actual
-runtime closure in that function, nested under `dd-trace` so it cannot replace
-the application's dependencies. It then merges
-`--import=dd-trace/initialize.mjs` into that function's existing `NODE_OPTIONS`.
-It does not change the function handler, set project-global `NODE_OPTIONS`,
-alter Edge output, or depend on Trace Drain.
+The Builder never overwrites an existing root or `src/instrumentation.*` file.
+It fails before installation and asks the customer to add `dd-trace/init` to
+their own hook instead. This avoids composing arbitrary customer code.
 
 Current Next.js automatically treats `dd-trace` as a server external. This is
-separate from the Builder's runtime closure: Next keeps the tracer out of
-function source bundles, while NFT supplies the files that native Node module
-resolution needs at runtime. The Builder does not add an unsupported
-post-build external-dependency setting.
+separate from normal output-file tracing: Next keeps the tracer out of function
+source bundles while its normal NFT pass supplies the runtime files. The
+generated hook makes the tracer visible to that pass; the function-local preload
+performs initialization before Next. The Builder does not copy tracer files or
+add unsupported function settings.
+
+Projects using `npm ci`, `yarn --frozen-lockfile`, or immutable installs must
+add `dd-trace` to production dependencies and commit the updated lockfile. The
+Builder fails before calling those incompatible install commands.
 
 Use Vercel's normal source-build deployment path. The Datadog integration must
 configure direct OTLP endpoints and encrypted headers for traces, logs, and
@@ -44,6 +46,6 @@ to their application, and `DD_TRACE_DEBUG` remains disabled in production.
 `@datadog/vercel-next-builder` is not published by this repository. This
 directory is therefore a tested prototype and onboarding contract, not a
 customer-installable release. Publishing the Builder requires a package owner,
-package manifest with `@vercel/next`, `@vercel/nft`, and `dd-trace`
+package manifest with `@vercel/next`, `@vercel/build-utils`, and `dd-trace`
 dependencies, registry/release workflow, and live Vercel acceptance before this
 configuration can be supported.
