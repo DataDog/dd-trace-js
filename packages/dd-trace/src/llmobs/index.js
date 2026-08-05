@@ -178,10 +178,17 @@ function handleLLMObsInjection ({ carrier }) {
     tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_NAME_KEY)
   }
   const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength)
-  tags = appendOptionalPropagatedTag(
-    tags, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
+  const tagsWithId = appendOptionalPropagatedTag(
+    tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength
   )
+  // Only append the name when the id fit: a name without an id is unresolvable by the backend.
+  if (tagsWithId === tags) {
+    tags = tagsWithId
+  } else {
+    tags = appendOptionalPropagatedTag(
+      tagsWithId, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
+    )
+  }
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 

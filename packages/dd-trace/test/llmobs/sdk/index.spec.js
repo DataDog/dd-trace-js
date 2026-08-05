@@ -2526,5 +2526,27 @@ describe('sdk', () => {
       assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
       assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
     })
+
+    it('drops the name when the budget is too tight for the id entry', () => {
+      const originalMax = tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+      const carrier = { 'x-datadog-tags': '' }
+
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, () => {
+        // First injection: measure the tags string length WITHOUT pagent entries.
+        injectCh.publish({ carrier })
+        const baseLength = carrier['x-datadog-tags']
+          .split(',').filter(e => !e.startsWith('_dd.p.llmobs_pagent')).join(',').length
+
+        // Second injection: budget allows the base tags but not the id entry (so name is also dropped).
+        carrier['x-datadog-tags'] = ''
+        tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = baseLength
+        injectCh.publish({ carrier })
+      })
+      tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = originalMax
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_span_id'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
+    })
   })
 })
