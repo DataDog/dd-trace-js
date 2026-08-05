@@ -145,7 +145,7 @@ function createUpgradeDispatchHandler (resolve, reject, onUpgrade) {
 }
 
 /**
- * @param {NodeJS.ProcessEnv} [overrides]
+ * @param {Record<string, string>} [overrides]
  */
 async function runDefaultDispatcherRetentionFixture (overrides = {}) {
   const env = { ...process.env, ...overrides }
@@ -1446,11 +1446,14 @@ describe('Plugin', () => {
       })
       describe('with hooks configuration', () => {
         let config
+        let hookRanInRequestScope
 
         beforeEach(() => {
+          hookRanInRequestScope = false
           config = {
             hooks: {
               request: (span, req, res) => {
+                hookRanInRequestScope = tracer.scope().active() === span
                 span.setTag('foo', '/foo')
               },
             },
@@ -1463,7 +1466,7 @@ describe('Plugin', () => {
             })
         })
 
-        it('should run the request hook before the span is finished', done => {
+        it('should run the request hook in the request span scope before it is finished', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -1474,6 +1477,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].meta.foo, '/foo')
+                assert.strictEqual(hookRanInRequestScope, true)
               })
               .then(done)
               .catch(done)

@@ -484,7 +484,7 @@ describe('check-require-cache', () => {
     test()
   })
 
-  it('should run sync functions through the allocation-free path without subscribers', () => {
+  it('should preserve mutable parameters on the allocation-free path without subscribers', () => {
     const { Client } = compile('test-trace-sync-fast-path')
     const client = new Client()
 
