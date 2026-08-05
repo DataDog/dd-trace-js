@@ -81,14 +81,12 @@ describe('test agent helper', () => {
         const requestErrored = once(request, 'error')
         request.end()
         const [socket] = await socketAssigned
-        const agentFreeListenerCount = httpAgent.listenerCount('free')
         const socketFreeListenerCount = socket.listenerCount('free')
 
         const closing = agent.close()
         socket.destroy()
         await Promise.all([closing, requestErrored])
 
-        assert.strictEqual(httpAgent.listenerCount('free'), agentFreeListenerCount)
         assert.strictEqual(socket.listenerCount('free'), socketFreeListenerCount)
         assert.strictEqual(origin in httpAgent.sockets, false)
         assert.strictEqual(origin in httpAgent.freeSockets, false)
