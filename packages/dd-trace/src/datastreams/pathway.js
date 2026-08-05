@@ -155,10 +155,10 @@ const DsmPathwayCodec = {
    * @returns {ReturnType<typeof decodePathwayContext>|undefined}
    */
   decode (carrier) {
+    if (carrier == null) return
+
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
-
-    if (carrier == null) return
 
     let ctx
     if (CONTEXT_PROPAGATION_KEY_BASE64 in carrier) {
