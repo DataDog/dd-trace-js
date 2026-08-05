@@ -324,6 +324,9 @@ accepted; if more are provided, the report is uploaded without flags.</p>
 Early Flake Detection retries in every supported test-duration bucket. A value of <code>0</code> disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.</p>
+<p>Set <code>DD_TEST_MANAGEMENT_REPORT_ENABLED=false</code> to hide the end-of-session Test Management report from CI logs.
+The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
+are disabled, quarantined, or run in Attempt to Fix mode.</p>
 <h3 id="custom-logging">Custom Logging</h3>
 <p>By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the <code>DD_TRACE_DEBUG</code> env var should be set to <code>true</code>.</p>
 <p>The tracer will then log debug information to <code>console.log()</code> and errors to <code>console.error()</code>. This behavior can be changed by passing a custom logger to the tracer. The logger should contain a <code>debug()</code> and <code>error()</code> methods that can handle messages and errors, respectively.</p>
