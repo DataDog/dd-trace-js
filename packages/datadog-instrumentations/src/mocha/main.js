@@ -17,6 +17,7 @@ const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
   getCoveredFilesFromCoverage,
@@ -100,6 +101,7 @@ const mochaGlobalRunCh = channel('ci:mocha:global:run')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
@@ -994,6 +996,8 @@ function onMessage (message) {
         attemptToFixExecutions,
       })
       workerReportTraceCh.publish(payload)
+    } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
     }
   }
 }
@@ -1127,8 +1131,33 @@ addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/buffered-worker-pool.js',
-}, (BufferedWorkerPoolPackage) => {
+}, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
+
+  if (satisfies(frameworkVersion, '<9.2.0')) {
+    // Shimmer is required because the worker environment must be changed before workerpool forks,
+    // before any test lifecycle hook can run. Mocha added this worker ID itself in 9.2.0.
+    shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
+      const pool = create.apply(this, arguments)
+
+      if (!testFinishCh.hasSubscribers) return pool
+
+      let workerId = 0
+      shimmer.wrap(pool._pool, '_createWorkerHandler', createWorkerHandler => function () {
+        this.forkOpts = {
+          ...this.forkOpts,
+          env: {
+            // eslint-disable-next-line eslint-rules/eslint-process-env
+            ...(this.forkOpts.env || process.env),
+            MOCHA_WORKER_ID: String(workerId++),
+          },
+        }
+        return createWorkerHandler.apply(this, arguments)
+      })
+
+      return pool
+    })
+  }
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
