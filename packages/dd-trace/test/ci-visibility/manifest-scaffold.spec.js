@@ -18,12 +18,16 @@ const {
   getManifestInputFiles,
 } = require('../../../../ci/test-optimization-validation/runner-command')
 const { getRunnerContract } = require('../../../../ci/test-optimization-validation/runner-contract')
+const { DD_MAJOR } = require('../../../../version')
 const {
   FRAMEWORKS,
   createRepositoryFixture,
   removeFixture,
   withRepositoryFixture,
 } = require('./validation-test-helpers')
+
+const CYPRESS_UNSUPPORTED_VERSION = DD_MAJOR >= 6 ? '11.2.0' : '6.6.0'
+const CYPRESS_MINIMUM_VERSION = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 
 function scaffoldFramework (fixture, framework) {
   return createManifestScaffold({ root: fixture.root, frameworks: new Set([framework]) }).frameworks[0]
@@ -2085,16 +2089,16 @@ describe('test optimization validation manifest scaffold', () => {
       const installedPackageJsonPath = path.join(fixture.root, 'node_modules', 'cypress', 'package.json')
       for (const filename of [packageJsonPath, installedPackageJsonPath]) {
         const packageJson = JSON.parse(fs.readFileSync(filename))
-        packageJson.version = filename === installedPackageJsonPath ? '11.2.0' : packageJson.version
-        if (filename === packageJsonPath) packageJson.devDependencies.cypress = '11.2.0'
+        packageJson.version = filename === installedPackageJsonPath ? CYPRESS_UNSUPPORTED_VERSION : packageJson.version
+        if (filename === packageJsonPath) packageJson.devDependencies.cypress = CYPRESS_UNSUPPORTED_VERSION
         fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
       }
       const framework = scaffoldFramework(fixture, 'cypress')
 
       assert.strictEqual(framework.status, 'detected_not_runnable')
       assert.strictEqual(framework.blockerCategory, 'UNSUPPORTED_VERSION')
-      assert.match(framework.notes[0], /Cypress 11\.2\.0 was detected/)
-      assert.match(framework.notes[0], /live validation requires >=12\.0\.0/)
+      assert.ok(framework.notes[0].includes(`Cypress ${CYPRESS_UNSUPPORTED_VERSION} was detected`))
+      assert.ok(framework.notes[0].includes(`live validation requires >=${CYPRESS_MINIMUM_VERSION}`))
       assert.match(framework.notes[0], /normal dependency workflow/)
     })
   })
