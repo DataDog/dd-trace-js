@@ -153,6 +153,47 @@ describe('OpenAIAgentsIntegration', () => {
       })
     })
 
+    it('restores the active LLMObs parent before deferred workflow completion', () => {
+      const llmobsParentSpan = makeFakeSpan('llmobs-parent')
+      const unrelatedSpan = makeFakeSpan('unrelated')
+      const workflowSpan = makeFakeSpan('workflow')
+      const agentSpan = makeFakeSpan('agent')
+      const config = {
+        llmobs: {
+          DD_LLMOBS_ENABLED: true,
+          mlApp: 'test',
+          sampleRate: 1,
+        },
+      }
+      const { integration } = build({ tracerSpans: [workflowSpan, agentSpan], config })
+
+      llmobsStorage.run({ span: llmobsParentSpan }, () => {
+        integration.startTrace({ traceId: 't1' })
+        integration.startSpan(
+          { spanId: 's1', traceId: 't1', parentId: null, spanData: { type: 'agent' } },
+          'agent'
+        )
+
+        integration.endTrace({ traceId: 't1' })
+
+        assert.strictEqual(llmobsStorage.getStore().span, llmobsParentSpan)
+        sinon.assert.notCalled(workflowSpan.finish)
+
+        llmobsStorage.run({ span: unrelatedSpan }, () => {
+          integration.endSpan({
+            spanId: 's1',
+            traceId: 't1',
+            parentId: null,
+            spanData: { type: 'agent' },
+          })
+
+          assert.strictEqual(llmobsStorage.getStore().span, unrelatedSpan)
+        })
+
+        sinon.assert.calledOnce(workflowSpan.finish)
+      })
+    })
+
     it('registers LLMObs spans when DD_LLMOBS_ENABLED is true', () => {
       const workflowSpan = makeFakeSpan()
       const { integration } = build({
@@ -586,6 +627,20 @@ describe('OpenAIAgentsIntegration', () => {
       sinon.assert.calledWith(workflowSpan.setTag, 'error.message', 'boom')
       sinon.assert.calledOnce(workflowSpan.finish)
       sinon.assert.calledOnce(agentSpan.finish)
+    })
+
+    it('finishes the workflow span when the root task errors before an agent starts', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      const { integration, processor } = buildWithProcessor({ tracerSpans: [workflowSpan] })
+
+      integration.startTrace({ traceId: 't1' })
+      driveSpan(processor, taskSpan)
+
+      processor.onSpanEnd({ ...taskSpan, error: { message: 'max turns exceeded' } })
+
+      sinon.assert.calledWith(workflowSpan.setTag, 'error', true)
+      sinon.assert.calledWith(workflowSpan.setTag, 'error.message', 'max turns exceeded')
+      sinon.assert.calledOnce(workflowSpan.finish)
     })
 
     it('names the LLM span after the top-level agent and tags workflow input/output', () => {

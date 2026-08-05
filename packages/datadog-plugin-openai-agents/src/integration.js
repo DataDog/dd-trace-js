@@ -145,6 +145,13 @@ class OpenAIAgentsIntegration {
     const info = this.#untracedSpans.get(oaiSpan.spanId)
     if (!info || info.ended) return
 
+    // agents-core does not end its trace when the run throws. In 0.14 the
+    // failure can live on the root task before any agent span exists, making
+    // this structural callback the only opportunity to finish the workflow.
+    if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
+      this.#requestWorkflowCompletion(oaiSpan.traceId, oaiSpan)
+    }
+
     info.ended = true
     this.#pruneUntracedSpan(oaiSpan.spanId, info)
     this.#spanEnded(info.traceId)
@@ -225,24 +232,29 @@ class OpenAIAgentsIntegration {
    * to be retained while completion is pending.
    *
    * @param {string | undefined} traceId
-   * @param {object} [rootAgentSpan] - top-level oai-span that ended in error.
+   * @param {object} [rootSpan] - top-level oai-span that ended in error.
    */
-  #requestWorkflowCompletion (traceId, rootAgentSpan) {
+  #requestWorkflowCompletion (traceId, rootSpan) {
     if (!traceId) return
     const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
     const info = this.#traceInfo.get(traceId)
 
-    if (rootAgentSpan?.error) {
+    if (rootSpan?.error) {
       ddSpan.setTag('error', true)
       ddSpan.setTag('error.type', AGENTS_ERROR_TYPE)
-      if (rootAgentSpan.error.message) {
-        ddSpan.setTag('error.message', rootAgentSpan.error.message)
+      if (rootSpan.error.message) {
+        ddSpan.setTag('error.message', rootSpan.error.message)
       }
     }
 
     if (info) {
-      info.completionRequested = true
+      if (!info.completionRequested) {
+        info.completionRequested = true
+        if (LLMObsTagger.tagMap.has(ddSpan)) {
+          llmobsStorage.enterWith(info.llmobsParentStore)
+        }
+      }
       if (info.activeSpanCount > 0) return
     }
 
@@ -257,13 +269,9 @@ class OpenAIAgentsIntegration {
   #completeWorkflowSpan (traceId) {
     const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
-    const info = this.#traceInfo.get(traceId)
 
     if (this.#isLLMObsEnabled()) this.#setTraceAttributes(ddSpan, traceId)
     ddSpan.finish()
-    if (info && LLMObsTagger.tagMap.has(ddSpan)) {
-      llmobsStorage.enterWith(info.llmobsParentStore)
-    }
     this.#oaiToDdSpan.delete(traceId)
     this.#traceInfo.delete(traceId)
   }
