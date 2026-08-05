@@ -13,13 +13,17 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 
 withVersions('express', 'express', version => {
-  if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
-    describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+  // Resolve the installed version: `version` can be a range ('>=4') that intersects both majors
+  // while the folder actually holds express 5, which would register the wrong route syntax.
+  const realVersion = require(`../../../../versions/express@${version}`).version()
+
+  if (semver.satisfies(realVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
+    describe.skip(`refusing to run tests as express@${realVersion} is incompatible with Node.js ${NODE_MAJOR}`)
     return
   }
 
   describe('Normalized HTTP route tag (_dd.appsec.normalized_route)', () => {
-    const isExpress4 = semver.intersects(version, '<5.0.0')
+    const isExpress4 = semver.satisfies(realVersion, '<5.0.0')
     let server, axios
 
     before(() => {
