@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -17,7 +19,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  withVersions('graphql', 'graphql', version => {
+  withVersions('graphql', 'graphql', (version, moduleName, resolvedVersion) => {
     useSandbox([`'graphql@${version}'`], false, [
       './packages/datadog-plugin-graphql/test/integration-test/*'])
 
@@ -25,10 +27,22 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    const variants = varySandbox('server.mjs', {
+    // graphql-js >=17 dropped its ESM default export (`import graphql from 'graphql'` now
+    // throws "does not provide an export named 'default'") — only the named-export forms
+    // apply to it, while every earlier major exposes both. `version` can be a range
+    // (e.g. '>=0.10'), so semver needs the resolved concrete version instead.
+    //
+    // varySandbox's writeSandboxVariants derives every non-base variant by string-replacing
+    // the base variant's own generated import line inside the template file, so the template
+    // must already contain *that exact line* verbatim — the base is 'default' when
+    // defaultExport is true, 'named' otherwise (see integration-tests/helpers/index.js). One
+    // template can't serve both bases, so server-named.mjs mirrors server.mjs but starts from
+    // the named-import form instead of the default one.
+    const hasDefaultExport = semver.lt(resolvedVersion, '17.0.0')
+    const variants = varySandbox(hasDefaultExport ? 'server.mjs' : 'server-named.mjs', {
       bindingName: 'graphqlLib',
       packageName: 'graphql',
-      defaultExport: true,
+      defaultExport: hasDefaultExport,
       namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
       namedExportBinding: 'namespace',
     })

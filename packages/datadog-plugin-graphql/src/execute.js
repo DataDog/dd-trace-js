@@ -5,7 +5,14 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getOperation, getSignature, isApolloHealthCheck } = require('./utils')
+const {
+  extractErrorIntoSpanEvent,
+  getOperation,
+  getSignature,
+  isApolloHealthCheck,
+  normalizeVariableValues,
+  subscribeToPrefix,
+} = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -60,9 +67,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
   // @graphql-tools/executor (used by graphql-yoga) emits on a different channel
   // prefix because the module name differs. Subscribe to both so Yoga execution
-  // produces graphql.execute spans.
+  // produces graphql.execute spans. graphql-js >=17 additionally emits on its own
+  // native `graphql:execute` diagnostics_channel (see utils.js' `subscribeToPrefix`
+  // doc comment for why orchestrion alone can't cover it).
   static extraPrefixes = [
     'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
+    'tracing:graphql:execute',
   ]
 
   /**
@@ -77,25 +87,99 @@ class GraphQLExecutePlugin extends TracingPlugin {
     super.addTraceSubs()
 
     for (const prefix of this.constructor.extraPrefixes) {
-      const events = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
-
-      for (const event of events) {
-        const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
-
-        if (this[event]) {
-          this.addSub(`${prefix}:${event}`, message => {
-            this[event](message)
-          })
-        }
-
-        if (this[bindName]) {
-          this.addBind(`${prefix}:${event}`, message => this[bindName](message))
-        }
-      }
+      subscribeToPrefix(this, prefix)
     }
   }
 
   bindStart (ctx) {
+    // graphql-js' native `graphql:execute` channel has no `.arguments` (that's an
+    // orchestrion-only convention) and hands us a fixed {schema, document,
+    // rawVariableValues, operationName, operationType} context instead of the raw
+    // args — see #bindStartNative for what that gap costs.
+    if (ctx.arguments === undefined) {
+      return this.#bindStartNative(ctx)
+    }
+
+    return this.#bindStartOrchestrion(ctx)
+  }
+
+  /**
+   * graphql-js >=17's native `graphql:execute` channel fires regardless of whether
+   * `require('graphql')` resolved to the package's CJS or ESM build, so it's the only
+   * reliable hook on that line — but its context is read-only and much smaller than what
+   * orchestrion's wrapper gives us, so this path is strictly best-effort relative to
+   * {@link #bindStartOrchestrion}:
+   *   - no mutable args to inject an AbortError-throwing proxy into, so the AppSec/WAF
+   *     pre-execute synchronous-abort gate (`apm:graphql:execute:start`) is not published;
+   *   - no `contextValue`, so concurrent executions sharing one contextValue object
+   *     (e.g. DataLoader-style batched resolution that continues on a later tick) fall
+   *     back to plain AsyncLocalStorage propagation instead of the WeakMap keying
+   *     `#bindStartOrchestrion` uses — correct for the common case, but a resolver that
+   *     genuinely runs outside the execute() call's continuation chain loses its parent;
+   *   - no `fieldResolver`, so a caller-supplied custom top-level field resolver is
+   *     invoked as-is and produces no graphql.resolve span for fields that rely on it
+   *     (graphql-js' own default resolver is still traced, via {@link GraphQLResolvePlugin}
+   *     subscribing to the native `graphql:resolve` channel directly).
+   *
+   * @param {{
+   *   schema: import('graphql').GraphQLSchema,
+   *   document: import('graphql').DocumentNode,
+   *   rawVariableValues: Record<string, unknown> | undefined,
+   *   operationName: string | undefined,
+   *   operationType: string | undefined,
+   * }} ctx
+   */
+  #bindStartNative (ctx) {
+    ctx.parentStore = ctx.currentStore = legacyStorage.getStore()
+
+    const { document, rawVariableValues } = ctx
+    const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
+    const type = ctx.operationType
+    const name = ctx.operationName
+    const source = this.config.source && docSource
+
+    if (name === '__ApolloServiceHealthCheck__' &&
+        document?.definitions?.length === 1 &&
+        isApolloHealthCheck(getOperation(document, name))) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
+    const signature = getSignature(document, name, type, this.config.signature)
+
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
+      resource: signature,
+      kind: this.constructor.kind,
+      type: this.constructor.type,
+      meta: {
+        'graphql.operation.type': type,
+        'graphql.operation.name': name,
+        'graphql.source': source,
+      },
+    }, ctx)
+
+    addVariableTags(this.config, span, rawVariableValues)
+
+    // Best-effort args object for `config.hooks.execute(span, args, result)` — a caller's hook
+    // may read `.schema`/`.document`/`.variableValues`/`.operationName` off this without crashing.
+    // `contextValue` and `fieldResolver` are never available on this path (the native channel's
+    // context does not carry them), so they stay undefined rather than the real values a hook
+    // might expect from the orchestrion path.
+    ctx.ddArgs = { schema: ctx.schema, document, variableValues: rawVariableValues, operationName: name }
+
+    // Shared with `GraphQLResolvePlugin`, which reads this off the ambient store — it has no
+    // execute-level hook of its own to allocate an operation-scoped map from. Needed even
+    // without `collapse`: graphql-js only brackets the resolver *call* with its native channel,
+    // not the value-completion/recursion that follows, so AsyncLocalStorage alone does not carry
+    // a field's span down to its own child fields — `GraphQLResolvePlugin` recovers the parent
+    // span explicitly through this map instead (see its `getParentKey`).
+    ctx.currentStore.graphqlFieldSpans = new Map()
+
+    return ctx.currentStore
+  }
+
+  #bindStartOrchestrion (ctx) {
     const rawArgs = ctx.arguments
     const objectForm = isObjectForm(rawArgs)
     const args = readArgs(rawArgs, objectForm)
@@ -223,6 +307,20 @@ class GraphQLExecutePlugin extends TracingPlugin {
   end (ctx) {
     if (ctx.ddSkipped) return ctx.parentStore
 
+    if (ctx.arguments === undefined) {
+      // Native graphql:execute channel: `end` fires right after the (possibly async) call
+      // returns. For a Promise result neither `result` nor `error` is set on `ctx` yet —
+      // `asyncEnd` carries those once the promise settles, matching graphql-js' own
+      // tracingChannel contract (see graphql's diagnostics.js `traceMixed`).
+      if (!Object.hasOwn(ctx, 'result') && !Object.hasOwn(ctx, 'error')) return ctx.parentStore
+
+      const span = ctx?.currentStore?.span || this.activeSpan
+      if (!span) return ctx.parentStore
+
+      this.#finishSpan(ctx, span, ctx.result, ctx.error)
+      return ctx.parentStore
+    }
+
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
 
@@ -248,6 +346,18 @@ class GraphQLExecutePlugin extends TracingPlugin {
       this.#finishSpan(ctx, span, result)
     }
 
+    return ctx.parentStore
+  }
+
+  // Only reached via the native graphql:execute channel — orchestrion's wrapper never
+  // publishes asyncEnd for graphql.execute; `end` above resolves the returned Promise itself.
+  asyncEnd (ctx) {
+    if (ctx.ddSkipped) return ctx.parentStore
+
+    const span = ctx?.currentStore?.span || this.activeSpan
+    if (!span) return ctx.parentStore
+
+    this.#finishSpan(ctx, span, ctx.result, ctx.error)
     return ctx.parentStore
   }
 
@@ -457,7 +567,7 @@ function wrapResolve (resolve) {
         parentTypeName,
         returnType: info.returnType,
         baseTypeName: getBaseTypeName(info.returnType),
-        variableValues: info.variableValues,
+        variableValues: normalizeVariableValues(info.variableValues),
         args,
         infoPath,
         pathString,
@@ -699,7 +809,9 @@ function getResolverInfo (info, args) {
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
-      if (directive.arguments.length === 0) continue
+      // graphql-js <17 always populates `arguments` with an (possibly empty) array; >=17 leaves
+      // it `undefined` when the directive takes none.
+      if (!directive.arguments?.length) continue
 
       const argList = {}
       for (const argument of directive.arguments) {
