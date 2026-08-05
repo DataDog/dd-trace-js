@@ -79,8 +79,8 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
 
       assert.strictEqual(
         message,
-        "obj={ username: 'alice', password: '[redacted]' };" +
-          "map=Map(2) { 'username' => 'alice', 'password' => '[redacted]' }"
+        "obj={ username: 'alice', password: '[redacted]', Symbol(password): '[redacted]' };" +
+          "map=Map(3) { 'username' => 'alice', 'password' => '[redacted]', Symbol(password) => '[redacted]' }"
       )
     })
   })

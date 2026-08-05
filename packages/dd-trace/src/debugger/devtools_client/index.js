@@ -35,8 +35,17 @@ const templateExpressionSetupCode = `
     breakLength: Infinity
   };
   const $dd_redactedIdentifiers = new Set(${JSON.stringify([...REDACTED_IDENTIFIERS])});
-  const $dd_isRedactedIdentifier = (key) =>
-    typeof key === 'string' && $dd_redactedIdentifiers.has(key.toLowerCase().replace(/[-_@$.]/g, ''));
+  const $dd_normalizeIdentifier = (key) => {
+    if (typeof key === 'string') return key.toLowerCase().replace(/[-_@$.]/g, '');
+    // Symbol('x').toString() is 'Symbol(x)'; slice(7, -1) yields 'x', matching
+    // normalizeName(name, isSymbol) in snapshot/redaction.js.
+    if (typeof key === 'symbol') return key.toString().slice(7, -1).toLowerCase().replace(/[-_@$.]/g, '');
+    return undefined;
+  };
+  const $dd_isRedactedIdentifier = (key) => {
+    const $dd_normalized = $dd_normalizeIdentifier(key);
+    return $dd_normalized !== undefined && $dd_redactedIdentifiers.has($dd_normalized);
+  };
   const $dd_hasRedactedKey = (keys) => {
     for (const key of keys) if ($dd_isRedactedIdentifier(key)) return true;
     return false;
