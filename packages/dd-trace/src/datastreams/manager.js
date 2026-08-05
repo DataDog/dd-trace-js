@@ -16,9 +16,13 @@ class DataStreamsManager {
     return ctx
   }
 
+  /**
+   * @param {Record<string, string>|undefined} carrier Pass every message's carrier, including the
+   *   ones without a context: that is what starts a new pathway instead of extending the previous
+   *   message's.
+   */
   decodeDataStreamsContext (carrier) {
     const ctx = DsmPathwayCodec.decode(carrier)
-    // we erase the previous context everytime we decode a new one
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
   }
