@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
 const net = require('node:net')
 const { inspect } = require('node:util')
 
@@ -327,6 +328,31 @@ describe('Plugin', () => {
           'db',
           'db.name'
         )
+
+        withPeerService(
+          () => tracer,
+          'mysql',
+          (done) => pool.getConnection((error, connection) => {
+            connection?.release()
+            done(error)
+          }),
+          'db',
+          'db.name',
+          { desc: 'for explicit pool acquire', resource: 'mysql.pool.acquire' }
+        )
+
+        it('keeps tracing when an acquire finishes without a matching start', async () => {
+          dc.channel('apm:mysql:pool:acquire:finish').publish({ poolWaitTime: 1 })
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['db.type'], 'mysql')
+            }, { spanResourceMatch: /^SELECT 15 AS survivor$/ }),
+            new Promise((resolve, reject) => {
+              pool.query('SELECT 15 AS survivor', error => error ? reject(error) : resolve())
+            }),
+          ])
+        })
 
         it('should do automatic instrumentation', done => {
           agent

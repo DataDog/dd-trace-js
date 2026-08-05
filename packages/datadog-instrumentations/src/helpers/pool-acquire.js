@@ -5,6 +5,7 @@ const { performance } = require('node:perf_hooks')
 
 /**
  * @typedef {import('node:diagnostics_channel').Channel} Channel
+ * @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike
  * @typedef {{
  *   acquired?: boolean,
  *   callback?: Function,
@@ -248,7 +249,7 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
 /**
  * @param {Function} getConnection
  * @param {object} pool
- * @param {IArguments} args
+ * @param {ArgumentsLike} args
  * @param {Record<string, unknown>} acquireCtx
  * @param {number|undefined} start
  * @param {Channel} acquireFinishCh
@@ -277,7 +278,7 @@ function isPoolQueryAcquire () {
 /**
  * @param {Function} method
  * @param {object} receiver
- * @param {IArguments|unknown[]} args
+ * @param {ArgumentsLike} args
  * @returns {unknown}
  */
 function runOutsidePoolQueryAcquire (method, receiver, args) {
@@ -288,7 +289,7 @@ function runOutsidePoolQueryAcquire (method, receiver, args) {
  * @param {ClusterAcquire | typeof poolQueryAcquire | undefined} acquire
  * @param {Function} method
  * @param {unknown} receiver
- * @param {IArguments|unknown[]} args
+ * @param {ArgumentsLike} args
  * @returns {unknown}
  */
 function runWithPoolQueryAcquire (acquire, method, receiver, args) {
@@ -405,7 +406,7 @@ function takePoolWaitTime (connection) {
  * @param {object} ctx
  * @param {Function} callback
  * @param {unknown} thisArg
- * @param {IArguments|unknown[]} args
+ * @param {ArgumentsLike} args
  * @returns {unknown}
  */
 function runWithPoolWait (transfer, connection, waitTime, channel, ctx, callback, thisArg, args) {
@@ -456,7 +457,7 @@ function deferPoolWaitTime (transfer, connection, waitTime) {
  * @param {object} ctx
  * @param {Function} callback
  * @param {unknown} thisArg
- * @param {IArguments} args
+ * @param {ArgumentsLike} args
  * @returns {unknown}
  */
 function runPoolQueryConnectionCallback (
@@ -534,7 +535,7 @@ function reportPoolAcquireError (start, error, acquireCtx, channels) {
  * @param {object} connectionCtx
  * @param {Function} callback
  * @param {unknown} thisArg
- * @param {IArguments|unknown[]} args
+ * @param {ArgumentsLike} args
  * @returns {unknown}
  */
 function runPoolAcquireError (start, error, acquireCtx, channels, connectionCtx, callback, thisArg, args) {

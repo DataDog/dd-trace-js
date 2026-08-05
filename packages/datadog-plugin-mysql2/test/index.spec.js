@@ -332,6 +332,18 @@ describe('Plugin', () => {
           })
         })
 
+        withPeerService(
+          () => tracer,
+          'mysql2',
+          (done) => pool.getConnection((error, connection) => {
+            connection?.release()
+            done(error)
+          }),
+          '127.0.0.1',
+          'out.host',
+          { desc: 'for explicit pool acquire', resource: 'mysql2.pool.acquire' }
+        )
+
         it('should do automatic instrumentation', done => {
           agent
             .assertFirstTraceSpan({
