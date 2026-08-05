@@ -1,6 +1,12 @@
 'use strict'
 
 const crypto = require('crypto')
+const {
+  deleteDatadogParentId,
+  readDatadogParentId,
+  readDatadogTraceId,
+  writeDatadogParentId,
+} = require('../../dd-trace/src/carrier')
 const log = require('../../dd-trace/src/log')
 const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/text_map')
 
@@ -37,7 +43,7 @@ function getDatadogOnlyPropagator (tracer) {
  * @returns {Record<string, string>}
  */
 function injectHeaders (tracer, span) {
-  const headers = {}
+  const headers = /** @type {Record<string, string>} */ ({})
   const propagator = getDatadogOnlyPropagator(tracer)
   const ctx = typeof span?.context === 'function' ? span.context() : span
   propagator.inject(ctx, headers)
@@ -51,8 +57,8 @@ function injectHeaders (tracer, span) {
  */
 function overrideParentId (headers, parentId) {
   if (!parentId) return
-  if (headers['x-datadog-trace-id']) {
-    headers['x-datadog-parent-id'] = String(parentId)
+  if (readDatadogTraceId(headers)) {
+    writeDatadogParentId(headers, String(parentId))
   }
 }
 
@@ -192,7 +198,7 @@ async function saveTraceContextCheckpointIfUpdated (
   if (typeof checkpointManager?.checkpoint !== 'function') return
 
   const currentHeaders = injectHeaders(tracer, span)
-  if (currentHeaders['x-datadog-trace-id'] === undefined) return
+  if (readDatadogTraceId(currentHeaders) === undefined) return
 
   const latest = findLastCheckpoint(event)
 
@@ -204,8 +210,8 @@ async function saveTraceContextCheckpointIfUpdated (
     // x-datadog-parent-id reflects the active span at save time and always differs, so exclude it
     // from the comparison. Capture the previous anchor first to carry it forward on a real update.
     // needsCheckpointUpdate only reads currentHeaders' keys, so deleting it from there is enough.
-    const anchoredSpanId = previousHeaders['x-datadog-parent-id']
-    delete currentHeaders['x-datadog-parent-id']
+    const anchoredSpanId = readDatadogParentId(previousHeaders)
+    deleteDatadogParentId(currentHeaders)
     if (!needsCheckpointUpdate(currentHeaders, previousHeaders)) return
 
     newNumber = latest.checkpointNumber + 1
