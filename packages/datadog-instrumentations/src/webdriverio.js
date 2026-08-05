@@ -12,6 +12,7 @@ const {
   getTestSuitePath,
   logTestOptimizationSummary,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -41,6 +42,7 @@ const modifiedFilesCh = channel('ci:mocha:modified-files')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
+const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
@@ -796,6 +798,8 @@ function handleWorkerMessage (state, workerRecord, message) {
       })
     } else if (messageCode === MOCHA_WORKER_LOGS_PAYLOAD_CODE) {
       workerReportLogsCh.publish(payload)
+    } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
     }
     return
   }
