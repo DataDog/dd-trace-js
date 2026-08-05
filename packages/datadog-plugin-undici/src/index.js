@@ -8,7 +8,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
-const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 const {
   HTTP_STATUS_CODE,
@@ -16,6 +16,7 @@ const {
   HTTP_RESPONSE_HEADERS,
 } = tags
 
+/** @type {import('node:async_hooks').AsyncLocalStorage<Store>} */
 const legacyStorage = storage('legacy')
 const DISPATCH_PREFIX = 'tracing:orchestrion:undici:Client_dispatch'
 const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
@@ -62,10 +63,6 @@ const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
  * @property {Response} [result]
  * @property {Response} [res]
  * @property {SpanStore} [currentStore]
- * @typedef {{ type?: string, id?: string, kind?: string } & {
- *   pluginConfig: object,
- *   sessionDetails: { host?: string, port?: string }
- * }} ServiceNameOptions
  */
 
 /** @type {WeakMap<NativeRequest, RequestContext>} */
@@ -107,7 +104,7 @@ class UndiciPlugin extends HttpClientPlugin {
    */
   bindStart (ctx) {
     ctx.dispatchContext = ctx
-    const parentStore = getStore()
+    const parentStore = legacyStorage.getStore()
     if (parentStore && (legacyFetchStores.has(parentStore) || nodeFetchStores.has(parentStore))) {
       ctx.parentStore = parentStore
       ctx.currentStore = /** @type {SpanStore} */ (parentStore)
@@ -130,22 +127,6 @@ class UndiciPlugin extends HttpClientPlugin {
     dispatchContexts.set(ctx.currentStore, ctx)
 
     return ctx.currentStore
-  }
-
-  /**
-   * @param {string} method
-   * @param {DatadogSpan | null | undefined} childOf
-   */
-  #startRequestSpan (method, childOf) {
-    return this.startSpan(this.operationName(), {
-      childOf,
-      meta: {
-        'span.kind': 'client',
-        'http.method': method,
-      },
-      resource: method,
-      type: 'http',
-    }, false)
   }
 
   /**
@@ -179,7 +160,7 @@ class UndiciPlugin extends HttpClientPlugin {
    */
   #onNativeRequestCreate (message) {
     const { request } = /** @type {{ request: NativeRequest }} */ (message)
-    const store = getStore()
+    const store = legacyStorage.getStore()
     const dispatchContext = store && dispatchContexts.get(store)
     if (!dispatchContext && store && (legacyFetchStores.has(store) || nodeFetchStores.has(store))) return
 
@@ -204,19 +185,22 @@ class UndiciPlugin extends HttpClientPlugin {
     const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
-    const span = this.#startRequestSpan(method, store && allowed ? store.span : null)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    /** @type {ServiceNameOptions} */
-    const serviceNameOptions = { pluginConfig: this.config, sessionDetails: { host: hostname, port } }
-    const service = this.serviceName(serviceNameOptions)
-
-    span.setTag('http.url', otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri)
-    span.setTag('out.host', hostname)
-    span.setTag(CLIENT_PORT_KEY, port ? Number.parseInt(port, 10) : undefined)
-    this.setServiceName(span, service.name)
-    if (service.source !== undefined) {
-      span.setTag(SVC_SRC_KEY, service.source)
-    }
+    const span = this.startSpan(this.operationName(), {
+      childOf: store && allowed ? store.span : null,
+      meta: {
+        'span.kind': 'client',
+        'http.method': method,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        'out.host': hostname,
+      },
+      metrics: {
+        [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
+      },
+      service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
+      resource: method,
+      type: 'http',
+    }, false)
 
     if (!allowed) {
       span._spanContext._trace.record = false
@@ -338,10 +322,10 @@ class UndiciPlugin extends HttpClientPlugin {
       span.setTag('error', error)
     }
 
+    this.config.hooks.request(span, null, null)
     if (callerStore) {
       legacyStorage.enterWith(callerStore)
     }
-    this.config.hooks.request(span, null, null)
     span.finish()
   }
 
@@ -391,13 +375,6 @@ class UndiciPlugin extends HttpClientPlugin {
   configure (config) {
     return super.configure(normalizeConfig(config))
   }
-}
-
-/**
- * @returns {Store | undefined}
- */
-function getStore () {
-  return /** @type {Store | undefined} */ (legacyStorage.getStore())
 }
 
 // Add configured headers to span with appropriate tags

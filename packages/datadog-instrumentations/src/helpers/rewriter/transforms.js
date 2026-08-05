@@ -50,7 +50,7 @@ function syncNoSubscriberFastPath (_state, node) {
 
   const fastStatements = clone(originalFunction.body.body)
   if (aliases.length > 0) {
-    fastStatements.unshift(parse(`function wrapper () { const ${aliases.join(', ')} }`).body[0].body.body[0])
+    fastStatements.unshift(parse(`function wrapper () { let ${aliases.join(', ')} }`).body[0].body.body[0])
   }
   fastStatements.push(parse('function wrapper () { return }').body[0].body.body[0])
 

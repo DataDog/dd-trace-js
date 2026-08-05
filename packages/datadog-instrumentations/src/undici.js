@@ -31,7 +31,7 @@ const wrappedDispatchers = new WeakSet()
 const NATIVE_DC_VERSION = '>=4.7.0 <5.0.0 || >=5.1.0'
 
 for (const hook of getHooks('undici')) {
-  addHook(hook, passthrough)
+  addHook(hook, moduleExports => moduleExports)
 }
 
 addHook({
@@ -115,12 +115,4 @@ function createWrapSetGlobalDispatcher (setGlobalDispatcher, Dispatcher) {
     return setGlobalDispatcher.call(this, dispatcher)
   }
   return /** @type {WrappedFunction} */ (wrappedSetGlobalDispatcher)
-}
-
-/**
- * @param {unknown} moduleExports
- * @returns {unknown}
- */
-function passthrough (moduleExports) {
-  return moduleExports
 }
