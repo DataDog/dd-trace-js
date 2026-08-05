@@ -117,6 +117,7 @@ describe('onPause', function () {
       './session': session,
       './state': state,
       './snapshot': snapshot,
+      './snapshot/redaction': redaction,
       './log': log,
       './send': send,
       './status': { ackEmitting },
