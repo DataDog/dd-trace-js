@@ -39,9 +39,13 @@ function publishLifecycle (channel, payload) {
  * @returns {Promise<T>}
  */
 function waitForVerdict (promise, verdict) {
-  return verdict
-    ? Promise.all([verdict, promise]).then(([, value]) => value)
-    : promise
+  if (!verdict) return promise
+
+  // Enforce the input verdict first: a denial must surface as AIGuardAbortError even when the SDK
+  // request rejects first. Promise.all would report whichever settles first, so a provider/network
+  // failure could mask the block. Observe the SDK rejection here so a denial leaves no unhandled one.
+  promise.catch(() => {})
+  return verdict.then(() => promise)
 }
 
 /**
@@ -163,6 +167,7 @@ function wrapCreate (create) {
     const options = args[0]
     const stream = options?.stream
 
+    // Streaming is  out of scope for lifecycle evaluation
     const lifecycleRequested = !stream &&
       (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
     const lifecycleArgs = lifecycleRequested ? snapshotLifecycleArgs(args) : undefined
@@ -180,7 +185,7 @@ function wrapCreate (create) {
       let apiPromise
       try {
         // Anthropic starts the request eagerly; the input verdict only gates result delivery.
-        apiPromise = create.apply(this, args)
+        apiPromise = create.apply(this, lifecycleArgs ?? args)
       } catch (error) {
         finish(ctx, null, error)
         throw error

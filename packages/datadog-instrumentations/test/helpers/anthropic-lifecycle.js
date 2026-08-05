@@ -54,7 +54,7 @@ class FakeMessages {
  * @returns {{
  *   promise: Promise<T | undefined>,
  *   reject: (reason?: unknown) => void,
- *   resolve: (value?: T | PromiseLike<T>) => void
+ *   resolve: (value?: T | Promise<T>) => void
  * }}
  */
 function createDeferred () {

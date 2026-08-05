@@ -159,6 +159,31 @@ describe('anthropic lifecycle instrumentation', () => {
     ).finally(unsubscribe)
   })
 
+  it('reports the input denial even when the request rejects first', async () => {
+    const denial = lifecycleAbortError()
+    const verdictSettled = createDeferred()
+    // Deny the input, but let the verdict settle only after the SDK request has already rejected.
+    const unsubscribe = subscribeWithHandler([messagesBeforeChannel], ctx => {
+      ctx.abortController.abort(denial)
+      ctx.pending.push(verdictSettled.promise)
+    })
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    apiPromise.parse = () => Promise.reject(new Error('provider exploded'))
+    messages._nextApiPromise = apiPromise
+
+    try {
+      const consumed = messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+      await new Promise(resolve => setImmediate(resolve)) // let the provider rejection settle first
+      verdictSettled.resolve()
+
+      // The block wins: the caller sees AIGuardAbortError, not the provider error.
+      await assert.rejects(consumed, e => e === denial)
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('evaluates the input when the APIPromise is consumed', async () => {
     const { calls, unsubscribe } = subscribeAutoResolve([messagesBeforeChannel])
     const messages = new Messages()

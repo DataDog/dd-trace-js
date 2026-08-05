@@ -4,7 +4,7 @@ const { FILE_FALLBACK, IMAGE_FALLBACK, stringifyOrEmpty } = require('./utils')
 /**
  * Converts an Anthropic image block to an `image_url` content part.
  *
- * @param {AnthropicImageBlock} block
+ * @param {object} block
  * @returns {{type: 'image_url', image_url: {url: string}}|undefined}
  */
 function convertAnthropicImageBlock (block) {
@@ -64,7 +64,7 @@ function combineMetadataWithBody (metadata, body) {
  * combined with the source body so prompt-injections placed in document metadata — not just its
  * content — reach AI Guard. base64 / unknown sources fall back to the metadata or [file].
  *
- * @param {AnthropicDocumentBlock} block
+ * @param {object} block
  * @returns {string|Array<object>}
  */
 function convertAnthropicDocumentBlock (block) {
@@ -97,7 +97,7 @@ function appendContent (items, content) {
  * AI Guard. Unknown block types fall through to a best-effort `text`-field extraction;
  * purely structural blocks without a `text` field are dropped silently.
  *
- * @param {Array<AnthropicContentBlock>} blocks
+ * @param {Array<object>} blocks
  * @returns {Array<object>}
  */
 function walkContentBlocks (blocks) {
@@ -222,7 +222,7 @@ function hasImageParts (parts) {
 /**
  * Converts Anthropic top-level `system` to a normalized system message.
  *
- * @param {string|Array<AnthropicContentBlock>|undefined} system
+ * @param {string|Array<object>|undefined} system
  * @returns {{role: 'system', content: string|Array<object>}|undefined}
  */
 function convertAnthropicSystem (system) {
@@ -236,7 +236,7 @@ function convertAnthropicSystem (system) {
 /**
  * Converts a plain string or array of Anthropic content blocks into normalized message content.
  *
- * @param {string|Array<AnthropicContentBlock>|undefined} blocks
+ * @param {string|Array<object>|undefined} blocks
  * @returns {string|Array<object>|undefined}
  */
 function convertAnthropicBlocksToContent (blocks) {
@@ -251,7 +251,7 @@ function convertAnthropicBlocksToContent (blocks) {
 /**
  * Converts an Anthropic tool_result block's content into a message content value.
  *
- * @param {string|Array<AnthropicContentBlock>|undefined} content
+ * @param {string|Array<object>|undefined} content
  * @returns {string|Array<object>}
  */
 function convertAnthropicToolResultContent (content) {
@@ -317,7 +317,7 @@ function appendPendingMessage (messages, role, parts, toolCalls) {
  * user-supplied tool results remain ahead of accompanying user text.
  *
  * @param {string} role
- * @param {Array<AnthropicContentBlock>} blocks
+ * @param {Array<object>} blocks
  * @returns {Array<object>}
  */
 function convertContentSegment (role, blocks) {
@@ -352,7 +352,7 @@ function convertContentSegment (role, blocks) {
  * and chronology instead of the instruction being folded into (and mis-scored as) user/assistant
  * text. See {@link convertContentSegment} for how each surrounding segment is converted.
  *
- * @param {{role: string, content: string|Array<AnthropicContentBlock>}} message
+ * @param {{role: string, content: string|Array<object>}} message
  * @returns {Array<object>}
  */
 function convertAnthropicMessage (message) {
@@ -383,7 +383,7 @@ function convertAnthropicMessage (message) {
 /**
  * Extracts input messages from an Anthropic `messages.create` call.
  *
- * @param {{system?: string|Array<AnthropicContentBlock>, messages?: Array<object>}|undefined} callArgs
+ * @param {{system?: string|Array<object>, messages?: Array<object>}|undefined} callArgs
  * @returns {Array<object>|undefined}
  */
 function getMessagesInputMessages (callArgs) {
@@ -405,7 +405,7 @@ function getMessagesInputMessages (callArgs) {
 /**
  * Extracts output messages from an Anthropic `messages.create` parsed response body.
  *
- * @param {{role?: string, content?: Array<AnthropicContentBlock>}|undefined} body
+ * @param {{role?: string, content?: Array<object>}|undefined} body
  * @returns {Array<object>}
  */
 function getMessagesOutputMessages (body) {
