@@ -66,6 +66,7 @@ function retainVercelRequest (promise) {
 }
 
 function onRequestEnd () {
+  if (getEnvironmentVariable('VERCEL') !== '1') return false
   return retainVercelRequest(waitForPendingExports())
 }
 
