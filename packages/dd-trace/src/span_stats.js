@@ -148,15 +148,26 @@ class SpanAggKey {
       this.srvSrc,
       this.spanKind,
       this.rpcStatusCode,
-      this.isTraceRoot,
     ].join(',')
   }
 }
 
 class SpanBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {object} [options]
+   * @param {boolean} [options.includeTraceRoot]
+   */
+  constructor ({ includeTraceRoot = false } = {}) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
-    const key = aggKey.toString()
+    const baseKey = aggKey.toString()
+    const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {
       this.set(key, new SpanAggStats(aggKey))
@@ -167,9 +178,20 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
+  #spanBucketOptions
+
+  /**
+   * @param {object} [spanBucketOptions]
+   * @param {boolean} [spanBucketOptions.includeTraceRoot]
+   */
+  constructor (spanBucketOptions) {
+    super()
+    this.#spanBucketOptions = spanBucketOptions
+  }
+
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new SpanBuckets(this.#spanBucketOptions))
     }
 
     return this.get(time)
@@ -189,14 +211,16 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-  } = {}, otlpExporter) {
+  } = {}, otlpExporter, otelSemanticsEnabled = false) {
     if (!otlpExporter) {
       this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets()
+    this.buckets = new TimeBuckets({
+      includeTraceRoot: Boolean(otlpExporter) && !otelSemanticsEnabled,
+    })
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null

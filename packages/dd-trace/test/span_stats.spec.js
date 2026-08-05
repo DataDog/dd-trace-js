@@ -105,24 +105,24 @@ describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
     assert.strictEqual(
-      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,,true')
+      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
     assert.strictEqual(
-      key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,,true')
+      key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,,true`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -136,7 +136,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
@@ -151,7 +151,7 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(
       key.toString(),
-      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,,true')
+      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
@@ -166,7 +166,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
   it('should include service source in aggregation key', () => {
@@ -179,28 +179,28 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,')
   })
 
   it('should include span kind in aggregation key', () => {
     const span = { ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
   })
 
   it('should normalize gRPC status name to numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5')
   })
 
   it('should keep numeric gRPC status code as numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14,true')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
   })
 
   it('should mark isTraceRoot false when parent_id is a non-zero Identifier', () => {
@@ -208,7 +208,7 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(key.isTraceRoot, false)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,,false')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
   })
 
   it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {
@@ -344,6 +344,20 @@ describe('SpanBuckets', () => {
   it('should add a new entry when new span does not match existing agg keys', () => {
     buckets.forSpan(errorSpan)
     assert.strictEqual(buckets.size, 2)
+  })
+
+  it('should split trace roots only when requested by the OTLP exporter', () => {
+    const childSpan = { ...basicSpan, parent_id: { toString: () => '1' } }
+    const legacyBuckets = new SpanBuckets()
+    const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+
+    legacyBuckets.forSpan(basicSpan)
+    legacyBuckets.forSpan(childSpan)
+    otlpBuckets.forSpan(basicSpan)
+    otlpBuckets.forSpan(childSpan)
+
+    assert.strictEqual(legacyBuckets.size, 1)
+    assert.strictEqual(otlpBuckets.size, 2)
   })
 })
 
@@ -556,6 +570,22 @@ describe('SpanStatsProcessor', () => {
     const [drained, bucketSizeNs] = otlpExporter.export.firstCall.args
     assert.strictEqual(drained.length, 1)
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
+  })
+
+  it('should split OTLP trace roots only when their attribute is exported', () => {
+    const childSpan = { ...topLevelSpan, parent_id: { toString: () => '1' } }
+    const defaultProcessor = new SpanStatsProcessor(config, otlpExporter)
+    const semanticsProcessor = new SpanStatsProcessor(config, otlpExporter, true)
+    clearTimeout(defaultProcessor.timer)
+    clearTimeout(semanticsProcessor.timer)
+
+    defaultProcessor.onSpanFinished(topLevelSpan)
+    defaultProcessor.onSpanFinished(childSpan)
+    semanticsProcessor.onSpanFinished(topLevelSpan)
+    semanticsProcessor.onSpanFinished(childSpan)
+
+    assert.strictEqual(defaultProcessor.buckets.values().next().value.size, 2)
+    assert.strictEqual(semanticsProcessor.buckets.values().next().value.size, 1)
   })
 
   it('should not call OTLP exporter on interval when drained is empty', () => {

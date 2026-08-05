@@ -5,6 +5,8 @@ const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { GRPC_STATUS_NAMES } = require('../../constants')
 
+const { stableStringify } = OtlpTransformerBase
+
 const NS_PER_S = 1e9
 
 // Must match libdatadog's EXPLICIT_BOUNDS_SECONDS and OTel spanmetrics connector defaults.
@@ -49,8 +51,8 @@ function getDeltaTemporality () {
   return _deltaTemporality
 }
 
-const STATUS_CODE_OK_ATTR = { key: 'status.code', value: { stringValue: 'STATUS_CODE_OK' } }
-const STATUS_CODE_ERROR_ATTR = { key: 'status.code', value: { stringValue: 'STATUS_CODE_ERROR' } }
+const STATUS_CODE_OK = 'STATUS_CODE_OK'
+const STATUS_CODE_ERROR = 'STATUS_CODE_ERROR'
 
 class OtlpStatsTransformer extends OtlpTransformerBase {
   #otelSemanticsEnabled
@@ -88,12 +90,13 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     const dataPoints = []
 
     for (const { timeNs, bucket } of drained) {
+      const distributions = new Map()
       const endTimeNs = timeNs + bucketSizeNs
       const startNano = isJson ? String(timeNs) : timeNs
       const endNano = isJson ? String(endTimeNs) : endTimeNs
 
       for (const aggStats of bucket.values()) {
-        const baseAttrs = this.#buildAttributes(aggStats.aggKey)
+        const baseAttributes = this.#buildAttributes(aggStats.aggKey)
 
         if (this.#otelSemanticsEnabled) {
           const okDist = new LogCollapsingLowestDenseDDSketch()
@@ -102,20 +105,40 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
           const errDist = new LogCollapsingLowestDenseDDSketch()
           errDist.merge(aggStats.topLevelErrorDistribution)
           errDist.merge(aggStats.nonTopLevelErrorDistribution)
-          this.#pushPoint(dataPoints, okDist, startNano, endNano, [...baseAttrs, STATUS_CODE_OK_ATTR])
-          this.#pushPoint(dataPoints, errDist, startNano, endNano, [...baseAttrs, STATUS_CODE_ERROR_ATTR])
+          this.#addDistribution(distributions, okDist, startNano, endNano, {
+            ...baseAttributes,
+            'status.code': STATUS_CODE_OK,
+          })
+          this.#addDistribution(distributions, errDist, startNano, endNano, {
+            ...baseAttributes,
+            'status.code': STATUS_CODE_ERROR,
+          })
         } else {
-          const tlAttrs = [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: true } }]
-          const ntlAttrs = [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: false } }]
-          this.#pushPoint(dataPoints, aggStats.topLevelOkDistribution, startNano, endNano,
-            [...tlAttrs, STATUS_CODE_OK_ATTR])
-          this.#pushPoint(dataPoints, aggStats.topLevelErrorDistribution, startNano, endNano,
-            [...tlAttrs, STATUS_CODE_ERROR_ATTR])
-          this.#pushPoint(dataPoints, aggStats.nonTopLevelOkDistribution, startNano, endNano,
-            [...ntlAttrs, STATUS_CODE_OK_ATTR])
-          this.#pushPoint(dataPoints, aggStats.nonTopLevelErrorDistribution, startNano, endNano,
-            [...ntlAttrs, STATUS_CODE_ERROR_ATTR])
+          this.#addDistribution(distributions, aggStats.topLevelOkDistribution, startNano, endNano, {
+            ...baseAttributes,
+            'datadog.span.top_level': true,
+            'status.code': STATUS_CODE_OK,
+          })
+          this.#addDistribution(distributions, aggStats.topLevelErrorDistribution, startNano, endNano, {
+            ...baseAttributes,
+            'datadog.span.top_level': true,
+            'status.code': STATUS_CODE_ERROR,
+          })
+          this.#addDistribution(distributions, aggStats.nonTopLevelOkDistribution, startNano, endNano, {
+            ...baseAttributes,
+            'datadog.span.top_level': false,
+            'status.code': STATUS_CODE_OK,
+          })
+          this.#addDistribution(distributions, aggStats.nonTopLevelErrorDistribution, startNano, endNano, {
+            ...baseAttributes,
+            'datadog.span.top_level': false,
+            'status.code': STATUS_CODE_ERROR,
+          })
         }
+      }
+
+      for (const { sketch, startNano, endNano, attributes } of distributions.values()) {
+        this.#pushPoint(dataPoints, sketch, startNano, endNano, attributes)
       }
     }
 
@@ -131,8 +154,37 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }]
   }
 
-  #pushPoint (points, sketch, startNano, endNano, attributes) {
+  /**
+   * @param {Map<string, {
+   *   sketch: object,
+   *   startNano: string | number,
+   *   endNano: string | number,
+   *   attributes: object[]
+   * }>} distributions
+   * @param {object} sketch
+   * @param {string | number} startNano
+   * @param {string | number} endNano
+   * @param {import('@opentelemetry/api').Attributes} attributes
+   * @returns {void}
+   */
+  #addDistribution (distributions, sketch, startNano, endNano, attributes) {
     if (!sketch || sketch.count === 0) return
+
+    const key = stableStringify(attributes)
+    const existing = distributions.get(key)
+    if (existing) {
+      existing.sketch.merge(sketch)
+    } else {
+      distributions.set(key, {
+        sketch,
+        startNano,
+        endNano,
+        attributes: this.transformAttributes(attributes),
+      })
+    }
+  }
+
+  #pushPoint (points, sketch, startNano, endNano, attributes) {
     points.push({
       attributes,
       startTimeUnixNano: startNano,
@@ -148,6 +200,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
   /**
    * @param {import('../../span_stats').SpanAggKey} aggKey
+   * @returns {import('@opentelemetry/api').Attributes}
    */
   #buildAttributes (aggKey) {
     const raw = { 'span.name': aggKey.resource, 'service.name': aggKey.service }
@@ -172,7 +225,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       raw['datadog.is_trace_root'] = aggKey.isTraceRoot
     }
 
-    return this.transformAttributes(raw)
+    return raw
   }
 }
 

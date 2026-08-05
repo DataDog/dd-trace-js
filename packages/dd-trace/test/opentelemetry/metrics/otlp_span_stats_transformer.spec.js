@@ -10,7 +10,7 @@ const { EXPLICIT_BOUNDS_SECONDS } = OtlpStatsTransformer
 const { SpanBuckets } = require('../../../src/span_stats')
 const { getProtobufTypes } = require('../../../src/opentelemetry/otlp/protobuf_loader')
 const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND, GRPC_STATUS_CODE } = require('../../../../../ext/tags')
-const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../../../src/constants')
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('../../../src/constants')
 
 const METRIC_NAME = 'traces.span.sdk.metrics.duration'
 const RESOURCE_ATTRS = {
@@ -41,16 +41,16 @@ function makeTopLevelSpan (overrides = {}) {
   return makeSpan({ metrics: { [TOP_LEVEL_KEY]: 1 }, ...overrides })
 }
 
-function makeBucket (spans) {
-  const bucket = new SpanBuckets()
+function makeBucket (spans, options) {
+  const bucket = new SpanBuckets(options)
   for (const span of spans) {
     bucket.forSpan(span).record(span)
   }
   return bucket
 }
 
-function makeDrained (timeNs, spans) {
-  return [{ timeNs, bucket: makeBucket(spans) }]
+function makeDrained (timeNs, spans, options) {
+  return [{ timeNs, bucket: makeBucket(spans, options) }]
 }
 
 /**
@@ -122,6 +122,37 @@ describe('OtlpStatsTransformer', () => {
         'datadog.span.top_level': false,
         'datadog.is_trace_root': true,
       })
+    })
+
+    it('coalesces span.kind aliases that map to the same exported attribute', () => {
+      const spans = [
+        makeSpan({ meta: { [SPAN_KIND]: 'server' } }),
+        makeSpan({ meta: { [SPAN_KIND]: 'SPAN_KIND_SERVER' } }),
+      ]
+      const drained = makeDrained(12340000000000, spans)
+      assert.strictEqual(drained[0].bucket.size, 2)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 2)
+      assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_SERVER')
+    })
+
+    it('keeps root and non-root distributions separate when datadog.is_trace_root is exported', () => {
+      const spans = [
+        makeSpan(),
+        makeSpan({ parent_id: { toString: () => '1' } }),
+      ]
+      const payload = JSON.parse(transformer.transform(
+        makeDrained(12340000000000, spans, { includeTraceRoot: true }),
+        BUCKET_SIZE_NS
+      ))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 2)
+      assert.deepStrictEqual(points.map(point => attrMapOf(point)['datadog.is_trace_root']), [true, false])
     })
 
     it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
@@ -283,6 +314,30 @@ describe('OtlpStatsTransformer', () => {
         { name: attrs['span.name'], method: attrs['http.request.method'], status: attrs['status.code'] },
         { name: 'GET /foo', method: 'GET', status: 'STATUS_CODE_ERROR' }
       )
+    })
+
+    it('coalesces dimensions hidden by OTel-semantics mode', () => {
+      const spans = [
+        makeSpan({
+          name: 'first.operation',
+          type: 'web',
+          meta: { [ORIGIN_KEY]: 'synthetics', [SVC_SRC_KEY]: 'integration' },
+        }),
+        makeSpan({
+          name: 'second.operation',
+          type: 'custom',
+          meta: {},
+          parent_id: { toString: () => '1' },
+        }),
+      ]
+      const drained = makeDrained(12340000000000, spans, { includeTraceRoot: true })
+      assert.strictEqual(drained[0].bucket.size, 2)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 2)
     })
   })
 
