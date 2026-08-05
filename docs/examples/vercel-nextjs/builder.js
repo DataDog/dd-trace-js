@@ -5,11 +5,7 @@ const path = require('node:path')
 
 const INSTRUMENTATION_EXTENSIONS = ['js', 'jsx', 'ts', 'tsx']
 const DATADOG_PRELOAD = '--import=dd-trace/initialize.mjs'
-const INSTRUMENTATION_SOURCE = `export function register () {
-  if (process.env.NEXT_RUNTIME !== 'edge') {
-    require('dd-trace/init')
-  }
-}
+const INSTRUMENTATION_SOURCE = `import 'dd-trace/initialize.mjs'
 `
 
 function getProjectPath (directory, fileName) {
@@ -60,7 +56,7 @@ function prepareBuildInput (options, FileBlob) {
   if (existingInstrumentation) {
     throw new Error(
       `Cannot add Datadog instrumentation because ${existingInstrumentation} already exists. ` +
-      'Add dd-trace/init to that file instead.'
+      "Add import 'dd-trace/initialize.mjs' to that file instead."
     )
   }
 

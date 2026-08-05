@@ -32,12 +32,7 @@ describe('Vercel Next Builder prototype', () => {
     prepareBuildInput(options, FileBlob)
 
     assert.strictEqual(options.files['package.json'], packageFile)
-    assert.strictEqual(options.files['instrumentation.ts'].data, `export function register () {
-  if (process.env.NEXT_RUNTIME !== 'edge') {
-    require('dd-trace/init')
-  }
-}
-`)
+    assert.strictEqual(options.files['instrumentation.ts'].data, "import 'dd-trace/initialize.mjs'\n")
   })
 
   it('refuses to overwrite root or src instrumentation files', () => {
@@ -75,8 +70,9 @@ describe('Vercel Next Builder prototype', () => {
 
       await instrumentBuildOutput(outputPath)
 
+      const nodeConfig = JSON.parse(await fs.readFile(path.join(nodeFunction, '.vc-config.json'), 'utf8'))
       assert.strictEqual(
-        JSON.parse(await fs.readFile(path.join(nodeFunction, '.vc-config.json'), 'utf8')).environment.NODE_OPTIONS,
+        nodeConfig.environment.NODE_OPTIONS,
         '--import=dd-trace/initialize.mjs --enable-source-maps'
       )
       assert.deepStrictEqual(
