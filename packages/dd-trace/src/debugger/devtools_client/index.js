@@ -25,10 +25,6 @@ require('./remote_config')
 /** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
-// Redaction of log-probe messages runs inside the paused application process, so the redacted-identifier
-// set is embedded into the evaluated code. Values are redacted before interpolation, matching the snapshot
-// path (see snapshot/processor.js) so that a template referencing an object or map (e.g. `{user}`) does not
-// leak sensitive fields the snapshot would redact.
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
   const $dd_segmentInspectOptions = {
