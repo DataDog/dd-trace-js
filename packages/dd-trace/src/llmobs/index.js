@@ -23,7 +23,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution } = require('./util')
+const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution, stripTagsetEntry } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -156,7 +156,7 @@ function handleLLMObsInjection ({ carrier }) {
   // id/name already on the parent's registry entry, so the chain survives multiple hops. Resolved
   // after the bail-out above so we don't allocate when there is nothing to inject.
   const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(
-    LLMObsTagger.tagMap.get(parent), parent
+    mlObsSpanTags, parent
   )
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
@@ -169,10 +169,19 @@ function handleLLMObsInjection ({ carrier }) {
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
   if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
-  // The id is always digit-safe; skip an unsafe name rather than letting the tagset encoder drop
-  // the whole header. Budget overflow (like ml_app) is a known limitation tracked separately.
-  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId)
-  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe)
+  // When a local agent attribution is resolved, strip any stale upstream pagent entries that
+  // `_injectTags` may have already written into the carrier (it propagates all `_dd.p.*` from
+  // `_trace.tags`). This ensures the downstream sees a consistent id-only or id+name pair
+  // rather than a mix from different hops. The id is always digit-safe; an unsafe name is wiped.
+  if (parentAgentSpanId) {
+    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_ID_KEY)
+    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_NAME_KEY)
+  }
+  const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+  tags = appendOptionalPropagatedTag(tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength)
+  tags = appendOptionalPropagatedTag(
+    tags, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
+  )
   if (tags !== existing) writeDatadogTags(carrier, tags)
 }
 

@@ -2491,5 +2491,40 @@ describe('sdk', () => {
       const tags = carrier['x-datadog-tags']
       assert.ok(tags.includes('_dd.p.llmobs_pagent_name=model=gpt4'), tags)
     })
+
+    it('strips stale upstream pagent entries when a local agent overrides them', () => {
+      // Simulate `_injectTags` having already written upstream attribution into the carrier.
+      let agentId
+      const carrier = {
+        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
+      }
+      llmobs.trace({ kind: 'agent', name: 'local_agent' }, span => {
+        agentId = span.context().toSpanId()
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=local_agent'), tags)
+      assert.ok(!tags.includes('upstream_id'), tags)
+      assert.ok(!tags.includes('upstream_agent'), tags)
+    })
+
+    it('strips stale upstream pagent_name when local agent name is unsafe', () => {
+      // Even though the upstream name was safe, the downstream should see id-only when the
+      // local agent name is not wire-safe (decision: keep just the id, wipe the name).
+      let agentId
+      const carrier = {
+        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
+      }
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
+        agentId = span.context().toSpanId()
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
+    })
   })
 })
