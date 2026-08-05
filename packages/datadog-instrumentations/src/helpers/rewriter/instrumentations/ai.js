@@ -5,7 +5,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=4.0.0',
+      versionRange: '>=4.0.0 <7.0.0',
       filePath: 'dist/index.js',
     },
     functionQuery: {
@@ -17,7 +17,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=4.0.0',
+      versionRange: '>=4.0.0 <7.0.0',
       filePath: 'dist/index.mjs',
     },
     functionQuery: {
@@ -54,7 +54,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=6.0.0',
+      versionRange: '>=6.0.0 <7.0.0',
       filePath: 'dist/index.js',
     },
     functionQuery: {
@@ -66,7 +66,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=6.0.0',
+      versionRange: '>=6.0.0 <7.0.0',
       filePath: 'dist/index.mjs',
     },
     functionQuery: {
@@ -104,7 +104,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=4.0.0',
+      versionRange: '>=4.0.0 <7.0.0',
       filePath: 'dist/index.js',
     },
     functionQuery: {
@@ -116,7 +116,7 @@ module.exports = [
   {
     module: {
       name: 'ai',
-      versionRange: '>=4.0.0',
+      versionRange: '>=4.0.0 <7.0.0',
       filePath: 'dist/index.mjs',
     },
     functionQuery: {

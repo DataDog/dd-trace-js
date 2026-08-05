@@ -71,7 +71,7 @@ interface Tracer extends opentracing.Tracer {
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends tracer.PluginName> (plugin: P, config?: tracer.PluginOptions[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -156,12 +156,12 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * OpenFeature Provider with Remote Config integration.
+   * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed.
    *
-   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+   * @env DD_FEATURE_FLAGS_ENABLED
+   * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -233,6 +233,7 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
+  "claude-agent-sdk": tracer.plugins.claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
@@ -292,6 +293,7 @@ interface Plugins {
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
+  "openai-agents": tracer.plugins.openai_agents;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
   "playwright": tracer.plugins.playwright;
@@ -314,6 +316,9 @@ interface Plugins {
 }
 
 declare namespace tracer {
+  export interface PluginOptions extends Plugins {}
+  export type PluginName = keyof PluginOptions;
+
   export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
@@ -426,7 +431,7 @@ declare namespace tracer {
    */
   export interface SamplingRule {
     /**
-     * Sampling rate for this rule.
+     * Sampling rate for this rule. A range between 0 and 1 representing the percent of traces sampled.
      */
     sampleRate: number
 
@@ -439,6 +444,22 @@ declare namespace tracer {
      * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
      */
     name?: string | RegExp
+
+    /**
+     * Resource name on which to apply this rule. The rule will apply to all resource names if not provided.
+     */
+    resource?: string | RegExp
+
+    /**
+     * Span tags on which to apply this rule, keyed by tag name. Each value is a glob pattern or regular
+     * expression, and the rule only applies when every entry matches the span's tags.
+     */
+    tags?: { [key: string]: string | RegExp }
+
+    /**
+     * Maximum number of traces matching this rule to sample per second.
+     */
+    maxPerSecond?: number
   }
 
   /**
@@ -620,10 +641,10 @@ declare namespace tracer {
     rateLimit?: number,
 
     /**
-     * Sampling rules to apply to priority sampling. Each rule is a JSON,
-     * consisting of `service` and `name`, which are regexes to match against
-     * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
-     * specified, will defer to global sampling rate for all spans.
+     * Sampling rules to apply to priority sampling. Each rule matches against a trace's
+     * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
+     * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -852,9 +873,9 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
-         * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
-         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
+         * Legacy feature flagging provider switch.
+         * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
+         * the provider.
          *
          * @default false
          * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
@@ -1725,7 +1746,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
@@ -2309,6 +2330,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
+     */
+    interface claude_agent_sdk extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
     interface anthropic extends Instrumentation {}
@@ -2373,6 +2400,14 @@ declare namespace tracer {
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
+      /**
+       * The service name to be used for this plugin. When a function is used it is called with the AWS
+       * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
+       * is used as the service name. Returning a nullish value falls back to the default service name, so
+       * individual resources can be mapped without renaming every call to the service.
+       */
+      service?: string | ((params: anyObject) => string | undefined | null);
+
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
@@ -2611,9 +2646,28 @@ declare namespace tracer {
     typeResolver?: any,
     }
 
+    /** Context object passed to the `hooks.resolve` callback for each instrumented field. */
+    interface FieldContext {
+      /** The field name being resolved */
+      fieldName: string;
+      /** The dot-separated field path (e.g. `'user.address.city'`) */
+      path: string;
+      /** The error from the resolver, or `null` if it succeeded */
+      error: Error | null;
+      /** The value returned by the resolver (sync resolvers only; `undefined` for async) */
+      result: unknown;
+    }
+
     /**
      * This plugin automatically instruments the
      * [graphql](https://github.com/graphql/graphql-js) module.
+     *
+     * It also instruments [mercurius](https://github.com/mercurius-js/mercurius)
+     * (the Fastify GraphQL adapter): every request through `app.graphql` /
+     * `reply.graphql` opens a top-level `graphql.request` span that parents the
+     * `graphql.parse`/`graphql.validate`/`graphql.execute` spans and carries the
+     * request text. This span is produced even when mercurius serves the query
+     * from its JIT-compiled path, where `graphql.execute` does not run.
      *
      * The `graphql` integration uses the operation name as the span resource name.
      * If no operation name is set, the resource name will always be just `query`,
@@ -2641,6 +2695,7 @@ declare namespace tracer {
        * instrument the operation or to `-1` to instrument all fields/resolvers.
        *
        * @default -1
+       * @env DD_TRACE_GRAPHQL_DEPTH
        */
       depth?: number;
 
@@ -2657,7 +2712,10 @@ declare namespace tracer {
       /**
        * An array of variable names to record. Can also be a callback that returns
        * the key/value pairs to record. For example, using
-       * `variables => variables` would record all variables.
+       * `variables => variables` would record all variables. The environment
+       * variable only accepts the array form (comma-separated variable names).
+       *
+       * @env DD_TRACE_GRAPHQL_VARIABLES
        */
       variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
@@ -2666,8 +2724,17 @@ declare namespace tracer {
        * `users.*.name` span instead of `users.0.name`, `users.1.name`, etc)
        *
        * @default true
+       * @env DD_TRACE_GRAPHQL_COLLAPSE
        */
       collapse?: boolean;
+
+      /**
+       * An array of error `extensions` keys to attach to the span error event
+       * for each GraphQL error.
+       *
+       * @env DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+       */
+      errorExtensions?: string[];
 
       /**
        * Whether to enable signature calculation for the resource name. This can
@@ -2689,6 +2756,7 @@ declare namespace tracer {
         execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
+        resolve?: (span?: Span, field?: FieldContext) => void;
       }
     }
 
@@ -3086,6 +3154,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
      */
     interface opensearch extends elasticsearch {}
@@ -3227,7 +3301,16 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [router](https://github.com/pillarjs/router) module.
      */
-    interface router extends Integration {}
+    interface router extends Integration {
+      /**
+       * Whether to enable instrumentation of router.middleware spans.
+       * When set to `false`, middleware spans are suppressed but route
+       * tracking (resource name, `http.route` tag) is still performed.
+       *
+       * @default true
+       */
+      middleware?: boolean;
+    }
 
     /**
     * This plugin automatically instruments the
@@ -3712,6 +3795,12 @@ declare namespace tracer {
       enabled: boolean,
 
       /**
+       * Datasets & Experiments API. Requires LLM Observability to be enabled and
+       * `DD_API_KEY` / `DD_APP_KEY` to be set.
+       */
+      experiments: Experiments,
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3832,6 +3921,13 @@ declare namespace tracer {
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
+      /**
+       * Submits end-user feedback for a span, trace, session, or customer-defined entity.
+       * Exactly one target must be provided in the options.
+       * @param options An object containing the label, metric type, value, submitter and target of the feedback.
+       */
+      submitFeedback (options: llmobs.FeedbackOptions): void
+
 
       /**
        * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
@@ -3853,6 +3949,157 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    /** JSON-serializable value accepted by LLMObs Experiments. */
+    type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
+    /**
+     * A task run over each dataset record during an experiment.
+     */
+    type ExperimentTask = (
+      input: JSONType,
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores a single task output. The return type selects the metric:
+     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
+     */
+    type ExperimentEvaluator = (
+      input: JSONType,
+      output: JSONType,
+      expectedOutput: JSONType
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
+
+    interface CreateDatasetOptions {
+      description?: string
+      records?: Array<{
+        id?: string,
+        inputData: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>
+      }>
+    }
+
+    interface ExperimentOptions {
+      name: string
+      dataset: Dataset
+      task: ExperimentTask
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
+      description?: string
+      config?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      throwOnErrors?: boolean
+    }
+
+    interface PullDatasetOptions {
+      /** Dataset version to pull. Defaults to latest. */
+      version?: number
+      /** Wait until at least this many records are readable (absorbs write lag). */
+      expectedRecordCount?: number
+      /** Maximum total time to wait, in ms. Default 30000. */
+      maxWaitMs?: number
+    }
+
+    interface ExperimentResultRow {
+      index: number
+      spanId: string
+      traceId: string
+      startNs: number
+      durationNs: number
+      input: JSONType
+      output: JSONType
+      expectedOutput: JSONType
+      readonly isError: boolean
+      errorType: string | null
+      errorMessage: string | null
+      evaluations: Record<string, JSONType>
+      evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+    }
+
+    interface ExperimentResult {
+      experimentId: string
+      rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
+      /** Dashboard URL for the experiment. */
+      url: string
+    }
+
+    interface DatasetPushResult {
+      /** Number of records from this push that were confirmed with a record id. */
+      pushedCount: number
+      /** Number of records attempted in this push. */
+      totalCount: number
+    }
+
+    interface Dataset {
+      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      /** Creates the dataset remotely if needed and pushes any unpushed records. */
+      push (): Promise<DatasetPushResult>
+      name (): string
+      id (): string | null
+      projectId (): string | null
+      version (): number | null
+      latestVersion (): number | null
+      records (): Array<{
+        id: string | null,
+        input: JSONType,
+        expectedOutput: JSONType,
+        metadata: Record<string, JSONType>
+      }>
+      /** Dashboard URL for the dataset, or null until pushed. */
+      url (): string | null
+    }
+
+    interface Experiment {
+      name (): string
+      experimentId (): string | null
+      url (): string | null
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
+    }
+
+    interface Experiments {
+      /** Create a local dataset buffer; pushed on the first experiment run. */
+      createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+      /** Pull an existing dataset (with records) by name. */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+      /** Build an experiment to run over a dataset. */
+      experiment (options: ExperimentOptions): Experiment
     }
 
     interface LLMObservabilitySpan {
@@ -3927,6 +4174,93 @@ declare namespace tracer {
       metadata?: { [key: string]: any }
     }
 
+    interface FeedbackSubmitter {
+      /**
+       * The identifier of the end user who submitted the feedback.
+       */
+      id: string,
+
+      /**
+       * The type of submitter, e.g. 'user'.
+       */
+      type?: string
+    }
+
+    interface FeedbackOptions {
+      /**
+       * The name of the feedback metric
+       */
+      label: string,
+
+      /**
+       * The type of feedback metric, one of 'categorical', 'score', 'boolean', 'json' or 'text'
+       */
+      metricType: 'categorical' | 'score' | 'boolean' | 'json' | 'text',
+
+      /**
+       * The value of the feedback metric.
+       * Must be string for 'categorical' and 'text' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
+       */
+      value: string | number | boolean | { [key: string]: any },
+
+      /**
+       * Who submitted the feedback.
+       */
+      submitter: llmobs.FeedbackSubmitter,
+
+      /**
+       * The span context of the span to attach the feedback to, as returned by `llmobs.exportSpan()`.
+       * Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` must be provided.
+       */
+      span?: llmobs.ExportedLLMObsSpan,
+
+      /**
+       * The ID of the span to attach the feedback to.
+       */
+      spanId?: string,
+
+      /**
+       * The ID of the trace to attach the feedback to.
+       */
+      traceId?: string,
+
+      /**
+       * The ID of the session to attach the feedback to.
+       */
+      sessionId?: string,
+
+      /**
+       * A customer-defined key to attach the feedback to.
+       */
+      feedbackJoinKey?: string,
+
+      /**
+       * An object of string key-value pairs to tag the feedback with.
+       * A `null` or `undefined` value is sent as the string `"null"` or `"undefined"`.
+       */
+      tags?: { [key: string]: string | null | undefined },
+
+      /**
+       * The name of the ML application
+       */
+      mlApp?: string,
+
+      /**
+       * The timestamp in milliseconds when the feedback was generated.
+       */
+      timestampMs?: number,
+
+      /**
+       * Reasoning for the feedback.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the feedback passed or failed. Valid values are pass and fail.
+       */
+      assessment?: 'pass' | 'fail'
+    }
+
     interface Document {
       /**
        * Document text
@@ -3967,6 +4301,68 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Audio segments attached to the message (e.g. speech input/output)
+       */
+      audioParts?: AudioPart[],
+
+      /**
+       * Images attached to the message (e.g. vision input, generated output)
+       */
+      imageParts?: ImagePart[],
+    }
+
+    /**
+     * Represents an audio segment attached to an LLM chat model message.
+     */
+    interface AudioPart {
+      /**
+       * The MIME type of the audio (e.g. "audio/wav", "audio/mpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The audio content as a base64-encoded string
+       */
+      content: string,
+    }
+
+    /**
+     * Represents an image attached to an LLM chat model message, carrying exactly
+     * one of inline `content` or an `attachmentKey`. Supplying neither or both is
+     * rejected by the tagger, and the union keeps both shapes from type-checking.
+     */
+    type ImagePart = {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The image content as a base64-encoded string
+       */
+      content: string,
+
+      /**
+       * Explicitly excluded when inline content is present to maintain type safety.
+       */
+      attachmentKey?: never,
+    } | {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * Key of an already-uploaded image, in place of inline content
+       */
+      attachmentKey: string,
+
+      /**
+       * Explicitly excluded when an attachment key is present to maintain type safety.
+       */
+      content?: never,
     }
 
     /**
@@ -4211,6 +4607,15 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       agentlessEnabled?: boolean,
+
+      /**
+       * The proportion of LLM Observability traces to sample, between `0` and `1` (inclusive).
+       * The decision is computed once per trace, propagated across services, and recorded on every
+       * span; spans are always sent and the decision is honored at ingestion time. Defaults to `1`.
+       * @env DD_LLMOBS_SAMPLE_RATE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      sampleRate?: number,
     }
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'

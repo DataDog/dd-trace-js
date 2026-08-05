@@ -2,7 +2,11 @@
 
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+const {
+  flushStartupLogs,
+  flushFrameworkWarnings,
+  flushLoadOrderWarnings,
+} = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
@@ -10,6 +14,10 @@ const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
 const log = require('./log')
+// Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
+// DD_TRACE_DEBUG.
+const { warn } = require('./log/writer')
+const logDiagnostic = message => warn('DATADOG TRACER DIAGNOSTIC - ' + message)
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -25,6 +33,12 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
+    // Curated frameworks (e.g. Next.js) silently no-op when loaded first and their users enable
+    // no logging (#5430 / #5432), so surface those unconditionally.
+    flushFrameworkWarnings(logDiagnostic)
+    if (config.startupLogs) {
+      flushLoadOrderWarnings(logDiagnostic)
+    }
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')

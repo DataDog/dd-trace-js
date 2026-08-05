@@ -1,5 +1,7 @@
 'use strict'
 
+const { syncBuiltinESMExports } = require('node:module')
+
 const { channel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 
@@ -26,4 +28,5 @@ if (process.setUncaughtExceptionCaptureCallback) {
         return result
       }
     })
+  syncBuiltinESMExports()
 }

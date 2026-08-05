@@ -36,8 +36,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 
 const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 const ATF_MANAGEMENT_TESTS = {
@@ -76,6 +76,15 @@ const DISABLED_MANAGEMENT_TESTS = {
       'disabled-2-test.js': {
         tests: {
           'disable should disable test': {
+            properties: {
+              disabled: true,
+            },
+          },
+        },
+      },
+      'disabled-serial-test.js': {
+        tests: {
+          'disabled serial retry should not run disabled sibling': {
             properties: {
               disabled: true,
             },
@@ -172,8 +181,19 @@ versions.forEach((version) => {
           }
         )
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -194,18 +214,9 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           })
 
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-            },
-          }
-        )
-
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        // The default fixture includes a known failing test.
+        assert.strictEqual(exitCode, 1)
       })
     })
 
@@ -609,6 +620,115 @@ versions.forEach((version) => {
           await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isDisabled: true })
         })
 
+        it('reports a skipped disabled attempt to fix test once per execution', async (receiver, run) => {
+          const testName = 'skipped disabled attempt to fix'
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    [testName]: {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+
+          const testAssertionsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === testName)
+
+              assert.strictEqual(tests.length, ATTEMPT_TO_FIX_NUM_RETRIES + 1)
+              for (const test of tests) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              }
+            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
+
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                SHOULD_ALWAYS_PASS: '1',
+                SHOULD_INCLUDE_SKIPPED_TEST: '1',
+              },
+            }
+          )
+          let testOutput = ''
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([
+            once(proc, 'exit'),
+            once(proc.stdout, 'end'),
+            once(proc.stderr, 'end'),
+            testAssertionsPromise,
+          ])
+
+          assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+          assert.match(testOutput, /Attempt to fix passed: all 4 execution\(s\) passed for 1 test\(s\)\./)
+          assert.doesNotMatch(testOutput, /Disabled:/)
+          assert.strictEqual(exitCode, 0, testOutput)
+        })
+
+        it('reports an attempt to fix test skipped by a failed project dependency', async (receiver, run) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'did-not-run.js': {
+                  tests: {
+                    'did not run because of early bail': {
+                      properties: { attempt_to_fix: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 0 },
+          })
+
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-did-not-run',
+                ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
+              },
+            }
+          )
+          let testOutput = ''
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([
+            once(proc, 'exit'),
+            once(proc.stdout, 'end'),
+            once(proc.stderr, 'end'),
+          ])
+
+          assert.match(testOutput, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+          assert.strictEqual(exitCode, 1, testOutput)
+        })
+
         it('--retries is disabled for an attempt to fix test', async (receiver) => {
           receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
@@ -719,7 +839,8 @@ versions.forEach((version) => {
             // the testOutput checks whether the test is actually skipped
             if (isDisabling) {
               assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
-              assert.strictEqual(exitCode, 0)
+              assert.match(testOutput, /Disabled: \d+ tests? skipped\./)
+              assert.strictEqual(exitCode, 0, testOutput)
             } else {
               assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
               assert.strictEqual(exitCode, 1)
@@ -740,6 +861,52 @@ versions.forEach((version) => {
           receiver.setSettings({ test_management: { enabled: true } })
           await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
         })
+
+        // Playwright itself only started ignoring unknown worker events in 1.39.0.
+        if (version === latest || satisfies(version, '>=1.39.0')) {
+          it('skips and reports a disabled sibling added by a serial retry', async (receiver, run) => {
+            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const testAssertionsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const disabledTestName = 'disabled serial retry should not run disabled sibling'
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const disabledTests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_NAME] === disabledTestName)
+
+                assert.strictEqual(disabledTests.length, 1)
+                assert.strictEqual(disabledTests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(disabledTests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
+
+            const proc = run(
+              './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                },
+              }
+            )
+            let testOutput = ''
+            proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              once(proc.stdout, 'end'),
+              once(proc.stderr, 'end'),
+              testAssertionsPromise,
+            ])
+
+            assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+            assert.strictEqual(exitCode, 0, testOutput)
+          })
+        }
 
         it('fails if disable is not enabled', async (receiver) => {
           receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
@@ -821,6 +988,7 @@ versions.forEach((version) => {
           hasFlakyTests = false,
         }) => {
           const testAssertionsPromise = getTestAssertions(receiver, { isQuarantining, hasFlakyTests })
+          let testOutput = ''
           let proc
           try {
             proc = exec(
@@ -835,6 +1003,8 @@ versions.forEach((version) => {
                 },
               }
             )
+            proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
             const [[exitCode]] = await Promise.all([
               once(proc, 'exit'),
@@ -842,6 +1012,10 @@ versions.forEach((version) => {
             ])
 
             if (isQuarantining) {
+              assert.match(
+                testOutput,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)

@@ -117,6 +117,19 @@ app.http('eh2-batch', {
   },
 })
 
+app.http('eh3-eventdata', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    const client = new EventHubProducerClient(process.env.MyEventHub, 'eh3')
+    await client.sendBatch(eventData)
+    await client.close()
+    return {
+      status: 200,
+    }
+  },
+})
+
 app.http('eh1-enqueueEvent', {
   methods: ['GET'],
   authLevel: 'anonymous',
@@ -210,6 +223,16 @@ app.eventHub('eventHubTest2', {
   connection: 'MyEventHub',
   eventHubName: 'eh2',
   cardinality: 'many',
+  handler: async (events, context) => {
+    return {
+      status: 200,
+    }
+  },
+})
+
+app.eventHub('eventHubTest3', {
+  connection: 'MyEventHub',
+  eventHubName: 'eh3',
   handler: async (events, context) => {
     return {
       status: 200,

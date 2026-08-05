@@ -1,10 +1,16 @@
 'use strict'
 
-// Capture real Date.now at module load time, before any test can install fake timers.
-const realDateNow = Date.now.bind(Date)
+const { fileURLToPath } = require('node:url')
+
+const { channel } = require('dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const log = require('../../dd-trace/src/log')
+const {
+  sendWebdriverioWorkerMessage,
+  SUITE_FINISH,
+} = require('../../datadog-instrumentations/src/mocha/webdriverio-protocol')
 
 const {
   TEST_STATUS,
@@ -37,6 +43,8 @@ const {
   TEST_IS_MODIFIED,
   TEST_FINAL_STATUS,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FRAMEWORK_ADAPTER,
+  getTestSuiteExecutionKey,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -52,7 +60,93 @@ const {
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
+const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
+const jasmineDoneCh = 'ci:webdriverio:jasmine:done'
+const jasmineReporterSpecDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end'
+const jasmineReporterSpecStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end'
+const jasmineReporterSuiteDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteDone:end'
+const jasmineReporterSuiteStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteStarted:end'
+const jasmineTestFunctionStartCh = 'tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start'
+const testFinishCh = channel('ci:mocha:test:finish')
+const WEBDRIVERIO_JASMINE_ADAPTER = 'jasmine'
+const workerFinishCh = channel('ci:mocha:worker:finish')
+
+/**
+ * @typedef {object} WebdriverioJasmineResult
+ * @property {string|undefined} id
+ * @property {string|undefined} description
+ * @property {Array<{message?: string, stack?: string}>|undefined} failedExpectations
+ * @property {string|undefined} file
+ * @property {string|undefined} filename
+ * @property {string|undefined} fullName
+ * @property {string|undefined} parentSuiteId
+ * @property {string|undefined} status
+ */
+
+/**
+ * Normalizes a WebdriverIO Jasmine spec identifier to a filesystem path.
+ *
+ * @param {string|undefined} file
+ * @returns {string|undefined}
+ */
+function normalizeJasmineFile (file) {
+  return file?.startsWith('file://') ? fileURLToPath(file) : file
+}
+
+/**
+ * Maps a Jasmine result status to the Test Optimization status vocabulary.
+ *
+ * @param {string|undefined} status
+ * @returns {'pass'|'fail'|'skip'}
+ */
+function getJasmineStatus (status) {
+  if (status === 'passed') return 'pass'
+  if (status === 'failed') return 'fail'
+  return 'skip'
+}
+
+/**
+ * Converts Jasmine's failed-expectation shape to an Error.
+ *
+ * @param {WebdriverioJasmineResult} result
+ * @returns {Error|undefined}
+ */
+function getJasmineError (result) {
+  const failedExpectation = result.failedExpectations?.[0]
+  if (!failedExpectation) return
+
+  const error = new Error(failedExpectation.message)
+  if (failedExpectation.stack) {
+    error.stack = failedExpectation.stack
+  }
+  return error
+}
+
+/**
+ * Resolves the spec file responsible for a run-level Jasmine failure.
+ *
+ * @param {WebdriverioJasmineResult|undefined} result
+ * @param {string[]} specs
+ * @returns {string|undefined}
+ */
+function getJasmineFailureFile (result, specs) {
+  const resultFile = normalizeJasmineFile(result?.file || result?.filename)
+  if (resultFile) {
+    return resultFile
+  }
+
+  const stack = result?.failedExpectations?.[0]?.stack
+  if (stack) {
+    for (const spec of specs) {
+      const file = normalizeJasmineFile(spec)
+      if (file && stack.includes(file)) {
+        return file
+      }
+    }
+  }
+
+  return specs.length === 1 ? normalizeJasmineFile(specs[0]) : undefined
+}
 
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
@@ -62,6 +156,100 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
+
+    this.addSub('ci:mocha:worker:configuration', ({
+      libraryConfig,
+      repositoryRoot,
+      specs,
+      testFramework,
+      testFrameworkAdapter,
+    }) => {
+      this.libraryConfig = libraryConfig
+      this.testFramework = testFramework
+      this.testFrameworkAdapter = testFrameworkAdapter
+      this._setRepositoryRoot(repositoryRoot)
+      if (testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        this._webdriverioJasmineState = {
+          currentResult: undefined,
+          specs: specs || [],
+          suiteErrors: new Map(),
+          suiteFiles: new Map(),
+          suiteStatuses: new Map(),
+          tests: new Map(),
+        }
+      }
+    })
+
+    this.addBind(jasmineTestFunctionStartCh, (ctx) => {
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
+        return storage('legacy').getStore()
+      }
+
+      const result = this._webdriverioJasmineState?.currentResult
+      const type = ctx.arguments?.[1]
+      if (type === 'Test' || (type === 'Hook' && result)) {
+        return this.#startWebdriverioJasmineTest(result)
+      }
+      return storage('legacy').getStore()
+    })
+
+    this.addSub(jasmineReporterSuiteStartedEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const suite = ctx.arguments?.[0]
+        const file = normalizeJasmineFile(suite?.filename)
+        if (suite?.id && file) {
+          this._webdriverioJasmineState.suiteFiles.set(suite.id, file)
+        }
+      }
+    })
+
+    this.addSub(jasmineReporterSuiteDoneEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const state = this._webdriverioJasmineState
+        const suite = ctx.arguments?.[0]
+        const error = suite && getJasmineError(suite)
+        const file = normalizeJasmineFile(
+          suite?.filename ||
+          state.suiteFiles.get(suite?.id) ||
+          (state.specs.length === 1 ? state.specs[0] : undefined)
+        )
+        if (error && file) {
+          state.suiteErrors.set(file, error)
+          state.suiteStatuses.set(file, 'fail')
+        }
+      }
+    })
+
+    this.addSub(jasmineDoneCh, ({ result } = {}) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        const state = this._webdriverioJasmineState
+        const error = result && getJasmineError(result)
+        const file = getJasmineFailureFile(result, state.specs)
+        if (error && file) {
+          state.suiteErrors.set(file, error)
+          state.suiteStatuses.set(file, 'fail')
+        }
+      }
+    })
+
+    this.addSub(jasmineReporterSpecStartedEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        this._webdriverioJasmineState.currentResult = ctx.arguments?.[0]
+        this.#startWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs, ctx.self?.startedSuite)
+      }
+    })
+
+    this.addSub(jasmineReporterSpecDoneEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        this.#finishWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+      }
+    })
+
+    this.addSub(jasmineAdapterRunAsyncEndCh, (ctx) => {
+      if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
+        this.#finishWebdriverioJasmineWorker(ctx)
+      }
+    })
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.libraryConfig?.isCodeCoverageEnabled) {
@@ -93,22 +281,32 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, isUnskippable, isForcedToRun, itrCorrelationId } = ctx
+      const {
+        testSuiteAbsolutePath,
+        testSuiteExecutionId,
+        isUnskippable,
+        isForcedToRun,
+        itrCorrelationId,
+      } = ctx
 
       // If the test module span is undefined, the plugin has not been initialized correctly and we bail out
       if (!this.testModuleSpan) {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+      const testFramework = this.testFramework || this.constructor.id
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(
           this.command,
           this.frameworkVersion,
           testSuite,
-          'mocha'
+          testFramework
         ),
         ...this.getSessionRequestErrorTags(),
         ...this.getSessionItrSkippingEnabledTags(),
+      }
+      if (this.testFrameworkAdapter) {
+        testSuiteMetadata[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -149,8 +347,9 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
-      this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
-      this._exportPendingWorkerTracesForTestSuite(testSuite)
+      const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
+      this._testSuiteSpansByTestSuite.set(testSuiteKey, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuiteKey)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
@@ -208,8 +407,8 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:worker:finish', () => {
-      this.tracer._exporter.flush()
+    this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:mocha:test:finish', ({
@@ -263,6 +462,7 @@ class MochaPlugin extends CiPlugin {
         span.finish()
         finishAllTraceSpans(span)
         this.activeTestSpan = null
+        this.cancelDiBreakpointHitWait()
         if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
           this.removeDiProbe(this.runningTestProbe)
           this.runningTestProbe = null
@@ -307,8 +507,24 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:retry', ({ span, isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
+    this.addSub('ci:mocha:test:retry', ({
+      span,
+      isFirstAttempt,
+      willBeRetried,
+      err,
+      test,
+      isAtrRetry,
+      promises,
+    }) => {
       if (span) {
+        const finishSpan = () => {
+          span.finish()
+          finishAllTraceSpans(span)
+          if (this.activeTestSpan === span) {
+            this.activeTestSpan = null
+          }
+        }
+
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
@@ -330,21 +546,34 @@ class MochaPlugin extends CiPlugin {
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
-            const { file, line, stackIndex } = probeInformation
+            const { file, line, stackIndex, setProbePromise } = probeInformation
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
-            while (realDateNow() < waitUntil) {
-              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
-              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
-              // fall back to a fixed syncronous delay.
+            this.prepareDiBreakpointHitWait()
+            if (promises) {
+              promises.setProbePromise = this.waitForDiOperation(setProbePromise)
             }
           }
         }
 
-        span.finish()
-        finishAllTraceSpans(span)
+        if (!isFirstAttempt &&
+          willBeRetried &&
+          this.di &&
+          this.libraryConfig?.isDiEnabled &&
+          this.runningTestProbe &&
+          promises) {
+          promises.finishTestPromise = this.waitForInFlightDiBreakpointHits().then(finishSpan, finishSpan)
+          return
+        }
+
+        finishSpan()
+      }
+    })
+
+    this.addSub('ci:mocha:test:di:wait', ({ promises }) => {
+      if (this.di) {
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
       }
     })
 
@@ -365,6 +594,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       if (this.testSessionSpan) {
@@ -427,16 +657,148 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+          autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
       }
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addBind('ci:mocha:global:run', (ctx) => {
       return ctx.currentStore
     })
+  }
+
+  /**
+   * Starts a Jasmine test span around WebdriverIO's test-function wrapper.
+   *
+   * @param {WebdriverioJasmineResult|undefined} result
+   * @param {string[]} [specs]
+   * @param {{filename?: string}|undefined} currentSuite
+   * @returns {object|undefined}
+   */
+  #startWebdriverioJasmineTest (result, specs, currentSuite) {
+    const state = this._webdriverioJasmineState
+    const currentStore = storage('legacy').getStore()
+    if (!state || !result?.id) {
+      return currentStore
+    }
+
+    const existingTest = state.tests.get(result.id)
+    if (existingTest) {
+      return existingTest.currentStore
+    }
+
+    const candidateSpecs = specs || state.specs
+    const testSuiteAbsolutePath = normalizeJasmineFile(
+      state.suiteFiles.get(result.parentSuiteId) ||
+      currentSuite?.filename ||
+      (candidateSpecs.length === 1 ? candidateSpecs[0] : undefined) ||
+      result.file ||
+      result.filename ||
+      candidateSpecs[0]
+    )
+    if (!testSuiteAbsolutePath) {
+      return currentStore
+    }
+
+    const span = this.startTestSpan({
+      testName: result.fullName || result.description,
+      testSuiteAbsolutePath,
+      title: result.description,
+    })
+    const testStore = { ...currentStore, span }
+    state.tests.set(result.id, {
+      currentStore: testStore,
+      span,
+      testSuiteAbsolutePath,
+    })
+    this.activeTestSpan = span
+
+    return testStore
+  }
+
+  /**
+   * Finishes a Jasmine test after its reporter receives the final result.
+   *
+   * @param {WebdriverioJasmineResult|undefined} result
+   * @param {string[]} [specs]
+   * @returns {void}
+   */
+  #finishWebdriverioJasmineTest (result, specs) {
+    const state = this._webdriverioJasmineState
+    if (!state || !result?.id) {
+      return
+    }
+
+    this.#startWebdriverioJasmineTest(result, specs)
+    const test = state.tests.get(result.id)
+    if (!test) {
+      return
+    }
+
+    const status = getJasmineStatus(result.status)
+    const error = getJasmineError(result)
+    if (error) {
+      test.span.setTag('error', error)
+    }
+    testFinishCh.publish({ span: test.span, status })
+    state.tests.delete(result.id)
+    if (state.currentResult?.id === result.id) {
+      state.currentResult = undefined
+    }
+
+    const previousStatus = state.suiteStatuses.get(test.testSuiteAbsolutePath)
+    if (status === 'fail' || !previousStatus || previousStatus === 'skip') {
+      state.suiteStatuses.set(test.testSuiteAbsolutePath, status)
+    }
+  }
+
+  /**
+   * Reports Jasmine suite statuses and flushes worker traces before its run settles.
+   *
+   * @param {{
+   *   resolveCallback?: (onDone: () => void) => void,
+   *   rejectCallback?: (onDone: () => void) => void
+   * }} context
+   * @returns {void}
+   */
+  #finishWebdriverioJasmineWorker (context) {
+    const state = this._webdriverioJasmineState
+    const results = []
+    const reportedFiles = new Set()
+    for (const [file, status] of state.suiteStatuses) {
+      const error = state.suiteErrors.get(file)
+      const result = { file, status }
+      if (error) {
+        result.error = {
+          message: error.message,
+          stack: error.stack,
+        }
+      }
+      results.push(result)
+      reportedFiles.add(file)
+    }
+    for (const spec of state.specs) {
+      const file = normalizeJasmineFile(spec)
+      if (!reportedFiles.has(file)) {
+        results.push({ file, status: 'skip' })
+      }
+    }
+
+    const waitForWorker = onDone => {
+      sendWebdriverioWorkerMessage({
+        origin: 'datadog',
+        name: SUITE_FINISH,
+        content: { results },
+      }, error => {
+        if (error) {
+          log.error('WebdriverIO Test Optimization IPC error', error)
+        }
+      }, () => workerFinishCh.publish({ onDone }))
+    }
+    context.resolveCallback = waitForWorker
+    context.rejectCallback = waitForWorker
   }
 
   startTestSpan (testInfo) {

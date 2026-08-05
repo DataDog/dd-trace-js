@@ -88,6 +88,9 @@ class BaseLLMObsWriter {
   }
 
   /**
+   * @param {Record<string, unknown>} event
+   * @param {{ apiKey?: string, site?: string }} [routing]
+   * @param {number} [byteLength]
    * @returns {boolean} `true` if the event was buffered, `false` if it was dropped
    * (e.g. the per-routing buffer was full). Callers that depend on the event
    * actually being submitted should check this value.
@@ -229,7 +232,7 @@ class BaseLLMObsWriter {
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = this._config.apiKey || ''
+      options.headers['DD-API-KEY'] = this._config.DD_API_KEY || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }

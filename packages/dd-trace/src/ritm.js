@@ -7,7 +7,11 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
-const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const {
+  isBuiltinModuleName,
+  isRelativeRequire,
+  normalizeModuleName,
+} = require('../../datadog-instrumentations/src/helpers/shared-utils')
 const { getConfiguredEnvName, getEnvironmentVariable } = require('./config/helper')
 
 const origRequire = Module.prototype.require
@@ -22,25 +26,6 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
-function stripNodePrefix (name) {
-  if (typeof name !== 'string') return name
-  return name.startsWith('node:') ? name.slice(5) : name
-}
-
-const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
-
-function isBuiltinModuleName (name) {
-  if (typeof name !== 'string') return false
-  if (name === 'electron') return true
-  return builtinModules.has(stripNodePrefix(name))
-}
-
-function normalizeModuleName (name) {
-  if (typeof name !== 'string') return name
-  const stripped = stripNodePrefix(name)
-  return builtinModules.has(stripped) ? stripped : name
-}
-
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
@@ -51,6 +36,11 @@ function normalizeModuleName (name) {
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @param {string[]} modules list of modules to hook into
+ * @param {object | Function} [options] hook options, or the `onrequire` callback
+ * @param {Function} [onrequire] callback to be executed upon encountering module
  */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)

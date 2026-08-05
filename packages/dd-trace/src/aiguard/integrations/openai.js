@@ -16,51 +16,65 @@ const chatCompletionsAfterChannel = channel('dd-trace:openai:chat.completions:af
 const responsesBeforeChannel = channel('dd-trace:openai:responses:before')
 const responsesAfterChannel = channel('dd-trace:openai:responses:after')
 
+let isEnabled = false
+let aiguard
+let opts
+
 /**
  * Subscribes AI Guard to OpenAI lifecycle channels.
  *
- * @param {object} aiguard
+ * @param {object} aiguardInstance
  * @param {boolean} block
- * @returns {() => void}
  */
-function enable (aiguard, block) {
-  const opts = { block, source: SOURCE_AUTO, integration: 'openai' }
+function enable (aiguardInstance, block) {
+  if (isEnabled) return
 
-  function onChatCompletionsBefore (ctx) {
-    pushEvaluation(ctx, aiguard, getChatCompletionsInputMessages(ctx.args?.[0]), opts)
-  }
-
-  function onChatCompletionsAfter (ctx) {
-    const inputMessages = getChatCompletionsInputMessages(ctx.args?.[0])
-    if (!inputMessages?.length) return
-    for (const message of getChatCompletionsOutputMessages(ctx.body)) {
-      pushEvaluation(ctx, aiguard, [...inputMessages, message], opts)
-    }
-  }
-
-  function onResponsesBefore (ctx) {
-    pushEvaluation(ctx, aiguard, getResponsesInputMessages(ctx.args?.[0]), opts)
-  }
-
-  function onResponsesAfter (ctx) {
-    const inputMessages = getResponsesInputMessages(ctx.args?.[0])
-    if (!inputMessages?.length) return
-    const outputMessages = getResponsesOutputMessages(ctx.body)
-    if (!outputMessages.length) return
-    pushEvaluation(ctx, aiguard, [...inputMessages, ...outputMessages], opts)
-  }
+  aiguard = aiguardInstance
+  opts = { block, source: SOURCE_AUTO, integration: 'openai' }
 
   chatCompletionsBeforeChannel.subscribe(onChatCompletionsBefore)
   chatCompletionsAfterChannel.subscribe(onChatCompletionsAfter)
   responsesBeforeChannel.subscribe(onResponsesBefore)
   responsesAfterChannel.subscribe(onResponsesAfter)
 
-  return function disable () {
-    chatCompletionsBeforeChannel.unsubscribe(onChatCompletionsBefore)
-    chatCompletionsAfterChannel.unsubscribe(onChatCompletionsAfter)
-    responsesBeforeChannel.unsubscribe(onResponsesBefore)
-    responsesAfterChannel.unsubscribe(onResponsesAfter)
+  isEnabled = true
+}
+
+function disable () {
+  if (!isEnabled) return
+
+  chatCompletionsBeforeChannel.unsubscribe(onChatCompletionsBefore)
+  chatCompletionsAfterChannel.unsubscribe(onChatCompletionsAfter)
+  responsesBeforeChannel.unsubscribe(onResponsesBefore)
+  responsesAfterChannel.unsubscribe(onResponsesAfter)
+
+  aiguard = undefined
+  opts = undefined
+  isEnabled = false
+}
+
+function onChatCompletionsBefore (ctx) {
+  pushEvaluation(ctx, aiguard, getChatCompletionsInputMessages(ctx.args?.[0]), opts)
+}
+
+function onChatCompletionsAfter (ctx) {
+  const inputMessages = getChatCompletionsInputMessages(ctx.args?.[0])
+  if (!inputMessages?.length) return
+  for (const message of getChatCompletionsOutputMessages(ctx.body)) {
+    pushEvaluation(ctx, aiguard, [...inputMessages, message], opts)
   }
 }
 
-module.exports = { enable }
+function onResponsesBefore (ctx) {
+  pushEvaluation(ctx, aiguard, getResponsesInputMessages(ctx.args?.[0]), opts)
+}
+
+function onResponsesAfter (ctx) {
+  const inputMessages = getResponsesInputMessages(ctx.args?.[0])
+  if (!inputMessages?.length) return
+  const outputMessages = getResponsesOutputMessages(ctx.body)
+  if (!outputMessages.length) return
+  pushEvaluation(ctx, aiguard, [...inputMessages, ...outputMessages], opts)
+}
+
+module.exports = { enable, disable }

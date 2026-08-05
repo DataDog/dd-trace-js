@@ -33,7 +33,7 @@ describe('AIGuard SDK', () => {
     flushInterval: 0,
     service: 'ai_guard_demo',
     env: 'test',
-    apiKey: 'API_KEY',
+    DD_API_KEY: 'API_KEY',
     DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
     experimental: {
@@ -124,7 +124,7 @@ describe('AIGuard SDK', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
-          'DD-API-KEY': config.apiKey,
+          'DD-API-KEY': config.DD_API_KEY,
           'DD-APPLICATION-KEY': config.DD_APP_KEY,
           'DD-AI-GUARD-VERSION': tracerVersion,
           'DD-AI-GUARD-SOURCE': 'SDK',

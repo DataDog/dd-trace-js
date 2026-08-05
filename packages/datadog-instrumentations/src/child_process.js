@@ -129,7 +129,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     const context = createContextFromChildProcessInfo(childProcessInfo)
     context.callArgs = callArgs
 
-    const { start, end, asyncStart, asyncEnd, error } = childProcessChannel
+    const { start, end, asyncStart, asyncEnd, error: errorChannel } = childProcessChannel
     start.publish(context)
 
     let result
@@ -140,7 +140,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
         result = customPromisifyMethod.apply(this, context.callArgs)
       } catch (error) {
         context.error = error
-        error.publish(context)
+        errorChannel.publish(context)
         throw error
       } finally {
         end.publish(context)
@@ -149,7 +149,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
     function reject (err) {
       context.error = err
-      error.publish(context)
+      errorChannel.publish(context)
       asyncStart.publish(context)
 
       asyncEnd.publish(context)
@@ -190,7 +190,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             const error = context.abortController.signal.reason || new Error('Aborted')
             childProcess.emit('error', error)
 
-            const cb = context.callArgs[context.callArgs.length - 1]
+            const cb = context.callArgs.at(-1)
             if (typeof cb === 'function') {
               cb(error)
             }

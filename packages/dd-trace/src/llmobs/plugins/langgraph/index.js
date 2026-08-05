@@ -14,7 +14,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     const span = ctx.currentStore?.span
@@ -74,7 +74,7 @@ class NextStreamLLMObsPlugin extends LLMObsPlugin {
 
     const { streamInputs: inputs, chunks } = streamData
     const input = inputs == null ? undefined : formatIO(inputs)
-    const lastChunk = chunks.length > 0 ? chunks[chunks.length - 1] : undefined
+    const lastChunk = chunks.length > 0 ? chunks.at(-1) : undefined
     const output = !hasError && lastChunk != null ? formatIO(lastChunk) : undefined
 
     this._tagger.tagTextIO(span, input, output)

@@ -21,6 +21,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
@@ -30,14 +31,16 @@ const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 const DEFAULT_IMPACTED_KNOWN_TESTS = {
   playwright: {
-    'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
+    'impacted-test.js':
       ['impacted test should be impacted', 'impacted test 2 should be impacted 2'],
+    'unimpacted-test.js':
+      ['unimpacted test should not be impacted'],
   },
 }
 
@@ -120,14 +123,22 @@ versions.forEach((version) => {
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
-      const getTestAssertions = (receiver, { isModified, isEfd, isNew }) =>
+      /**
+       * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
+       * @param {object} options
+       * @param {boolean} options.isModified
+       * @param {boolean} [options.isEfd]
+       * @param {boolean} [options.isEfdEnabled]
+       * @param {boolean} [options.isNew]
+       */
+      const getTestAssertions = (receiver, { isModified, isEfd, isEfdEnabled = isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
 
-            if (isEfd) {
+            if (isEfdEnabled) {
               assertObjectContains(testSession.meta, {
                 [TEST_EARLY_FLAKE_ENABLED]: 'true',
               })
@@ -137,12 +148,9 @@ versions.forEach((version) => {
 
             const resourceNames = tests.map(span => span.resource)
 
-            assertObjectContains(resourceNames,
-              [
-                'impacted-test.js.impacted test should be impacted',
-                'impacted-test.js.impacted test 2 should be impacted 2',
-              ]
-            )
+            assert.ok(resourceNames.includes('unimpacted-test.js.unimpacted test should not be impacted'))
+            assert.ok(resourceNames.includes('impacted-test.js.impacted test should be impacted'))
+            assert.ok(resourceNames.includes('impacted-test.js.impacted test 2 should be impacted 2'))
 
             const impactedTests = tests.filter(test =>
               test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
@@ -168,7 +176,19 @@ versions.forEach((version) => {
               } else {
                 assert.ok(!(TEST_IS_NEW in impactedTest.meta))
               }
+              if (!isEfd) {
+                assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in impactedTest.meta))
+              }
             }
+
+            const unmodifiedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] ===
+                'ci-visibility/playwright-tests-impacted-tests/unimpacted-test.js')
+
+            assert.strictEqual(unmodifiedTests.length, 1)
+            assert.ok(!(TEST_IS_MODIFIED in unmodifiedTests[0].meta))
+            assert.ok(!(TEST_IS_NEW in unmodifiedTests[0].meta))
+            assert.ok(!(TEST_IS_RETRY in unmodifiedTests[0].meta))
 
             if (isEfd) {
               const retriedTests = tests.filter(
@@ -190,12 +210,26 @@ versions.forEach((version) => {
             }
           }, 60000)
 
+      /**
+       * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
+       * @param {object} options
+       * @param {boolean} options.isModified
+       * @param {boolean} [options.isEfd]
+       * @param {boolean} [options.isEfdEnabled]
+       * @param {boolean} [options.isNew]
+       * @param {Record<string, string>} [extraEnvVars]
+       */
       const runImpactedTest = async (
         receiver,
-        { isModified, isEfd = false, isNew = false },
+        { isModified, isEfd = false, isEfdEnabled = isEfd, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions(receiver, { isModified, isEfd, isNew })
+        const testAssertionsPromise = getTestAssertions(receiver, {
+          isModified,
+          isEfd,
+          isEfdEnabled,
+          isNew,
+        })
         let proc
         try {
           proc = exec(
@@ -225,6 +259,40 @@ versions.forEach((version) => {
           await runImpactedTest(receiver, { isModified: true })
         })
 
+        it('does not manage impacted tests when the EFD retry budget is zero', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+          await runImpactedTest(receiver, { isModified: true, isEfdEnabled: true })
+        })
+
+        it('does not mark or retry tests in unmodified files', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+                '10s': NUM_RETRIES_EFD,
+              },
+            },
+            known_tests_enabled: true,
+          })
+          await runImpactedTest(
+            receiver,
+            { isModified: true, isEfd: true }
+          )
+        })
+
         it('should not be detected as impacted if disabled', async (receiver) => {
           receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
           receiver.setSettings({ impacted_tests_enabled: false })
@@ -246,7 +314,10 @@ versions.forEach((version) => {
       context('test is new', () => {
         it('should be retried and marked both as new and modified', async (receiver) => {
           receiver.setKnownTests({
-            playwright: {},
+            playwright: {
+              'unimpacted-test.js':
+                ['unimpacted test should not be impacted'],
+            },
           })
           receiver.setSettings({
             impacted_tests_enabled: true,

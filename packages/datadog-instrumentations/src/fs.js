@@ -88,8 +88,10 @@ addHook({ name: 'fs' }, fs => {
   const asyncMethods = Object.keys(paramsByMethod)
   const syncMethods = asyncMethods.map(name => `${name}Sync`)
 
-  massWrap(fs, asyncMethods, createWrapFunction())
-  massWrap(fs, syncMethods, createWrapFunction())
+  // Node 20 defines `fs.opendir` / `fs.opendirSync` as lazy accessor properties;
+  // `replaceGetter` resolves the method so the call is wrapped, not the accessor.
+  massWrap(fs, asyncMethods, createWrapFunction(), { replaceGetter: true })
+  massWrap(fs, syncMethods, createWrapFunction(), { replaceGetter: true })
   massWrap(fs.promises, asyncMethods, createWrapFunction('promises.'))
 
   wrap(fs.realpath, 'native', createWrapFunction('', 'realpath.native'))
@@ -355,15 +357,15 @@ function getMessage (operation, params, args, self) {
   return { operation, ...metadata }
 }
 
-function massWrap (target, methods, wrapper) {
+function massWrap (target, methods, wrapper, options) {
   for (const method of methods) {
-    wrap(target, method, wrapper)
+    wrap(target, method, wrapper, options)
   }
 }
 
-function wrap (target, method, wrapper) {
+function wrap (target, method, wrapper, options) {
   try {
-    shimmer.wrap(target, method, wrapper)
+    shimmer.wrap(target, method, wrapper, options)
   } catch {
     // skip unavailable method
   }

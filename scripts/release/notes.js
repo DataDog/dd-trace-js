@@ -8,7 +8,7 @@ const { capture, run } = require('./helpers/terminal')
 
 const version = pkg.version
 const tag = `v${version}`
-const major = version.split('.')[0]
+const major = version.split('.', 1)[0]
 const body = capture(`gh pr view ${tag}-proposal --json body --jq '.body'`)
 const args = process.argv.slice(2)
 const flags = []
@@ -25,4 +25,16 @@ if (version.includes('-')) {
 fs.mkdirSync(folder, { recursive: true })
 fs.writeFileSync(file, body)
 
-run(`gh release create ${tag} --target v${major}.x --title ${version} -F ${file} ${flags.join(' ')}`)
+let releaseExists = false
+try {
+  capture(`gh release view ${tag} --json tagName`)
+  releaseExists = true
+} catch {
+  // Release does not exist yet
+}
+
+if (releaseExists) {
+  run(`gh release edit ${tag} --title ${version} -F ${file} ${flags.join(' ')}`)
+} else {
+  run(`gh release create ${tag} --target v${major}.x --title ${version} -F ${file} ${flags.join(' ')}`)
+}

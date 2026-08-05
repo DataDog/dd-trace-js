@@ -93,14 +93,14 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super()
 
-    if (!config.apiKey || !config.DD_APP_KEY) {
+    if (!config.DD_API_KEY || !config.DD_APP_KEY) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
       this.#initialized = false
       return
     }
     this.#tracer = tracer
     this.#headers = {
-      'DD-API-KEY': config.apiKey,
+      'DD-API-KEY': config.DD_API_KEY,
       'DD-APPLICATION-KEY': config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
@@ -121,6 +121,9 @@ class AIGuard extends NoopAIGuard {
    *
    * - Clones each message so callers cannot mutate the data set in the meta struct.
    * - Truncates the list of messages and `content` fields emitting metrics accordingly.
+   *
+   * @param {import('../../../../index').aiguard.Message[]} messages
+   * @param {{ source: string, integration: string }} telemetryTags
    */
   #buildMessagesForMetaStruct (messages, telemetryTags) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
@@ -230,7 +233,7 @@ class AIGuard extends NoopAIGuard {
     // still applies for SDK callers that don't supply an explicit parent.
     const traceOpts = childOf ? { childOf } : {}
     return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
-      const last = messages[messages.length - 1]
+      const last = messages.at(-1)
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)
       if (target === 'tool') {

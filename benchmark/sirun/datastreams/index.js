@@ -14,7 +14,7 @@ const { getMessageSize } = require('../../../packages/dd-trace/src/datastreams/s
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 1_200_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const processor = new DataStreamsProcessor({
   dsmEnabled: true,
@@ -107,13 +107,13 @@ assert.ok(CONSUME_CARRIERS[0]['dd-pathway-ctx-base64'], 'codec did not inject pa
 
 guard.loopStart()
 if (VARIANT === 'consume') {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const carrier = CONSUME_CARRIERS[iteration % CONSUME_CARRIERS.length]
     const ctx = DsmPathwayCodec.decode(carrier)
     processor.setCheckpoint(CONSUMER_TAGS[iteration % CONSUMER_TAGS.length], span, ctx, MESSAGE_SIZE)
   }
 } else if (VARIANT === 'produce-with-message-size') {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const payloadSize = getMessageSize(MESSAGE)
     const ctx = processor.setCheckpoint(
       PRODUCER_TAGS[iteration % PRODUCER_TAGS.length],
@@ -124,7 +124,7 @@ if (VARIANT === 'consume') {
     DsmPathwayCodec.encode(ctx, {})
   }
 } else if (VARIANT === 'produce-manual-checkpoint') {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const ctx = processor.setCheckpoint(
       MANUAL_PRODUCER_TAGS[iteration % MANUAL_PRODUCER_TAGS.length],
       span,
@@ -134,7 +134,7 @@ if (VARIANT === 'consume') {
     DsmPathwayCodec.encode(ctx, {})
   }
 } else if (VARIANT === 'produce-high-cardinality') {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const ctx = processor.setCheckpoint(
       HIGH_CARDINALITY_PRODUCER_TAGS[iteration % HIGH_CARDINALITY_PRODUCER_TAGS.length],
       span,
@@ -144,7 +144,7 @@ if (VARIANT === 'consume') {
     DsmPathwayCodec.encode(ctx, {})
   }
 } else {
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const ctx = processor.setCheckpoint(
       PRODUCER_TAGS[iteration % PRODUCER_TAGS.length],
       span,

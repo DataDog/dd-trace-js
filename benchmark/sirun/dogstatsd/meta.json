@@ -7,16 +7,16 @@
   "instructions": true,
   "variants": {
     "no-tags": {
-      "env": { "VARIANT": "no-tags", "ITERATIONS": "6000000" }
+      "env": { "VARIANT": "no-tags", "OPERATIONS": "6000000" }
     },
     "with-tags": {
-      "env": { "VARIANT": "with-tags", "ITERATIONS": "8300000" }
+      "env": { "VARIANT": "with-tags", "OPERATIONS": "8300000" }
     },
     "many-tags": {
-      "env": { "VARIANT": "many-tags", "ITERATIONS": "3000000" }
+      "env": { "VARIANT": "many-tags", "OPERATIONS": "3000000" }
     },
     "aggregated": {
-      "env": { "VARIANT": "aggregated", "ITERATIONS": "15000000" }
+      "env": { "VARIANT": "aggregated", "OPERATIONS": "15000000" }
     }
   }
 }

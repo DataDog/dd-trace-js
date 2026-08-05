@@ -37,6 +37,9 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
+          // The legacy `elasticsearch` package emits the deprecated `util._extend` at module load and `util.isArray`
+          // at client construction; allow each before its triggering call so the deprecation guard does not throw.
+          temporaryWarningExceptions.add('The `util._extend` API is deprecated. Please use Object.assign() instead.')
           elasticsearch = metaModule.get()
 
           temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')

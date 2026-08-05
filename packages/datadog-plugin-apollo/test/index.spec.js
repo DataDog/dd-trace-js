@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const axios = require('axios')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
@@ -74,7 +75,7 @@ describe('Plugin', () => {
   }
 
   describe('@apollo/gateway', () => {
-    withVersions('apollo', '@apollo/gateway', version => {
+    withVersions('apollo', '@apollo/gateway', (version, moduleName, resolvedVersion) => {
       after(() => {
         return agent.close()
       })
@@ -419,7 +420,7 @@ describe('Plugin', () => {
               // the call to  the recordExceptions() method by ApolloGateway
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
               // fetch span but instead the error will be propagated to the request span and be set there
-              if (version > '2.3.0') {
+              if (semver.gt(resolvedVersion, '2.3.0')) {
                 assertObjectContains(traces[0][3], {
                   error: 1,
                   meta: {

@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 /**
  * @typedef {{
@@ -102,6 +103,36 @@ describe('coverage-ci-visibility', () => {
     encoder.makePayload()
 
     assert.strictEqual(encoder.count(), 0)
+  })
+
+  it('drops the queued payload and logs when the chunk cap fires mid-encode', () => {
+    logger.error = sinon.stub()
+    // Coverage uses its own `_coverageBytes` chunk rather than the parent's
+    // `_traceBytes`, so the cap throw skipped the `AgentEncoder.encode`
+    // catch path entirely and escaped to the host process. The regression
+    // pins that the local catch in `CoverageCIVisibilityEncoder.encode`
+    // drops the queued payload instead of throwing.
+    encoder.encode(formattedCoverage)
+    assert.strictEqual(encoder.count(), 1)
+
+    const originalReserve = encoder._coverageBytes.reserve.bind(encoder._coverageBytes)
+    let triggered = false
+    sinon.stub(encoder._coverageBytes, 'reserve').callsFake(function (size) {
+      if (triggered) return originalReserve(size)
+      triggered = true
+      throw new OverflowError(MAX_SIZE + 1)
+    })
+
+    encoder.encode(formattedCoverage2)
+
+    assert.strictEqual(encoder.count(), 0, 'queued payload must be dropped on overflow')
+    sinon.assert.calledOnce(logger.error)
+  })
+
+  it('rethrows non-overflow encode errors', () => {
+    sinon.stub(encoder._coverageBytes, 'reserve').throws(new Error('not an overflow'))
+
+    assert.throws(() => encoder.encode(formattedCoverage), /not an overflow/)
   })
 
   it('should be able to make multiple payloads', () => {

@@ -7,11 +7,13 @@ const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 const sinon = require('sinon')
 
-const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/query')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+const traceTimeoutMs = 2_000
 
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
@@ -107,7 +109,23 @@ describe('Plugin', () => {
             'mongodb-core',
             (done) => collection.insertOne({ a: 1 }, {}, done),
             'test',
-            'peer.service'
+            'peer.service',
+            { component: 'mongodb' }
+          )
+
+          // The bulkWrite span is opened with `db.name` set, so it flows through the same
+          // collection-stripping `getPeerService` override as the per-command spans.
+          withPeerService(
+            () => tracer,
+            'mongodb-core',
+            () => collection.bulkWrite([{ insertOne: { document: { a: 1 } } }]),
+            'test',
+            'peer.service',
+            {
+              component: 'mongodb',
+              desc: 'with bulkWrite',
+              resource: () => `bulkWrite test.${collectionName}`,
+            }
           )
 
           it('should do automatic instrumentation', done => {
@@ -123,7 +141,10 @@ describe('Plugin', () => {
                   'out.host': '127.0.0.1',
                   component: 'mongodb',
                 },
-              }, { spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`) })
+              }, {
+                spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`),
+                timeoutMs: traceTimeoutMs,
+              })
               .then(done)
               .catch(done)
 
@@ -177,6 +198,110 @@ describe('Plugin', () => {
             })
           })
 
+          it('should open a parent bulkWrite span wrapping the per-type write commands', async () => {
+            collection.bulkWrite([
+              { insertOne: { document: { a: 1 } } },
+              { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
+              { deleteOne: { filter: { a: 2 } } },
+            ])
+
+            return agent.assertSomeTraces(traces => {
+              const parent = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
+              assert.ok(parent, 'expected a bulkWrite span')
+              assert.strictEqual(parent.name, expectedSchema.outbound.opName)
+              assert.strictEqual(parent.service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(parent.type, 'mongodb')
+              assert.strictEqual(parent.meta['span.kind'], 'client')
+              assert.strictEqual(parent.meta['db.name'], `test.${collectionName}`)
+              assert.strictEqual(parent.meta.component, 'mongodb')
+
+              const children = traces[0].filter(span => span.parent_id.toString() === parent.span_id.toString())
+              const writeResources = children
+                .map(span => span.resource)
+                .filter(resource => !resource.startsWith('ismaster') && !resource.startsWith('hello'))
+                .sort()
+              assert.deepStrictEqual(writeResources, [
+                (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+                `insert test.${collectionName}`,
+                `update test.${collectionName}`,
+              ].sort())
+            }, {
+              spanResourceMatch: /^bulkWrite test\./,
+              timeoutMs: traceTimeoutMs,
+            })
+          })
+
+          it('should tag the bulkWrite span when the operation fails', async () => {
+            await collection.insertOne({ _id: 1 })
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
+              assert.rejects(collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }])),
+            ])
+          })
+
+          it('should finish the bulkWrite span when a trailing callback is passed', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.name': `test.${collectionName}`,
+                },
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
+              // Pre-v5 returns undefined and invokes the callback; v5+ ignores it and returns a promise.
+              Promise.resolve(collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {})),
+            ])
+          })
+
+          // Pre-v5 reports failures through the callback rather than a rejected promise, and
+          // validates arguments synchronously rather than returning a rejected promise.
+          if (version && semver.intersects(version, '<5')) {
+            it('should tag the bulkWrite span when the legacy callback form fails', done => {
+              collection.insertOne({ _id: 1 }, {}, () => {
+                agent.assertFirstTraceSpan({
+                  error: 1,
+                }, { spanResourceMatch: /^bulkWrite test\./ }).then(done, done)
+
+                collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }], {}, () => {})
+              })
+            })
+
+            it('should finish and tag the bulkWrite span when arguments throw synchronously', () => {
+              assert.throws(() => collection.bulkWrite('not-an-array'))
+
+              return agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ })
+            })
+
+            it('should restore the parent context for spans started in the legacy callback', done => {
+              const parentSpan = tracer.startSpan('test.parent')
+
+              const assertion = agent.assertSomeTraces(traces => {
+                const bulkWrite = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
+                const child = traces[0].find(span => span.name === 'test.child')
+                assert.ok(bulkWrite, 'expected a bulkWrite span')
+                assert.ok(child, 'expected a span started in the callback')
+                // The bulkWrite span has finished by the time the callback runs, so a span
+                // started there must nest under the original parent, not the bulkWrite span.
+                assert.strictEqual(child.parent_id.toString(), parentSpan.context().toSpanId())
+              }, {
+                spanResourceMatch: /^bulkWrite test\./,
+                timeoutMs: traceTimeoutMs,
+              })
+
+              tracer.scope().activate(parentSpan, () => {
+                collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {
+                  tracer.trace('test.child', () => {})
+                  parentSpan.finish()
+                })
+              })
+
+              assertion.then(done, done)
+            })
+          }
+
           it('should have the statement tag when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
@@ -188,7 +313,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"a":1},{"b":2}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should have the statement tag when doing a multi statement delete', async () => {
@@ -199,7 +324,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"a":1},{"b":2}]',
               },
-            })
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
@@ -213,7 +338,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a single delete operation', async () => {
@@ -249,7 +374,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a multi delete operation', async () => {
@@ -263,7 +388,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
               },
-            })
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -514,7 +639,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
               assert.strictEqual(traces[0][0].service, 'custom')
-            })
+            }, { timeoutMs: traceTimeoutMs })
             .then(done)
             .catch(done)
 
@@ -548,7 +673,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
             },
-          })
+          }, { spanResourceMatch: /^update test\./ })
         })
 
         withNamingSchema(
@@ -575,7 +700,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -592,7 +717,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '{"user":"string","age":"number"}',
             },
-          })
+          }, { spanResourceMatch: /^find test\./ })
         })
 
         it('should preserve operator keys while reporting value types', async () => {
@@ -602,7 +727,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
             },
-          })
+          }, { spanResourceMatch: /^find test\./ })
         })
       })
 
@@ -615,7 +740,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {

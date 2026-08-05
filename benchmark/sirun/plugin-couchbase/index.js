@@ -7,7 +7,7 @@ const CouchBasePlugin = require('../../../packages/datadog-plugin-couchbase/src/
 const StoragePlugin = require('../../../packages/dd-trace/src/plugins/storage')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 5_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Couchbase builds its span tags in `CouchBasePlugin.startSpan`: assemble the
 // base tag bag, add bucket/collection names, and merge the per-operation custom
@@ -92,7 +92,7 @@ plugin.startSpan(ops[0].operation, ops[0].customTags, ops[0].locator, ctx)
 assert.ok(lastMeta && lastMeta['db.type'] === 'couchbase', 'startSpan did not build the couchbase tags')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   const entry = ops[i % len]
   plugin.startSpan(entry.operation, entry.customTags, entry.locator, ctx)
 }

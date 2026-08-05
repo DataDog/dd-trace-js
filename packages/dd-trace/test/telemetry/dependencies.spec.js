@@ -360,7 +360,7 @@ describe('dependencies', () => {
   describe('with configuration', () => {
     const config = {
       telemetry: {
-        dependencyCollection: false,
+        DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED: false,
       },
     }
     const application = 'test'

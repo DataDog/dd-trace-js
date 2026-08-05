@@ -43,7 +43,7 @@ describe('BaseLLMObsWriter', () => {
       config: {
         site: 'site.com',
         url: new URL('http://localhost:8126'),
-        apiKey: 'test',
+        DD_API_KEY: 'test',
       },
     }
   })

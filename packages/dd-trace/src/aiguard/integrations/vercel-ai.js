@@ -11,45 +11,59 @@ const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
 const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
 const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
 
+let isEnabled = false
+let aiguard
+let opts
+
 /**
  * Subscribes AI Guard to Vercel AI lifecycle channels.
  *
- * @param {object} aiguard
+ * @param {object} aiguardInstance
  * @param {boolean} block
- * @returns {() => void}
  */
-function enable (aiguard, block) {
-  const opts = { block, source: SOURCE_AUTO, integration: 'ai' }
+function enable (aiguardInstance, block) {
+  if (isEnabled) return
 
-  function onBefore (ctx) {
-    pushEvaluation(ctx, aiguard, convertVercelPromptToMessages(ctx.prompt), opts)
-  }
-
-  function onGenerateAfter (ctx) {
-    const inputMessages = convertVercelPromptToMessages(ctx.prompt)
-    if (!inputMessages.length || !ctx.result?.content?.length) return
-
-    pushEvaluation(ctx, aiguard, buildOutputMessages(inputMessages, ctx.result.content), opts)
-  }
-
-  function onStreamAfter (ctx) {
-    const inputMessages = convertVercelPromptToMessages(ctx.prompt)
-    if (!inputMessages.length || !ctx.chunks?.length) return
-
-    pushEvaluation(ctx, aiguard, buildOutputMessages(inputMessages, getStreamContent(ctx.chunks)), opts)
-  }
+  aiguard = aiguardInstance
+  opts = { block, source: SOURCE_AUTO, integration: 'ai' }
 
   doGenerateBeforeChannel.subscribe(onBefore)
   doGenerateAfterChannel.subscribe(onGenerateAfter)
   doStreamBeforeChannel.subscribe(onBefore)
   doStreamAfterChannel.subscribe(onStreamAfter)
 
-  return function disable () {
-    doGenerateBeforeChannel.unsubscribe(onBefore)
-    doGenerateAfterChannel.unsubscribe(onGenerateAfter)
-    doStreamBeforeChannel.unsubscribe(onBefore)
-    doStreamAfterChannel.unsubscribe(onStreamAfter)
-  }
+  isEnabled = true
+}
+
+function disable () {
+  if (!isEnabled) return
+
+  doGenerateBeforeChannel.unsubscribe(onBefore)
+  doGenerateAfterChannel.unsubscribe(onGenerateAfter)
+  doStreamBeforeChannel.unsubscribe(onBefore)
+  doStreamAfterChannel.unsubscribe(onStreamAfter)
+
+  aiguard = undefined
+  opts = undefined
+  isEnabled = false
+}
+
+function onBefore (ctx) {
+  pushEvaluation(ctx, aiguard, convertVercelPromptToMessages(ctx.prompt), opts)
+}
+
+function onGenerateAfter (ctx) {
+  const inputMessages = convertVercelPromptToMessages(ctx.prompt)
+  if (!inputMessages.length || !ctx.result?.content?.length) return
+
+  pushEvaluation(ctx, aiguard, buildOutputMessages(inputMessages, ctx.result.content), opts)
+}
+
+function onStreamAfter (ctx) {
+  const inputMessages = convertVercelPromptToMessages(ctx.prompt)
+  if (!inputMessages.length || !ctx.chunks?.length) return
+
+  pushEvaluation(ctx, aiguard, buildOutputMessages(inputMessages, getStreamContent(ctx.chunks)), opts)
 }
 
 /**
@@ -75,4 +89,4 @@ function getStreamContent (chunks) {
   return text ? [{ type: 'text', text }] : []
 }
 
-module.exports = { enable }
+module.exports = { enable, disable }

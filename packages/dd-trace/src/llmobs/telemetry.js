@@ -3,6 +3,7 @@
 const ERROR_TYPE = require('../constants')
 
 const telemetryMetrics = require('../telemetry/metrics')
+const { getSegment } = require('../util')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
@@ -22,7 +23,7 @@ function extractIntegrationFromTags (tags) {
   if (!Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
-  return integrationTag.split(':')[1] || null
+  return getSegment(integrationTag, ':', 1) || null
 }
 
 function extractTagsFromSpanEvent (event) {
@@ -87,6 +88,7 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     site: config.site,
     auto: Number(autoEnabled),
     ml_app: config.llmobs.mlApp,
+    sample_rate: config.llmobs.sampleRate,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
@@ -181,6 +183,23 @@ function recordSubmitEvaluation (options, err, value = 1) {
   llmobsMetrics.count('evals_submitted', tags).inc(value)
 }
 
+/**
+ * @param {string} metricType - The submitted metric type, `'other'` if unrecognized.
+ * @param {string} targetType - The payload key the feedback was attached to, `'other'` if unresolved.
+ * @param {string} err - The telemetry error tag, empty when the submission succeeded.
+ * @param {number} [value]
+ * @returns {void}
+ */
+function recordSubmitFeedback (metricType, targetType, err, value = 1) {
+  const tags = {
+    error: Number(!!err),
+    metric_type: metricType,
+    target_type: targetType,
+  }
+  if (err) tags.error_type = err
+  llmobsMetrics.count('feedback_submitted', tags).inc(value)
+}
+
 function recordLLMObsUserProcessorCalled (error, value = 1) {
   const tags = { error: error ? 1 : 0 }
   llmobsMetrics.count('user_processor_called', tags).inc(value)
@@ -199,5 +218,6 @@ module.exports = {
   recordUserFlush,
   recordExportSpan,
   recordSubmitEvaluation,
+  recordSubmitFeedback,
   recordLLMObsUserProcessorCalled,
 }

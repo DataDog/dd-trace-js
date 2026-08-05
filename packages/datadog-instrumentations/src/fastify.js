@@ -22,6 +22,10 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
+let lastPublishedError
+let lastPublishedReq
+
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -56,17 +60,11 @@ function wrapAddHook (addHook) {
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
     arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook () {
-      // Fast path: every fastify request invokes each addHook'd handler, so the wrap
-      // runs in the user's hot path. The only side effects this wrapper carries are
-      // the three channels below; when none of them have a subscriber (the default
-      // plugin config, and the steady state once appsec / cookie subscribers detach),
-      // the wrap has nothing to do, and a `fn.apply(this, arguments)` forward keeps
-      // V8's CallApplyArguments fast path intact.
-      //
-      // The previous shape mutated `arguments[arguments.length - 1]` to swap `done`.
-      // That mutation materialises the magical arguments object and disables V8
-      // inlining of the enclosing function. The slow path below builds a fresh args
-      // array instead so the hot fast path keeps a clean forward.
+      // Every fastify request invokes each addHook'd handler, so this wrapper runs in the
+      // user's hot path. When none of the three channels below has a subscriber (the default
+      // plugin config, and the steady state once appsec / cookie subscribers detach), forward
+      // `arguments` untouched: no args array is materialised and V8's CallApplyArguments fast
+      // path stays intact. The slow path copies/indexes the args only when it has work to do.
       if (errorChannel.hasSubscribers || cookieParserReadCh.hasSubscribers || callbackFinishCh.hasSubscribers) {
         return invokeHookWithContext(name, fn, this, arguments)
       }
@@ -85,7 +83,7 @@ function wrapAddHook (addHook) {
  * @param {string} name Lifecycle phase the hook was registered against.
  * @param {Function} fn User-supplied hook.
  * @param {unknown} thisArg `this` Fastify passes to the hook.
- * @param {ArrayLike<unknown>} args Fastify's positional args; the dispatcher always
+ * @param {ArgumentsLike} args Fastify's positional args; the dispatcher always
  *   places `done` as the trailing positional (see fastify/lib/hooks.js hookIterator,
  *   onSendHookRunner, preParsingHookRunner, onRequestAbortHookRunner).
  */
@@ -96,6 +94,8 @@ function invokeHookWithContext (name, fn, thisArg, args) {
   const ctx = { req }
 
   try {
+    // `args` is the wrapper's `arguments` object, which has no `Array#at`.
+    // eslint-disable-next-line unicorn/prefer-at
     const lastArg = args[args.length - 1]
 
     if (typeof lastArg === 'function') {
@@ -110,16 +110,20 @@ function invokeHookWithContext (name, fn, thisArg, args) {
     const promise = fn.apply(thisArg, args)
 
     if (promise && typeof promise.catch === 'function') {
-      return promise.catch(error => {
+      // Observe the rejection to publish, then hand back the original promise so
+      // the rejection keeps propagating untouched. Returning the handler's
+      // promise instead would resolve with `undefined` and swallow the rejection.
+      promise.catch(error => {
         ctx.error = error
-        return publishError(ctx)
+        publishError(ctx)
       })
     }
 
     return promise
   } catch (error) {
     ctx.error = error
-    throw publishError(ctx)
+    publishError(ctx)
+    throw error
   }
 }
 
@@ -305,11 +309,24 @@ function getRouteConfig (request) {
 }
 
 function publishError (ctx) {
-  if (ctx.error) {
-    publishErrorChannel(ctx)
-  }
+  const error = ctx.error
+  if (!error) return
 
-  return ctx.error
+  // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
+  // hook after it throws, re-throwing the same error object on every sequential
+  // re-drive (#9099), recursing the subscriber until boot overflows the stack.
+  // The subscribers tag once per request, so the guard collapses only a re-drive
+  // of the same error against the same request; a distinct request reusing a
+  // cached error object still publishes. Boot hooks carry no request, so their
+  // re-drives share the same `undefined` req and collapse after the first. The
+  // re-drive re-throws the one caught error on the trailing hop, so a compare
+  // against the previous publish bounds it without a per-error side table.
+  const req = ctx.req
+  if (error === lastPublishedError && req === lastPublishedReq) return
+  lastPublishedError = error
+  lastPublishedReq = req
+
+  publishErrorChannel(ctx)
 }
 
 function onRoute (routeOptions) {

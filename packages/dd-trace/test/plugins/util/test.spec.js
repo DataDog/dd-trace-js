@@ -10,10 +10,14 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+const { SPAN_TYPE } = require('../../../../../ext/tags')
 require('../../setup/core')
+const getConfig = require('../../../src/config')
+const Span = require('../../../src/opentracing/span')
 
 const {
   getTestParametersString,
+  getTestLevelsMetadataTags,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -28,26 +32,149 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
   collectTestOptimizationSummariesFromTraces,
+  formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getLibraryCapabilitiesTags,
+  getTestParentSpan,
+  setRumTestCorrelation,
+  setRumTestTags,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../../src/plugins/util/test')
 
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const {
+  CI_JOB_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+} = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('library capabilities', () => {
+  it('advertises TIA for Vitest unless the execution mode does not support it', () => {
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0')[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      '1'
+    )
+    assert.strictEqual(
+      getLibraryCapabilitiesTags('vitest', '4.0.0', {
+        omitTestImpactAnalysis: true,
+      })[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
+      undefined
+    )
+  })
+})
+
+describe('RUM test correlation', () => {
+  const tracer = { _config: getConfig() }
+  const processor = { process () {} }
+  const prioritySampler = { sample () {} }
+
+  /**
+   * @param {import('../../../src/opentracing/span_context')|undefined} parent
+   * @param {Record<string, string>} [tags]
+   */
+  function createSpan (parent, tags) {
+    return new Span(tracer, processor, prioritySampler, {
+      operationName: 'test',
+      parent,
+      tags,
+    })
+  }
+
+  it('sets correlation metadata on an active test span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const context = {
+      isRumActive: false,
+      browserVersion: undefined,
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, testSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets correlation metadata on the test ancestor of an active child span', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+    const childSpan = createSpan(testSpan.context())
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, childSpan), testSpan)
+    assert.strictEqual(context.testExecutionId, testSpan.context().toTraceId())
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), '1.2.3')
+    assert.strictEqual(childSpan.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(childSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('does not mutate context without an active span', () => {
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, undefined), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+  })
+
+  it('does not mutate context when the active trace has no test span', () => {
+    const span = createSpan()
+    const context = {
+      isRumActive: true,
+      browserVersion: '1.2.3',
+      testExecutionId: undefined,
+    }
+
+    assert.strictEqual(setRumTestCorrelation(context, span), undefined)
+    assert.strictEqual(context.testExecutionId, undefined)
+    assert.strictEqual(span.context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    assert.strictEqual(span.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('sets only the available RUM tags', () => {
+    const testSpan = createSpan(undefined, { [SPAN_TYPE]: 'test' })
+
+    setRumTestTags(testSpan, true, undefined)
+
+    assert.strictEqual(testSpan.context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+    assert.strictEqual(testSpan.context().getTag(TEST_BROWSER_VERSION), undefined)
+  })
+
+  it('uses a preallocated test execution ID for the test trace', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }, '123456789'), parentSpan)
+    sinon.assert.calledOnceWithExactly(extract, 'text_map', {
+      'x-datadog-trace-id': '123456789',
+      'x-datadog-parent-id': '0000000000000000',
+    })
+  })
+})
 
 describe('getTestOptimizationRequestResults', () => {
   it('starts known tests, test management, and skippable requests together when enabled', async () => {
@@ -192,6 +319,31 @@ describe('getTestParametersString', () => {
     assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+  })
+})
+
+describe('getTestLevelsMetadataTags', () => {
+  it('keeps only allowlisted CI and Git tags', () => {
+    const testLevelsMetadataTags = getTestLevelsMetadataTags({
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+      'ci.custom': 'custom-ci-value',
+      'git.custom': 'custom-git-value',
+      'test.command': 'npm test',
+    })
+
+    assert.deepStrictEqual(testLevelsMetadataTags, {
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+    })
   })
 })
 
@@ -385,6 +537,29 @@ describe('attempt to fix summary', () => {
     assert.doesNotMatch(summary, /execution \d+:/)
   })
 
+  it('keeps colliding suite and test display names as separate attempt to fix tests', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'pass',
+      isDisabled: true,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Attempt to fix failed: 1 of 2 execution\(s\) failed across 1 of 2 test\(s\)\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
+  })
+
   it('collects attempt to fix executions from worker traces', () => {
     const executions = new Map()
     const payload = JSON.stringify([
@@ -484,6 +659,25 @@ describe('attempt to fix summary', () => {
     )
   })
 
+  it('does not split Unicode test names when truncating the start', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const suite = `a😀${'b'.repeat(58)}`
+    const testName = 'c'.repeat(100)
+
+    try {
+      logAttemptToFixTestExecution(suite, testName)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      `Datadog Test Optimization: attempting to fix …${'b'.repeat(58)} › ` +
+      `${'c'.repeat(48)}…${'c'.repeat(48)}`
+    )
+  })
+
   it('logs the attempt to fix progress line once for a test effort', () => {
     const consoleWarn = sinon.stub(console, 'warn')
     const loggedAttemptToFixTests = new Set()
@@ -505,6 +699,21 @@ describe('attempt to fix summary', () => {
       consoleWarn.secondCall.args[0],
       'Datadog Test Optimization: attempting to fix suite.js › other test'
     )
+  })
+
+  it('uses the suite and test tuple to deduplicate attempt to fix progress lines', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('a › b', 'c', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('a', 'b › c', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(loggedAttemptToFixTests.size, 2)
   })
 
   it('combines attempt to fix and dynamic name sections into one session report', () => {
@@ -529,6 +738,288 @@ describe('attempt to fix summary', () => {
     assert.strictEqual(newTestsWithDynamicNames.size, 0)
     assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
     assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
+  })
+})
+
+describe('test management summary', () => {
+  it('does not read report configuration for unmanaged tests', () => {
+    const getValueFromEnvSources = sinon.stub()
+    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+      '../../../src/plugins/util/test',
+      {
+        '../../config/helper': {
+          getValueFromEnvSources,
+        },
+      }
+    )
+    const executions = new Map()
+
+    recordExecution({
+      testSuite: 'unmanaged.spec.js',
+      testName: 'passes',
+      status: 'pass',
+    }, executions)
+
+    assert.strictEqual(getValueFromEnvSources.callCount, 0)
+    assert.strictEqual(executions.size, 0)
+  })
+
+  it('reports effective disabled and quarantined actions once per test', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'disabled.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'does not fail the session',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'attempt-to-fix.spec.js',
+      testName: 'takes precedence',
+      status: 'fail',
+      isAttemptToFix: true,
+      isDisabled: true,
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Disabled: 1 test skipped.\n' +
+      '  Quarantined: 1 test run; 1 failure did not affect the test session.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [disabled] disabled.spec.js › is skipped\n' +
+      '  • [quarantined, failed] quarantined.spec.js › does not fail the session'
+    )
+  })
+
+  it('keeps colliding suite and test display names as separate managed tests', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'a › b',
+      testName: 'c',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'a',
+      testName: 'b › c',
+      status: 'fail',
+      isQuarantined: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+
+    assert.strictEqual(executions.size, 2)
+    assert.match(summary, /Disabled: 1 test skipped\./)
+    assert.match(summary, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+    assert.strictEqual(summary.match(/a › b › c/g).length, 2)
+  })
+
+  it('collects disabled and quarantined actions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_test_disabled': 'true',
+            'test.suite': 'disabled.spec.js',
+            'test.name': 'is skipped',
+            'test.status': 'skip',
+          },
+        },
+        {
+          meta: {
+            'test.test_management.is_quarantined': 'true',
+            'test.suite': 'quarantined.spec.js',
+            'test.name': 'fails',
+            'test.status': 'fail',
+          },
+        },
+      ],
+    ])
+
+    collectTestOptimizationSummariesFromTraces(payload, { testManagementExecutions: executions })
+
+    assert.match(formatTestManagementSummary(executions), /Disabled: 1 test skipped\./)
+    assert.match(
+      formatTestManagementSummary(executions),
+      /Quarantined: 1 test run; 1 failure did not affect the test session\./
+    )
+  })
+
+  it('reports when every quarantined test passes', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'passes',
+      status: 'pass',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(
+      formatTestManagementSummary(executions),
+      'Test Management\n' +
+      '  Quarantined: 1 test run; all passed.\n' +
+      '\n' +
+      '  Affected tests:\n' +
+      '  • [quarantined, passed] quarantined.spec.js › passes'
+    )
+  })
+
+  it('does not report quarantined tests that did not run', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is skipped',
+      status: 'skip',
+      isQuarantined: true,
+    }, executions)
+    recordTestManagementExecution({
+      testSuite: 'quarantined.spec.js',
+      testName: 'is pending',
+      isQuarantined: true,
+    }, executions)
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(formatTestManagementSummary(executions), '')
+  })
+
+  it('omits names when more than five tests are affected', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    for (let index = 0; index < 6; index++) {
+      recordTestManagementExecution({
+        testSuite: 'suite.js',
+        testName: `disabled ${index}`,
+        status: 'skip',
+        isDisabled: true,
+      }, executions)
+    }
+
+    try {
+      logTestOptimizationSummary({ testManagementExecutions: executions })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Disabled: 6 tests skipped\./)
+    assert.match(consoleWarn.firstCall.args[0], /Individual test names omitted because 6 tests were affected\./)
+    assert.doesNotMatch(consoleWarn.firstCall.args[0], /disabled 0/)
+    assert.match(consoleWarn.firstCall.args[0], /DD_TEST_MANAGEMENT_REPORT_ENABLED=false/)
+  })
+
+  it('keeps every displayed test on one bounded line', () => {
+    const executions = new Map()
+    const longSuite = `packages/${'nested/'.repeat(30)}long.spec.js`
+    const longName = `outer context ${'middle '.repeat(30)}\nunique suffix`
+
+    recordTestManagementExecution({
+      testSuite: longSuite,
+      testName: longName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.ok(detailLine)
+    assert.ok(detailLine.length <= 177, `Got line with ${detailLine.length} characters: ${detailLine}`)
+    assert.ok(!detailLine.includes('\n'))
+    assert.match(detailLine, /…/)
+    assert.match(detailLine, /unique suffix/)
+  })
+
+  it('does not split Unicode test names when truncating the middle', () => {
+    const executions = new Map()
+    const testName = `${'a'.repeat(79)}😀${'b'.repeat(80)}`
+
+    recordTestManagementExecution({
+      testName,
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, `  • [disabled] ${'a'.repeat(79)}…${'b'.repeat(79)}`)
+  })
+
+  it('strips terminal control sequences from displayed test names', () => {
+    const executions = new Map()
+
+    recordTestManagementExecution({
+      testSuite: '\x1b[2Jsuite.js',
+      testName: '\x1b]8;;https://example.com\x07linked\x1b]8;;\x07 \x07name',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+
+    const summary = formatTestManagementSummary(executions)
+    const detailLine = summary.split('\n').find(line => line.includes('[disabled]'))
+
+    assert.strictEqual(detailLine, '  • [disabled] suite.js › linked name')
+  })
+
+  it('can disable the end-of-session report without retaining results', () => {
+    const executions = new Map()
+    const attemptToFixExecutions = new Map()
+    const newTestsWithDynamicNames = new Set()
+    const consoleWarn = sinon.stub(console, 'warn')
+    process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+
+    recordTestManagementExecution({
+      testSuite: 'suite.js',
+      testName: 'disabled',
+      status: 'skip',
+      isDisabled: true,
+    }, executions)
+    assert.strictEqual(executions.size, 0)
+
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: 'suite.js',
+      testName: 'attempt to fix',
+      status: 'pass',
+    })
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+
+    try {
+      logTestOptimizationSummary({
+        attemptToFixExecutions,
+        newTestsWithDynamicNames,
+        testManagementExecutions: executions,
+      })
+    } finally {
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 0)
+    assert.strictEqual(attemptToFixExecutions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.strictEqual(executions.size, 0)
   })
 })
 
@@ -640,6 +1131,11 @@ describe('getCodeOwnersForFilename', () => {
         matches: ['file1.js', 'packages/dd-trace/fileA.js'],
         misses: ['file10.js', 'packages/dd-trace/file/name.js'],
       },
+      {
+        pattern: String.raw`file\*.js`,
+        matches: ['file*.js', 'packages/dd-trace/file*.js'],
+        misses: ['file1.js', 'packages/dd-trace/fileA.js'],
+      },
     ]
 
     for (const { pattern, matches = [], misses = [] } of patternTests) {
@@ -654,6 +1150,14 @@ describe('getCodeOwnersForFilename', () => {
         assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
       }
     }
+  })
+
+  it('treats a trailing backslash as a literal instead of throwing', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'docs\\', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(getCodeOwnersForFilename('docs/README.md', codeOwnersFileEntries), null)
   })
 
   it('keeps CODEOWNERS matching case-sensitive', () => {
@@ -1216,41 +1720,6 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
-  })
-})
-
-describe('getEfdRetryCount', () => {
-  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
-
-  it('returns retries for the matching duration bucket', () => {
-    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
-    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
-  })
-
-  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
-    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
-    assert.strictEqual(getEfdRetryCount(0, {}), 0)
-    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
-    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
-  })
-})
-
-describe('getMaxEfdRetryCount', () => {
-  it('returns the largest retry count from slow test retry buckets', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
-  })
-
-  it('preserves an explicit all-zero configuration', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
-  })
-
-  it('returns 0 when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), 0)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
   })
 })
 

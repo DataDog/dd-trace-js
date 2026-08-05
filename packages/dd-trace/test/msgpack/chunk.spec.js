@@ -51,6 +51,41 @@ describe('MsgpackChunk', () => {
       chunk.reserve(2049)
       assert.equal(chunk.buffer.length, 4096)
     })
+
+    it('throws ERR_MSGPACK_CHUNK_OVERFLOW past MAX_SIZE without growing the buffer', () => {
+      const chunk = new MsgpackChunk()
+      const before = chunk.buffer
+
+      assert.throws(() => chunk.reserve(MsgpackChunk.MAX_SIZE + 1), MsgpackChunk.OverflowError)
+      // The cap fires before the resize, so the chunk stays usable for the
+      // caller's recovery path (flush, reset, drop, etc.).
+      assert.equal(chunk.buffer, before)
+      assert.equal(chunk.length, 0)
+    })
+
+    it('tags OverflowError so writers can recognise the cap by code', () => {
+      const needed = MsgpackChunk.MAX_SIZE + 1
+      const error = new MsgpackChunk.OverflowError(needed)
+
+      assert.ok(error instanceof RangeError)
+      assert.equal(error.name, 'OverflowError')
+      // Writers branch on the `code` string, so it has to be an own instance
+      // property that survives crossing a module boundary, not a prototype-only
+      // tag.
+      assert.ok(Object.hasOwn(error, 'code'))
+      assert.equal(error.code, 'ERR_MSGPACK_CHUNK_OVERFLOW')
+      assert.ok(error.message.includes(String(needed)))
+    })
+
+    it('clamps the doubled capacity at MAX_SIZE when growth would otherwise overshoot', () => {
+      // Start the chunk just below MAX_SIZE so the doubling step would land
+      // at 2 * MAX_SIZE if it weren't clamped.
+      const chunk = new MsgpackChunk(MsgpackChunk.MAX_SIZE - 1024)
+
+      chunk.reserve(MsgpackChunk.MAX_SIZE - 512)
+
+      assert.equal(chunk.buffer.length, MsgpackChunk.MAX_SIZE)
+    })
   })
 
   describe('reset', () => {

@@ -240,6 +240,17 @@ describe('OTel Tracer', () => {
     })
   })
 
+  it('reflects the sampling decision in traceFlags before the span ends', () => {
+    const otelTracer = new Tracer({}, {}, new TracerProvider())
+
+    const span = otelTracer.startSpan('name')
+    try {
+      assert.strictEqual(span.spanContext().traceFlags, 1)
+    } finally {
+      span.end()
+    }
+  })
+
   describe('_convertOtelContextToDatadog (traceparent/tracestate extraction)', () => {
     const TRACE_ID = '0123456789abcdef0123456789abcdef'
     const SPAN_ID = '0123456789abcdef'

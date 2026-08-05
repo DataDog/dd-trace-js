@@ -112,24 +112,16 @@ function apolloDrainHttpServerHook (drainModule) {
   return drainModule
 }
 
-addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['4'] }, apolloServerHook)
+addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['>=4'] }, apolloServerHook)
 
 addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['4'] }, apolloExpress4Hook)
 
-addHook({ name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['4'] }, apolloHeaderMapHook)
+addHook(
+  { name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['>=4'] },
+  apolloHeaderMapHook
+)
 
 addHook(
   { name: '@apollo/server', file: 'dist/cjs/plugin/drainHttpServer/index.js', versions: ['>=5.0.0'] },
   apolloDrainHttpServerHook
-)
-
-addHook(
-  { name: '@apollo/server', file: 'dist/cjs/runHttpQuery.js', versions: ['>=5.0.0'] },
-  (runHttpQueryModule) => {
-    shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
-      return wrapExecuteHTTPGraphQLRequest(originalRunHttpQuery)
-    })
-
-    return runHttpQueryModule
-  }
 )

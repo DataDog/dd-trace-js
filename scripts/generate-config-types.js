@@ -41,6 +41,7 @@ const PROPERTY_TYPE_OVERRIDES = {
 }
 const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
+  normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
   setGRPCRange: 'number[]',
@@ -56,8 +57,10 @@ function createTreeNode () {
 }
 
 function getPropertyName (canonicalName, entry) {
-  const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
-  return configurationNames?.[0] ?? canonicalName
+  if (entry.namespace) {
+    return `${entry.namespace}.${canonicalName}`
+  }
+  return entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName
 }
 
 const FALLBACK_PATTERN =
@@ -250,14 +253,16 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
     const type = getEnvVarType(propertyName, entry)
 
     envVarTypes.set(canonicalName, type)
-    for (const alias of entry.aliases ?? []) {
-      if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
-        envVarTypes.set(alias, type)
+    if ((entry.aliases) != null) {
+      for (const alias of entry.aliases) {
+        if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
+          envVarTypes.set(alias, type)
+        }
       }
     }
   }
 
-  const body = [...envVarTypes.entries()]
+  const body = [...envVarTypes]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, type]) => `  ${renderPropertyName(name)}: ${type};`)
     .join('\n')

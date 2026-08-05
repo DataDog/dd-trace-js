@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const GrpcClientPlugin = require('../../../packages/datadog-plugin-grpc/src/client')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 5_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every gRPC client call walks `bindStart`: parse the `/pkg.Service/Method` path
 // (cached per path) into name/service/package, assemble the method meta bag, and
@@ -59,7 +59,7 @@ for (const message of messages) {
 
 const len = messages.length
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   plugin.bindStart(messages[i % len])
 }
 guard.done()

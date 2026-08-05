@@ -108,7 +108,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
-        service: this.serviceName(),
+        service: this.serviceName(request),
         integrationName: 'aws-sdk',
       }, ctx)
 
@@ -216,14 +216,18 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
   }
 
-  serviceName () {
-    return this.config.service ||
-      super.serviceName({
-        id: 'aws',
-        type: 'web',
-        kind: 'client',
-        awsService: this.serviceIdentifier,
-      })
+  /**
+   * @param {{ params?: object }} request
+   */
+  serviceName (request) {
+    return super.serviceName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: this.serviceIdentifier,
+      pluginConfig: this.config,
+      params: request.params,
+    })
   }
 
   isEnabled (request) {

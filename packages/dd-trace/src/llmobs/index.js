@@ -7,8 +7,17 @@ const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
 const {
   ML_APP,
+  SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   PROPAGATED_ML_APP_KEY,
   PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_SESSION_ID_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -18,6 +27,7 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
+const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -68,10 +78,10 @@ function enable (config) {
   spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
-  injectCh.subscribe(handleLLMObsParentIdInjection)
+  injectCh.subscribe(handleLLMObsInjection)
 
   setAgentStrategy(config, useAgentless => {
-    if (useAgentless && !(config.apiKey && config.site)) {
+    if (useAgentless && !(config.DD_API_KEY && config.site)) {
       if (DD_MAJOR < 6 || !config?.startupLogs) {
         // eslint-disable-next-line no-console
         console.error(INCOMPATIBLE_INITIALIZATION)
@@ -92,7 +102,7 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
-  if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
+  if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
@@ -106,8 +116,8 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propagate the parent id and mlApp.
-function handleLLMObsParentIdInjection ({ carrier }) {
+// we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
+function handleLLMObsInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
   if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
@@ -122,7 +132,20 @@ function handleLLMObsParentIdInjection ({ carrier }) {
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
-  if (!parentId && !mlApp) return
+  const sampleRate =
+    mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
+  const samplingDecision =
+    mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+  const sessionId =
+    mlObsSpanTags?.[SESSION_ID] ??
+    parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
+    parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
+  const llmobsTraceId = mlObsSpanTags?.[TRACE_ID]
+  const propagatedTraceId = llmobsTraceId === undefined
+    ? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+    : llmObsTraceIdToWire(llmobsTraceId)
+
+  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -130,6 +153,10 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
+  if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
+  if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
+  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 

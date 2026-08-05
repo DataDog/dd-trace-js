@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync } = require('node:fs')
+const { closeSync, constants, fstatSync, openSync, readFileSync } = require('node:fs')
 const { gzipSync } = require('node:zlib')
 
 const getConfig = require('../../config')
@@ -17,35 +17,52 @@ const {
 } = require('../telemetry')
 
 const UPLOAD_TIMEOUT_MS = 30_000
+const COVERAGE_FILE_OPEN_FLAGS = constants.O_RDONLY |
+  (constants.O_NOFOLLOW || 0) |
+  constants.O_NONBLOCK
+const BIGINT_STAT_OPTIONS = { bigint: true }
 
 /**
  * Uploads a single coverage report to the Datadog CI intake.
  * One file per request with field names 'coverage' and 'event'.
  * @param {object} options - Upload options
  * @param {string} options.filePath - Path to the coverage report file
+ * @param {bigint} options.fileDevice - Device containing the discovered report
+ * @param {bigint} options.fileInode - Inode of the discovered report
  * @param {string} options.format - Format of the coverage report (e.g., 'lcov', 'cobertura')
+ * @param {string[]} [options.flags] - Optional coverage report grouping flags
  * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
  * @param {URL} options.url - The base URL for the coverage report upload
  * @param {boolean} [options.isEvpProxy] - Whether to use EVP proxy for the upload
  * @param {string} [options.evpProxyPrefix] - The EVP proxy prefix (e.g., '/evp_proxy/v4')
- * @param {Function} callback - Callback function (err)
+ * @param {(error: Error|null) => void} callback - Callback function
  */
 function uploadCoverageReport (
-  { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
+  { filePath, fileDevice, fileInode, format, flags, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
-  const apiKey = getConfig().apiKey
+  const { DD_API_KEY } = getConfig()
 
-  if (!apiKey && !isEvpProxy) {
+  if (!DD_API_KEY && !isEvpProxy) {
     return callback(new Error('DD_API_KEY is required for coverage report upload'))
   }
 
   let compressedCoverage
   try {
-    const coverageContent = readFileSync(filePath)
+    const fileDescriptor = openSync(filePath, COVERAGE_FILE_OPEN_FLAGS)
+    let coverageContent
+    try {
+      const fileStats = fstatSync(fileDescriptor, BIGINT_STAT_OPTIONS)
+      if (!fileStats.isFile() || fileStats.dev !== fileDevice || fileStats.ino !== fileInode) {
+        throw new Error('Coverage report changed after discovery')
+      }
+      coverageContent = readFileSync(fileDescriptor)
+    } finally {
+      closeSync(fileDescriptor)
+    }
     compressedCoverage = gzipSync(coverageContent)
-  } catch (err) {
-    return callback(new Error(`Failed to read coverage report at ${filePath}: ${err.message}`))
+  } catch (error) {
+    return callback(new Error(`Failed to read coverage report at ${filePath}: ${error.message}`))
   }
 
   // Build the event payload with format, type, and all tags from test environment metadata
@@ -53,6 +70,9 @@ function uploadCoverageReport (
     type: 'coverage_report',
     format,
     ...testEnvironmentMetadata,
+  }
+  if (flags?.length) {
+    eventPayload['report.flags'] = flags
   }
 
   // Create multipart form
@@ -82,7 +102,7 @@ function uploadCoverageReport (
     options.headers['X-Datadog-EVP-Subdomain'] = 'ci-intake'
   } else {
     options.path = '/api/v2/cicovreprt'
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   log.debug('Uploading coverage report %s to %s%s', filePath, url, options.path)

@@ -35,3 +35,9 @@ if (process.env.SHOULD_INCLUDE_FLAKY_TEST) {
     ])
   })
 }
+
+if (process.env.SHOULD_INCLUDE_SKIPPED_TEST) {
+  test.skip('skipped disabled attempt to fix', () => {
+    throw new Error('SHOULD NOT BE EXECUTED')
+  })
+}

@@ -12,25 +12,9 @@ const {
   isRetriableNetworkError,
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
-const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
+const { parseUrl } = require('../../exporters/common/url')
 
 const legacyStorage = storage('legacy')
-
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
-    return urlToHttpOptions(urlObjOrString)
-  }
-
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
@@ -58,7 +42,7 @@ function request (data, options, callback) {
     if (url.protocol === 'unix:') {
       opts.socketPath = url.pathname
     } else {
-      opts.path = opts.path ?? url.path
+      opts.path ??= url.path
       opts.protocol = url.protocol
       opts.hostname = url.hostname
       opts.port = url.port
@@ -116,9 +100,9 @@ function request (data, options, callback) {
           if (res.statusCode === 429 && !hasRetried) {
             const resetHeader = res.headers['x-ratelimit-reset']
             const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? Number.NaN
+              ? NaN
               : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : Number.NaN
+            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true

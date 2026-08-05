@@ -10,8 +10,10 @@
  * @property {string[]} [aliases]
  * @property {string[]} [configurationNames]
  * @property {string} [internalPropertyName]
+ * @property {string} [namespace] Nests the canonical env name under this property path (e.g. `telemetry`).
  * @property {string} [transform]
  * @property {string} [allowed]
+ * @property {string} [description]
  * @property {string|boolean} [deprecated]
  * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
  */
@@ -305,6 +307,8 @@ module.exports = {
    *
    * This should only be called once in config.js to avoid copying the object frequently.
    *
+   * @param {typeof process.env} [source] The environment to read from
+   * @param {boolean} [internalOnly] Only return configurations marked as internal
    * @returns {TracerEnv} The environment variables
    */
   getEnvironmentVariables (source = process.env, internalOnly = false) {

@@ -1,11 +1,13 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
+const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager, startupLog, logLateLoadedFrameworks } = require('./startup-log')
+const { setStartupLogPluginManager, startupLog } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
@@ -13,6 +15,7 @@ const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
 const processTags = require('./process-tags')
+const { isTrue } = require('./util')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -21,6 +24,24 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
+const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const ORDINARY_TRACING_DISABLED_MESSAGE =
+  'Ordinary dd-trace application tracing initialization is disabled during offline Test Optimization validation. ' +
+  'The CI test process must initialize through dd-trace/ci/init.'
+const OFFLINE_VALIDATION_EXPORTERS = new Set([
+  'ci_validation',
+  'cucumber_worker',
+  'jest_worker',
+  'mocha_worker',
+  'playwright_worker',
+  'vitest_worker',
+])
+const FEATURE_STATE_NOOP = 0
+const FEATURE_STATE_LAZY = 1
+const FEATURE_STATE_ACTIVE = 2
+
 class LazyModule {
   constructor (provider) {
     this.provider = provider
@@ -28,6 +49,7 @@ class LazyModule {
 
   /**
    * @param {import('./config/config-base')} config - Tracer configuration
+   * @param {...unknown} args - Extra arguments forwarded to the lazily loaded module
    */
   enable (config, ...args) {
     this.module = this.provider()
@@ -69,6 +91,9 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  /** @type {Record<string, number> | undefined} */
+  #featureStates
+
   constructor () {
     super()
 
@@ -91,7 +116,10 @@ class Tracer extends NoopProxy {
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
-      openfeature: new LazyModule(() => require('./openfeature')),
+    }
+
+    for (const feature of Object.values(features)) {
+      this._modules[feature.name] = new LazyModule(feature.factory)
     }
   }
 
@@ -102,6 +130,11 @@ class Tracer extends NoopProxy {
     if (this._initialized) return this
 
     this._initialized = true
+
+    if (isOfflineTestOptimizationValidation() && !isOfflineValidationExporter(options)) {
+      process.stderr.write(`${ORDINARY_TRACING_DISABLED_MESSAGE}\n`)
+      return this
+    }
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
@@ -114,7 +147,11 @@ class Tracer extends NoopProxy {
       propagationHash.configure(config)
 
       if (config.DD_CRASHTRACKING_ENABLED) {
-        require('./crashtracking').start(config)
+        try {
+          require('./crashtracking').start(config)
+        } catch (e) {
+          log.warn('Crashtracking is not available in this environment', e)
+        }
       }
 
       if (config.DD_HEAP_SNAPSHOT_COUNT > 0) {
@@ -123,7 +160,7 @@ class Tracer extends NoopProxy {
 
       telemetry.start(config, this._pluginManager)
 
-      if (config.dogstatsd) {
+      if (config.dogstatsd && !isOfflineTestOptimizationValidation()) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
@@ -138,7 +175,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+      if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
 
@@ -176,15 +213,16 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        const openfeatureRemoteConfig = require('./openfeature/remote_config')
-        openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
+        for (const feature of Object.values(features)) {
+          feature.remoteConfig?.(rc, config, this)
+        }
       }
 
-      if (config.profiling.enabled === 'true') {
+      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
         this._profilerStarted = false
-        if (config.profiling.enabled === 'auto') {
+        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
@@ -216,7 +254,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+      if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -225,7 +263,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
-        if (config.apiKey) {
+        if (config.DD_API_KEY) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -237,7 +275,7 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isTestDynamicInstrumentationEnabled) {
+      if (config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
@@ -267,14 +305,44 @@ class Tracer extends NoopProxy {
   }
 
   /**
+   * @param {(typeof features)[string]} feature
+   * @param {import('./config/config-base')} config
+   */
+  #enableFeature (feature, config) {
+    const states = this.#featureStates ??= {}
+    const state = states[feature.name] ?? FEATURE_STATE_NOOP
+
+    if (state === FEATURE_STATE_ACTIVE || state === FEATURE_STATE_LAZY) return
+    states[feature.name] = FEATURE_STATE_LAZY
+
+    Reflect.defineProperty(this, feature.name, {
+      get: () => {
+        const Provider = feature.provider()
+        const provider = new Provider(this._tracer, config)
+
+        this._modules[feature.name].enable(config)
+        Reflect.defineProperty(this, feature.name, {
+          value: provider,
+          configurable: true,
+          enumerable: true,
+        })
+        states[feature.name] = FEATURE_STATE_ACTIVE
+        return provider
+      },
+      configurable: true,
+      enumerable: true,
+    })
+  }
+
+  /**
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
-    if (config.tracing !== false) {
+    if (config.DD_TRACE_ENABLED !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.enabled) {
+      if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
@@ -287,14 +355,12 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
         if (config.experimental?.aiguard?.enabled) {
-          this._modules.aiguard.enable(this._tracer, config)
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
-      if (config.experimental.flaggingProvider.enabled) {
-        this._modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
+      if (config.experimental?.aiguard?.enabled) {
+        this._modules.aiguard.enable(this._tracer, config)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
@@ -305,7 +371,10 @@ class Tracer extends NoopProxy {
       this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
-      this._modules.openfeature.disable()
+    }
+
+    for (const feature of Object.values(features)) {
+      if (feature.isEnabled(config)) this.#enableFeature(feature, config)
     }
 
     if (this._tracingInitialized) {
@@ -314,7 +383,6 @@ class Tracer extends NoopProxy {
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
-      logLateLoadedFrameworks()
     }
   }
 
@@ -387,6 +455,27 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+}
+
+/**
+ * Checks the private filesystem-only Test Optimization validation mode.
+ *
+ * @returns {boolean} whether network-capable tracer side channels must stay disabled
+ */
+function isOfflineTestOptimizationValidation () {
+  return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_MANIFEST_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_OUTPUT_ENV))
+}
+
+/**
+ * Checks whether initialization selected a filesystem-only Test Optimization exporter.
+ *
+ * @param {import('../../../index').TracerOptions} [options] tracer initialization options
+ * @returns {boolean} whether the selected exporter is safe for offline validation
+ */
+function isOfflineValidationExporter (options) {
+  return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
 }
 
 module.exports = Tracer

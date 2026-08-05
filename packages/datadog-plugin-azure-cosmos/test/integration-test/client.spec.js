@@ -16,15 +16,18 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
   let spawnEnv
 
   withVersions('azure-cosmos', '@azure/cosmos', (version) => {
     useSandbox([`'@azure/cosmos@${version}'`], false, [
       './packages/datadog-plugin-azure-cosmos/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'CosmosClient', undefined, '@azure/cosmos', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'CosmosClient',
+      packageName: '@azure/cosmos',
+      defaultExport: false,
+      namedExports: ['CosmosClient'],
+      namedExportBinding: 'direct',
     })
 
     beforeEach(async () => {
@@ -37,7 +40,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

@@ -10,6 +10,12 @@ const { globSync } = require('glob')
 
 const multiMochaRc = require('../.mochamultireporterrc')
 
+// V8's top-level `--maglev`/`--no-maglev` toggle landed in V8 11 (Node 20). On
+// V8 10 (Node 18) the flag does not exist, so passing it aborts the child with
+// `bad option: --no-maglev` (exit 9) before mocha runs. Children reuse this
+// process's binary, so our own V8 major decides whether the flag is safe.
+const SUPPORTS_NO_MAGLEV = Number.parseInt(process.versions.v8, 10) >= 11
+
 /**
  * @param {string} openTag
  * @param {string} name
@@ -93,7 +99,7 @@ function splitLines (carry, chunk) {
  *   stdoutEnded: boolean,
  *   stderrEnded: boolean,
  *   code: number|null,
- *   signal: NodeJS.Signals|null,
+ *   signal: keyof import('node:os').SignalConstants|null,
  *   outBuf: {stream: 'stdout'|'stderr', text: string}[],
  *   stderrErrBuf: string[],
  *   failureBuf: string[],
@@ -256,7 +262,7 @@ async function main () {
   let interrupted = false
 
   /**
-   * @param {NodeJS.ErrnoException} error
+   * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
     if (!error || error.code !== 'EPIPE') return
@@ -271,7 +277,7 @@ async function main () {
   process.stderr.on('error', onPipeError)
 
   /**
-   * @param {NodeJS.Signals} signal
+   * @param {keyof import('node:os').SignalConstants} signal
    */
   const onSignal = (signal) => {
     if (interrupted) return
@@ -345,7 +351,7 @@ async function main () {
   let idx = 0
   let running = 0
   let failures = 0
-  /** @type {{file: string, code: number|null, signal: NodeJS.Signals|null}[]} */
+  /** @type {{file: string, code: number|null, signal: keyof import('node:os').SignalConstants|null}[]} */
   const failed = []
 
   /** @type {Entry[]} */
@@ -549,6 +555,11 @@ async function main () {
 
         const nodeArgs = []
         if (opts.exposeGc) nodeArgs.push('--expose-gc')
+        // Network-heavy specs intermittently abort with STATUS_STACK_BUFFER_OVERRUN
+        // (0xC0000409) when mocha-run-file's process.exit() races V8's Maglev teardown
+        // on Windows. Maglev can only be disabled via a CLI flag, not NODE_OPTIONS.
+        // TODO(BridgeAR): drop once https://github.com/nodejs/node/issues/62260 is fixed.
+        if (process.platform === 'win32' && SUPPORTS_NO_MAGLEV) nodeArgs.push('--no-maglev')
         nodeArgs.push(runFileScript, file)
 
         entry.started = true
@@ -672,7 +683,7 @@ async function main () {
 
     if (stderrErrors) {
       process.stdout.write(stderrErrors)
-      const last = entry.stderrErrBuf[entry.stderrErrBuf.length - 1]
+      const last = entry.stderrErrBuf.at(-1)
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
     if (hasFailures) {
@@ -700,7 +711,7 @@ async function main () {
         process.stdout.write(out)
       }
 
-      const last = entry.failureBuf[entry.failureBuf.length - 1]
+      const last = entry.failureBuf.at(-1)
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
   }

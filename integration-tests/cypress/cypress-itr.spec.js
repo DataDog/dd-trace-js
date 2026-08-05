@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
 
+const semver = require('semver')
 const {
   sandboxCwd,
   useSandbox,
@@ -27,12 +28,13 @@ const {
   TEST_ITR_FORCED_RUN,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_RUN_HARD_TIMEOUT = 70_000
+const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -63,7 +65,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -88,7 +90,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
@@ -110,9 +112,7 @@ moduleTypes.forEach(({
     this.timeout(80_000)
     let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin.
-    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       this.timeout(180_000)
@@ -270,6 +270,73 @@ moduleTypes.forEach(({
           skippableRequestPromise,
           coverageRequestPromise,
         ])
+      })
+
+      over12It('does not count ITR-skipped tests twice when retrying a missing dd:beforeEach result', async () => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/other.cy.js',
+            },
+          },
+          {
+            type: 'test',
+            attributes: {
+              name: 'basic pass suite can pass',
+              suite: 'cypress/e2e/basic-pass.js',
+            },
+          },
+        ])
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        let testOutput = ''
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_DD_BEFORE_EACH_NO_RESULT_ONCE: '1',
+              SPEC_PATTERN: 'cypress/e2e/{basic-pass,other.cy}.js',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', (data) => { testOutput += data })
+        childProcess.stderr?.on('data', (data) => { testOutput += data })
+
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const skippedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          ).content
+          assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const skippedTestInOtherSpec = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          ).content
+          assert.strictEqual(skippedTestInOtherSpec.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTestInOtherSpec.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 1/)
+        assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 2/)
       })
 
       it('does not skip tests if test skipping is disabled by the API', async () => {
@@ -538,7 +605,7 @@ moduleTypes.forEach(({
             : ''
           command = `../../node_modules/.bin/cypress run ${commandSuffix}`
         } else {
-          command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
+          command = 'node ../../cypress-esm-config.mjs'
         }
 
         const envVars = getCiVisAgentlessConfig(receiver.port)

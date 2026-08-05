@@ -24,11 +24,11 @@ const {
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_RUN_HARD_TIMEOUT = 70_000
 const SPEC_PATTERN = 'cypress/e2e/{other,spec}.cy.js'
 const SKIPPED_TEST = {
@@ -76,7 +76,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -100,7 +100,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
@@ -123,7 +123,7 @@ moduleTypes.forEach(({
 
     let cwd, childProcess, webAppBaseUrl, webAppServer
 
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       cwd = sandboxCwd()

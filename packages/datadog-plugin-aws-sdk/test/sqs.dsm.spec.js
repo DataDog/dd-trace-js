@@ -309,6 +309,45 @@ describe('Plugin', () => {
               nowStub.restore()
             })
         })
+
+        it('starts the consumer span for a batch receive whose later entries carry only DSM context',
+          async () => {
+            // With batchPropagationEnabled off (the default) only the first sendMessageBatch entry
+            // carries trace context; the rest carry a DSM-only `_datadog` that extracts to null. The
+            // multi-message receive must skip those rather than pass a null context to span.addLink,
+            // which previously threw and dropped the consumer span.
+            const consumerPromise = agent.assertSomeTraces(traces => {
+              let consumerSpan
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'aws.response') consumerSpan = span
+                }
+              }
+              if (consumerSpan === undefined) throw new Error('no consumer span yet')
+              assert.strictEqual(consumerSpan.meta['span.kind'], 'server')
+            }, { timeoutMs: 5000 })
+
+            const drive = (async () => {
+              await new Promise((resolve, reject) => {
+                sqs.sendMessageBatch({
+                  Entries: [
+                    { Id: '1', MessageBody: 'dsm batch 1' },
+                    { Id: '2', MessageBody: 'dsm batch 2' },
+                    { Id: '3', MessageBody: 'dsm batch 3' },
+                  ],
+                  QueueUrl: QueueUrlDsm,
+                }, error => error ? reject(error) : resolve())
+              })
+              await new Promise((resolve, reject) => {
+                sqs.receiveMessage(
+                  { QueueUrl: QueueUrlDsm, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 },
+                  error => error ? reject(error) : resolve()
+                )
+              })
+            })()
+
+            await Promise.all([consumerPromise, drive])
+          })
       })
     })
   })

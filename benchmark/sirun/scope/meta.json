@@ -9,7 +9,7 @@
     "scope_enabled": {
       "env": {
         "SCOPE_ENABLED": "true",
-        "COUNT": "250000"
+        "OPERATIONS": "250000"
       }
     }
   }

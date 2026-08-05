@@ -140,4 +140,81 @@ describe('graphql', () => {
 
     return agentPromise
   })
+
+  it('should block an attack', async () => {
+    const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+      assert.strictEqual(payload.length, 2)
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.strictEqual(payload[1][0].meta['appsec.blocked'], 'true')
+      assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
+    })
+
+    await assert.rejects(
+      axios({
+        url: `${proc.url}/graphql`,
+        method: 'post',
+        headers: {
+          'Content-type': 'application/json',
+        },
+        data: {
+          query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
+          variables: {
+            category: 'blockattack',
+          },
+          operationName: 'getImagesByCategory',
+        },
+      }),
+      (err) => {
+        assert.strictEqual(err.response.status, 403)
+        return true
+      }
+    )
+
+    return agentPromise
+  })
+
+  it('should block an attack in a batched request', async () => {
+    const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+      assert.strictEqual(payload.length, 2)
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.strictEqual(payload[1][0].meta['appsec.blocked'], 'true')
+      assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
+    })
+
+    await assert.rejects(
+      axios({
+        url: `${proc.url}/graphql`,
+        method: 'post',
+        headers: {
+          'Content-type': 'application/json',
+        },
+        data: [
+          {
+            query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title }}',
+            variables: { imageId: 1 },
+            operationName: 'getSingleImage',
+          },
+          {
+            query: 'query getImagesByCategory($category: String) { images(category: $category) { title }}',
+            variables: { category: 'blockattack' },
+            operationName: 'getImagesByCategory',
+          },
+        ],
+      }),
+      (err) => {
+        assert.strictEqual(err.response.status, 403)
+        return true
+      }
+    )
+
+    return agentPromise
+  })
 })

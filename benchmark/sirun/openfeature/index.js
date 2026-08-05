@@ -37,13 +37,13 @@ const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writ
 
 const {
   VARIANT,
-  COUNT,
+  OPERATIONS,
   NUM_FLAGS = '100',
   NUM_USERS = '50',
   NUM_FIELDS = '10',
 } = process.env
 
-const count = Number(COUNT)
+const operations = Number(OPERATIONS)
 const numFlags = Math.max(1, Number(NUM_FLAGS))
 const numUsers = Math.max(1, Number(NUM_USERS))
 const numFields = Math.max(0, Number(NUM_FIELDS))
@@ -122,7 +122,7 @@ if (VARIANT === 'aggregate') {
   writer._globalCount = 0
 
   guard.loopStart()
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < operations; i++) {
     writer._aggregate(rawEvents[i % cycleCount])
     if (i > 0 && i % 10000 === 0) {
       writer._full.clear()
@@ -149,7 +149,7 @@ if (VARIANT === 'aggregate') {
   writer._rawQueue.length = 0
 
   guard.loopStart()
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < operations; i++) {
     // Keep the bounded queue from filling so we measure the steady-state enqueue
     // cost, not the overflow drop path. The real drain runs on setImmediate, which
     // never fires inside this tight synchronous loop.

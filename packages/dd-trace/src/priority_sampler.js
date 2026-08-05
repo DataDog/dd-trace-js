@@ -19,6 +19,7 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
+const { formatKnuthRate } = require('./util')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -35,19 +36,6 @@ const {
 } = require('./constants')
 
 const DEFAULT_KEY = 'service:,env:'
-
-/**
- * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
- *
- * @param {number} rate
- */
-function formatKnuthRate (rate) {
-  const string = Number(rate).toFixed(6)
-  for (let i = string.length - 1; i > 0; i--) {
-    if (string[i] === '0') continue
-    return string.slice(0, i + (string[i] === '.' ? 0 : 1))
-  }
-}
 
 const defaultSampler = new Sampler(AUTO_KEEP)
 
@@ -152,7 +140,7 @@ class PrioritySampler {
       samplers[key] = new Sampler(rates[key])
     }
 
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
+    samplers[DEFAULT_KEY] ||= defaultSampler
 
     this._samplers = samplers
 
@@ -269,8 +257,11 @@ class PrioritySampler {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
-    if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
-    if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+    if (rule.provenance === 'customer') {
+      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
+    } else if (rule.provenance === 'dynamic') {
+      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+    }
 
     return rule.sample(context) && this._isSampledByRateLimit(context)
       ? USER_KEEP

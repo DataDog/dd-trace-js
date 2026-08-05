@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const { DsmPathwayCodec, getMessageSize } = require('../../../packages/dd-trace/src/datastreams')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 8_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // With Data Streams Monitoring enabled, every produced kafka message runs
 // getMessageSize then DsmPathwayCodec.encode, which varint-encodes the pathway
@@ -58,7 +58,7 @@ assert.ok(Object.keys(probe).length === 1, 'DsmPathwayCodec.encode did not write
 guard.loopStart()
 let sink = 0
 const len = messages.length
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += encodeOnce(messages[i % len])
 }
 guard.done()

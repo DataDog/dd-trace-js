@@ -6,7 +6,7 @@ const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const vercelAiIntegration = require('../../../src/aiguard/integrations/vercel-ai')
+const { vercelAi } = require('../../../src/aiguard/integrations')
 const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
 
 const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
@@ -16,15 +16,14 @@ const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
 describe('AIGuard Vercel AI integration', () => {
   const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
   let evaluate
-  let disable
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-    disable = vercelAiIntegration.enable({ evaluate }, true)
+    vercelAi.enable({ evaluate }, true)
   })
 
   afterEach(() => {
-    disable()
+    vercelAi.disable()
     sinon.restore()
   })
 

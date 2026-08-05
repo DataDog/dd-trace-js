@@ -16,6 +16,23 @@ const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
+  // The WAF is driven by a static rasp_rules.json here, so Remote Configuration is not under test.
+  // Disable it so the tracer's RC client never polls `/v0.7/config` (which can otherwise land on this app).
+  let originalRemoteConfigEnabled
+
+  before(() => {
+    originalRemoteConfigEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+  })
+
+  after(() => {
+    if (originalRemoteConfigEnabled === undefined) {
+      delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+    } else {
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = originalRemoteConfigEnabled
+    }
+  })
+
   withVersions('fastify', 'fastify', '>=2', (version) => {
     let app, hooks, axios, pool
 

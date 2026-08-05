@@ -210,7 +210,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
@@ -331,7 +331,7 @@ describe('Plugin', () => {
                 // librdkafka may deliver messages across multiple batches,
                 // so each batch span will have links for the messages it received.
                 assert.ok(links.length >= 1, `expected at least 1 span link, got ${links.length}`)
-              })
+              }, { timeoutMs: 5000 }) // librdkafka consumer delivery lags the produce by seconds
 
               await consumer.run({ eachBatch: () => {} })
               await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
@@ -426,7 +426,7 @@ describe('Plugin', () => {
               try {
                 // Passing invalid arguments should cause an error
                 nativeProducer.produce()
-              } catch (err) {
+              } catch {
                 // Error is expected
               }
 
@@ -537,7 +537,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)

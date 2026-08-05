@@ -25,7 +25,7 @@ describe('Plugin', () => {
 
         before(function () {
           this.timeout(10_000)
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
+          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
           AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
             require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)

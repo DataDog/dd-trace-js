@@ -22,3 +22,11 @@ insert_final_newline = unset
 # Streamed verbatim and asserted byte-for-byte by the response-blocking test.
 [packages/dd-trace/test/appsec/streamtest.txt]
 insert_final_newline = false
+
+# CRLF so the license workflow's `cat vendored-dependencies.csv >> LICENSE-3rdparty.csv`
+# append stays byte-stable; otherwise editors re-LF on save and the release tooling re-commits.
+[LICENSE-3rdparty.csv]
+end_of_line = crlf
+
+[.github/vendored-dependencies.csv]
+end_of_line = crlf

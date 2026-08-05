@@ -24,12 +24,12 @@ module.exports.init = function (tracerConfig) {
     })
     : new NoopDogStatsDClient()
 
-  logger = tracerConfig && tracerConfig.apiKey
+  logger = tracerConfig && tracerConfig.DD_API_KEY
     ? new ExternalLogger({
       ddsource: 'openai',
       hostname: tracerConfig.hostname,
       service: tracerConfig.service,
-      apiKey: tracerConfig.apiKey,
+      apiKey: tracerConfig.DD_API_KEY,
       interval: FLUSH_INTERVAL,
     })
     : new NoopExternalLogger()

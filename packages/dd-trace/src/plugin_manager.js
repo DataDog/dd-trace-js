@@ -158,7 +158,7 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      queryStringObfuscation,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
       headerTags,
@@ -169,16 +169,20 @@ module.exports = class PluginManager {
       clientIpHeader,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       DD_TRACE_OTEL_SEMANTICS_ENABLED,
+      DD_TRACE_GRAPHQL_COLLAPSE,
+      DD_TRACE_GRAPHQL_DEPTH,
+      DD_TRACE_GRAPHQL_VARIABLES,
+      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      testOptimization,
       isServiceUserProvided,
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -193,21 +197,21 @@ module.exports = class PluginManager {
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      isTestDynamicInstrumentationEnabled: testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
     }
 
-    if (queryStringObfuscation !== undefined) {
-      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
+      sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     }
 
     if (serviceMapping && serviceMapping[name]) {
@@ -223,6 +227,18 @@ module.exports = class PluginManager {
     // to an individual plugin, so we normalize them here.
     if (middlewareTracingEnabled !== undefined) {
       sharedConfig.middleware = middlewareTracingEnabled
+    }
+
+    // The graphql `DD_TRACE_GRAPHQL_*` options are global on purpose: they feed
+    // the plugin config as a base that a programmatic `tracer.use('graphql', …)`
+    // overrides, and stay on the Config singleton so remote config and config
+    // telemetry observe them. Forwarded only for graphql so other plugins do not
+    // carry keys they ignore. The plugin-facing names drop the prefix.
+    if (name === 'graphql') {
+      sharedConfig.collapse = DD_TRACE_GRAPHQL_COLLAPSE
+      sharedConfig.depth = DD_TRACE_GRAPHQL_DEPTH
+      sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
+      sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
     }
 
     return sharedConfig

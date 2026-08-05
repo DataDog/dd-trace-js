@@ -120,8 +120,8 @@ const extractQueueMetadata = queueURL => {
 
   if (parts.length < minParts) return null
 
-  const accountId = parts[parts.length - 2]
-  const queueName = parts[parts.length - 1]
+  const accountId = parts.at(-2)
+  const queueName = parts.at(-1)
   const host = hasScheme ? parts[1] : parts[0]
 
   let region = 'us-east-1' // Default region if not found in URL
@@ -143,31 +143,9 @@ const extractQueueMetadata = queueURL => {
   return { queueName, arn }
 }
 
-/**
- * Returns true when `obj` has no own enumerable properties. The
- * `for-in` loop with an early return is the only allocation-free shape
- * for this check; benchmarks pin it as 1.3-1.4x faster than
- * `Object.keys(obj).length === 0` across small / medium / large
- * objects, and this is the hot path on every AWS messaging send.
- *
- * Callers in this package only pass plain objects they construct
- * locally, so prototype-enumerable keys are not a concern here. Do not
- * reuse this helper on caller-supplied objects without revisiting that
- * assumption.
- *
- * @param {object} obj
- * @returns {boolean}
- */
-const isEmpty = obj => {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) return false
-  return true
-}
-
 module.exports = {
   generatePointerHash,
   encodeValue,
   extractPrimaryKeys,
   extractQueueMetadata,
-  isEmpty,
 }

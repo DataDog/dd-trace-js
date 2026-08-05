@@ -53,7 +53,7 @@ describe('AgentlessWriter', () => {
       '../../encode/agentless-json': { AgentlessJSONEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
-      '../../config': () => ({ apiKey }),
+      '../../config': () => ({ DD_API_KEY: apiKey }),
     })
   })
 

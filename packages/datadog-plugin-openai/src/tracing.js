@@ -627,6 +627,10 @@ function lookupOperationEndpoint (operationId, methodName, url) {
  * This function essentially normalizes the OpenAI method interface. Many methods accept
  * a single object argument. The remaining ones take individual arguments. This function
  * turns the individual arguments into an object to make extracting properties consistent.
+ *
+ * @param {string} methodName SDK method name, e.g. `createChatCompletion` or `chat.completions.create`
+ * @param {unknown[]} args arguments the SDK method was called with
+ * @returns {Record<string, unknown>}
  */
 function normalizeRequestPayload (methodName, args) {
   switch (methodName) {

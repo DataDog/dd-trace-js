@@ -1,7 +1,7 @@
 {
   "name": "debugger",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 5,
   "instructions": true,
   "variants": {
     "enabled-but-breakpoint-not-hit": {
@@ -10,10 +10,11 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "220000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
-        "INSTALL_ONLY": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "37"
+        "BREAKPOINT_LINE": "38"
       }
     },
     "line-probe-without-snapshot": {
@@ -22,10 +23,11 @@
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "37",
-        "ITERATIONS": "3500"
+        "BREAKPOINT_LINE": "36"
       }
     },
     "line-probe-with-snapshot-default": {
@@ -33,14 +35,14 @@
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "iterations": 5,
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "37",
+        "BREAKPOINT_LINE": "36",
         "CAPTURE_SNAPSHOT": "true",
-        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
-        "ITERATIONS": "2450"
+        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000"
       }
     },
     "line-probe-with-snapshot-minimal": {
@@ -48,18 +50,18 @@
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
-      "iterations": 7,
       "env": {
+        "STARTUP_GUARD_MAX_SHARE": "0.1",
+        "OPERATIONS": "32000",
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "37",
+        "BREAKPOINT_LINE": "36",
         "CAPTURE_SNAPSHOT": "true",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
         "MAX_REFERENCE_DEPTH": "0",
         "MAX_COLLECTION_SIZE": "0",
         "MAX_FIELD_COUNT": "0",
-        "MAX_LENGTH": "9007199254740991",
-        "ITERATIONS": "3500"
+        "MAX_LENGTH": "9007199254740991"
       }
     }
   }

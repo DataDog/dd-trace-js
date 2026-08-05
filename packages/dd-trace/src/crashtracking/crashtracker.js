@@ -1,6 +1,6 @@
 'use strict'
 
-const { EOL } = require('node:os')
+const { EOL, platform } = require('node:os')
 
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
@@ -71,7 +71,7 @@ class Crashtracker {
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
-    const resolveMode = require('os').platform === 'linux'
+    const resolveMode = platform() === 'linux'
       ? 'EnabledWithSymbolsInReceiver'
       : 'EnabledWithInprocessSymbols'
 

@@ -31,8 +31,8 @@ const { PLAYWRIGHT_VERSION } = process.env
 const NUM_RETRIES_EFD = 3
 const PLAYWRIGHT_EFD_GATHER_TIMEOUT = 60000
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -239,6 +239,55 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
+      it('overrides slow test retries with the EFD retry count environment variable', async (receiver, run) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 1,
+              '30s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          playwright: {},
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const slowTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'efd duration retries slightly slow test'
+            )
+            assert.strictEqual(slowTests.length, 2)
+            slowTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in test.meta))
+            })
+            assert.strictEqual(slowTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
+          }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: '1',
+              TEST_DIR: './ci-visibility/playwright-efd-duration',
+              PLAYWRIGHT_WORKERS: '2',
+            },
+          }
+        )
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
       it('keeps duration retry counts scoped by Playwright project', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
@@ -320,6 +369,7 @@ versions.forEach((version) => {
             for (const repeatedTest of repeatedTests) {
               assert.strictEqual(repeatedTest.meta[TEST_IS_NEW], 'true')
               assert.ok(!(TEST_IS_RETRY in repeatedTest.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in repeatedTest.meta))
               assert.ok(!(TEST_RETRY_REASON in repeatedTest.meta))
             }
           }, 45_000)

@@ -13,7 +13,7 @@ if [ -z "$plugin_name" ]; then
   node - << EOF
     const fs=require('fs');
     const yaml = require('yaml');
-    const pluginsData = fs.readFileSync('.github/workflows/plugins.yml', 'utf8');
+    const pluginsData = fs.readFileSync('.github/workflows/apm-integrations.yml', 'utf8');
     const env=Object.keys(yaml.parse(pluginsData).jobs);
     console.log(...env);
 EOF
@@ -36,7 +36,7 @@ fi
 read -r PLUGINS SERVICES <<<$(node - << EOF
 const fs=require('fs');
 const yaml = require('yaml');
-const pluginsData = fs.readFileSync('.github/workflows/plugins.yml', 'utf8');
+const pluginsData = fs.readFileSync('.github/workflows/apm-integrations.yml', 'utf8');
 const { PLUGINS, SERVICES } = yaml.parse(pluginsData).jobs['$plugin_name'].env;
 console.log(PLUGINS || '', SERVICES || '')
 EOF
@@ -72,7 +72,7 @@ echo -e "\tPLUGINS=$PLUGINS"
 echo -e "\tSERVICES=$SERVICES"
 echo -e "${YELLOW}The ${RESET}versions${YELLOW} directory has been populated, and any ${RESET}\$SERVICES${YELLOW} have been brought up if not already running."
 echo -e "You can now run the plugin's tests with:"
-echo -e "\t${RESET}yarn test:plugins"
+echo -e "\t${RESET}npm run test:plugins"
 echo -e "${YELLOW}To exit this shell, type 'exit' or do Ctrl+D."
 echo -e $RESET
 

@@ -37,6 +37,9 @@ function getJestRunArgs (options) {
       args.push(`--coverageReporters=${coverageReporter}`)
     }
   }
+  if (options.randomize) {
+    args.push('--randomize', `--seed=${options.seed}`, '--showSeed')
+  }
 
   return args
 }
@@ -78,6 +81,10 @@ if (process.env.ENABLE_HAPPY_DOM) {
   options.testEnvironment = '@happy-dom/jest-environment'
 }
 
+if (process.env.CUSTOM_TEST_ENVIRONMENT) {
+  options.testEnvironment = process.env.CUSTOM_TEST_ENVIRONMENT
+}
+
 if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
@@ -104,6 +111,15 @@ if (process.env.WORKER_IDLE_MEMORY_LIMIT) {
 
 if (process.env.JEST_BAIL) {
   options.bail = true
+}
+
+if (process.env.JEST_RANDOMIZE) {
+  options.randomize = true
+  options.seed = Number(process.env.JEST_SEED ?? 1)
+}
+
+if (process.env.JEST_TEST_NAME_PATTERN) {
+  options.testNamePattern = process.env.JEST_TEST_NAME_PATTERN
 }
 
 if (process.env.USE_JEST_RUN) {

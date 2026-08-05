@@ -43,8 +43,8 @@ describe('sendData', () => {
         'content-type': 'application/json',
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
-        'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version,
+        'DD-Client-Library-Language': application.language_name,
+        'DD-Client-Library-Version': application.tracer_version,
         'dd-session-id': '123',
       },
       url: undefined,
@@ -69,8 +69,8 @@ describe('sendData', () => {
         'content-type': 'application/json',
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
-        'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version,
+        'DD-Client-Library-Language': application.language_name,
+        'DD-Client-Library-Version': application.tracer_version,
         'dd-session-id': '123',
       },
       url: 'unix:/foo/bar/baz',
@@ -83,7 +83,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
-      telemetry: { debug: true },
+      telemetry: { DD_TELEMETRY_DEBUG: true },
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -161,7 +161,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -184,8 +184,10 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-        DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+          DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -198,5 +200,42 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
+  })
+
+  it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {
+    request.yields(new Error('agent unreachable'))
+
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    assert.strictEqual(request.callCount, 2)
+    const backendOptions = request.getCall(1).args[1]
+    assert.deepStrictEqual(backendOptions.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(backendOptions.headers['DD-API-KEY'], 'secret-key')
+  })
+
+  it('skips the agentless backend request when the endpoint URL is invalid', () => {
+    request.yields(new Error('agent unreachable'))
+
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        site: 'x:notaport',
+        tags: { 'runtime-id': '123' },
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    assert.strictEqual(request.callCount, 1)
   })
 })

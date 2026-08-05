@@ -39,6 +39,7 @@ const missingPlugins = [
   'datadog-plugin-sequelize', // sequelize does not produce spans
   'datadog-plugin-body-parser', // body-parser does not produce spans
   'datadog-plugin-light-my-request', // light-my-request does not produce spans
+  'datadog-plugin-mercurius', // mercurius tracing is done through the graphql plugin (graphql.request span)
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
@@ -56,7 +57,7 @@ function extractPluginIds (source, re, index) {
 }
 
 function extractPluginsInterfaceKeys (dtsSource) {
-  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/m)
+  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/)
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]

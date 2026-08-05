@@ -8,7 +8,7 @@
   "variants": {
     "command": {
       "env": {
-        "ITERATIONS": "3500000"
+        "OPERATIONS": "3500000"
       }
     }
   }

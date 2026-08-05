@@ -9,7 +9,7 @@ const {
 const id = require('../../../packages/dd-trace/src/id')
 
 const { VARIANT } = process.env
-const ENCODE_COUNT = Number(process.env.ENCODE_COUNT) || 60_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Test Optimization ships every test, suite, module and session event through
 // the agentless msgpack event encoder: truncateSpanTestOpt, normalizeSpan, then
@@ -144,7 +144,7 @@ assert.equal(encoder._eventCount, 0, 'makePayload did not reset the encoder')
 
 guard.loopStart()
 let sink = 0
-for (let iteration = 0; iteration < ENCODE_COUNT; iteration++) {
+for (let iteration = 0; iteration < OPERATIONS; iteration++) {
   encoder.encode(trace)
   sink += encoder.makePayload().length
 }

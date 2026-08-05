@@ -8,13 +8,17 @@
 // the library, replace the custom registration with the built-in option and
 // remove the entry here.
 
+const assert = require('node:assert')
+
+const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+
 const { parse, query } = require('./compiler')
 
 module.exports = { waitForAsyncEnd }
 
 /**
- * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
- * wrapper's native-Promise fulfillment handler.
+ * Injects settlement-specific asyncEnd waits into a generated `tracePromise`
+ * wrapper's native-Promise handlers.
  *
  * @param {object} _state
  * @param {import('estree').CallExpression} node
@@ -22,26 +26,68 @@ module.exports = { waitForAsyncEnd }
  */
 function waitForAsyncEnd (_state, node) {
   const onFulfilled = node.arguments[0]
-  const statements = onFulfilled?.body?.body
+  const onRejected = node.arguments[1]
 
-  if (!statements || query(onFulfilled.body, '[id.name=__apm$asyncEndPromise]').length > 0) {
+  if (!onFulfilled?.body || !onRejected?.body) {
     return
   }
 
-  const returnIndex = statements.findIndex(statement => (
-    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
-  ))
+  injectAsyncEndCallbackWait(onFulfilled.body, 'ReturnStatement', 'resolveCallback')
+  injectAsyncEndCallbackWait(onRejected.body, 'ThrowStatement', 'rejectCallback')
+}
 
-  if (returnIndex === -1) return
+/**
+ * Injects a settlement-specific callback wait before an exit.
+ *
+ * @param {import('estree').BlockStatement} body
+ * @param {'ReturnStatement'|'ThrowStatement'} exitType
+ * @param {'resolveCallback'|'rejectCallback'} callbackProperty
+ * @returns {void}
+ */
+function injectAsyncEndCallbackWait (body, exitType, callbackProperty) {
+  const callbackVariable = `__apm$${callbackProperty}`
+  if (query(body, `[id.name=${callbackVariable}]`).length > 0) {
+    return
+  }
 
+  const exitIndex = body.body.findIndex(statement =>
+    statement.type === exitType && statement.argument
+  )
+
+  // The generated settlement handlers always end in a return or throw; a miss means the
+  // upstream template changed and the caller's try/catch falls back to the
+  // unwrapped source.
+  assert(exitIndex !== -1, `waitForAsyncEnd: no ${exitType} to wait on`)
+
+  // This runs inside tracePromise's native-Promise settlement handler. The
+  // Promise adapts subscriber callback completion to that existing chain.
   const waitStatements = parse(`
     function wrapper () {
-      const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
-      if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-        return __apm$asyncEndPromise.then(() => result, () => result);
+      const ${callbackVariable} = __apm$ctx.${callbackProperty};
+      if (typeof ${callbackVariable} === 'function') {
+        return new Promise(${callbackVariable}).then(() => __apm$result, () => __apm$result);
       }
     }
   `).body[0].body.body
 
-  statements.splice(returnIndex, 0, ...waitStatements)
+  const exitArgument = body.body[exitIndex].argument
+  const callbackIf = waitStatements[1]
+  const { arguments: onCallbackSettled } = callbackIf.consequent.body[0].argument
+
+  if (exitType === 'ThrowStatement') {
+    for (const handler of onCallbackSettled) {
+      handler.body = {
+        type: 'BlockStatement',
+        body: [{
+          type: 'ThrowStatement',
+          argument: clone(exitArgument),
+        }],
+      }
+    }
+  } else {
+    onCallbackSettled[0].body = clone(exitArgument)
+    onCallbackSettled[1].body = clone(exitArgument)
+  }
+
+  body.body.splice(exitIndex, 0, ...waitStatements)
 }

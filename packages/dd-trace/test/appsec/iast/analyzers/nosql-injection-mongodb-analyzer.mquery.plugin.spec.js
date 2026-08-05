@@ -12,12 +12,12 @@ const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
 
-// TODO(APPSEC-62431): re-enable once duplicate NOSQL_MONGODB_INJECTION
-// detection (N+1 !== N) is fixed
-describe.skip('nosql injection detection with mquery', () => {
+describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mquery', 'mongodb', mongodbVersion => {
+      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
+
       const vulnerableMethodFilename = 'mquery-vulnerable-method.js'
       let client, testCollection, tmpFilePath, dbName
 
@@ -28,7 +28,7 @@ describe.skip('nosql injection detection with mquery', () => {
       before(async () => {
         const id = require('../../../../src/id')
         dbName = id().toString()
-        const mongo = require(`../../../../../../versions/mongodb@${mongodbVersion}`).get()
+        const mongo = mongodb.get()
 
         client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`)
         await client.connect()
@@ -42,7 +42,7 @@ describe.skip('nosql injection detection with mquery', () => {
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
         try {
           fs.unlinkSync(tmpFilePath)
-        } catch (e) {
+        } catch {
           // ignore the error
         }
         fs.copyFileSync(src, tmpFilePath)
@@ -84,7 +84,7 @@ describe.skip('nosql injection detection with mquery', () => {
                   assert.notStrictEqual(result, undefined)
                   assert.strictEqual(result.length, 1)
                   assert.strictEqual(result[0].id, 1)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
 
@@ -112,7 +112,7 @@ describe.skip('nosql injection detection with mquery', () => {
 
                       res.end()
                     })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
               },
@@ -128,7 +128,7 @@ describe.skip('nosql injection detection with mquery', () => {
               fn: async (req, res) => {
                 try {
                   await require(tmpFilePath).vulnerableFindExec(collection, { name: req.query.key })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -145,7 +145,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: req.query.key2 })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -164,7 +164,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: req.query.key2 })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -182,7 +182,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 try {
                   await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: 'not_tainted' })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -201,7 +201,7 @@ describe.skip('nosql injection detection with mquery', () => {
                   const filter = { name: req.query.key }
                   const where = { key2: req.query.key2 }
                   await require(tmpFilePath).vulnerableFindWhere(collection, filter, where)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -220,7 +220,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFind(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -246,7 +246,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -272,7 +272,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 try {
                   require(tmpFilePath)
                     .vulnerableFind(collection, { name: req.query.key })
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()
@@ -289,7 +289,7 @@ describe.skip('nosql injection detection with mquery', () => {
                   .find({
                     name: 'test',
                   })
-              } catch (e) {
+              } catch {
                 // do nothing
               }
               res.end()
@@ -299,7 +299,7 @@ describe.skip('nosql injection detection with mquery', () => {
               try {
                 await collection
                   .find()
-              } catch (e) {
+              } catch {
                 // do nothing
               }
               res.end()
@@ -319,7 +319,7 @@ describe.skip('nosql injection detection with mquery', () => {
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
-                } catch (e) {
+                } catch {
                   // do nothing
                 }
                 res.end()

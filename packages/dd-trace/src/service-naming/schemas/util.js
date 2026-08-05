@@ -28,12 +28,43 @@ function optionServiceSource ({ pluginConfig }) {
   }
 }
 
-function awsServiceV0 ({ tracerService, awsService }) {
-  return `${tracerService}-aws-${awsService}`
+/**
+ * Resolve a `service` config that may be a string or a function. A string
+ * overrides every span; a function is called with the request params so a
+ * single resource can be mapped to its own service, and only a non-empty
+ * string result is honored — anything else falls back to `defaultService`.
+ *
+ * @param {{ service?: string | ((params?: object) => unknown) }} [pluginConfig]
+ * @param {object} [params]
+ * @param {string} defaultService
+ * @returns {string}
+ */
+function configServiceName (pluginConfig, params, defaultService) {
+  const service = pluginConfig?.service
+  if (typeof service === 'function') {
+    const custom = service(params)
+    return typeof custom === 'string' && custom ? custom : defaultService
+  }
+  return service || defaultService
 }
 
-function awsServiceSource ({ awsService }) {
-  return awsService
+function awsServiceV0 ({ tracerService, pluginConfig, params, awsService }) {
+  return configServiceName(pluginConfig, params, `${tracerService}-aws-${awsService}`)
 }
 
-module.exports = { identityService, httpPluginClientService, awsServiceV0, optionServiceSource, awsServiceSource }
+function awsServiceV1 ({ tracerService, pluginConfig, params }) {
+  return configServiceName(pluginConfig, params, tracerService)
+}
+
+function awsServiceSource ({ awsService, pluginConfig }) {
+  return pluginConfig?.service ? 'opt.plugin' : awsService
+}
+
+module.exports = {
+  identityService,
+  httpPluginClientService,
+  awsServiceV0,
+  awsServiceV1,
+  optionServiceSource,
+  awsServiceSource,
+}

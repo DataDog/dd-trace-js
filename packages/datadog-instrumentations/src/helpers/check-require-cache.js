@@ -1,11 +1,9 @@
 'use strict'
 
-// This code runs before the tracer is configured and before a logger is ready
-// For that reason we queue up the messages now and decide what to do with them later
-const warnings = []
-// Same idea, but for the high-signal framework warnings that surface by default
-// (see flushFrameworkWarnings) rather than only under DD_TRACE_DEBUG.
-const frameworkWarnings = []
+// Queued before the logger is ready; flushed once the tracer knows its config.
+const warnings = [] // conflicts; flushed under DD_TRACE_DEBUG
+const loadOrderWarnings = [] // "loaded before dd-trace"; flushed under startupLogs
+const frameworkWarnings = [] // curated (e.g. Next.js); flushed unconditionally
 
 /**
  * Here we maintain a list of packages that an application
@@ -65,11 +63,11 @@ const earlyLoadFrameworks = new Map([
  * unsupported version then a warning would still be displayed.
  * This is OK as the tracer should be loaded earlier anyway.
  *
- * Curated frameworks (see `earlyLoadFrameworks`) are collected regardless of
- * `debug`, since they surface by default; the broad list stays debug-only.
- * @param {boolean} debug Whether to also queue the broad DD_TRACE_DEBUG-only warnings.
+ * Curated frameworks (see `earlyLoadFrameworks`) surface unconditionally; the
+ * broad list of packages loaded before dd-trace is queued for the startupLogs-
+ * gated flush (`flushLoadOrderWarnings`).
  */
-module.exports.checkForRequiredModules = function (debug) {
+module.exports.checkForRequiredModules = function () {
   const packages = require('./hooks')
   const naughties = new Set()
   const frameworksSeen = new Set()
@@ -84,8 +82,8 @@ module.exports.checkForRequiredModules = function (debug) {
 
     // A curated framework loads its own server before user code, so its server
     // module being cached means dd-trace was too late to instrument it. These
-    // surface by default (see flushFrameworkWarnings) with an actionable
-    // message, so they never fall through to the DD_TRACE_DEBUG-only list below.
+    // surface unconditionally (see flushFrameworkWarnings) with an actionable
+    // message, so they never fall through to the broad load-order list below.
     const framework = earlyLoadFrameworks.get(pkg)
     if (framework !== undefined) {
       if (!frameworksSeen.has(pkg) && path?.endsWith(framework.file)) {
@@ -100,15 +98,17 @@ module.exports.checkForRequiredModules = function (debug) {
       continue
     }
 
-    if (!debug || naughties.has(pkg) || !(pkg in packages)) continue
+    if (naughties.has(pkg) || !(pkg in packages)) continue
 
-    warnings.push(() => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
+    loadOrderWarnings.push(
+      () => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`
+    )
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) warnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
+  if (didWarn) loadOrderWarnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
 }
 
 /**
@@ -153,9 +153,23 @@ module.exports.flushStartupLogs = function (log) {
 }
 
 /**
+ * Drains the broad "loaded before dd-trace" warnings collected by
+ * `checkForRequiredModules`. The tracer gates this on startupLogs (these are
+ * startup diagnostics), unlike the unconditional `flushFrameworkWarnings`.
+ * @param {(message: string) => void} warn
+ */
+module.exports.flushLoadOrderWarnings = function (warn) {
+  while (loadOrderWarnings.length) {
+    const entry = loadOrderWarnings.shift()
+    warn(typeof entry === 'function' ? entry() : entry)
+  }
+}
+
+/**
  * Drains the framework warnings collected by `checkForRequiredModules`. The
- * caller surfaces them by default (gated on startupLogs), unlike the
- * DD_TRACE_DEBUG-only `flushStartupLogs` queue.
+ * tracer surfaces these unconditionally (not gated on startupLogs or
+ * DD_TRACE_DEBUG), unlike the DD_TRACE_DEBUG-only `flushStartupLogs` queue,
+ * because the affected users run with neither enabled (#5430 / #5432).
  * @param {(message: string) => void} warn
  */
 module.exports.flushFrameworkWarnings = function (warn) {

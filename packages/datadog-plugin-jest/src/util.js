@@ -15,6 +15,8 @@ const log = require('../../dd-trace/src/log')
  * [[1, 2, 3], [2, 3, 5]]
  * 2. An array of objects, e.g.
  * [{ a: 1, b: 2, expected: 3 }, { a: 2, b: 3, expected: 5}]
+ *
+ * @param {unknown[]} testParameters `test.each` arguments
  */
 function getFormattedJestTestParameters (testParameters) {
   if (!testParameters || !testParameters.length) {
@@ -43,7 +45,8 @@ function getFormattedJestTestParameters (testParameters) {
 
 // @fast-check/jest appends a random seed to the reported test name. A test name that keeps changing
 // breaks some Test Optimization features, so normalize this narrow suffix regardless of import style.
-const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
+// fast-check emits exactly one space before the suffix.
+const SEED_SUFFIX_RE = / ?\(with seed=-?\d+\) ?$/i
 
 function removeSeedSuffixFromTestName (testName) {
   return testName.replace(SEED_SUFFIX_RE, '')
@@ -122,28 +125,43 @@ function isMarkedAsUnskippable (test) {
   return false
 }
 
-function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
+function getJestSuitesToRun (skippableSuites, originalTests, rootDir, fallbackRootDir) {
   const unskippableSuites = {}
   const forcedToRunSuites = {}
 
   const skippedSuites = []
   const suitesToRun = []
+  const normalizedSkippableSuites = new Set(skippableSuites.map(suite => suite.replaceAll('\\', '/')))
 
   for (const test of originalTests) {
     const relativePath = getTestSuitePath(test.path, rootDir)
-    const shouldBeSkipped = skippableSuites.includes(relativePath)
+    const testRootDir = test?.context?.config?.rootDir || fallbackRootDir
+    let fallbackRelativePath
+    let skippedSuite = normalizedSkippableSuites.has(relativePath) ? relativePath : undefined
+    if (testRootDir && testRootDir !== rootDir) {
+      fallbackRelativePath = getTestSuitePath(test.path, testRootDir)
+      if (skippedSuite === undefined && normalizedSkippableSuites.has(fallbackRelativePath)) {
+        skippedSuite = fallbackRelativePath
+      }
+    }
     if (isMarkedAsUnskippable(test)) {
       suitesToRun.push(test)
       unskippableSuites[relativePath] = true
-      if (shouldBeSkipped) {
+      if (fallbackRelativePath !== undefined) {
+        unskippableSuites[fallbackRelativePath] = true
+      }
+      if (skippedSuite !== undefined) {
         forcedToRunSuites[relativePath] = true
+        if (fallbackRelativePath !== undefined) {
+          forcedToRunSuites[fallbackRelativePath] = true
+        }
       }
       continue
     }
-    if (shouldBeSkipped) {
-      skippedSuites.push(relativePath)
-    } else {
+    if (skippedSuite === undefined) {
       suitesToRun.push(test)
+    } else {
+      skippedSuites.push(skippedSuite)
     }
   }
 

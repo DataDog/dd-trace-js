@@ -3,7 +3,7 @@
 const util = require('node:util')
 const assert = require('node:assert')
 const { inspect } = require('node:util')
-const { before, beforeEach, after } = require('mocha')
+const { before, beforeEach, afterEach, after } = require('mocha')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
@@ -16,25 +16,31 @@ const MOCK_OBJECT = Symbol('object')
 const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
+ * @typedef {typeof MOCK_STRING | typeof MOCK_NUMBER | typeof MOCK_OBJECT | typeof MOCK_NOT_NULLISH} MockValue
+ */
+
+/**
+ * Optional fields assert their own absence when omitted, except `traceId`, which defaults to `MOCK_STRING`.
  * @typedef {{
- *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
+ *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'step' | 'tool' | 'retrieval',
  *   name: string,
- *   inputMessages: Record<string, unknown>,
- *   outputMessages: Record<string, unknown>,
- *   inputDocuments: Record<string, unknown>,
- *   outputDocuments: Record<string, unknown>,
- *   inputValue: Record<string, unknown>,
- *   outputValue: Record<string, unknown>,
- *   metrics: { [key: string]: number },
- *   metadata: Record<string, unknown>,
+ *   inputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   outputDocuments?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   inputValue?: string | MockValue,
+ *   outputValue?: string | MockValue,
+ *   metrics?: Record<string, number | MockValue> | MockValue,
+ *   metadata?: Record<string, unknown> | MockValue,
+ *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
- *   error?: { message: string, type: string, stack: string },
- *   span: unknown,
+ *   error?: object,
+ *   span: object,
  *   sessionId?: string,
- *   tags: Record<string, unknown>,
- *   traceId?: string,
+ *   tags: Record<string, string>,
+ *   traceId?: string | MockValue,
  * }} ExpectedLLMObsSpanEvent
  */
 
@@ -58,7 +64,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  *
  * @param {object} actual
- * @param {ExpectedLLMObsSpanEvent} expected
+ * @param {object | MockValue | string | number | boolean | null | undefined} expected
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
@@ -277,6 +283,8 @@ function assertLlmObsSpanEvent (actual, expected) {
     meta: expectedMeta,
   }
 
+  if (sessionId) expectedSpanEvent.session_id = sessionId
+
   assert.deepStrictEqual(actual, expectedSpanEvent)
 }
 
@@ -333,6 +341,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
   }
 
   const expectedEvaluationMetric = {
+    event_kind: 'evaluation',
     join_on: {
       span: {
         trace_id: joinOn.span.traceId,
@@ -391,7 +400,8 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {string} options.plugin
  * @param {object} options.tracerConfigOptions
  * @returns {{
- *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
  * }}
  */
@@ -399,15 +409,18 @@ function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
 } = {}) {
-  /** @type {Promise<Array<Array<object>>>} */
+  /** @type {ReturnType<typeof agent.assertSomeTraces>} */
   let apmTracesPromise
+  const runState = { cancelled: false }
 
   const resetTracesPromises = () => {
+    // LLMObs plugin tests drive real SDK calls through the VCR proxy; the first call in a suite
+    // pays module-load and cassette-read cost that can exceed the 1s assertSomeTraces default.
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    })
+    }, { timeoutMs: 5000 })
   }
 
   useEnv({
@@ -424,7 +437,15 @@ function useLlmObs ({
     })
   })
 
-  beforeEach(resetTracesPromises)
+  beforeEach(() => {
+    runState.cancelled = false
+    resetTracesPromises()
+  })
+
+  afterEach(() => {
+    runState.cancelled = true
+    apmTracesPromise.cancel()
+  })
 
   after(async () => {
     await agent.close()
@@ -442,13 +463,29 @@ function useLlmObs ({
       // tests should know how many spans they expect to see, otherwise tests will timeout
       const llmobsSpans = []
 
-      while (llmobsSpans.length < numLlmObsSpans) {
+      while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
         await new Promise(resolve => setImmediate(resolve))
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
       }
 
       return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+    },
+
+    /**
+     * @param {number} [windowMs] - How long to wait for a forbidden span before passing.
+     * @returns {Promise<void>}
+     */
+    assertNoLlmObsSpans: async function (windowMs = 100) {
+      await apmTracesPromise
+      resetTracesPromises()
+
+      const deadline = Date.now() + windowMs
+      while (Date.now() < deadline && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const llmobsSpans = getLlmObsSpansFromRequests(agent.getLlmObsSpanEventsRequests(true))
+        assert.equal(llmobsSpans.length, 0, `expected no LLMObs spans, got ${llmobsSpans.length}`)
+      }
     },
 
     getEvaluationMetrics: function () {

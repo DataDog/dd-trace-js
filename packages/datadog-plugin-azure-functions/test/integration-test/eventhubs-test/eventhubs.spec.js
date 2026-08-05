@@ -111,6 +111,27 @@ describe('esm', () => {
         }
       }).timeout(60000)
 
+      it('propagates eventdata through an event hub with unset cardinality', async () => {
+        const groups = await agent.collectGroups({
+          trigger: () => curl('http://127.0.0.1:7071/api/eh3-eventdata'),
+          predicate: azureInvokeGroup('EventHubs eventHubTest3'),
+          expectedCount: 2,
+        })
+        for (const group of groups) {
+          assertObjectContains(group[0], {
+            name: 'azure.functions.invoke',
+            resource: 'EventHubs eventHubTest3',
+            meta: {
+              'messaging.operation': 'receive',
+              'messaging.system': 'eventhubs',
+              'messaging.destination.name': 'eh3',
+              'span.kind': 'consumer',
+            },
+          })
+          assert.strictEqual(parseLinks(group[0]).length, 1)
+        }
+      }).timeout(60000)
+
       it('propagates eventData through an event hub with a cardinality of many', async () => {
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-eventdata'),

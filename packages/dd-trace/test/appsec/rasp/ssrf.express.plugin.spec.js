@@ -15,6 +15,8 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
+const NON_ROUTABLE_HOST = '192.0.2.1'
+
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
@@ -79,17 +81,18 @@ describe('RASP - ssrf', () => {
             const module = require(protocol)
 
             app = (req, res) => {
-              const clientRequest = module.get(`${protocol}://${req.query.host}`, function (incomingResponse) {
-                incomingResponse.resume()
-                res.end('end')
-              })
+              const clientRequest = module.get(`${protocol}://${req.query.host}`)
 
               clientRequest.on('error', noop)
+              setImmediate(() => {
+                clientRequest.destroy()
+                res.end('end')
+              })
             }
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
             ])
           })
 
@@ -146,13 +149,18 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`)
+              const abortController = new AbortController()
+              axiosToTest.get(`https://${req.query.host}`, { proxy: false, signal: abortController.signal })
                 .catch(noop) // swallow network error
-                .then(() => res.end('end'))
+
+              setImmediate(() => {
+                abortController.abort()
+                res.end('end')
+              })
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -200,13 +208,17 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              requestToTest.get(`https://${req.query.host}`).on('response', () => {
+              const clientRequest = requestToTest.get(`https://${req.query.host}`, { proxy: false })
+              clientRequest.on('error', noop)
+
+              setImmediate(() => {
+                clientRequest.abort()
                 res.end('end')
               })
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })

@@ -21,7 +21,7 @@ describe('Plugin', () => {
 
       afterEach(async () => {
         await teardown(client)
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should create a span', async () => {
@@ -79,8 +79,8 @@ describe('Plugin', () => {
               })
 
               assert(span.meta['http.useragent'].includes('azure-cosmos-js/'), 'expected http.useragent in span meta')
-              assert(parseInt(span.meta['db.response.status_code']) >= 200 &&
-                parseInt(span.meta['db.response.status_code']) < 300,
+              assert(parseInt(span.meta['db.response.status_code'], 10) >= 200 &&
+                parseInt(span.meta['db.response.status_code'], 10) < 300,
                 `expected 2xx status code, got ${span.meta['db.response.status_code']}`)
 
               validatedResources.add(resource)

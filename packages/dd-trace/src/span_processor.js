@@ -6,21 +6,21 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+const { APM_TRACING_ENABLED_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
 
-    // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config)
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
@@ -42,11 +42,11 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans, tracing } = this._config
+    const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (tracing === false) {
+    if (DD_TRACE_ENABLED === false) {
       this._erase(trace, active)
       return
     }
@@ -55,12 +55,16 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
+      const stampApmDisabled = this._config.apmTracingEnabled === false
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (stampApmDisabled) {
+            formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so
           // record them before the OTel rename — an export-only transform.

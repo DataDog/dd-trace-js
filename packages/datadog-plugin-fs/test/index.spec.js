@@ -50,25 +50,17 @@ describe('Plugin', () => {
 
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          function waitForNextTrace () {
-            agent.assertSomeTraces((data) => {
-              if (data) {
-                data.forEach((arr) => {
-                  arr.forEach((trace) => {
-                    if (trace.name === 'fs.operation') {
-                      assert.fail('should not have been any fs traces')
-                    }
-                  })
-                })
+          agent
+            .assertNoTraces((data) => {
+              for (const traces of data) {
+                for (const trace of traces) {
+                  if (trace.name === 'fs.operation') {
+                    assert.fail('should not have been any fs traces')
+                  }
+                }
               }
-              process.nextTick(() => {
-                waitForNextTrace()
-              })
-            }).catch(done)
-          }
-
-          waitForNextTrace()
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {
@@ -107,11 +99,11 @@ describe('Plugin', () => {
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.assertSomeTraces(() => {
-            assert.fail('should not have been any traces')
-          }).catch(done)
-
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+          agent
+            .assertNoTraces(() => {
+              assert.fail('should not have been any traces')
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {
@@ -315,7 +307,7 @@ describe('Plugin', () => {
           const filename = path.join(__filename, Math.random().toString())
           try {
             fs.openSync(filename, 'r')
-          } catch (err) {
+          } catch {
             expectOneSpan(agent, done, {
               resource: 'openSync',
               error: 0,
@@ -394,7 +386,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -433,7 +425,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -485,7 +477,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1008,7 +1000,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1033,7 +1025,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1062,10 +1054,10 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(sourceFile)
-          } catch (e) { /* */ }
+          } catch { /* */ }
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1092,7 +1084,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1120,7 +1112,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1198,7 +1190,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1323,7 +1315,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1355,7 +1347,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1655,7 +1647,7 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
-            } catch (e) { /* */ }
+            } catch { /* */ }
             await fs.promises.unlink(filename)
           })
 

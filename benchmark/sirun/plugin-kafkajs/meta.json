@@ -7,13 +7,13 @@
   "instructions": true,
   "variants": {
     "small": {
-      "env": { "VARIANT": "small", "ITERATIONS": "8500000" }
+      "env": { "VARIANT": "small", "OPERATIONS": "8500000" }
     },
     "large": {
-      "env": { "VARIANT": "large", "ITERATIONS": "5500000" }
+      "env": { "VARIANT": "large", "OPERATIONS": "5500000" }
     },
     "mixed": {
-      "env": { "VARIANT": "mixed", "ITERATIONS": "7000000" }
+      "env": { "VARIANT": "mixed", "OPERATIONS": "7000000" }
     }
   }
 }

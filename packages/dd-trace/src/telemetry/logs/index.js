@@ -13,6 +13,9 @@ let enabled = false
  * Telemetry logs api defines only ERROR, WARN and DEBUG levels:
  * - WARN level is enabled by default
  * - DEBUG level will be possible to activate with an env var or telemetry config property
+ *
+ * @param {string | undefined} level
+ * @returns {boolean}
  */
 function isLevelEnabled (level) {
   return isValidLevel(level)
@@ -55,7 +58,7 @@ function onErrorLog (msg) {
 }
 
 function start (config) {
-  if (!config.telemetry.logCollection || enabled) return
+  if (!config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED || enabled) return
 
   enabled = true
 

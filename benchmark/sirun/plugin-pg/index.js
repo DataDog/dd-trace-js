@@ -9,7 +9,7 @@ const id = require('../../../packages/dd-trace/src/id')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced pg query reaches injectDbmQuery -> createDbmComment, which builds
 // the Datadog Block Monitoring SQL comment and splices it onto the query. This
@@ -74,13 +74,13 @@ if (VARIANT === 'full') {
   // generated identifiers each time. Swapping in new ids per iteration keeps the
   // hex computation unwarmed; a single reused context would memoize toString(16)
   // after the first call and measure cached lookups instead of the real cost.
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     spanContext._traceId = id()
     spanContext._spanId = id()
     sink += injectOnce().length
   }
 } else {
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     sink += injectOnce().length
   }
 }

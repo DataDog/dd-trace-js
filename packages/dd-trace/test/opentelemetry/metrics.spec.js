@@ -1175,7 +1175,7 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('HTTP Export Behavior', () => {
-    it('handles timeout and error without network', (done) => {
+    it('handles timeout and error without network', async () => {
       const results = { timeout: false, error: false }
       let requestCount = 0
 
@@ -1183,6 +1183,9 @@ describe('OpenTelemetry Meter Provider', () => {
         httpStub.restore()
         httpStub = null
       }
+
+      // Install fake timers before setupMetrics() so the reader's periodic export interval is faked.
+      const clock = sinon.useFakeTimers()
 
       httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
         requestCount++
@@ -1214,19 +1217,24 @@ describe('OpenTelemetry Meter Provider', () => {
         return mockReq
       })
 
-      setupMetrics()
-      const meter = metrics.getMeter('app')
-      meter.createCounter('test1').add(1)
+      try {
+        const { config } = setupMetrics()
+        const exportIntervalMs = Number(config.OTEL_METRIC_EXPORT_INTERVAL)
+        // One export interval plus a margin for the stub's 10ms socket-handler delay.
+        const exportRoundTripMs = exportIntervalMs + 20
+        const meter = metrics.getMeter('app')
 
-      setTimeout(() => {
+        meter.createCounter('test1').add(1)
+        await clock.tickAsync(exportRoundTripMs)
+        assert(results.timeout, 'first export should surface a socket timeout')
+
+        // Fresh data forces a second (delta) export.
         meter.createCounter('test2').add(2)
-      }, 120)
-
-      setTimeout(() => {
-        assert(results.timeout)
-        assert(results.error)
-        done()
-      }, 300)
+        await clock.tickAsync(exportRoundTripMs)
+        assert(results.error, 'second export should surface a socket error')
+      } finally {
+        clock.restore()
+      }
     })
   })
 })

@@ -2,7 +2,6 @@
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
@@ -71,6 +70,12 @@ class Sns extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ Message?: string, MessageAttributes?: Record<string, object> }} params
+   * @param {string | undefined} topicArn
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
@@ -79,37 +84,32 @@ class Sns extends BaseAwsSdkPlugin {
       return
     }
 
-    const ddInfo = {}
+    let ddInfo
     // for now, we only want to inject to the first message, this may change for batches in the future
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
-      // add ddInfo before checking DSM so we can include DD attributes in payload size
-      params.MessageAttributes._datadog = {
-        DataType: 'Binary',
-        BinaryValue: ddInfo,
-      }
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
     if (this.config.dsmEnabled) {
-      if (!params.MessageAttributes._datadog) {
-        params.MessageAttributes._datadog = {
-          DataType: 'Binary',
-          BinaryValue: ddInfo,
-        }
+      // Add the placeholder before the checkpoint so its payload size includes DD attributes.
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: ddInfo ?? {},
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
     }
 
-    if (isEmpty(ddInfo)) {
-      if (params.MessageAttributes._datadog) {
-        // let's avoid adding any additional information to payload if we failed to inject
-        delete params.MessageAttributes._datadog
-      }
-    } else {
+    if (ddInfo) {
       // BINARY types are automatically base64 encoded
-      params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: Buffer.from(JSON.stringify(ddInfo)),
+      }
+    } else if (params.MessageAttributes._datadog) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
     }
   }
 

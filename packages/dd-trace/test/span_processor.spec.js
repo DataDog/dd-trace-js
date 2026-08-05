@@ -9,6 +9,8 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
+const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+
 describe('SpanProcessor', () => {
   let prioritySampler
   let processor
@@ -60,8 +62,9 @@ describe('SpanProcessor', () => {
     config = {
       flushMinSpans: 3,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
     spanFormat = sinon.stub().returns({ formatted: true })
 
@@ -142,7 +145,8 @@ describe('SpanProcessor', () => {
 
   it('should configure span sampler correctly', () => {
     const config = {
-      stats: { enabled: false },
+      stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+      appsec: {},
       sampler: {
         sampleRate: 0,
         spanSamplingRules: [
@@ -164,10 +168,11 @@ describe('SpanProcessor', () => {
 
   it('should erase the trace and stop execution when tracing=false', () => {
     const config = {
-      tracing: false,
+      DD_TRACE_ENABLED: false,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -230,6 +235,67 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
+  it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
+    config.apmTracingEnabled = false
+    config.flushMinSpans = 2
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const firstFormatted = { metrics: {} }
+    const secondFormatted = { metrics: {} }
+    spanFormat.onFirstCall().returns(firstFormatted)
+    spanFormat.onSecondCall().returns(secondFormatted)
+    trace.started = [activeSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan]
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(firstFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
+    assert.strictEqual(secondFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
+    sinon.assert.calledWith(exporter.export, [firstFormatted, secondFormatted])
+  })
+
+  it('should add APM disabled marker to every chunk when a delayed child flushes alone', () => {
+    // Reproduces the standalone-ASM billing regression: the entry span flushes
+    // in one chunk, then a long-lived child (e.g. delayed http.request) flushes
+    // later in its own chunk. Both chunks must carry _dd.apm.enabled:0.
+    config.apmTracingEnabled = false
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const parentFormatted = { metrics: {} }
+    const childFormatted = { metrics: {} }
+    spanFormat.onFirstCall().returns(parentFormatted)
+    spanFormat.onSecondCall().returns(childFormatted)
+
+    const parentSpan = { ...finishedSpan }
+    const childSpan = { ...finishedSpan }
+    trace.started = [parentSpan]
+    trace.finished = [parentSpan]
+
+    processor.process(parentSpan)
+
+    assert.strictEqual(parentFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
+    sinon.assert.calledWith(exporter.export, [parentFormatted])
+
+    trace.started = [childSpan]
+    trace.finished = [childSpan]
+
+    processor.process(childSpan)
+
+    assert.strictEqual(childFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
+    sinon.assert.calledWith(exporter.export.secondCall, [childFormatted])
+  })
+
+  it('should not add APM disabled marker when APM tracing is enabled', () => {
+    config.apmTracingEnabled = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const formattedSpan = { metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
+  })
+
   describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
     function formattedHttpSpan () {
       return {
@@ -246,7 +312,12 @@ describe('SpanProcessor', () => {
 
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())
-      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       trace.started = [finishedSpan]
       trace.finished = [finishedSpan]
@@ -261,7 +332,12 @@ describe('SpanProcessor', () => {
 
     it('records span stats from the Datadog tag names, before the export-only rename', () => {
       spanFormat.returns(formattedHttpSpan())
-      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       const statsView = {}
       processor._stats = {

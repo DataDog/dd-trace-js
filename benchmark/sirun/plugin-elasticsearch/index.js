@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const ElasticsearchPlugin = require('../../../packages/datadog-plugin-elasticsearch/src/index')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced Elasticsearch request walks `bindStart`: serialize the request
 // body (JSON.stringify), quantize the path (digit -> ?), serialize the query
@@ -96,7 +96,7 @@ plugin.bindStart(ctxs[0])
 assert.ok(lastMeta && typeof lastMeta['elasticsearch.url'] === 'string', 'bindStart did not build meta')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   plugin.bindStart(ctxs[i % len])
 }
 guard.done()

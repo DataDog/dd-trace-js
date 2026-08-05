@@ -116,6 +116,66 @@ function wrapModelWithLifecycle (model) {
   }
 }
 
+/**
+ * Wraps an OTel span without changing its method receivers.
+ *
+ * OTel spans may use private fields, so methods must run against the original
+ * span. A per-invocation wrapper also preserves `ctx` without mutating the AI
+ * SDK's shared no-op span.
+ *
+ * @param {import('@opentelemetry/api').Span} span
+ * @param {object} ctx
+ * @returns {import('@opentelemetry/api').Span}
+ */
+function createDelegatingSpan (span, ctx) {
+  return {
+    spanContext () {
+      return span.spanContext.apply(span, arguments)
+    },
+    setAttribute () {
+      span.setAttribute.apply(span, arguments)
+      return this
+    },
+    setAttributes (attributes) {
+      vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+      span.setAttributes.apply(span, arguments)
+      return this
+    },
+    addEvent () {
+      span.addEvent.apply(span, arguments)
+      return this
+    },
+    addLink () {
+      span.addLink.apply(span, arguments)
+      return this
+    },
+    addLinks () {
+      span.addLinks.apply(span, arguments)
+      return this
+    },
+    setStatus () {
+      span.setStatus.apply(span, arguments)
+      return this
+    },
+    updateName () {
+      span.updateName.apply(span, arguments)
+      return this
+    },
+    isRecording () {
+      return span.isRecording.apply(span, arguments)
+    },
+    recordException (exception) {
+      ctx.error = exception
+      vercelAiTracingChannel.error.publish(ctx)
+      return span.recordException.apply(span, arguments)
+    },
+    end () {
+      vercelAiTracingChannel.asyncEnd.publish(ctx)
+      return span.end.apply(span, arguments)
+    },
+  }
+}
+
 function wrapTracer (tracer) {
   if (tracers.has(tracer)) {
     return
@@ -127,7 +187,7 @@ function wrapTracer (tracer) {
     return function (...args) {
       const name = args[0]
       const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
 
       const ctx = {
         name,
@@ -136,35 +196,7 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // the below is necessary in the case that the span is vercel ai's noopSpan.
-          // while we don't want to patch the noopSpan more than once, we do want to treat each as a
-          // fresh instance. However, this is really not necessary for non-noop spans, but not sure
-          // how to differentiate.
-          const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
-
-          shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function (...args) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, args)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'setAttributes', function (setAttributes) {
-            return function (attributes) {
-              vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return setAttributes.apply(this, arguments)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'recordException', function (recordException) {
-            return function (exception) {
-              ctx.error = exception
-              vercelAiTracingChannel.error.publish(ctx)
-              return recordException.apply(this, arguments)
-            }
-          })
-
-          return originalCb.call(this, freshSpan)
+          return originalCb.call(this, createDelegatingSpan(span, ctx))
         }
       })
 
@@ -225,12 +257,63 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithLifecycle(ctx.result)
+        const model = ctx.arguments[0]
+        if (typeof model !== 'string' && model !== ctx.result) {
+          wrapModelWithLifecycle(model)
+          wrappedModels.add(ctx.result)
+        } else {
+          wrapModelWithLifecycle(ctx.result)
+        }
       },
     })
 
     return exports
   })
 }
+
+const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
+const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+
+// for testing, and possibly actual instrumentation use, we want to
+// guard against double-subscribing to the asyncEnd channel of the
+// vercel ai-provided tracingChannel
+let subscribed = false
+
+// as of the v7 release, the ai sdk does not automatically aggregate streamed responses
+// we will handle emitting the chunks directly for products to handle
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  if (subscribed) return exports
+  subscribed = true
+
+  // ai sdk v7 only supported on node.js 22+
+  // inlining this import here so we only import in those cases
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
+
+  aiSdkTelemetryChannel.subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
+
+          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+
+          if (done) {
+            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+
+  return exports
+})
 
 module.exports = { wrapModelWithLifecycle }

@@ -1,6 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
-import type { plugins } from '..';
+import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -70,7 +70,9 @@ tracer.init({
   rateLimit: 1000,
   samplingRules: [
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
+    { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -228,7 +230,8 @@ const graphqlOptions: plugins.graphql = {
   hooks: {
     execute: (span?: Span, args?, res?) => { },
     validate: (span?: Span, document?, errors?) => { },
-    parse: (span?: Span, source?, document?) => { }
+    parse: (span?: Span, source?, document?) => { },
+    resolve: (span?: Span, field?) => { }
   }
 };
 
@@ -250,6 +253,10 @@ const awsSdkOptions: plugins.aws_sdk = {
     consumer: true,
     producer: false
   }
+};
+
+const awsSdkServiceFunctionOptions: plugins.aws_sdk = {
+  service: (params): string | undefined => params.TableName ? String(params.TableName) : undefined,
 };
 
 const bullmqOptions: plugins.bullmq = {
@@ -290,10 +297,11 @@ tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('claude-agent-sdk');
 tracer.use('avsc');
-tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
@@ -383,6 +391,7 @@ tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
+tracer.use('openai-agents');
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -402,6 +411,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
@@ -410,6 +420,14 @@ tracer.use('undici');
 tracer.use('vitest');
 tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
+
+type PluginUse = <P extends PluginName>(plugin: P, config?: PluginOptions[P] | boolean) => Tracer
+const usePlugin: PluginUse = tracer.use.bind(tracer)
+usePlugin('express', { service: 'name' })
+// @ts-expect-error Only built-in plugin names are supported.
+usePlugin('unknown-plugin')
+// @ts-expect-error Redis options must not be accepted by the express plugin.
+usePlugin('express', { splitByInstance: true })
 
 tracer.use('express', false)
 tracer.use('express', { enabled: false })
@@ -643,6 +661,31 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   cb(new Error('boom'))
 })
 
+// messages carrying image parts, inline and by attachment key
+llmobs.annotate({
+  inputData: [{
+    content: 'what is in this image',
+    imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }]
+  }],
+  outputData: [{
+    content: 'a pixel',
+    imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }]
+  }]
+})
+
+// an image part carries exactly one of content or attachmentKey
+type ImagePart = import('..').llmobs.ImagePart
+const inlineImagePart: ImagePart = { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+const keyedImagePart: ImagePart = { mimeType: 'image/jpeg', attachmentKey: 'key-123' }
+// @ts-expect-error An image part must carry either content or attachmentKey.
+const emptyImagePart: ImagePart = { mimeType: 'image/png' }
+// @ts-expect-error An image part must not carry both content and attachmentKey.
+const overspecifiedImagePart: ImagePart = {
+  mimeType: 'image/png',
+  content: 'iVBORw0KGgo=',
+  attachmentKey: 'key-123'
+}
+
 // wrap a function
 llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
@@ -669,6 +712,28 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     label: 'toxicity',
     metricType: 'boolean',
     value: 'true'
+  })
+
+  // submit end-user feedback
+  llmobs.submitFeedback({
+    label: 'thumbs_up',
+    metricType: 'boolean',
+    value: true,
+    submitter: { id: 'user-123', type: 'user' },
+    span: llmobsSpanCtx
+  })
+
+  llmobs.submitFeedback({
+    label: 'comment',
+    metricType: 'text',
+    value: 'this answer was helpful',
+    submitter: { id: 'user-123' },
+    feedbackJoinKey: 'my-join-key',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now(),
+    assessment: 'pass',
+    reasoning: 'the user was satisfied'
   })
 })
 
