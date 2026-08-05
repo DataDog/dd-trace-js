@@ -276,8 +276,6 @@ class Sqs extends BaseAwsSdkPlugin {
       const message = messages[i]
       const carrier = carriers === undefined ? this.parseMessageCarrier(message) : carriers[i]
       if (carrier) {
-        // Inert for EventBridge until its producer emits a pathway (separate
-        // change) — no `dd-pathway-ctx-base64` to decode yet; SQS/SNS decode now.
         this.tracer.decodeDataStreamsContext(carrier)
       }
       const payloadSize = getHeadersSize({
