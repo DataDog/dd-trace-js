@@ -1,10 +1,31 @@
 'use strict'
 
 const fs = require('node:fs/promises')
-const Module = require('node:module')
 const path = require('node:path')
 
+const INSTRUMENTATION_EXTENSIONS = ['js', 'jsx', 'ts', 'tsx']
 const DATADOG_PRELOAD = '--import=dd-trace/initialize.mjs'
+const INSTRUMENTATION_SOURCE = `export function register () {
+  if (process.env.NEXT_RUNTIME !== 'edge') {
+    require('dd-trace/init')
+  }
+}
+`
+
+function getProjectPath (directory, fileName) {
+  return directory === '.' ? fileName : path.posix.join(directory, fileName)
+}
+
+function getInstrumentationPaths (directory) {
+  const paths = []
+
+  for (const extension of INSTRUMENTATION_EXTENSIONS) {
+    paths.push(getProjectPath(directory, `instrumentation.${extension}`))
+    paths.push(getProjectPath(path.posix.join(directory, 'src'), `instrumentation.${extension}`))
+  }
+
+  return paths
+}
 
 function mergeNodeOptions (nodeOptions = '') {
   if (nodeOptions.includes('dd-trace/initialize.mjs')) return nodeOptions
@@ -28,92 +49,61 @@ async function findFunctionPaths (directory) {
   return functionPaths
 }
 
-async function findPackageRoot (packageName, searchPath) {
-  const packageRequire = Module.createRequire(path.join(searchPath, 'package.json'))
-  let resolved
+async function readBuildFile (file) {
+  const chunks = []
 
-  try {
-    resolved = packageRequire.resolve(`${packageName}/package.json`)
-  } catch (error) {
-    if (error.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error
-    resolved = packageRequire.resolve(packageName)
-  }
+  for await (const chunk of file.toStream()) chunks.push(chunk)
 
-  let directory = path.dirname(resolved)
-
-  while (directory !== path.dirname(directory)) {
-    try {
-      const manifest = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'))
-      if (manifest.name === packageName) return directory
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error
-    }
-    directory = path.dirname(directory)
-  }
-
-  throw new Error(`Unable to find the package root for ${packageName}`)
+  return Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString('utf8')
 }
 
-async function resolveTracerRoot () {
-  return validateTracerRoot(await findPackageRoot('dd-trace', __dirname))
+function createBuildFile (FileBlob, data) {
+  return new FileBlob({ data, contentType: 'application/javascript' })
 }
 
-async function validateTracerRoot (tracerRoot) {
-  const manifestPath = path.join(tracerRoot, 'package.json')
-  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'))
+function hasFrozenInstallCommand (installCommand) {
+  return /\bnpm\s+ci\b|--frozen-lockfile|--immutable/.test(installCommand || '')
+}
 
-  if (manifest.name !== 'dd-trace') {
-    throw new Error(`Expected ${manifestPath} to describe dd-trace`)
-  }
+async function prepareBuildInput (options, tracerVersion, FileBlob) {
+  const directory = path.posix.dirname(options.entrypoint)
+  const packagePath = getProjectPath(directory, 'package.json')
+  const packageFile = options.files[packagePath]
 
-  try {
-    await fs.access(path.join(tracerRoot, 'initialize.mjs'))
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error
+  if (!packageFile) throw new Error(`Expected ${packagePath} in the Vercel build input`)
+
+  const existingInstrumentation = getInstrumentationPaths(directory).find(filePath => options.files[filePath])
+  if (existingInstrumentation) {
     throw new Error(
-      `dd-trace ${manifest.version || 'unknown'} does not provide initialize.mjs; install a supported version`
+      `Cannot add Datadog instrumentation because ${existingInstrumentation} already exists. ` +
+      'Add dd-trace/init to that file instead.'
     )
   }
 
-  return tracerRoot
-}
+  const packageJson = JSON.parse(await readBuildFile(packageFile))
+  const dependencies = { ...packageJson.dependencies }
+  const developmentDependency = packageJson.devDependencies?.['dd-trace']
 
-function findTraceBase (tracerRoot) {
-  let directory = tracerRoot
-
-  while (directory !== path.dirname(directory)) {
-    if (path.join(directory, 'node_modules', 'dd-trace') === tracerRoot) return directory
-    directory = path.dirname(directory)
+  if (hasFrozenInstallCommand(options.config?.installCommand) && !dependencies['dd-trace']) {
+    throw new Error(
+      'Cannot add dd-trace with a frozen install command. ' +
+        'Add dd-trace to production dependencies and update the lockfile.'
+    )
   }
 
-  throw new Error(`dd-trace must be installed under node_modules: ${tracerRoot}`)
-}
+  dependencies['dd-trace'] = dependencies['dd-trace'] || developmentDependency || tracerVersion
 
-async function stageTracerFiles (tracerRoot, workPath) {
-  // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require -- Builder dependency.
-  const { nodeFileTrace } = require('@vercel/nft')
-  const traceBase = await fs.realpath(findTraceBase(tracerRoot))
-  tracerRoot = await fs.realpath(tracerRoot)
-  const { fileList } = await nodeFileTrace([
-    path.join(tracerRoot, 'initialize.mjs'),
-    path.join(tracerRoot, 'init.js'),
-  ], {
-    base: traceBase,
-    processCwd: workPath,
-  })
-
-  for (const relativePath of fileList) {
-    const source = path.join(traceBase, relativePath)
-    const tracerPath = relativePath.startsWith('node_modules/dd-trace/')
-      ? relativePath
-      : path.join('node_modules', 'dd-trace', relativePath)
-    const destination = path.join(workPath, tracerPath)
-    await fs.mkdir(path.dirname(destination), { recursive: true })
-    await fs.copyFile(source, destination)
+  if (developmentDependency) {
+    const { 'dd-trace': ignored, ...devDependencies } = packageJson.devDependencies
+    packageJson.devDependencies = devDependencies
   }
+
+  packageJson.dependencies = dependencies
+  options.files[packagePath] = createBuildFile(FileBlob, `${JSON.stringify(packageJson, null, 2)}\n`)
+  options.files[getProjectPath(directory, 'instrumentation.ts')] = createBuildFile(FileBlob, INSTRUMENTATION_SOURCE)
 }
 
-async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
+async function instrumentBuildOutput (outputPath) {
   const functionsPath = path.join(outputPath, 'functions')
 
   try {
@@ -123,13 +113,11 @@ async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
     throw error
   }
 
-  const functionPaths = await findFunctionPaths(functionsPath)
-  for (const functionPath of functionPaths) {
+  for (const functionPath of await findFunctionPaths(functionsPath)) {
     const configPath = path.join(functionPath, '.vc-config.json')
     const config = JSON.parse(await fs.readFile(configPath, 'utf8'))
     if (!String(config.runtime).startsWith('nodejs')) continue
 
-    await stageTracerFiles(tracerRoot, functionPath)
     config.environment = {
       ...config.environment,
       NODE_OPTIONS: mergeNodeOptions(config.environment?.NODE_OPTIONS),
@@ -140,23 +128,25 @@ async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
 
 async function build (options) {
   // eslint-disable-next-line n/no-missing-require -- Declared by the published Builder package.
+  const { FileBlob } = require('@vercel/build-utils')
+  // eslint-disable-next-line n/no-missing-require -- Declared by the published Builder package.
   const { build: buildNext } = require('@vercel/next')
+  // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require -- Builder dependency.
+  const { version } = require('dd-trace/package.json')
+
+  await prepareBuildInput(options, version, FileBlob)
   const result = await buildNext(options)
 
-  if (result.buildOutputPath) {
-    const tracerRoot = await resolveTracerRoot()
-    await instrumentBuildOutput(result.buildOutputPath, tracerRoot, options.workPath)
-  }
+  if (result.buildOutputPath) await instrumentBuildOutput(result.buildOutputPath)
 
   return result
 }
 
 module.exports = {
   build,
-  findTraceBase,
+  getInstrumentationPaths,
+  hasFrozenInstallCommand,
   instrumentBuildOutput,
   mergeNodeOptions,
-  resolveTracerRoot,
-  stageTracerFiles,
-  validateTracerRoot,
+  prepareBuildInput,
 }
