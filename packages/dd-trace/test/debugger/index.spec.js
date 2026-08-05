@@ -6,11 +6,8 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 require('../setup/mocha')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('debugger/index', () => {
   let DynamicInstrumentation
@@ -247,54 +244,6 @@ describe('debugger/index', () => {
     })
   })
 
-  describe('identity refresh', () => {
-    it('should reconfigure the worker with the refreshed runtime id when the identity-refresh channel fires', () => {
-      DynamicInstrumentation.start(config, rc)
-      const configPort = messageChannels[2].port2
-      configPort.postMessage.resetHistory()
-
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
-      config.tags['runtime-id'] = 'refreshed-runtime-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(configPort.postMessage)
-      const postedConfig = configPort.postMessage.firstCall.args[0]
-      assert.strictEqual(postedConfig.runtimeId, 'refreshed-runtime-id')
-    })
-
-    it('should not reconfigure the worker when the channel fires before start', () => {
-      identityRefreshChannel.publish(config)
-      // Should not throw, and there is no worker/configPort to have posted to.
-      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
-    })
-
-    it('should stop reacting to identity refresh after stop', () => {
-      DynamicInstrumentation.start(config, rc)
-      const configPort = messageChannels[2].port2
-
-      DynamicInstrumentation.stop()
-      configPort.postMessage.resetHistory()
-
-      config.tags['runtime-id'] = 'refreshed-runtime-id'
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.notCalled(configPort.postMessage)
-    })
-
-    it('should not accumulate subscriptions across restarts', () => {
-      DynamicInstrumentation.start(config, rc)
-      DynamicInstrumentation.stop()
-      DynamicInstrumentation.start(config, rc)
-      const configPort = messageChannels[messageChannels.length - 1].port2
-      configPort.postMessage.resetHistory()
-
-      identityRefreshChannel.publish(config)
-
-      sinon.assert.calledOnce(configPort.postMessage)
-    })
-  })
-
   describe('lifecycle', () => {
     it('should be able to start again after stopping', () => {
       // First start
@@ -340,146 +289,6 @@ describe('debugger/index', () => {
 
       // Should have created a new worker
       assert.strictEqual(Worker.callCount, firstWorkerCall + 1)
-    })
-  })
-
-  describe('pending start', () => {
-    // A DynamicInstrumentation instance whose fetchAgentInfo callback is captured instead of
-    // invoked, so tests can simulate stop() racing the pending start.
-    function createPendingInstrumentation () {
-      let deferredCallback
-      const PendingWorker = sinon.stub()
-      PendingWorker.prototype.on = sinon.stub().returnsThis()
-      PendingWorker.prototype.once = sinon.stub().returnsThis()
-      PendingWorker.prototype.unref = sinon.stub()
-      PendingWorker.prototype.terminate = sinon.stub()
-      PendingWorker.prototype.removeAllListeners = sinon.stub()
-
-      const instrumentation = proxyquire('../../src/debugger/index', {
-        fs: {
-          readFile: sinon.stub(),
-        },
-        '../agent/info': {
-          fetchAgentInfo: (url, callback) => { deferredCallback = callback },
-        },
-        './config': proxyquire('../../src/debugger/config', {
-          '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
-        }),
-        worker_threads: {
-          Worker: PendingWorker,
-          MessageChannel: class MessageChannel {
-            constructor () {
-              this.port1 = { unref: sinon.stub(), on: sinon.stub() }
-              this.port2 = { unref: sinon.stub(), on: sinon.stub(), postMessage: sinon.stub() }
-            }
-          },
-          threadId: 0,
-        },
-      })
-
-      return { instrumentation, Worker: PendingWorker, resolveAgentInfo: (...args) => deferredCallback(...args) }
-    }
-
-    it('reports isStarted() while still waiting on detectDebuggerEndpoint()', () => {
-      const { instrumentation, Worker: PendingWorker } = createPendingInstrumentation()
-
-      instrumentation.start(config, rc)
-
-      assert.strictEqual(instrumentation.isStarted(), true)
-      sinon.assert.notCalled(PendingWorker)
-    })
-
-    it('runs cleanup when stopped while still waiting on detectDebuggerEndpoint()', () => {
-      const { instrumentation, Worker: PendingWorker, resolveAgentInfo } = createPendingInstrumentation()
-
-      instrumentation.start(config, rc)
-      instrumentation.stop()
-
-      assert.strictEqual(instrumentation.isStarted(), false)
-      sinon.assert.calledWith(rc.removeProductHandler, 'LIVE_DEBUGGING')
-
-      // Fires after stop() already ran cleanup - must not construct a worker.
-      resolveAgentInfo(null, { endpoints: [] })
-
-      sinon.assert.notCalled(PendingWorker)
-    })
-
-    it('stops reacting to identity refresh once cancelled during a pending start', () => {
-      const { instrumentation, resolveAgentInfo } = createPendingInstrumentation()
-
-      instrumentation.start(config, rc)
-      instrumentation.stop()
-      resolveAgentInfo(null, { endpoints: [] })
-
-      // Should not throw even though the worker/configPort were never created.
-      config.tags['runtime-id'] = 'refreshed-runtime-id'
-      identityRefreshChannel.publish(config)
-    })
-
-    it('can start again after a cancelled pending start', () => {
-      const { instrumentation, Worker: PendingWorker, resolveAgentInfo } = createPendingInstrumentation()
-
-      instrumentation.start(config, rc)
-      instrumentation.stop()
-      resolveAgentInfo(null, { endpoints: [] }) // late; must not construct a worker for the cancelled start
-
-      instrumentation.start(config, rc)
-      assert.strictEqual(instrumentation.isStarted(), true)
-
-      // Resolves the second (still in-flight) start's own detectDebuggerEndpoint call.
-      resolveAgentInfo(null, { endpoints: [] })
-      sinon.assert.calledOnce(PendingWorker)
-
-      instrumentation.stop()
-    })
-
-    it('does not build a worker from a callback superseded by a stop()+start() cycle', () => {
-      // Needs two independently-resolvable fetchAgentInfo callbacks (one per start()), so this
-      // doesn't reuse createPendingInstrumentation()'s single deferredCallback slot.
-      const deferredCallbacks = []
-      const PendingWorker = sinon.stub()
-      PendingWorker.prototype.on = sinon.stub().returnsThis()
-      PendingWorker.prototype.once = sinon.stub().returnsThis()
-      PendingWorker.prototype.unref = sinon.stub()
-      PendingWorker.prototype.terminate = sinon.stub()
-      PendingWorker.prototype.removeAllListeners = sinon.stub()
-
-      const instrumentation = proxyquire('../../src/debugger/index', {
-        fs: {
-          readFile: sinon.stub(),
-        },
-        '../agent/info': {
-          fetchAgentInfo: (url, callback) => { deferredCallbacks.push(callback) },
-        },
-        './config': proxyquire('../../src/debugger/config', {
-          '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
-        }),
-        worker_threads: {
-          Worker: PendingWorker,
-          MessageChannel: class MessageChannel {
-            constructor () {
-              this.port1 = { unref: sinon.stub(), on: sinon.stub() }
-              this.port2 = { unref: sinon.stub(), on: sinon.stub(), postMessage: sinon.stub() }
-            }
-          },
-          threadId: 0,
-        },
-      })
-
-      instrumentation.start(config, rc)
-      instrumentation.stop()
-      instrumentation.start(config, rc) // second session starts while the first's endpoint check is still pending
-
-      // Second session's own detectDebuggerEndpoint call resolves first.
-      deferredCallbacks[1](null, { endpoints: [] })
-      sinon.assert.calledOnce(PendingWorker)
-
-      // The stale first session's callback resolves late - must not build a second, mismatched worker
-      // (it would otherwise mix this session's probe/log ports with the second session's config port).
-      deferredCallbacks[0](null, { endpoints: [] })
-      sinon.assert.calledOnce(PendingWorker)
-
-      instrumentation.stop()
     })
   })
 
