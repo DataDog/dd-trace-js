@@ -1,8 +1,8 @@
 'use strict'
 
-const os = require('os')
-
 const { channel } = require('dc-polyfill')
+
+const buildResourceAttributes = require('../resource-attributes')
 
 /**
  * @typedef {import('../../config')} Config
@@ -38,37 +38,6 @@ const { registerTelemetryFlusher } = require('../../flush')
 const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
-
-/**
- * Builds the resource attributes for the OTel logs exporter. Shared by
- * `initializeOpenTelemetryLogs()` and the identity-refresh handler so they can't drift apart.
- * @param {import('../../config/config-base')} config - Tracer configuration instance
- * @returns {object} Resource attributes
- */
-function buildResourceAttributes (config) {
-  const resourceAttributes = {
-    'service.name': config.service,
-    'service.version': config.version,
-    'deployment.environment': config.env,
-  }
-
-  // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
-  // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
-  if (config.tags) {
-    const filteredTags = { ...config.tags }
-    delete filteredTags.service
-    delete filteredTags.version
-    delete filteredTags.env
-    Object.assign(resourceAttributes, filteredTags)
-  }
-
-  // Add host.name if reportHostname is enabled
-  if (config.reportHostname) {
-    resourceAttributes['host.name'] = os.hostname()
-  }
-
-  return resourceAttributes
-}
 
 /**
  * Initializes OpenTelemetry Logs support

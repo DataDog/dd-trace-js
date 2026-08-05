@@ -8,6 +8,7 @@ const { metrics } = require('@opentelemetry/api')
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const { registerTelemetryFlusher } = require('../../flush')
+const buildGeneralResourceAttributes = require('../resource-attributes')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
@@ -46,35 +47,6 @@ let unsubscribeSpanStatsIdentityRefresh = null
  *
  * @package
  */
-
-/**
- * Builds the resource attributes for the general OTel metrics exporter (service/version/env,
- * `config.tags` minus those three, and hostname when enabled). Shared by
- * `initializeOpenTelemetryMetrics()` and its identity-refresh handler so they can't drift apart.
- * @param {import('../../config/config-base')} config - Tracer configuration instance
- * @returns {object} Resource attributes
- */
-function buildGeneralResourceAttributes (config) {
-  const resourceAttributes = {
-    'service.name': config.service,
-    'service.version': config.version,
-    'deployment.environment': config.env,
-  }
-
-  if (config.tags) {
-    const filteredTags = { ...config.tags }
-    delete filteredTags.service
-    delete filteredTags.version
-    delete filteredTags.env
-    Object.assign(resourceAttributes, filteredTags)
-  }
-
-  if (config.reportHostname) {
-    resourceAttributes['host.name'] = os.hostname()
-  }
-
-  return resourceAttributes
-}
 
 /**
  * Initializes OpenTelemetry Metrics support
