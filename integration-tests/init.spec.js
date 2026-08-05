@@ -300,9 +300,9 @@ describe('init.js', () => {
       return checkEnv({ DD_TRACE_SAMPLE_RATE: '0.5' })
     })
 
-    it('skips keys with null values', () => {
+    it('coerces null values to strings', () => {
       process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
-      return checkEnv({ DD_SERVICE: undefined })
+      return checkEnv({ DD_SERVICE: 'null' })
     })
 
     it('does not crash on malformed pm2_env JSON', () => {
@@ -339,6 +339,22 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testInjectionScenarios('loader', 'initialize.mjs',
         process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
+
+      // Only off-thread loaders install the matcher; see initialize.mjs.
+      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
+        context('import-in-the-middle include matcher', () => {
+          useEnv({
+            NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
+            pm2_env: JSON.stringify({
+              DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+                'SANITIZER:*:init/security-control-module.mjs:sanitize',
+            }),
+          })
+
+          it('wraps instrumented and PM2 security control modules and nothing else', () =>
+            testFile('init/loader-matcher.mjs', 'true\n', [], ''))
+        })
+      }
     })
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {

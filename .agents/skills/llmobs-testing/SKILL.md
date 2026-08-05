@@ -5,23 +5,30 @@ description: |
   dd-trace-js. Triggers: "write LLMObs tests", "test an LLMObs plugin",
   "assertLlmObsSpanEvent", "useLlmObs", "getEvents", any MOCK_* matcher
   ("MOCK_STRING" / "MOCK_NOT_NULLISH" / "MOCK_NUMBER" / "MOCK_OBJECT"),
-  "VCR cassette", "vcr proxy", "127.0.0.1:9126", any LlmObsCategory test
-  ("LLM_CLIENT" / "MULTI_PROVIDER" / "ORCHESTRATION" / "INFRASTRUCTURE").
+  "VCR cassette", "vcr proxy", "127.0.0.1:9126", "record a cassette",
+  "test:llmobs:plugins".
 ---
 
 # LLM Observability Testing Skill
 
-## Determine the package category first
+## Decide how each instrumented surface gets its responses first
 
-**Before writing any test, determine the package's `LlmObsCategory`.** Category picks the test strategy (VCR or not), the span kind, and the test structure. The wrong category produces tests that pass against the wrong contract — VCR cassettes for a workflow library produce empty recordings; pure-function tests for an HTTP-call wrapper miss the network surface entirely.
+**That choice picks the response source and test setup** — cassettes for a workflow record nothing, while
+pure-function tests for a provider-backed call miss the network surface entirely. The operation independently
+determines its span kind and fields. These are working categories for reasoning; none exists as a code constant.
 
-Quick check:
+- **LLM client / multi-provider** — reaches provider HTTP directly or through a supplied provider package (openai,
+  anthropic, genai, ai, langchain): VCR cassettes or a canned `fetch`.
+- **Orchestration** — carries workflow or graph state and makes no provider calls of its own (langgraph): no VCR;
+  drive nodes with plain return values.
+- **Infrastructure** — implements a protocol or server (modelcontextprotocol-sdk): run the SDK's own server
+  and client over its in-memory transport.
+- **Canned `fetch` instead of a cassette** — where the spec supplies the responses itself: google-cloud-vertexai
+  swaps `global.fetch` per test and stubs Google auth, openai-agents and some `ai` providers pass a `fetch` option
+  to the client they construct.
 
-- Direct HTTP calls to an LLM provider? → `LLM_CLIENT` or `MULTI_PROVIDER` — VCR.
-- Workflow / graph orchestration with state? → `ORCHESTRATION` — no VCR, pure functions, real LLM as the orchestration node.
-- Protocol / server implementation? → `INFRASTRUCTURE` — mock server.
-
-See [references/category-strategies.md](references/category-strategies.md) for the FORBIDDEN-vs-REQUIRED matrix per category.
+See [references/category-strategies.md](references/category-strategies.md) for the forbidden-vs-required matrix per
+strategy.
 
 ## Core Testing Concepts
 
@@ -44,38 +51,33 @@ See [references/test-structure.md](references/test-structure.md) for complete te
 
 ### 2. VCR Cassettes
 
-VCR records real API calls and replays them in tests for deterministic testing without external dependencies.
+Provider traffic is recorded once and replayed afterwards. Clients reach the proxy at
+`http://127.0.0.1:9126/vcr/{provider}`; the category block above decides which categories use it at all.
 
-**Purpose:**
-- Record real LLM API responses once
-- Replay deterministically in CI without API keys
-- No external dependencies after recording
+Two facts block every first run:
 
-**How it works:**
-1. Configure proxy baseURL: `http://127.0.0.1:9126/vcr/{provider}`
-2. Run tests with real API keys (first time only)
-3. VCR proxy records requests/responses to cassette files
-4. Subsequent test runs replay from cassettes (no API keys needed)
+- **The proxy is the test-agent container**, not a script in this repo — `docker compose up -d testagent`.
+  Without it every call fails with `ECONNREFUSED 127.0.0.1:9126`, which reads like a provider outage.
+- **Cassettes live in one shared tree** under `packages/dd-trace/test/llmobs/cassettes/{provider}/`, with
+  generated names, rather than beside the spec.
 
-**Cassette location:** `test/llmobs/plugins/{integration}/cassettes/`
+See [references/vcr-cassettes.md](references/vcr-cassettes.md) for recording, provider mapping, body
+normalizers, and the commands to run a single integration.
 
-**When to use VCR:**
-- ✅ `LlmObsCategory.LLM_CLIENT` (Direct API wrappers)
-- ✅ `LlmObsCategory.MULTI_PROVIDER` (Multi-provider frameworks)
-- ❌ `LlmObsCategory.ORCHESTRATION` (Pure functions, no API calls)
-- ❌ `LlmObsCategory.INFRASTRUCTURE` (Mock servers instead)
+### 3. Response Strategy And Operation Kind
 
-See [references/vcr-cassettes.md](references/vcr-cassettes.md) for recording process and troubleshooting.
+The block at the top maps response source to test strategy. The operation maps independently to a span kind:
 
-### 3. Category-Specific Test Strategies
+- **Provider-backed LLM client / multi-provider operations**: use the proxy baseURL
+  `http://127.0.0.1:9126/vcr/{provider}` or a canned `fetch`. Chat and generation emit `llm`; LangChain and `ai`
+  also expose operations with other kinds.
+- **Orchestration**: span kind `'workflow'` or `'agent'`, never `'llm'` — the orchestrator coordinates libraries that
+  call providers rather than calling them itself. Nodes return plain values, so the test exercises graph execution
+  instead of a provider API.
+- **Infrastructure**: the SDK's own server and client over its in-memory transport, protocol-specific
+  validation, no VCR.
 
-The category-determination block at the top maps category to strategy. Non-obvious bits per category:
-
-- **LLM_CLIENT / MULTI_PROVIDER**: VCR proxy baseURL is `http://127.0.0.1:9126/vcr/{provider}`. Span kind: `'llm'`. Cassettes record once with real API keys; CI replays them.
-- **ORCHESTRATION**: Span kind: `'workflow'` or `'agent'`, never `'llm'`. No VCR, no real API calls — the orchestrator itself doesn't make HTTP calls, it coordinates libraries that do. Mock LLM responses as plain return values from the node so the test exercises the workflow execution, not the provider API.
-- **INFRASTRUCTURE**: Mock server, protocol-specific validation, no VCR.
-
-See [references/category-strategies.md](references/category-strategies.md) for per-category patterns.
+See [references/category-strategies.md](references/category-strategies.md) for the patterns per shape.
 
 ### 4. Assertion Patterns
 
@@ -83,35 +85,34 @@ See [references/category-strategies.md](references/category-strategies.md) for p
 
 Validates span structure with flexible matchers for non-deterministic values.
 
-**Available matchers:**
-- `MOCK_STRING` - Matches any non-empty string (use for output text)
-- `MOCK_NOT_NULLISH` - Matches any truthy value (use for token counts)
-- `MOCK_NUMBER` - Matches any number
-- `MOCK_OBJECT` - Matches any object (use for errors)
+**Available matchers:** each one is a `typeof` or nullish check, not a value check.
+- `MOCK_STRING` - any string, `''` included (use for output text)
+- `MOCK_NOT_NULLISH` - anything but `null` / `undefined`, so `0` and `''` pass (use for token counts)
+- `MOCK_NUMBER` - any number
+- `MOCK_OBJECT` - anything with `typeof 'object'`, `null` included (opaque `schema` / `metadata` payloads, or
+  a whole output message whose shape varies, as the `ai` specs do)
 
-**Assertable fields:**
-- `spanKind` (required) - Span type from `LlmObsSpanKind` enum
-- `name` - Operation name
-- `modelName` - Model identifier (for LLM spans)
-- `modelProvider` - Provider name (for LLM spans)
-- `inputMessages` - Input messages in `[{content, role}]` format
-- `outputMessages` - Output messages in `[{content, role}]` format
-- `metrics` - Token usage (`input_tokens`, `output_tokens`, `total_tokens`)
-- `metadata` - Model parameters (`temperature`, `max_tokens`, etc.)
-- `error` - Error object (if operation failed)
+**Required fields:** `span`, `spanKind`, `name`, `tags`. A missing `tags` throws
+`TypeError: Cannot read properties of undefined (reading 'ml_app')` instead of failing an assertion, and every
+plugin span carries at least `{ ml_app: 'test', integration: '<integration>' }`.
 
-**Partial validation:** Only specified fields are checked, others ignored.
-
-See [references/assertion-helpers.md](references/assertion-helpers.md) for complete API and patterns.
+**Optional fields:** `modelName`, `modelProvider`, `inputMessages`, `outputMessages`, `inputDocuments`,
+`outputDocuments`, `inputValue`, `outputValue`, `metrics`, `metadata`, `toolDefinitions`, `error`, `parentId`,
+`sessionId`, `traceId`. Omitting a field asserts its absence rather than ignoring it: no model fields, no input, no
+output, no metadata, no tool definitions, `metrics` of `{}`, `status: 'ok'`, and the root parent id. `traceId` is
+the exception: omission defaults to `MOCK_STRING` because every event has one. See
+[references/assertion-helpers.md](references/assertion-helpers.md) for the patterns.
 
 ## Test File Organization
 
-**Location:** `test/llmobs/plugins/{integration}/index.spec.js`
+**Location:** `packages/dd-trace/test/llmobs/plugins/{integration}/index.spec.js`. One file per
+major-version surface when the SDK's shape changed across majors, named after it rather than kept in
+one file — `openaiv3.spec.js` / `openaiv4.spec.js`, `index.spec.js` / `index.v7.spec.js`.
 
 **Structure:**
 1. Import helpers from `'../../util'`
 2. Initialize LLMObs test environment
-3. Load modules in `beforeEach()` for fresh state
+3. Load modules after `useLlmObs()` installs the tracer, then recreate mutable clients per test
 4. Group tests by method (`describe('chat completions', ...)`)
 5. Cover all instrumented methods
 6. Test error cases
@@ -123,41 +124,40 @@ useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH, MOCK_NUMBER, MO
 
 See [references/test-structure.md](references/test-structure.md) for complete template.
 
-## Key Testing Points
+## Span Kinds And The Fields They Carry
 
-### Coverage Requirements
+`SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` is the list the public SDK validates against:
+`llm` (chat / completions), `workflow`, `agent`, `task` (a unit of work inside a workflow), `tool`, `embedding`,
+`retrieval`. Plugins set the kind directly and skip that validation, so kinds outside the list exist — `ai` v7
+and claude-agent-sdk both emit `step`.
 
-Test all instrumented methods with:
-- ✅ Basic operation (single message/call)
-- ✅ Multi-turn conversations (if applicable)
-- ✅ Error cases
-- ✅ All required span fields (spanKind, name, modelName, modelProvider)
-- ✅ Message format validation (`{content, role}` structure)
-- ✅ Metrics validation (token counts exist and are truthy)
-- ✅ Metadata validation (parameters passed through)
+Pinning a field the kind never emits asserts metadata production does not produce:
 
-### Span Kind Validation
+- `llm` — `modelName`, `modelProvider`, `inputMessages` / `outputMessages`, and any emitted token `metrics` /
+  `metadata`
+- `embedding` — `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics`
+- `retrieval` — `inputValue`, `outputDocuments`
+- `workflow` / `agent` / `task` / `step` / `tool` — kind-specific `inputValue` / `outputValue`, sometimes
+  `metadata`, never
+  model fields or token metrics
 
-Match span kind to operation type using `LlmObsSpanKind` enum:
-- Chat/completions → `'llm'`
-- Workflow execution → `'workflow'`
-- Agent runs → `'agent'`
-- Tool calls → `'tool'`
-- Embeddings → `'embedding'`
-- Retrieval → `'retrieval'`
+Cover every instrumented method, and a multi-turn conversation where the surface takes one.
 
-### Error Handling
+## Error Handling
 
-On errors, validate:
-- Empty output messages: `[{content: '', role: ''}]`
-- Error object exists: `error: MOCK_OBJECT`
-- Span still created (not dropped)
+On errors the span is still submitted. Match the plugin's output contract: OpenAI and GenAI carry
+`outputMessages: [{ content: '', role: '' }]`, while Anthropic and non-`llm` integrations may omit output.
+Pass a truthy marker to expect an error:
 
-## References
+```javascript
+error: {},
+```
 
-For detailed information, see:
+The option decides only whether the expected event carries `status: 'error'` — `assertLlmObsSpanEvent`
+copies the three error fields out of the span it is checking, so the marker does not pin the throw.
+A call that resolves still fails on that status. Pin which error was thrown on the APM span the LLMObs
+span was built from:
 
-- [references/test-structure.md](references/test-structure.md) - Complete test file templates and organization
-- [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management, troubleshooting
-- [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers, patterns
-- [references/category-strategies.md](references/category-strategies.md) - Detailed test strategies for each LlmObsCategory
+```javascript
+assert.strictEqual(apmSpans[0].meta['error.message'], error.message)
+```

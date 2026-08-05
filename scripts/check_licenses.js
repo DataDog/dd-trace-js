@@ -203,16 +203,18 @@ function addNpmProductionDependencies (dependencies, packageLockPath) {
 function addDependencyPatterns (patterns, manifest, context, includePeers = false) {
   const optionalDependencies = manifest.optionalDependencies ?? {}
 
-  for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
-    if (!Object.hasOwn(optionalDependencies, name)) {
-      addDependencyPattern(patterns, name, range, context)
+  if ((manifest.dependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.dependencies)) {
+      if (!Object.hasOwn(optionalDependencies, name)) {
+        addDependencyPattern(patterns, name, range, context)
+      }
     }
   }
   for (const [name, range] of Object.entries(optionalDependencies)) {
     addDependencyPattern(patterns, name, range, context)
   }
-  if (includePeers) {
-    for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {
+  if (includePeers && (manifest.peerDependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.peerDependencies)) {
       addDependencyPattern(patterns, name, range, context, manifest.optionalPeers?.includes(name))
     }
   }

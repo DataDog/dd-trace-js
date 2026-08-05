@@ -15,6 +15,8 @@ const log = require('../../dd-trace/src/log')
  * [[1, 2, 3], [2, 3, 5]]
  * 2. An array of objects, e.g.
  * [{ a: 1, b: 2, expected: 3 }, { a: 2, b: 3, expected: 5}]
+ *
+ * @param {unknown[]} testParameters `test.each` arguments
  */
 function getFormattedJestTestParameters (testParameters) {
   if (!testParameters || !testParameters.length) {
@@ -43,7 +45,8 @@ function getFormattedJestTestParameters (testParameters) {
 
 // @fast-check/jest appends a random seed to the reported test name. A test name that keeps changing
 // breaks some Test Optimization features, so normalize this narrow suffix regardless of import style.
-const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
+// fast-check emits exactly one space before the suffix.
+const SEED_SUFFIX_RE = / ?\(with seed=-?\d+\) ?$/i
 
 function removeSeedSuffixFromTestName (testName) {
   return testName.replace(SEED_SUFFIX_RE, '')

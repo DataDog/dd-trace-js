@@ -16,6 +16,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-policy')
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
@@ -69,6 +70,15 @@ describe('CI Visibility Exporter', () => {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: 20,
       DD_TEST_MANAGEMENT_ENABLED: true,
     }
+    const ZERO_RETRY_POLICY = {
+      durationRetryCounts: [
+        { durationLimitMs: 5000, retryCount: 0 },
+        { durationLimitMs: 10_000, retryCount: 0 },
+        { durationLimitMs: 30_000, retryCount: 0 },
+        { durationLimitMs: 300_000, retryCount: 0 },
+      ],
+      schedulingRetryCount: 0,
+    }
 
     it('creates a complete frozen policy from remote and local settings', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
@@ -78,8 +88,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: true,
         requireGit: true,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 0 }),
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         isDiEnabled: true,
@@ -96,8 +105,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: true,
         requireGit: true,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionRetryPolicy: ZERO_RETRY_POLICY,
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         flakyTestRetriesCount: 5,
@@ -109,7 +117,7 @@ describe('CI Visibility Exporter', () => {
         isCoverageReportUploadEnabled: true,
       })
       assert.strictEqual(Object.isFrozen(policy), true)
-      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionSlowTestRetries), true)
+      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionRetryPolicy), true)
     })
 
     it('creates a complete disabled policy when remote settings are unavailable', () => {
@@ -121,8 +129,7 @@ describe('CI Visibility Exporter', () => {
         isItrEnabled: false,
         requireGit: false,
         isEarlyFlakeDetectionEnabled: false,
-        earlyFlakeDetectionNumRetries: 0,
-        earlyFlakeDetectionSlowTestRetries: {},
+        earlyFlakeDetectionRetryPolicy: ZERO_RETRY_POLICY,
         earlyFlakeDetectionFaultyThreshold: 30,
         isFlakyTestRetriesEnabled: false,
         flakyTestRetriesCount: 5,
@@ -468,8 +475,15 @@ describe('CI Visibility Exporter', () => {
   describe('filterConfiguration', () => {
     const remoteConfiguration = {
       isEarlyFlakeDetectionEnabled: true,
-      earlyFlakeDetectionNumRetries: 10,
-      earlyFlakeDetectionSlowTestRetries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+      earlyFlakeDetectionRetryPolicy: {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 10 },
+          { durationLimitMs: 10_000, retryCount: 5 },
+          { durationLimitMs: 30_000, retryCount: 3 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 10,
+      },
     }
 
     it('preserves the backend EFD retry configuration when the local retry count is unset', () => {
@@ -477,10 +491,9 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 10)
       assert.deepStrictEqual(
-        configuration.earlyFlakeDetectionSlowTestRetries,
-        remoteConfiguration.earlyFlakeDetectionSlowTestRetries
+        configuration.earlyFlakeDetectionRetryPolicy,
+        remoteConfiguration.earlyFlakeDetectionRetryPolicy
       )
     })
 
@@ -492,12 +505,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 2,
-        '10s': 2,
-        '30s': 2,
-        '5m': 2,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 2 },
+          { durationLimitMs: 10_000, retryCount: 2 },
+          { durationLimitMs: 30_000, retryCount: 2 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 2,
       })
     })
 
@@ -509,12 +524,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 0,
-        '10s': 0,
-        '30s': 0,
-        '5m': 0,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 0 },
+          { durationLimitMs: 10_000, retryCount: 0 },
+          { durationLimitMs: 30_000, retryCount: 0 },
+          { durationLimitMs: 300_000, retryCount: 0 },
+        ],
+        schedulingRetryCount: 0,
       })
     })
   })
@@ -1377,13 +1394,28 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
+    /**
+     * @param {CiVisibilityExporter} exporter
+     * @param {(error: Error|null) => void} [callback]
+     */
     function upload (exporter, callback = () => {}) {
       exporter.uploadCoverageReport({
         filePath: '/tmp/coverage.xml',
+        fileDevice: 1n,
+        fileInode: 9_007_199_254_740_993n,
         format: 'cobertura',
         testEnvironmentMetadata: { 'git.commit.sha': 'abc123' },
       }, callback)
     }
+
+    it('forwards the discovered coverage report identity', () => {
+      const exporter = createExporter()
+
+      upload(exporter)
+
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileDevice, 1n)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].fileInode, 9_007_199_254_740_993n)
+    })
 
     it('reuses exactly 32 coverage report flags for every upload', () => {
       const flags = Array.from({ length: 32 }, (_, index) => `flag-${index}`)

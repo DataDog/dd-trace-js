@@ -11,11 +11,13 @@ const {
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
   getCoveredFilesFromCoverage,
@@ -28,6 +30,7 @@ const {
   getTestCoverageLinesPercentage,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
   isModifiedTest,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -66,12 +69,15 @@ let hasWarnedDeprecatedMochaVersion = false
 const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
+let areAllSuitesSkipped = false
 let skippedSuites = []
 let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -95,6 +101,7 @@ const mochaGlobalRunCh = channel('ci:mocha:global:run')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
@@ -227,6 +234,7 @@ function getMochaTestSessionCoverageFiles () {
 
 function resetSuiteSkippingRunState () {
   isSuitesSkipped = false
+  areAllSuitesSkipped = false
   skippedSuites = []
   skippableSuitesCoverage = {}
   skippedSuitesCoverage = {}
@@ -357,7 +365,11 @@ function getOnEndHandler (isParallel, onDone) {
       isParallel,
     }, onDone)
 
-    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    logTestOptimizationSummary({
+      attemptToFixExecutions,
+      newTestsWithDynamicNames,
+      extraSections: areAllSuitesSkipped ? [TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE] : [],
+    })
     loggedAttemptToFixTests.clear()
   }
 }
@@ -384,6 +396,57 @@ function applyTestManagementTestsResponse ({ err, testManagementTests: receivedT
 
 function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
+}
+
+/**
+ * @typedef {object} MochaSuite
+ * @property {MochaSuite[]} suites
+ * @property {import('mocha').Test[]} tests
+ * @property {MochaSuite[]} _onlySuites
+ * @property {import('mocha').Test[]} _onlyTests
+ */
+
+/**
+ * Mirrors Mocha 5's private exclusivity check.
+ *
+ * @param {MochaSuite} suite
+ * @returns {boolean}
+ */
+function hasOnly (suite) {
+  if (suite._onlyTests.length || suite._onlySuites.length) return true
+
+  for (const childSuite of suite.suites) {
+    if (hasOnly(childSuite)) return true
+  }
+  return false
+}
+
+/**
+ * Mirrors Mocha 5's private exclusivity filter.
+ *
+ * @param {MochaSuite} suite
+ * @returns {boolean}
+ */
+function filterOnly (suite) {
+  if (suite._onlyTests.length) {
+    suite.tests = suite._onlyTests
+    suite.suites = []
+  } else {
+    suite.tests = []
+
+    for (const onlySuite of suite._onlySuites) {
+      if (hasOnly(onlySuite)) filterOnly(onlySuite)
+    }
+
+    const filteredSuites = []
+    for (const childSuite of suite.suites) {
+      if (suite._onlySuites.includes(childSuite) || filterOnly(childSuite)) {
+        filteredSuites.push(childSuite)
+      }
+    }
+    suite.suites = filteredSuites
+  }
+  return suite.tests.length > 0 || suite.suites.length > 0
 }
 
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
@@ -418,6 +481,13 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
 
     // We remove the suites that we skip through ITR
+    // Mocha normally applies exclusivity after this asynchronous configuration step.
+    if (typeof runner.suite.hasOnly === 'function') {
+      if (runner.suite.hasOnly()) runner.suite.filterOnly()
+    } else if (hasOnly(runner.suite)) {
+      filterOnly(runner.suite)
+    }
+    const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
@@ -426,6 +496,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
     skippedSuites = [...filteredSuites.skippedSuites]
     suitesToSkip = suitesToSkipForRun
@@ -489,8 +560,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+    config.earlyFlakeDetectionRetryPolicy =
+      libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -978,6 +1049,8 @@ function onMessage (message) {
         attemptToFixExecutions,
       })
       workerReportTraceCh.publish(payload)
+    } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
     }
   }
 }
@@ -1042,7 +1115,7 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
+  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -1088,10 +1161,11 @@ addHook({
           }
         }
         isSuitesSkipped = skippedFiles.length > 0
+        areAllSuitesSkipped = options.grep === undefined && files.length > 0 && filteredFiles.length === 0
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
-        run.apply(this, [onRunDone, { files: filteredFiles }])
+        run.apply(this, [onRunDone, { files: filteredFiles, options }])
       } else {
         run.apply(this, arguments)
       }
@@ -1110,8 +1184,33 @@ addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/buffered-worker-pool.js',
-}, (BufferedWorkerPoolPackage) => {
+}, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
+
+  if (satisfies(frameworkVersion, '<9.2.0')) {
+    // Shimmer is required because the worker environment must be changed before workerpool forks,
+    // before any test lifecycle hook can run. Mocha added this worker ID itself in 9.2.0.
+    shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
+      const pool = create.apply(this, arguments)
+
+      if (!testFinishCh.hasSubscribers) return pool
+
+      let workerId = 0
+      shimmer.wrap(pool._pool, '_createWorkerHandler', createWorkerHandler => function () {
+        this.forkOpts = {
+          ...this.forkOpts,
+          env: {
+            // eslint-disable-next-line eslint-rules/eslint-process-env
+            ...(this.forkOpts.env || process.env),
+            MOCHA_WORKER_ID: String(workerId++),
+          },
+        }
+        return createWorkerHandler.apply(this, arguments)
+      })
+
+      return pool
+    })
+  }
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
@@ -1130,8 +1229,7 @@ addHook({
     if (config.isKnownTestsEnabled) {
       if (config.knownTests?.mocha) {
         const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
-        newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
-        newWorkerArgs._ddEfdSlowTestRetries = config.earlyFlakeDetectionSlowTestRetries
+        newWorkerArgs._ddEfdRetryPolicy = config.earlyFlakeDetectionRetryPolicy
         newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {

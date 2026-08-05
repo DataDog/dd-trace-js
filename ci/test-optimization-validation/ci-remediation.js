@@ -183,7 +183,7 @@ function isDatadogModuleSpecifier (specifier, entrypoint) {
 }
 
 function hasDynamicEnvironmentReference (value) {
-  return /(?:\$[A-Za-z_{]|\$\(|%[A-Za-z_][A-Za-z0-9_]*%)/.test(value)
+  return /\$[A-Za-z_{]|\$\(|%[A-Za-z_][A-Za-z0-9_]*%/.test(value)
 }
 
 function getRecommendedValues (framework) {

@@ -403,7 +403,7 @@ function prepareTestServerForIastInExpress (
       try {
         const cookieParser = require('../../../../../versions/cookie-parser').get()
         expressApp.use(cookieParser())
-      } catch (e) {
+      } catch {
         // do nothing, in some scenarios we don't have cookie-parser dependency available, and we don't need
         // it in all the iast tests
       }
@@ -470,7 +470,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
           } else {
             finish()
           }
-        } catch (e) {
+        } catch {
           if (!headersSent()) {
             reply.code(500).send()
           } else if (reply.raw && typeof reply.raw.end === 'function') {

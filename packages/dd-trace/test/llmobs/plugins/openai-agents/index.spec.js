@@ -334,7 +334,7 @@ describe('integrations', () => {
           // through the runner.
           try {
             await agentsCore.run(toolErrorAgent, 'What is the sum of 1 and 2?', { maxTurns: 2 })
-          } catch (err) {
+          } catch {
             // Expected: model loops on the failing tool call until maxTurns.
           }
 

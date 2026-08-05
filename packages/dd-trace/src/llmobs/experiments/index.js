@@ -26,9 +26,11 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #llmobs
   #projectName
 
-  constructor (config) {
+  constructor (config, llmobs) {
+    this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
     this.#client = new ExperimentsClient({
       apiKey: config.DD_API_KEY,
@@ -45,15 +47,17 @@ class Experiments {
       : (descriptionOrOptions ?? {})
     const dataset = new Dataset(this.#client, name, options.description ?? '')
     const recordIds = new Set()
-    for (const record of options.records ?? []) {
-      if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
-        throw new Error('record id must be a non-empty string')
+    if ((options.records) != null) {
+      for (const record of options.records) {
+        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+          throw new Error('record id must be a non-empty string')
+        }
+        if (record.id !== undefined) {
+          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
+          recordIds.add(record.id)
+        }
+        dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
       }
-      if (record.id !== undefined) {
-        if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
-        recordIds.add(record.id)
-      }
-      dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
     }
     return dataset
   }
@@ -80,13 +84,16 @@ class Experiments {
             'GET',
             `${API_BASE_PATH}/${projectId}/datasets?filter[name]=${encodeURIComponent(name)}`
           )
-          for (const item of listed?.data ?? []) {
-            if (item?.attributes?.name === name) {
-              datasetId = String(item?.id ?? '')
-              description = String(item?.attributes?.description ?? '')
-              latestVersion = item?.attributes?.current_version ?? null
-              datasetVersion = version ?? latestVersion
-              break
+          const datasets = listed?.data
+          if (datasets) {
+            for (const item of datasets) {
+              if (item?.attributes?.name === name) {
+                datasetId = String(item?.id ?? '')
+                description = String(item?.attributes?.description ?? '')
+                latestVersion = item?.attributes?.current_version ?? null
+                datasetVersion = version ?? latestVersion
+                break
+              }
             }
           }
           if (datasetId === null) return false
@@ -105,16 +112,19 @@ class Experiments {
             'GET',
             `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
           )
-          for (const item of resp?.data ?? []) {
-            const attrs = item?.attributes ?? item
-            const recordId = String(item?.id ?? attrs?.id ?? '')
-            recs.push(new DatasetRecord(
-              attrs?.input ?? null,
-              attrs?.expected_output ?? null,
-              attrs?.metadata ?? {},
-              recordId === '' ? null : recordId
-            ))
-            ids.push(recordId)
+          const recordData = resp?.data
+          if (recordData) {
+            for (const item of recordData) {
+              const attrs = item?.attributes ?? item
+              const recordId = String(item?.id ?? attrs?.id ?? '')
+              recs.push(new DatasetRecord(
+                attrs?.input ?? null,
+                attrs?.expected_output ?? null,
+                attrs?.metadata ?? {},
+                recordId === '' ? null : recordId
+              ))
+              ids.push(recordId)
+            }
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break
@@ -161,13 +171,13 @@ class Experiments {
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
-    return new Experiment(this.#client, options)
+    return new Experiment(this.#client, options, this.#llmobs)
   }
 }
 
 // Factory used by the LLMObs SDK: returns a real Experiments instance when
 // enabled and credentialed, otherwise a no-op that explains what's missing.
-function createExperiments (config) {
+function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
@@ -183,7 +193,7 @@ function createExperiments (config) {
       'then retry'
     )
   }
-  return new Experiments(config)
+  return new Experiments(config, llmobs)
 }
 
 module.exports = { Experiments, createExperiments }

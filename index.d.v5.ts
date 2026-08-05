@@ -71,7 +71,7 @@ interface Tracer extends opentracing.Tracer {
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends tracer.PluginName> (plugin: P, config?: tracer.PluginOptions[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -316,6 +316,9 @@ interface Plugins {
 }
 
 declare namespace tracer {
+  export interface PluginOptions extends Plugins {}
+  export type PluginName = keyof PluginOptions;
+
   export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
@@ -3939,18 +3942,30 @@ declare namespace tracer {
      */
     type ExperimentTask = (
       input: JSONType,
-      config: Record<string, JSONType>
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
     ) => JSONType | Promise<JSONType>
 
     /**
      * Scores a single task output. The return type selects the metric:
-     * `boolean` -> boolean, `number` -> score, anything else -> categorical.
+     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
      */
     type ExperimentEvaluator = (
       input: JSONType,
       output: JSONType,
       expectedOutput: JSONType
     ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
 
     interface CreateDatasetOptions {
       description?: string
@@ -3966,11 +3981,22 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
-      /** Evaluators keyed by metric label. */
-      evaluators?: Record<string, ExperimentEvaluator>
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+    }
+
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      throwOnErrors?: boolean
     }
 
     interface PullDatasetOptions {
@@ -3998,9 +4024,20 @@ declare namespace tracer {
       evaluationErrors: Record<string, string>
     }
 
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+    }
+
     interface ExperimentResult {
       experimentId: string
       rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string
     }
@@ -4035,7 +4072,7 @@ declare namespace tracer {
       name (): string
       experimentId (): string | null
       url (): string | null
-      run (): Promise<ExperimentResult>
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
     }
 
     interface Experiments {

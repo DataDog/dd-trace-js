@@ -519,7 +519,7 @@ function buildExpressServer (agent) {
     } else {
       agent.emit('debugger-diagnostics', {
         headers: req.headers,
-        payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
+        payload: JSON.parse((/** @type {Array<{ buffer: Buffer }>} */ (req.files))[0].buffer.toString()),
       })
     }
   })

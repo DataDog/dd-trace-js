@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const net = require('node:net')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -59,6 +60,66 @@ describe('Plugin', () => {
               assert.strictEqual(tracer.scope().active(), span)
               done()
             })
+          })
+        })
+
+        it('should preserve successful query callback semantics', async () => {
+          let query
+
+          await new Promise((resolve, reject) => {
+            /**
+             * @param {Error | null} error
+             * @param {object[] | undefined} results
+             * @param {object[] | undefined} fields
+             */
+            function callback (error, results, fields) {
+              try {
+                assert.strictEqual(arguments.length, 3)
+                assert.strictEqual(this, query)
+                assert.strictEqual(error, null)
+                assert.ok(Array.isArray(results))
+                assert.ok(Array.isArray(fields))
+                resolve()
+              } catch (error) {
+                reject(error)
+              }
+            }
+
+            query = connection.query('SELECT 1 + 1 AS solution', callback)
+          })
+        })
+
+        it('should preserve failed query callback semantics', async () => {
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const { port } = probe.address()
+          await new Promise(resolve => probe.close(resolve))
+
+          const failedConnection = mysql.createConnection({
+            host: '127.0.0.1',
+            port,
+            user: 'root',
+            connectTimeout: 500,
+          })
+          let query
+
+          await new Promise((resolve, reject) => {
+            /**
+             * @param {Error} error
+             */
+            function callback (error) {
+              failedConnection.destroy()
+              try {
+                assert.strictEqual(arguments.length, 1)
+                assert.strictEqual(this, query)
+                assert.ok(error instanceof Error)
+                resolve()
+              } catch (error) {
+                reject(error)
+              }
+            }
+
+            query = failedConnection.query('SELECT 1', callback)
           })
         })
 

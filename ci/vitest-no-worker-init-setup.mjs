@@ -8,12 +8,11 @@ const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
-const earlyFlakeDetectionRetries = providedContext.earlyFlakeDetectionRetries || 0
-const earlyFlakeDetectionRetryThresholds = Array.isArray(providedContext.earlyFlakeDetectionRetryThresholds)
-  ? providedContext.earlyFlakeDetectionRetryThresholds
-  : []
-const earlyFlakeDetectionSlowRetries = providedContext.earlyFlakeDetectionSlowRetries || {}
-const hasEarlyFlakeDetectionSlowRetries = Object.keys(earlyFlakeDetectionSlowRetries).length > 0
+const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || {
+  durationRetryCounts: [],
+  schedulingRetryCount: 0,
+}
+const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
@@ -110,26 +109,29 @@ if (isNoWorkerInitActive) {
 }
 
 function applyExecutionChanges (suite) {
-  for (const task of suite?.tasks || []) {
-    if (task.type === 'suite') {
-      applyExecutionChanges(task)
-      continue
-    }
+  const tasks = suite?.tasks
+  if (tasks) {
+    for (const task of tasks) {
+      if (task.type === 'suite') {
+        applyExecutionChanges(task)
+        continue
+      }
 
-    const testSuite = getTestSuite(task)
-    const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName]) {
-      task.retry = 0
-      task.repeats = attemptToFixRetries
-      task.meta.__ddTestOptAtfRetries = attemptToFixRetries
-    } else if (disabledTests[testSuite]?.[testName]) {
-      task.mode = 'skip'
-    } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
-      task.retry = 0
-      task.repeats = earlyFlakeDetectionRetries
-      task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      const testSuite = getTestSuite(task)
+      const testName = getTestName(task)
+      if (attemptToFixTests[testSuite]?.[testName]) {
+        task.retry = 0
+        task.repeats = attemptToFixRetries
+        task.meta.__ddTestOptAtfRetries = attemptToFixRetries
+      } else if (disabledTests[testSuite]?.[testName]) {
+        task.mode = 'skip'
+      } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+        task.retry = 0
+        task.repeats = earlyFlakeDetectionRetries
+        task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      }
+      wrapRetryCondition(task)
     }
-    wrapRetryCondition(task)
   }
 }
 
@@ -380,7 +382,7 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionSlowRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -606,7 +608,7 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionSlowRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -633,16 +635,10 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
 }
 
 function getEarlyFlakeDetectionRetryCount (task) {
-  if (!hasEarlyFlakeDetectionSlowRetries) {
-    return earlyFlakeDetectionRetries
-  }
-
   const executionStart = earlyFlakeDetectionStartByTask.get(task)
   const duration = executionStart === undefined ? task.result?.duration ?? 0 : now() - executionStart
-  for (const { key, limitMs } of earlyFlakeDetectionRetryThresholds) {
-    if (duration < limitMs) {
-      return earlyFlakeDetectionSlowRetries[key] ?? 0
-    }
+  for (const { durationLimitMs, retryCount } of earlyFlakeDetectionRetryPolicy.durationRetryCounts) {
+    if (duration < durationLimitMs) return retryCount
   }
   return 0
 }
