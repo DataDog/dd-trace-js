@@ -121,6 +121,9 @@ class AIGuard extends NoopAIGuard {
    *
    * - Clones each message so callers cannot mutate the data set in the meta struct.
    * - Truncates the list of messages and `content` fields emitting metrics accordingly.
+   *
+   * @param {import('../../../../index').aiguard.Message[]} messages
+   * @param {{ source: string, integration: string }} telemetryTags
    */
   #buildMessagesForMetaStruct (messages, telemetryTags) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
@@ -230,7 +233,7 @@ class AIGuard extends NoopAIGuard {
     // still applies for SDK callers that don't supply an explicit parent.
     const traceOpts = childOf ? { childOf } : {}
     return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
-      const last = messages[messages.length - 1]
+      const last = messages.at(-1)
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)
       if (target === 'tool') {

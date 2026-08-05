@@ -9,8 +9,10 @@ const { getCommandExecutionSettings } = require('./command-runner')
 const { bindManifestExecutables, getManifestCommands } = require('./executable')
 const { getFixtureRecipeDigests } = require('./offline-fixtures')
 const { sanitizeForReport } = require('./redaction')
+const { getManifestInputFiles } = require('./runner-command')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
+const MAX_CAPTURED_PROJECT_SOURCE_BYTES = 512 * 1024
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
 const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', '.nyc_output', 'node_modules'])
 
@@ -85,7 +87,8 @@ function getApprovalMaterial ({
     out,
     path.join(packageRoot, '.junit-tmp'),
   ])
-  const executableIdentities = bindManifestExecutables(manifest)
+  const includeLocal = requestedScenario !== 'ci-wiring'
+  const executableIdentities = includeLocal ? bindManifestExecutables(manifest) : []
 
   return {
     schemaVersion: 1,
@@ -103,6 +106,7 @@ function getApprovalMaterial ({
       path: path.resolve(manifest.__path),
       sha256: getManifestDigest(manifest),
     },
+    projectFiles: getApprovalProjectFiles(manifest, { includeLocal }),
     selection: {
       frameworks: [...selectedFrameworkIds],
       scenario: requestedScenario,
@@ -111,17 +115,70 @@ function getApprovalMaterial ({
       outputDirectory: path.resolve(out),
       offlineFixtureNonce,
       keepTemporaryFiles: keepTempFiles,
+      requiredCapabilities: getRequiredCapabilities({
+        manifest,
+        requestedScenario,
+        selectedFrameworkIds,
+      }),
       verbose,
     },
-    fixtureRecipeDigests: getFixtureRecipeDigests({
-      frameworks: manifest.frameworks || [],
-      selectedFrameworkIds,
-      requestedScenario,
-    }),
-    commands: getManifestCommands(manifest).map(([id, command]) => getApprovalCommand(id, command)),
-    generatedFiles: getGeneratedFileMaterial(manifest),
+    fixtureRecipeDigests: includeLocal
+      ? getFixtureRecipeDigests({
+        frameworks: manifest.frameworks || [],
+        selectedFrameworkIds,
+        requestedScenario,
+      })
+      : [],
+    commands: getManifestCommands(manifest, requestedScenario)
+      .map(([id, command]) => getApprovalCommand(id, command)),
+    generatedFiles: getGeneratedFileMaterial(manifest, requestedScenario),
     executables: executableIdentities,
   }
+}
+
+// Capability metadata is approval-only; the validator does not request permissions or start prerequisites.
+function getRequiredCapabilities ({ manifest, requestedScenario, selectedFrameworkIds = [] }) {
+  if (requestedScenario === 'ci-wiring') return []
+  const selected = new Set(selectedFrameworkIds)
+  const frameworks = (manifest.frameworks || []).filter(framework => {
+    return framework.status === 'runnable' && (selected.size === 0 || selected.has(framework.id))
+  })
+  const capabilities = new Set()
+  if (frameworks.some(framework => ['cypress', 'playwright'].includes(framework.framework) ||
+    (framework.framework === 'vitest' && framework.validation?.runnerArgs?.includes('--browser')) ||
+    framework.browserRequired === true)) {
+    capabilities.add('browser_process')
+  }
+  if (frameworks.some(framework => framework.localSocketRequired === true ||
+    (framework.validation?.fallbackTests || []).some(fallback => fallback.localSocketRequired === true))) {
+    capabilities.add('localhost_socket')
+  }
+  return [...capabilities].sort()
+}
+
+function getApprovalProjectFiles (manifest, { includeLocal = true } = {}) {
+  return getApprovalProjectSnapshot(manifest, { includeLocal }).projectFiles
+}
+
+// Hashes and static-analysis sources come from the same reads to avoid approval-time races.
+function getApprovalProjectSnapshot (manifest, { includeLocal = true } = {}) {
+  const projectFiles = []
+  const sources = new Map()
+  for (const filename of getManifestInputFiles(manifest, { includeLocal })) {
+    const stat = fs.lstatSync(filename)
+    const contents = fs.readFileSync(filename)
+    projectFiles.push({
+      path: filename,
+      sha256: crypto.createHash('sha256').update(contents).digest('hex'),
+    })
+    sources.set(
+      filename,
+      stat.isFile() && !stat.isSymbolicLink() && contents.length <= MAX_CAPTURED_PROJECT_SOURCE_BYTES
+        ? contents
+        : undefined
+    )
+  }
+  return { projectFiles, sources }
 }
 
 /**
@@ -166,14 +223,10 @@ function getApprovalCommand (id, command) {
     cwd: path.resolve(command.cwd),
     environmentMode: 'clean',
     environment: command.env || {},
+    inheritedEnvironmentNames: command.requiredEnvVars || [],
     ...getCommandExecutionSettings(command),
     outputPaths: getCommandOutputPaths(command),
-  }
-  if (command.usesShell) {
-    shape.shell = command.shell || null
-    shape.shellCommand = command.shellCommand
-  } else {
-    shape.argv = command.argv
+    argv: command.argv,
   }
   return sanitizeForReport(shape)
 }
@@ -182,26 +235,64 @@ function getApprovalCommand (id, command) {
  * Returns exact generated test source and cleanup policy covered by the manifest digest.
  *
  * @param {object} manifest loaded manifest
+ * @param {string|null} requestedScenario selected validator scenario
  * @returns {object[]} generated file approval material
  */
-function getGeneratedFileMaterial (manifest) {
+function getGeneratedFileMaterial (manifest, requestedScenario) {
   const files = []
-  for (const framework of manifest.frameworks || []) {
-    const strategy = framework.generatedTestStrategy
-    for (const file of strategy?.files || []) {
-      const content = `${file.contentLines.join('\n')}\n`
-      files.push(sanitizeForReport({
-        frameworkId: framework.id,
-        path: path.resolve(file.path),
-        sha256: crypto.createHash('sha256').update(content).digest('hex'),
-        content,
-        removeAfterValidation: (strategy.cleanupPaths || []).some(cleanupPath => {
-          return path.resolve(cleanupPath) === path.resolve(file.path)
-        }),
-      }))
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      const strategy = framework.generatedTestStrategy
+      const selectedPaths = getSelectedGeneratedPaths(strategy, requestedScenario)
+      if (strategy?.files) {
+        for (const file of strategy.files) {
+          if (!selectedPaths.has(path.resolve(file.path))) continue
+          const content = `${file.contentLines.join('\n')}\n`
+          files.push(sanitizeForReport({
+            frameworkId: framework.id,
+            path: path.resolve(file.path),
+            sha256: crypto.createHash('sha256').update(content).digest('hex'),
+            content,
+            removeAfterValidation: (strategy.cleanupPaths || []).some(cleanupPath => {
+              return path.resolve(cleanupPath) === path.resolve(file.path)
+            }),
+          }))
+        }
+      }
     }
   }
   return files
+}
+
+/**
+ * Returns generated and support files used by the selected feature.
+ *
+ * @param {object|undefined} strategy generated strategy
+ * @param {string|null} requestedScenario selected validator scenario
+ * @returns {Set<string>} selected absolute paths
+ */
+function getSelectedGeneratedPaths (strategy, requestedScenario) {
+  if (!strategy || requestedScenario === 'basic-reporting' || requestedScenario === 'ci-wiring') return new Set()
+  const generatedId = {
+    atr: 'atr-fail-once',
+    efd: 'basic-pass',
+    'test-management': 'test-management-target',
+  }[requestedScenario]
+  const scenarioPaths = new Set((strategy.scenarios || []).map(scenario => {
+    return path.resolve(scenario.testIdentities[0].file)
+  }))
+  const selectedPaths = new Set()
+  if (strategy.files) {
+    for (const file of strategy.files) {
+      const filename = path.resolve(file.path)
+      if (!requestedScenario || !scenarioPaths.has(filename)) selectedPaths.add(filename)
+    }
+  }
+  if (generatedId) {
+    const scenario = strategy.scenarios?.find(candidate => candidate.id === generatedId)
+    if (scenario) selectedPaths.add(path.resolve(scenario.testIdentities[0].file))
+  }
+  return selectedPaths
 }
 
 /**
@@ -295,5 +386,7 @@ module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
   getApprovalMaterial,
+  getApprovalProjectSnapshot,
+  getRequiredCapabilities,
   serializeApprovalMaterial,
 }

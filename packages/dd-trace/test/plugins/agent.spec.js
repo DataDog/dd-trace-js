@@ -6,6 +6,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const propagationHash = require('../../src/propagation-hash')
 const agent = require('./agent')
 
 const instrumentationsSymbol = Symbol.for('_ddtrace_instrumentations')
@@ -109,6 +110,19 @@ describe('test agent helper', () => {
       const configured = global._ddtrace._pluginManager._configsByName
       assert.ok(configured.express, `express missing, configured = ${Object.keys(configured)}`)
       assert.notStrictEqual(configured.http?.enabled, true)
+    })
+
+    it('clears the propagation-hash config on agent.close', async () => {
+      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
+      try {
+        await agent.load([])
+        assert.strictEqual(propagationHash.isEnabled(), true)
+
+        await agent.close()
+        assert.strictEqual(propagationHash.isEnabled(), false)
+      } finally {
+        delete process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
+      }
     })
 
     // Single-eval invariant: each `datadog-instrumentations/*.js` file evaluates

@@ -129,10 +129,10 @@ function openAndWrite (root, filename, data, label, creationFlag) {
  *
  * @param {string} directory directory path
  * @param {string} label customer-facing path label
- * @returns {{dev: number, ino: number}} directory identity
+ * @returns {{dev: bigint, ino: bigint}} directory identity
  */
 function getDirectoryIdentity (directory, label) {
-  const stat = fs.lstatSync(directory)
+  const stat = fs.lstatSync(directory, { bigint: true })
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(`Refusing ${label} because its parent is not a regular directory: ${directory}`)
   }
@@ -143,7 +143,7 @@ function getDirectoryIdentity (directory, label) {
  * Refuses replacement of a parent directory between safe creation and publication.
  *
  * @param {string} directory directory path
- * @param {{dev: number, ino: number}} expected expected identity
+ * @param {{dev: bigint, ino: bigint}} expected expected identity
  * @param {string} label customer-facing path label
  */
 function assertDirectoryIdentity (directory, expected, label) {
@@ -158,7 +158,7 @@ function assertDirectoryIdentity (directory, expected, label) {
  *
  * @param {string} filename temporary filename
  * @param {string} parent expected parent directory
- * @param {{dev: number, ino: number}} parentIdentity expected parent identity
+ * @param {{dev: bigint, ino: bigint}} parentIdentity expected parent identity
  */
 function removeTemporaryFile (filename, parent, parentIdentity) {
   try {

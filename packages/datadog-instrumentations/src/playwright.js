@@ -9,13 +9,19 @@ const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
 const {
+  EMPTY_EFD_RETRY_POLICY,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   parseAnnotations,
   getTestSuitePath,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -29,6 +35,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -49,6 +56,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
@@ -65,6 +73,7 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
+const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const DD_PROPERTIES_TIMEOUT = 5000
@@ -88,8 +97,7 @@ const STATUS_TO_TEST_STATUS = {
 let remainingTestsByFile = {}
 let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
@@ -101,6 +109,7 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 let quarantinedButNotAttemptToFixFqns = new Set()
+let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
@@ -204,16 +213,8 @@ function getTestEfdKey (test) {
   return [projectKey, repeatEachKey, testFqn].filter(Boolean).join(' ')
 }
 
-function getConfiguredEfdRetryCount () {
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-}
-
 function markEfdManagedTest (test) {
   test._ddIsEfdManagedTest = true
-  test._ddEfdSlowTestRetries = earlyFlakeDetectionSlowTestRetries
   efdManagedTestKeys.add(getTestEfdKey(test))
 }
 
@@ -236,15 +237,18 @@ function registerEfdRetryTest (test) {
   })
 }
 
-function getTestEfdSlowTestRetries (test) {
-  return test._ddEfdSlowTestRetries || earlyFlakeDetectionSlowTestRetries
+/**
+ * @returns {boolean}
+ */
+function shouldRunEarlyFlakeDetection () {
+  return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
 
 function isTestEfdManaged (test) {
   return !!test._ddIsEfdManagedTest || (
     (test._ddIsNew || test._ddIsModified) &&
     !test._ddIsAttemptToFix &&
-    isEarlyFlakeDetectionEnabled
+    shouldRunEarlyFlakeDetection()
   )
 }
 
@@ -260,7 +264,8 @@ function getEfdRetryRepeatEachIndex (fileSuite, projectSuite, retryIndex, retryC
 }
 
 function getEfdRetryCountForTest (test) {
-  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? getConfiguredEfdRetryCount()
+  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ??
+    earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 }
 
 function setEfdRetryCountForTest (test, retryCount) {
@@ -394,12 +399,12 @@ function waitForEfdRetryCount (test) {
   })
 }
 
-function shouldSkipEfdRetry (test) {
+function shouldSkipEfdRetryTest (test) {
   if (!test._ddIsEfdRetry) {
     return false
   }
   const retryCount = test._ddEfdRetryCount ?? efdRetryCountByTestKey.get(getTestEfdKey(test))
-  return retryCount !== undefined && test._ddEfdRetryIndex > retryCount
+  return shouldSkipEfdRetry(test._ddEfdRetryIndex, retryCount)
 }
 
 function getTestProperties (test) {
@@ -614,12 +619,6 @@ function getTestByTestId (dispatcher, testId) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, params) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, ...params })
-  })
-}
-
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
@@ -687,7 +686,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
-  if (shouldSkipEfdRetry(test)) {
+  if (shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     return
   }
@@ -736,6 +735,33 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   }
 }
 
+/**
+ * Records a skipped managed test for the end-of-session report.
+ *
+ * @param {object} test
+ * @param {string} testSuiteAbsolutePath
+ * @returns {void}
+ */
+function recordSkippedTestOptimizationExecution (test, testSuiteAbsolutePath) {
+  if (recordedTestOptimizationExecutions.has(test) ||
+    !test._ddIsAttemptToFix && !test._ddIsDisabled) return
+
+  const execution = {
+    testSuite: getTestSuitePath(testSuiteAbsolutePath, rootDir),
+    testName: getTestFullname(test),
+    status: 'skip',
+    isDisabled: test._ddIsDisabled,
+    isQuarantined: test._ddIsQuarantined,
+  }
+
+  if (test._ddIsAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, execution)
+  } else {
+    recordTestManagementExecution(execution)
+  }
+  recordedTestOptimizationExecutions.add(test)
+}
+
 function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
   if (!shouldFinishTestSuite(testSuiteAbsolutePath)) {
     return
@@ -746,6 +772,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
 
   for (const test of skippedTests) {
     const browserName = getBrowserNameFromProjects(projects, test)
+    recordSkippedTestOptimizationExecution(test, testSuiteAbsolutePath)
     testSkipCh.publish({
       testName: getTestFullname(test),
       testSuiteAbsolutePath,
@@ -804,7 +831,7 @@ function testEndHandler ({
     return
   }
 
-  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetry(test)) {
+  if (test._ddShouldSkipEfdRetry || shouldSkipEfdRetryTest(test)) {
     test._ddShouldSkipEfdRetry = true
     remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(currentTest => currentTest !== test)
@@ -830,7 +857,7 @@ function testEndHandler ({
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
-    const retryCount = getEfdRetryCount(duration, getTestEfdSlowTestRetries(test))
+    const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
     setEfdRetryCountForTest(test, retryCount)
     if (retryCount === 0) {
       efdSlowAbortedTests.add(testEfdKey)
@@ -838,19 +865,38 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+  const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
+
+  if (!hasRecordedTestOptimizationExecution) {
+    recordTestManagementExecution({
+      testSuite: getTestSuitePath(test._requireFile, rootDir),
+      testName: getTestFullname(test),
+      status: testStatus,
+      isAttemptToFix: testProperties.attemptToFix,
+      isDisabled: testProperties.disabled,
+      isQuarantined: testProperties.quarantined,
+    })
+  }
 
   if (testProperties.attemptToFix) {
     test._ddHasFailedAttemptToFixRetries = false
     test._ddHasFailedAllRetries = false
     test._ddHasPassedAttemptToFixRetries = false
 
-    recordAttemptToFixExecution(attemptToFixExecutions, {
-      testSuite: getTestSuitePath(test._requireFile, rootDir),
-      testName: getTestFullname(test),
-      status: testStatus,
-      isDisabled: testProperties.disabled,
-      isQuarantined: testProperties.quarantined,
-    })
+    if (!hasRecordedTestOptimizationExecution) {
+      recordAttemptToFixExecution(attemptToFixExecutions, {
+        testSuite: getTestSuitePath(test._requireFile, rootDir),
+        testName: getTestFullname(test),
+        status: testStatus,
+        isDisabled: testProperties.disabled,
+        isQuarantined: testProperties.quarantined,
+      })
+    }
+  }
+
+  if (!hasRecordedTestOptimizationExecution &&
+    (testProperties.attemptToFix || testProperties.disabled || testProperties.quarantined)) {
+    recordedTestOptimizationExecutions.add(test)
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1 && testProperties.attemptToFix) {
@@ -1005,7 +1051,7 @@ function prepareDispatcherRun (dispatcher, args) {
     testGroups = testGroups.filter(group => group.tests.length > 0)
   }
 
-  if (isEarlyFlakeDetectionEnabled) {
+  if (shouldRunEarlyFlakeDetection()) {
     testGroups = deferEfdRetryGroups(testGroups)
   }
 
@@ -1206,8 +1252,6 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
-    let onDone
-
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1228,8 +1272,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       if (!err) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+        earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
@@ -1357,9 +1400,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
-      for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
+      for (const [fqn, testStatuses] of testsToTestStatuses) {
         // Only count as failed if the final status (after retries) is 'fail'
-        const lastStatus = testStatuses[testStatuses.length - 1]
+        const lastStatus = testStatuses.at(-1)
         if (lastStatus === 'fail') {
           totalFailedTestCount += 1
           if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
@@ -1379,21 +1422,17 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
 
-    const flushWait = new Promise(resolve => {
-      onDone = resolve
-    })
-    testSessionFinishCh.publish({
+    await getChannelPromise(testSessionFinishCh, {
       status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone,
     })
-    await flushWait
 
     startedSuites = []
     remainingTestsByFile = {}
     quarantinedButNotAttemptToFixFqns = new Set()
+    recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
     efdManagedTestKeys.clear()
     efdRetryCountByTestKey.clear()
@@ -1506,7 +1545,8 @@ createRootSuiteCh.subscribe({
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
-    ctx.asyncEndPromise = handlePageGoto(ctx.self)
+    const rumDetectionPromise = handlePageGoto(ctx.self)
+    ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
   },
 })
 
@@ -1601,6 +1641,30 @@ addHook({
 })
 
 /**
+ * @typedef {Record<string, unknown>} PlaywrightTest
+ */
+
+/**
+ * @typedef {Record<string, unknown>} PlaywrightSuite
+ */
+
+/**
+ * @typedef {{ _fullProject: unknown, _addSuite: (suite: unknown) => void }} PlaywrightProjectSuite
+ */
+
+/**
+ * @typedef {(
+ *   copiedTest: PlaywrightTest, originalTest: PlaywrightTest, repeatEachIndex: number
+ * ) => void} ConfigureCopiedTest
+ */
+
+/**
+ * @typedef {(
+ *   fileSuite: PlaywrightSuite, projectSuite: PlaywrightProjectSuite, repeatEachIndex: number, numRetries: number
+ * ) => number} GetRetryRepeatEachIndex
+ */
+
+/**
  * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
  * as playwright could change it at any time.
  *
@@ -1613,6 +1677,13 @@ addHook({
  * - we clone each of these file suites for each repeat index
  * - we execute `applyRepeatEachIndex` for each of these cloned file suites
  * - we add the cloned file suites to the project suite
+ *
+ * @param {Map<PlaywrightSuite, PlaywrightProjectSuite>} fileSuitesWithTestsToRetry
+ * @param {(test: PlaywrightTest) => unknown} filterTest
+ * @param {Array<string | ((test: PlaywrightTest) => unknown)>} tagsToApply
+ * @param {number} numRetries
+ * @param {ConfigureCopiedTest} [configureCopiedTest]
+ * @param {GetRetryRepeatEachIndex} [getRetryRepeatEachIndex]
  */
 function applyRetriesToTests (
   fileSuitesWithTestsToRetry,
@@ -1720,7 +1791,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
+      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
         markEfdManagedTest(impactedTest)
         const fileSuite = getSuiteType(impactedTest, 'file')
         if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {
@@ -1737,7 +1808,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
       ],
-      getConfiguredEfdRetryCount(),
+      earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
       (copiedTest, originalTest, retryIndex) => {
         markEfdRetryTest(copiedTest, retryIndex, originalTest)
         markEfdManagedTest(copiedTest)
@@ -1763,8 +1834,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
-          // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+          // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
           markEfdManagedTest(newTest)
           const fileSuite = getSuiteType(newTest, 'file')
@@ -1778,7 +1849,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         fileSuitesWithNewTestsToProjects,
         isNewTest,
         ['_ddIsNew', '_ddIsEfdRetry'],
-        getConfiguredEfdRetryCount(),
+        earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
           markEfdManagedTest(copiedTest)
@@ -1842,6 +1913,8 @@ function finishProcessHostStartRunner (processHost) {
         serializedTraces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
       })
+    } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(message[1])
     }
   })
 }
@@ -1890,6 +1963,8 @@ async function handlePageGoto (page) {
     return
   }
 
+  activeRumPages.add(page)
+
   let browserVersion
   try {
     browserVersion = page.context().browser()?.version()
@@ -1924,6 +1999,54 @@ async function handlePageGoto (page) {
   } catch (error) {
     log.error('Playwright RUM correlation cookie error', error)
   }
+}
+
+/**
+ * Stops a RUM session and expires its correlation cookie.
+ *
+ * @param {import('playwright-core').Page} page
+ * @returns {Promise<void>}
+ */
+async function cleanupRumPage (page) {
+  try {
+    const isRumActive = await page.evaluate(stopRumSession)
+
+    if (!isRumActive) {
+      return
+    }
+
+    // Give some time RUM to flush data, similar to what we do in selenium
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+    const url = page.url()
+    if (url) {
+      const domain = new URL(url).hostname
+      await page.context().addCookies([{
+        name: RUM_COOKIE_NAME,
+        value: '',
+        domain,
+        path: '/',
+        expires: 0,
+      }])
+    } else {
+      log.error('RUM is active but page.url() is not available')
+    }
+  } catch (error) {
+    // Cleanup must not change the test result.
+    log.error('afterEach hook error', error)
+  }
+}
+
+/**
+ * Stops RUM sessions and expires correlation cookies for pages visited by the current test.
+ *
+ * @returns {Promise<void[]>|undefined}
+ */
+function cleanupRumPages () {
+  if (activeRumPages.size === 0) return
+
+  const cleanupPromises = Array.from(activeRumPages, cleanupRumPage)
+  activeRumPages.clear()
+  return Promise.all(cleanupPromises)
 }
 
 addHook({
@@ -1966,7 +2089,7 @@ function instrumentWorkerMainMethods (workerMain) {
       test.expectedStatus = 'skipped'
     }
     await waitForEfdRetryCount(test)
-    if (shouldSkipEfdRetry(test)) {
+    if (shouldSkipEfdRetryTest(test)) {
       test._ddShouldSkipEfdRetry = true
       test.expectedStatus = 'skipped'
     }
@@ -1975,6 +2098,7 @@ function instrumentWorkerMainMethods (workerMain) {
     }
     test._ddStartTime = performance.now()
     steps = []
+    activeRumPages.clear()
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -2038,34 +2162,7 @@ function instrumentWorkerMainMethods (workerMain) {
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
-          fn: async function ({ page }) {
-            try {
-              if (page) {
-                const isRumActive = await page.evaluate(stopRumSession)
-
-                if (isRumActive) {
-                  // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
-                  const url = page.url()
-                  if (url) {
-                    const domain = new URL(url).hostname
-                    await page.context().addCookies([{
-                      name: RUM_COOKIE_NAME,
-                      value: '',
-                      domain,
-                      path: '/',
-                      expires: 0,
-                    }])
-                  } else {
-                    log.error('RUM is active but page.url() is not available')
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore errors
-              log.error('afterEach hook error', e)
-            }
-          },
+          fn: cleanupRumPages,
           title: 'afterEach hook',
           _ddHook: true,
         })
@@ -2078,21 +2175,6 @@ function instrumentWorkerMainMethods (workerMain) {
     await res
 
     const { status, error, annotations, retry, testId } = testInfo
-    const testEfdKey = getTestEfdKey(test)
-    const isEfdManagedTest = isTestEfdManaged(test)
-    if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
-      const duration = test.results?.at(-1)?.duration > 0
-        ? test.results.at(-1).duration
-        : performance.now() - test._ddStartTime
-      const retryCount = getEfdRetryCount(
-        duration,
-        getTestEfdSlowTestRetries(test)
-      )
-      setEfdRetryCountForTest(test, retryCount)
-      if (retryCount === 0) {
-        efdSlowAbortedTests.add(testEfdKey)
-      }
-    }
 
     if (!hasDdProperties && process.send) {
       process.send({
@@ -2111,12 +2193,6 @@ function instrumentWorkerMainMethods (workerMain) {
     if (annotations.length) {
       annotationTags = parseAnnotations(annotations)
     }
-
-    let onDone
-
-    const flushPromise = new Promise(resolve => {
-      onDone = resolve
-    })
 
     // Wait for the properties to be received, but do not block the worker forever if IPC fails.
     const ddPropertiesTimeoutPromise = new Promise(resolve => {
@@ -2143,7 +2219,7 @@ function instrumentWorkerMainMethods (workerMain) {
       testStatus: STATUS_TO_TEST_STATUS[status],
     })
 
-    testFinishCh.publish({
+    await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
       error,
@@ -2161,13 +2237,10 @@ function instrumentWorkerMainMethods (workerMain) {
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
-      onDone,
       finalStatus,
       earlyFlakeAbortReason: test._ddEarlyFlakeAbortReason,
       ...testCtx.currentStore,
     })
-
-    await flushPromise
 
     return res
   })
@@ -2233,6 +2306,7 @@ function generateSummaryWrapper (generateSummary) {
         } = test
         const browserName = getBrowserNameFromProjects(sessionProjects, test)
 
+        recordSkippedTestOptimizationExecution(test, testSuiteAbsolutePath)
         testSkipCh.publish({
           testName: getTestFullname(test),
           testSuiteAbsolutePath,

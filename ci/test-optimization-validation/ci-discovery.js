@@ -61,18 +61,22 @@ function buildCiDiscovery ({ manifest, diagnosis }) {
 function getManifestWorkflowLocations (manifest) {
   const root = manifest.repository?.root
   const locations = []
-  for (const framework of manifest.frameworks || []) {
-    const configFile = framework.ciWiring?.configFile
-    if (typeof configFile !== 'string') continue
-    if (!root || !path.isAbsolute(configFile)) {
-      locations.push(configFile)
-      continue
-    }
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      const configFile = framework.ciWiring?.configFile
+      if (typeof configFile !== 'string') continue
+      if (!root || !path.isAbsolute(configFile)) {
+        locations.push(configFile)
+        continue
+      }
 
-    const relative = path.relative(root, configFile)
-    locations.push(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-      ? relative.split(path.sep).join('/')
-      : configFile)
+      const relative = path.relative(root, configFile)
+      const isRelativePath = relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+      locations.push(isRelativePath
+        ? relative.split(path.sep).join('/')
+        : configFile)
+    }
   }
   return uniqueStrings(locations)
 }
@@ -86,7 +90,7 @@ function getFrameworkCiDiscoveryContradiction (framework, manifest) {
     reason: 'CI workflow files were found by validator static diagnosis, but this manifest entry says no CI ' +
       'workflow was found. The manifest cannot support a "no CI workflow found" conclusion.',
     recommendation: 'Inspect the discovered CI files with hidden-directory-aware discovery, then update ciWiring, ' +
-      'ciWiringCommand, omittedTestCommands, notes, or unresolved blockers before rerunning live validation.',
+      'ciWiring configuration evidence, omittedTestCommands, notes, or unresolved blockers before validation.',
     ciDiscovery,
   }
 }
@@ -106,12 +110,14 @@ function getCiDiscoveryContradictions ({ manifest, declaredFound, staticFound })
     )
   }
 
-  for (const framework of manifest.frameworks || []) {
-    if (!frameworkClaimsNoCi(framework)) continue
-    contradictions.push(
-      `framework ${framework.id || '<unknown>'} records no CI workflow, but static diagnosis found ` +
-        formatList(staticFound)
-    )
+  if (manifest.frameworks) {
+    for (const framework of manifest.frameworks) {
+      if (!frameworkClaimsNoCi(framework)) continue
+      contradictions.push(
+        `framework ${framework.id || '<unknown>'} records no CI workflow, but static diagnosis found ` +
+          formatList(staticFound)
+      )
+    }
   }
 
   return contradictions

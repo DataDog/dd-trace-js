@@ -9,8 +9,11 @@ const {
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
   formatAudioPart,
   getFunctionArguments,
+  normalizeLlmObsTraceId,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -19,6 +22,48 @@ const {
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
+  describe('LLMObs trace id propagation', () => {
+    const traceId = '6a5f76e7000000001973227978d8110b'
+    const wireTraceId = '141393847380800662846519802803680448779'
+
+    it('converts a canonical hexadecimal trace id to decimal for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire(traceId), wireTraceId)
+    })
+
+    it('normalizes a propagated decimal trace id to canonical hexadecimal', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(wireTraceId), traceId)
+    })
+
+    it('preserves 64-bit decimal trace ids and converts the first 128-bit value', () => {
+      assert.strictEqual(normalizeLlmObsTraceId('18446744073709551615'), '18446744073709551615')
+      assert.strictEqual(
+        normalizeLlmObsTraceId('18446744073709551616'),
+        '00000000000000010000000000000000'
+      )
+    })
+
+    it('preserves hexadecimal and custom trace ids while normalizing', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(traceId), traceId)
+      assert.strictEqual(normalizeLlmObsTraceId('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('preserves custom trace ids for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('returns undefined for empty trace ids', () => {
+      assert.strictEqual(llmObsTraceIdToWire(''), undefined)
+      assert.strictEqual(normalizeLlmObsTraceId(''), undefined)
+    })
+
+    it('generates a 128-bit trace id containing the start time', () => {
+      const generatedTraceId = generateLlmObsTraceId(1_700_000_000_000)
+
+      assert.match(generatedTraceId, /^[0-9a-f]{32}$/)
+      assert.strictEqual(generatedTraceId.slice(0, 16), '6553f10000000000')
+    })
+  })
+
   describe('encodeUnicode', () => {
     it('should encode unicode characters', () => {
       assert.strictEqual(encodeUnicode('😀'), '\\ud83d\\ude00')

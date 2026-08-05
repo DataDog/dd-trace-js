@@ -24,6 +24,7 @@ const {
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
@@ -122,7 +123,7 @@ moduleTypes.forEach(({
 
     let cwd, childProcess, webAppBaseUrl, webAppServer
 
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       cwd = sandboxCwd()

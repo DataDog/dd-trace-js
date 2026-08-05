@@ -6,18 +6,19 @@ Working examples of LLMObs plugins in dd-trace-js.
 
 **Location:** `packages/dd-trace/src/llmobs/plugins/base.js`
 
-The abstract base class all plugins extend.
+The abstract base class leaf plugins extend. Composite roots such as `ai/index.js` extend `CompositePlugin`
+instead.
 
 **Key methods:**
 - `start(ctx)` - Registers span, captures context
 - `getLLMObsSpanRegisterOptions(ctx)` - Abstract, must implement
 - `setLLMObsTags(ctx)` - Abstract, must implement
-- `asyncEnd(ctx)` - Calls setLLMObsTags
-- `end(ctx)` - Restores context
+- `end(ctx)` - Restores context after the wrapped call returns
+- `asyncEnd(ctx)` - Calls setLLMObsTags after the operation settles
 
 **Tagger methods** (accessed via `this._tagger`):
 - `tagLLMIO`, `tagEmbeddingIO`, `tagRetrievalIO`, `tagTextIO`
-- `tagMetadata`, `tagMetrics`, `tagSpanTags`, `tagPrompt`
+- `tagMetadata`, `tagMetrics`, `tagSpanTags`, `tagPrompt`, `tagToolDefinitions`, `tagModelName`
 
 ## Simple LLM Client Examples
 
@@ -36,7 +37,7 @@ The abstract base class all plugins extend.
 
 ### Anthropic Plugin
 
-**Location:** `packages/datadog-plugin-anthropic/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/anthropic/` (`index.js` + `util.js`)
 
 **Category:** LLM API Client
 
@@ -49,7 +50,7 @@ The abstract base class all plugins extend.
 
 ### Google GenAI Plugin
 
-**Location:** `packages/datadog-plugin-google-genai/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/genai/` (`index.js` + `util.js`)
 
 **Category:** LLM API Client
 
@@ -64,7 +65,8 @@ The abstract base class all plugins extend.
 
 ### Vercel AI SDK
 
-**Location:** `packages/datadog-plugin-ai-sdk/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/ai/` (`ddTelemetry.js` + `vercelTelemetry.js` behind a
+`CompositePlugin`)
 
 **Category:** Multi-Provider Framework
 
@@ -77,9 +79,9 @@ The abstract base class all plugins extend.
 
 ## Orchestration Examples
 
-### LangChain LangGraph
+### LangGraph
 
-**Location:** `packages/datadog-plugin-langchain-langgraph/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/langgraph/`
 
 **Category:** Pure Orchestration
 
@@ -88,6 +90,9 @@ The abstract base class all plugins extend.
 - State management tracking
 - Uses 'workflow' span kind instead of 'llm'
 - No direct LLM API calls
+
+LangChain is a separate hybrid plugin (`packages/dd-trace/src/llmobs/plugins/langchain/`). It emits `workflow`,
+`llm`, `embedding`, `tool`, and `retrieval` spans. Provider-backed cases run over the VCR proxy.
 
 **Good for:** Workflow instrumentation, non-LLM span kinds
 
@@ -101,55 +106,8 @@ The abstract base class all plugins extend.
 | Vercel AI SDK | Multi-Provider | Medium | Provider abstraction |
 | LangGraph | Orchestration | Simple | Workflow spans, state management |
 
-## Key Patterns by Provider
-
-### OpenAI Pattern
-```javascript
-// Messages: Simple array
-inputs.messages → [{role, content}]
-
-// Response: choices array
-results.choices[0].message → {role, content}
-
-// Tokens: Standard names
-usage.prompt_tokens, usage.completion_tokens
-```
-
-### Anthropic Pattern
-```javascript
-// Messages: Content blocks
-msg.content[0].text → Extract text from blocks
-
-// Response: Content array
-results.content.filter(c => c.type === 'text')
-
-// Tokens: Different names
-usage.input_tokens, usage.output_tokens
-```
-
-### Google Pattern
-```javascript
-// Messages: Parts format
-contents → [{role, parts: [{text}]}]
-
-// Response: Candidates
-candidates[0].content.parts → Join text
-
-// Tokens: Mixed names
-usageMetadata.promptTokenCount, candidatesTokenCount
-```
-
-### LangGraph Pattern
-```javascript
-// Input: State objects
-StateGraph state → Extract relevant fields
-
-// Output: State changes
-Track state transitions, not LLM responses
-
-// Span kind: 'workflow' not 'llm'
-kind: 'workflow' for graph execution
-```
+Per-provider request, response and token-field shapes live in
+[message-extraction.md](message-extraction.md).
 
 ## Streaming Implementations
 
@@ -163,14 +121,14 @@ kind: 'workflow' for graph execution
 
 ### General Streaming Approach
 
-1. Maintain buffer keyed by request/span ID
-2. On each chunk, extract delta and append to buffer
-3. On completion, tag accumulated content
-4. Clear buffer for that request
+Use the contract the instrumentation already publishes. Anthropic and GenAI append chunks to the operation's `ctx`
+and build `ctx.result` when the chunk channel reports `done`; OpenAI's instrumentation builds the result before
+publishing `asyncEnd`. The plugin tags that final result instead of maintaining a second request-keyed buffer.
 
 ## CompositePlugin Integration
 
-Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class declares a `static plugins` field mapping keys to plugin classes.
+Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class exposes a
+`static plugins` mapping, either as a field or a getter.
 
 See `packages/datadog-plugin-google-genai/src/index.js` for a reference implementation.
 
@@ -179,43 +137,10 @@ See `packages/datadog-plugin-google-genai/src/index.js` for a reference implemen
 Test files demonstrate expected span structure and assertions:
 
 **Locations:**
-- `packages/dd-trace/test/llmobs/plugins/openai/index.spec.js`
+- `packages/dd-trace/test/llmobs/plugins/openai/openaiv4.spec.js`
 - `packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js`
 - `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`
-- `packages/dd-trace/test/llmobs/plugins/langchain-langgraph/index.spec.js`
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js`
 
-## How to Use References
-
-### Starting Point
-
-1. Read `base.js` to understand abstract methods
-2. Study OpenAI plugin for simplest example
-3. Look at Anthropic/Google for complex formats
-
-### Finding Similar Patterns
-
-1. Check message format in provider docs
-2. Find reference plugin with similar format
-3. Adapt extraction logic
-
-### Debugging
-
-1. Compare your plugin with reference
-2. Check test files for expected structure
-3. Verify message format matches standard
-
-## Quick Reference Guide
-
-**Simple formats (messages array):** Use OpenAI pattern
-
-**Nested content:** Use Anthropic pattern
-
-**Multi-level nesting:** Use Google pattern
-
-**Multiple providers:** Use Vercel AI SDK pattern
-
-**Orchestration/workflows:** Use LangGraph pattern
-
-**Streaming:** Check OpenAI streaming implementation
-
-**CompositePlugin:** Check Anthropic integration
+Start from `base.js` for the abstract methods, then the plugin above whose message format is closest to the
+one you are adding.

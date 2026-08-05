@@ -97,7 +97,7 @@ withVersions('passport-http', 'passport-http', version => {
             },
           }
         )
-      } catch (e) {}
+      } catch {}
 
       await agent.assertSomeTraces(assertFingerprintInTraces)
     })

@@ -3,322 +3,208 @@
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 
+const {
+  assertApprovalDigest,
+  getApprovalDigest,
+  getApprovalMaterial,
+  getApprovalProjectSnapshot,
+  serializeApprovalMaterial,
+} = require('../../../../ci/test-optimization-validation/approval')
 const {
   loadApprovedPlan,
   writeApprovalArtifacts,
 } = require('../../../../ci/test-optimization-validation/approval-artifacts')
-const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
+const { getExecutableForSpawn } = require('../../../../ci/test-optimization-validation/executable')
+const { getBasicCommand } = require('../../../../ci/test-optimization-validation/runner-command')
+const {
+  createLoadedManifest,
+  createRepositoryFixture,
+  removeFixture,
+} = require('./validation-test-helpers')
 
 describe('test optimization validation approval', () => {
-  it('binds approval to every regular installed package file', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-preloads-'))
-    const { approval: copiedApproval, packageRoot: copiedPackageRoot } = copyApprovalPackage(root)
-    const input = {
-      manifest: { __path: path.join(root, 'manifest.json'), repository: { root } },
+  let fixture
+  let input
+
+  beforeEach(() => {
+    fixture = createRepositoryFixture({ framework: 'mocha' })
+    input = {
+      manifest: createLoadedManifest(fixture.root, 'mocha'),
       offlineFixtureNonce: '0'.repeat(32),
-      out: path.join(copiedPackageRoot, 'results'),
-    }
-
-    try {
-      let digest = copiedApproval.getApprovalDigest(input)
-      for (const relativePath of [
-        'ci/init.js',
-        'register.js',
-        'loader-hook.mjs',
-        'version.js',
-        'packages/dd-trace/src/proxy.js',
-        'packages/dd-trace/src/encode/agentless-ci-visibility.js',
-        'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
-      ]) {
-        fs.appendFileSync(path.join(copiedPackageRoot, relativePath), '\n// changed after approval\n')
-        const changedDigest = copiedApproval.getApprovalDigest(input)
-        assert.notStrictEqual(changedDigest, digest, `${relativePath} must affect the approval digest`)
-        digest = changedDigest
-      }
-
-      const addedRuntimeFile = path.join(copiedPackageRoot, 'packages', 'dd-trace', 'src', 'future-runtime.bin')
-      fs.writeFileSync(addedRuntimeFile, 'new package file')
-      const addedFileDigest = copiedApproval.getApprovalDigest(input)
-      assert.notStrictEqual(addedFileDigest, digest, 'new package files must affect the approval digest')
-      digest = addedFileDigest
-
-      const dependencyFile = path.join(copiedPackageRoot, 'node_modules', 'dependency', 'index.js')
-      fs.mkdirSync(path.dirname(dependencyFile), { recursive: true })
-      fs.writeFileSync(dependencyFile, 'dependency version one')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-      fs.writeFileSync(dependencyFile, 'dependency version two')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-
-      const coverageProfile = path.join(copiedPackageRoot, '.nyc_output', 'coverage.json')
-      fs.mkdirSync(path.dirname(coverageProfile), { recursive: true })
-      fs.writeFileSync(coverageProfile, 'coverage version one')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-      fs.writeFileSync(coverageProfile, 'coverage version two')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-
-      const junitShard = path.join(copiedPackageRoot, '.junit-tmp', 'worker.xml')
-      fs.mkdirSync(path.dirname(junitShard), { recursive: true })
-      fs.writeFileSync(junitShard, 'junit version one')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-      fs.writeFileSync(junitShard, 'junit version two')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-
-      const gitMetadataFile = path.join(copiedPackageRoot, '.git')
-      fs.writeFileSync(gitMetadataFile, 'gitdir: outside-the-package')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-
-      fs.mkdirSync(input.out)
-      fs.writeFileSync(path.join(input.out, 'approval.json'), 'generated approval output')
-      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
+      out: path.join(fixture.root, 'dd-test-optimization-validation-results'),
     }
   })
 
-  it('serializes inspectable material whose bytes reproduce the approval digest', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-material-'))
-    const { approval } = copyApprovalPackage(root)
-    const manifestPath = path.join(root, 'manifest.json')
-    const manifestSource = getManifest(root, [process.execPath, '-e', 'console.log("API_KEY=secret")'])
-    manifestSource.frameworks[0].existingTestCommand.env = { API_KEY: 'secret', SAFE_MODE: 'enabled' }
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
-    const manifest = { ...manifestSource, __path: manifestPath }
-    const input = {
-      manifest,
-      offlineFixtureNonce: '0'.repeat(32),
-      out: path.join(root, 'results'),
-    }
+  afterEach(() => removeFixture(fixture.root))
 
-    try {
-      const approvalJson = approval.serializeApprovalMaterial(input)
-      const material = approval.getApprovalMaterial(input)
-      const independentDigest = crypto.createHash('sha256').update(approvalJson).digest('hex')
+  it('binds only direct commands and every project-controlled input', () => {
+    const json = serializeApprovalMaterial(input)
+    const material = getApprovalMaterial(input)
 
-      assert.strictEqual(independentDigest, approval.getApprovalDigest(input))
-      assert.strictEqual(`${JSON.stringify(material, null, 2)}\n`, approvalJson)
-      assert.strictEqual(material.commands[0].environment.API_KEY, '<redacted>')
-      assert.strictEqual(material.commands[0].environment.SAFE_MODE, 'enabled')
-      assert.doesNotMatch(approvalJson, /API_KEY=secret/)
-      assert.match(material.commands[0].argv[2], /API_KEY=<redacted>/)
-      assert.ok(material.validator.coveredFiles.some(file => file.path === 'package.json'))
-      assert.ok(material.validator.coveredFiles.some(file => {
-        return file.path === 'packages/dd-trace/src/encode/agentless-ci-visibility.js'
-      }))
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
+    assert.strictEqual(
+      crypto.createHash('sha256').update(json).digest('hex'),
+      getApprovalDigest(input)
+    )
+    assert.ok(material.commands.length >= 4)
+    assert.ok(material.commands.every(command => {
+      return command.usesShell === false &&
+        command.argv[0] === process.execPath &&
+        command.argv[1] === fs.realpathSync(fixture.runner)
+    }))
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path).sort(), [
+      path.join(fixture.root, 'package.json'),
+      fs.realpathSync(fixture.runner),
+      fixture.testFile,
+    ].sort())
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
+    assert.doesNotMatch(json, /npm (?:run |test)|shellCommand|setupCommands/)
   })
 
-  it('loads only the exact regular approval file whose bytes the user approved', function () {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approved-file-'))
-    const manifestPath = path.join(root, 'manifest.json')
-    const out = path.join(root, 'results')
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, [process.execPath, '-e', '']))}\n`)
-    const manifest = loadManifest(manifestPath)
+  it('binds static package input without approving local execution for a CI-only audit', () => {
+    const approvalInput = { ...input, requestedScenario: 'ci-wiring' }
+    const material = getApprovalMaterial(approvalInput)
+    const digest = getApprovalDigest(approvalInput)
 
-    try {
-      const written = writeApprovalArtifacts({
-        manifest,
-        out,
-        selectedFrameworkIds: ['jest:root'],
-        requestedScenario: 'basic-reporting',
-        offlineFixtureNonce: '0'.repeat(32),
-        keepTempFiles: false,
-        verbose: false,
-      })
-      const approved = loadApprovedPlan(written.approvalJsonPath, written.digest)
-
-      assert.strictEqual(approved.path, written.approvalJsonPath)
-      assert.deepStrictEqual(approved.material.selection, {
-        frameworks: ['jest:root'],
-        scenario: 'basic-reporting',
-      })
-
-      fs.appendFileSync(written.approvalJsonPath, ' ')
-      assert.throws(
-        () => loadApprovedPlan(written.approvalJsonPath, written.digest),
-        /approved plan file changed after approval/i
-      )
-
-      if (process.platform !== 'win32') {
-        const storedApproval = path.join(out, 'stored-approval.json')
-        fs.renameSync(written.approvalJsonPath, storedApproval)
-        fs.symlinkSync(storedApproval, written.approvalJsonPath)
-        assert.throws(
-          () => loadApprovedPlan(written.approvalJsonPath, written.digest),
-          /regular file, not a symbolic link/
-        )
-      }
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
+    assert.deepStrictEqual(material.commands, [])
+    assert.deepStrictEqual(material.executables, [])
+    assert.deepStrictEqual(material.fixtureRecipeDigests, [])
+    assert.deepStrictEqual(material.generatedFiles, [])
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [])
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
+      path.join(fixture.root, 'package.json'),
+    ])
+    fs.appendFileSync(path.join(fixture.root, 'package.json'), ' ')
+    assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
   })
 
-  it('rejects manifest or option changes made after the plan was rendered', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
-    const { approval } = copyApprovalPackage(root)
-    const manifestPath = path.join(root, 'manifest.json')
-    const out = path.join(root, 'results')
-    const input = {
-      out,
-      offlineFixtureNonce: '0'.repeat(32),
-      selectedFrameworkIds: [],
-      requestedScenario: null,
-      keepTempFiles: false,
-      verbose: false,
-    }
+  it('snapshots package scripts for a non-runnable framework in a mixed plan', () => {
+    input.manifest.frameworks[0].status = 'requires_manual_setup'
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const packageJson = path.join(fixture.root, 'package.json')
 
-    try {
-      fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, ['npm', 'test']))}\n`)
-      const approvedManifest = loadManifest(manifestPath)
-      const digest = approval.getApprovalDigest({ manifest: approvedManifest, ...input })
-
-      approval.assertApprovalDigest(digest, { manifest: approvedManifest, ...input })
-      assert.throws(() => approval.assertApprovalDigest(digest, {
-        manifest: approvedManifest,
-        ...input,
-        out: path.join(root, 'different-results'),
-      }), /changed after approval/)
-      assert.throws(() => approval.assertApprovalDigest(digest, {
-        manifest: approvedManifest,
-        ...input,
-        offlineFixtureNonce: '1'.repeat(32),
-      }), /changed after approval/)
-
-      fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, ['sh', '-c', 'echo changed']))}\n`)
-      const changedManifest = loadManifest(manifestPath)
-      assert.throws(() => approval.assertApprovalDigest(digest, { manifest: changedManifest, ...input }), {
-        message: /changed after approval/,
-      })
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
+    assert.ok(snapshot.sources.has(packageJson))
+    assert.ok(snapshot.projectFiles.some(file => file.path === packageJson))
+    assert.strictEqual(snapshot.sources.has(fs.realpathSync(fixture.runner)), false)
   })
 
-  it('refuses manifests outside the repository or reached through a symbolic link', function () {
-    if (process.platform === 'win32') this.skip()
+  it('binds required browser and localhost capabilities without managing permissions', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.browserRequired = true
+    framework.localSocketRequired = true
 
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-outside-'))
-    const outsideManifest = path.join(outside, 'manifest.json')
-    const linkedManifest = path.join(root, 'manifest.json')
+    const material = getApprovalMaterial(input)
 
-    try {
-      fs.writeFileSync(outsideManifest, `${JSON.stringify(getManifest(root, ['npm', 'test']))}\n`)
-      assert.throws(() => loadManifest(outsideManifest), /stored directly in repository.root/)
-
-      fs.symlinkSync(outsideManifest, linkedManifest)
-      assert.throws(() => loadManifest(linkedManifest), /regular file, not a symbolic link/)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-      fs.rmSync(outside, { recursive: true, force: true })
-    }
+    assert.deepStrictEqual(material.validation.requiredCapabilities, [
+      'browser_process',
+      'localhost_socket',
+    ])
   })
 
-  it('refuses command working directories that escape through a repository symlink', function () {
-    if (process.platform === 'win32') this.skip()
+  it('derives mandatory browser capability from an inherently browser-backed framework', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'cypress'
+    delete framework.browserRequired
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
 
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-outside-'))
-    const linkedDirectory = path.join(root, 'linked')
-    const manifestPath = path.join(root, 'manifest.json')
-    const manifest = getManifest(root, ['npm', 'test'])
-    manifest.frameworks[0].existingTestCommand.cwd = linkedDirectory
-
-    try {
-      fs.symlinkSync(outside, linkedDirectory)
-      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
-      assert.throws(() => loadManifest(manifestPath), /resolves outside repository.root/)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-      fs.rmSync(outside, { recursive: true, force: true })
-    }
+    framework.browserRequired = false
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
   })
 
-  it('refuses command output paths that escape through a repository symlink', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-outside-'))
-    const linkedDirectory = path.join(root, 'linked')
-    const manifestPath = path.join(root, 'manifest.json')
-    const manifest = getManifest(root, ['npm', 'test'])
-    manifest.frameworks[0].existingTestCommand.outputPaths = [path.join(linkedDirectory, 'coverage')]
+  it('derives browser capability from retained Vitest browser arguments', () => {
+    const framework = input.manifest.frameworks[0]
+    framework.framework = 'vitest'
+    framework.validation.runnerArgs = ['--browser']
+    framework.browserRequired = false
 
-    try {
-      fs.symlinkSync(outside, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir')
-      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
-      assert.throws(() => loadManifest(manifestPath), /outputPaths\[0\] resolves outside repository\.root/)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-      fs.rmSync(outside, { recursive: true, force: true })
-    }
+    assert.deepStrictEqual(getApprovalMaterial(input).validation.requiredCapabilities, ['browser_process'])
+  })
+
+  it('refuses to publish approval artifacts when project inputs changed during preflight', () => {
+    const snapshot = getApprovalProjectSnapshot(input.manifest)
+    const capturedTestSource = snapshot.sources.get(fixture.testFile).toString('utf8')
+    fs.appendFileSync(fixture.testFile, '\n// changed during preflight\n')
+
+    assert.throws(
+      () => writeApprovalArtifacts({ ...input, expectedProjectFiles: snapshot.projectFiles }),
+      /project inputs changed during plan preflight/
+    )
+    assert.doesNotMatch(capturedTestSource, /changed during preflight/)
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval.json')), false)
+    assert.strictEqual(fs.existsSync(path.join(input.out, 'approval-files.sha256')), false)
+  })
+
+  it('binds a CI file when local framework validation is unavailable', () => {
+    const workflow = path.join(fixture.root, '.github', 'workflows', 'test.yml')
+    fs.mkdirSync(path.dirname(workflow), { recursive: true })
+    fs.writeFileSync(workflow, 'jobs:\n  test:\n    steps: []\n')
+    input.manifest.frameworks[0].status = 'requires_manual_setup'
+    input.manifest.frameworks[0].ciWiring.configFile = workflow
+    const approvalInput = { ...input, requestedScenario: 'ci-wiring' }
+    const material = getApprovalMaterial(approvalInput)
+    const digest = getApprovalDigest(approvalInput)
+
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
+      workflow,
+      path.join(fixture.root, 'package.json'),
+    ].sort())
+    fs.appendFileSync(workflow, '# changed after approval\n')
+    assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
+  })
+
+  it('changes the approval digest when the selected test or runner changes', () => {
+    const digest = getApprovalDigest(input)
+
+    fs.appendFileSync(fixture.testFile, '\n// changed after review\n')
+    assert.notStrictEqual(getApprovalDigest(input), digest)
+    fs.appendFileSync(fixture.runner, '\n// changed after review\n')
+    assert.notStrictEqual(getApprovalDigest(input), digest)
+    assert.throws(() => assertApprovalDigest(digest, input), /changed after approval/)
+  })
+
+  it('revalidates the approved runner immediately before spawn', () => {
+    getApprovalMaterial(input)
+    const command = getBasicCommand(input.manifest.frameworks[0])
+
+    assert.strictEqual(
+      getExecutableForSpawn(command, { requireApproval: true }).path,
+      fs.realpathSync(process.execPath)
+    )
+    fs.appendFileSync(fixture.runner, '\n// executable mutation\n')
+    assert.throws(
+      () => getExecutableForSpawn(command, { requireApproval: true }),
+      /executable changed after approval/
+    )
+  })
+
+  it('loads only the exact regular approval artifact', () => {
+    const written = writeApprovalArtifacts(input)
+    const loaded = loadApprovedPlan(written.approvalJsonPath, written.digest)
+
+    assert.strictEqual(loaded.path, written.approvalJsonPath)
+    const originalApproval = fs.readFileSync(written.approvalJsonPath)
+    const invalidApproval = JSON.parse(originalApproval)
+    invalidApproval.validation.requiredCapabilities = ['network_access']
+    fs.writeFileSync(written.approvalJsonPath, `${JSON.stringify(invalidApproval)}\n`)
+    const invalidDigest = crypto.createHash('sha256').update(fs.readFileSync(written.approvalJsonPath)).digest('hex')
+    assert.throws(
+      () => loadApprovedPlan(written.approvalJsonPath, invalidDigest),
+      /validation.requiredCapabilities/
+    )
+    fs.writeFileSync(written.approvalJsonPath, originalApproval)
+    fs.appendFileSync(written.approvalJsonPath, ' ')
+    assert.throws(
+      () => loadApprovedPlan(written.approvalJsonPath, written.digest),
+      /changed after approval/
+    )
+
+    const stored = path.join(input.out, 'stored-approval.json')
+    fs.renameSync(written.approvalJsonPath, stored)
+    fs.symlinkSync(stored, written.approvalJsonPath)
+    assert.throws(
+      () => loadApprovedPlan(written.approvalJsonPath, written.digest),
+      /regular file, not a symbolic link/
+    )
   })
 })
-
-/**
- * Copies the approval runtime into an isolated package that parallel tests cannot mutate.
- *
- * @param {string} root temporary test root
- * @returns {{approval: object, packageRoot: string}} copied approval module and package root
- */
-function copyApprovalPackage (root) {
-  const sourcePackageRoot = path.resolve(__dirname, '../../../..')
-  const packageRoot = path.join(root, 'dd-trace')
-  const validationDirectory = path.join(packageRoot, 'ci', 'test-optimization-validation')
-  const copiedFiles = [
-    'package.json',
-    'ci/diagnose.js',
-    'ci/init.js',
-    'ci/validate-test-optimization.js',
-    'loader-hook.mjs',
-    'register.js',
-    'version.js',
-    'ext/exporters.js',
-    'packages/dd-trace/src/exporter.js',
-    'packages/dd-trace/src/proxy.js',
-    'packages/dd-trace/src/encode/agentless-ci-visibility.js',
-  ]
-
-  fs.cpSync(path.join(sourcePackageRoot, 'ci', 'test-optimization-validation'), validationDirectory, {
-    recursive: true,
-  })
-  fs.cpSync(
-    path.join(sourcePackageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
-    path.join(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
-    { recursive: true }
-  )
-  for (const relativePath of copiedFiles) {
-    const destination = path.join(packageRoot, relativePath)
-    fs.mkdirSync(path.dirname(destination), { recursive: true })
-    fs.copyFileSync(path.join(sourcePackageRoot, relativePath), destination)
-  }
-
-  return {
-    approval: require(path.join(validationDirectory, 'approval')),
-    packageRoot,
-  }
-}
-
-function getManifest (root, argv) {
-  return {
-    schemaVersion: '1.0',
-    repository: { root },
-    environment: { os: 'darwin' },
-    frameworks: [{
-      id: 'jest:root',
-      framework: 'jest',
-      status: 'runnable',
-      project: { root },
-      existingTestCommand: { cwd: root, argv },
-      preflight: { ran: false, maxTestCount: 50 },
-      ciWiring: {
-        status: 'skip',
-        replayability: 'not_replayable',
-        replayBlocker: 'No CI command selected.',
-        reason: 'No CI command selected.',
-      },
-    }],
-  }
-}

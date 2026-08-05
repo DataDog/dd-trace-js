@@ -26,9 +26,11 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #llmobs
   #projectName
 
-  constructor (config) {
+  constructor (config, llmobs) {
+    this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
     this.#client = new ExperimentsClient({
       apiKey: config.DD_API_KEY,
@@ -39,21 +41,40 @@ class Experiments {
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.
-  createDataset (name, description = '') {
-    return new Dataset(this.#client, name, description)
+  createDataset (name, descriptionOrOptions = '') {
+    const options = typeof descriptionOrOptions === 'string'
+      ? { description: descriptionOrOptions }
+      : (descriptionOrOptions ?? {})
+    const dataset = new Dataset(this.#client, name, options.description ?? '')
+    const recordIds = new Set()
+    if ((options.records) != null) {
+      for (const record of options.records) {
+        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+          throw new Error('record id must be a non-empty string')
+        }
+        if (record.id !== undefined) {
+          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
+          recordIds.add(record.id)
+        }
+        dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
+      }
+    }
+    return dataset
   }
 
   // Pull an existing dataset by name (with its records). Polls with exponential
   // backoff to absorb read-after-write lag; pass `expectedRecordCount` to also
   // wait until that many records are readable.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000 } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, version } = options
     const projectId = await this.#client.ensureProjectId()
 
     let datasetId = null
     let description = ''
     let records = []
     let recordIds = []
+    let datasetVersion = version ?? null
+    let latestVersion = null
     let lastError = ''
 
     const succeeded = await retryWithBackoff(async () => {
@@ -63,11 +84,16 @@ class Experiments {
             'GET',
             `${API_BASE_PATH}/${projectId}/datasets?filter[name]=${encodeURIComponent(name)}`
           )
-          for (const item of listed?.data ?? []) {
-            if (item?.attributes?.name === name) {
-              datasetId = String(item?.id ?? '')
-              description = String(item?.attributes?.description ?? '')
-              break
+          const datasets = listed?.data
+          if (datasets) {
+            for (const item of datasets) {
+              if (item?.attributes?.name === name) {
+                datasetId = String(item?.id ?? '')
+                description = String(item?.attributes?.description ?? '')
+                latestVersion = item?.attributes?.current_version ?? null
+                datasetVersion = version ?? latestVersion
+                break
+              }
             }
           }
           if (datasetId === null) return false
@@ -78,16 +104,27 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = cursor ? `?page[cursor]=${encodeURIComponent(cursor)}` : ''
+          const query = new URLSearchParams()
+          if (cursor) query.set('page[cursor]', cursor)
+          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
           )
-          for (const item of resp?.data ?? []) {
-            const attrs = item?.attributes ?? item
-            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-            ids.push(String(item?.id ?? ''))
+          const recordData = resp?.data
+          if (recordData) {
+            for (const item of recordData) {
+              const attrs = item?.attributes ?? item
+              const recordId = String(item?.id ?? attrs?.id ?? '')
+              recs.push(new DatasetRecord(
+                attrs?.input ?? null,
+                attrs?.expected_output ?? null,
+                attrs?.metadata ?? {},
+                recordId === '' ? null : recordId
+              ))
+              ids.push(recordId)
+            }
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break
@@ -119,18 +156,28 @@ class Experiments {
       )
     }
 
-    return Dataset.fromExisting(this.#client, name, description, datasetId, projectId, records, recordIds)
+    return Dataset.fromExisting(
+      this.#client,
+      name,
+      description,
+      datasetId,
+      projectId,
+      records,
+      recordIds,
+      datasetVersion,
+      latestVersion
+    )
   }
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
-    return new Experiment(this.#client, options)
+    return new Experiment(this.#client, options, this.#llmobs)
   }
 }
 
 // Factory used by the LLMObs SDK: returns a real Experiments instance when
 // enabled and credentialed, otherwise a no-op that explains what's missing.
-function createExperiments (config) {
+function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
@@ -146,7 +193,7 @@ function createExperiments (config) {
       'then retry'
     )
   }
-  return new Experiments(config)
+  return new Experiments(config, llmobs)
 }
 
 module.exports = { Experiments, createExperiments }

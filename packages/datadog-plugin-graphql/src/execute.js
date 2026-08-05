@@ -495,6 +495,7 @@ function wrapResolve (resolve) {
     // run in the parent store, not field.currentStore: the first sibling's
     // synchronous resolver already finished the shared graphql.resolve span, so
     // re-entering its store would parent user spans to a closed span.
+    // eslint-disable-next-line unicorn/prefer-else-if -- Keep sibling early return outside first-field setup.
     if (!isFirst) {
       return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.parentStore, (err) => {
         if (updateFieldCh.hasSubscribers) {

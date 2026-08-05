@@ -6,6 +6,7 @@ const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+const { isNodeBuiltinModuleName } = require('./shared-utils')
 
 /**
  * @param {string} moduleBaseDir
@@ -49,10 +50,19 @@ function Hook (modules, hookOptions, onrequire) {
   this._patched = Object.create(null)
   const patched = new WeakMap()
 
+  /**
+   * @param {object|Function|undefined} moduleExports
+   * @param {string} moduleName
+   * @param {string|undefined} moduleBaseDir
+   * @param {string|undefined} moduleVersion
+   * @param {boolean|undefined} isIitm
+   */
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
+    const defaultExport = isIitm && moduleExports.default
+    let defaultExportAliases
     let defaultWrapResult
 
     const wrappedOnrequire = (moduleExports, ...args) => {
@@ -73,21 +83,49 @@ function Hook (modules, hookOptions, onrequire) {
       moduleVersion ||= getVersion(moduleBaseDir)
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
-      return
+      return moduleExports
     }
 
     if (
-      isIitm &&
-      moduleExports.default &&
-      (typeof moduleExports.default === 'object' ||
-      typeof moduleExports.default === 'function')
+      defaultExport &&
+      (typeof defaultExport === 'object' ||
+      typeof defaultExport === 'function')
     ) {
-      defaultWrapResult = wrappedOnrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      if (defaultWrapResult && defaultWrapResult !== defaultExport) {
+        defaultExportAliases = []
+        for (const exportName of Object.keys(moduleExports)) {
+          if (exportName !== 'default' && moduleExports[exportName] === defaultExport) {
+            defaultExportAliases.push(exportName)
+          }
+        }
+      }
     }
 
-    const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    // A builtin's named ESM exports are a second view of what `default` already points at, and
+    // `patched` cannot relate them because it keys on the object the hook ran against.
+    let newExports
+    if (defaultWrapResult && isNodeBuiltinModuleName(moduleName)) {
+      // Accessor exports are read, not skipped: `replaceGetter` leaves Node 20's `fs.opendir`
+      // an accessor, and Node's ESM facade resolved every export before handing us this view.
+      for (const key of Object.keys(defaultWrapResult)) {
+        const wrapped = defaultWrapResult[key]
+        const existing = moduleExports[key]
+        if (existing !== wrapped && existing !== undefined) {
+          moduleExports[key] = wrapped
+        }
+      }
+      newExports = moduleExports
+    } else {
+      newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    }
 
-    if (defaultWrapResult) newExports.default = defaultWrapResult
+    if (defaultWrapResult && defaultExportAliases) {
+      newExports.default = defaultWrapResult
+      for (const exportName of defaultExportAliases) {
+        moduleExports[exportName] = defaultWrapResult
+      }
+    }
 
     this._patched[filename] = true
 

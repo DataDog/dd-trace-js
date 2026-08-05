@@ -1,862 +1,717 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const { getArtifactId } = require('./artifact-id')
+const { BLOCKER_CATEGORY_VALUES } = require('./blocker-category')
 const {
   MAX_GENERATED_FILES,
   getGeneratedFileContentError,
 } = require('./generated-file-policy')
-const { getInlineDatadogInitialization } = require('./local-command')
+const { getGeneratedTestContractError } = require('./generated-test-contract')
+const { hasUnsafeInvisibleCharacter, sanitizeString } = require('./redaction')
 const {
-  hasUnsafeExecutionCharacter,
-  hasUnsafeInvisibleCharacter,
-  isSensitiveName,
-  sanitizeForReport,
-  sanitizeString,
-} = require('./redaction')
+  getRunnerArgsError,
+  getRunnerEnvironmentError,
+  getRunnerInputError,
+} = require('./runner-contract')
 
-const FRAMEWORKS = new Set([
-  'jest',
-  'vitest',
-  'mocha',
-  'cucumber',
-  'cypress',
-  'playwright',
-  'node:test',
-  'ava',
-  'tap',
-  'jasmine',
-  'karma',
-  'uvu',
-  'testcafe',
-  'custom',
-  'unknown',
-])
-
+const FRAMEWORKS = new Set(['cucumber', 'cypress', 'jest', 'mocha', 'playwright', 'vitest'])
 const STATUSES = new Set([
-  'runnable',
   'detected_not_runnable',
-  'requires_external_service',
   'requires_manual_setup',
+  'runnable',
   'unsupported_by_validator',
-  'unknown',
 ])
-const CI_WIRING_STATUSES = new Set([
-  'pass',
-  'fail',
-  'skip',
-  'unknown',
-])
-const CI_WIRING_REPLAYABILITIES = new Set(['replayable', 'not_replayable'])
-const CI_INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unknown'])
-const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
-const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
-const MAX_FRAMEWORKS = 100
-const MAX_MANIFEST_ARRAY_ENTRIES = 1000
-const MAX_SETUP_COMMANDS = 100
-const MAX_VALIDATION_ERRORS = 50
-const MAX_REPRESENTATIVE_TESTS = 1000
-const SECRET_PLACEHOLDER = 'dd-validation-placeholder'
-const SAFE_SECRET_FIELD_VALUES = new Set(['', '0', '1', 'false', 'true', 'none', 'disabled'])
-const COMMAND_FIELDS = new Set([
-  'argv',
-  'cwd',
-  'description',
-  'env',
-  'required',
-  'requiredEnvVars',
-  'shell',
-  'shellCommand',
-  'shellReason',
-  'timeoutMs',
-  'usesShell',
-  'id',
-  'outputPaths',
-])
-
-const GENERATED_SCENARIO_IDS = new Set([
-  'basic-pass',
-  'atr-fail-once',
-  'test-management-target',
-])
-const GENERATED_SCENARIO_EXIT_CODES = {
+const INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unknown'])
+const TRANSPORT_MODES = new Set(['agent', 'agentless', 'none', 'unknown'])
+const GENERATED_SCENARIOS = new Set(['basic-pass', 'atr-fail-once', 'test-management-target'])
+const GENERATED_EXIT_CODES = {
   'basic-pass': 0,
   'atr-fail-once': 1,
   'test-management-target': 0,
 }
+const FORBIDDEN_EXECUTION_FIELDS = new Set([
+  'argv',
+  'existingTestCommand',
+  'forcedLocalCommand',
+  'isolationTestCandidate',
+  'isolationTestCandidates',
+  'localTestCandidates',
+  'runCommand',
+  'setup',
+  'shell',
+  'shellCommand',
+  'usesShell',
+])
+const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+const SECRET_ENV_PATTERN =
+  /(?:^|_)(?:API_?KEY|AUTH(?:ORIZATION)?|CREDENTIALS?|PASS(?:WORD|WD)?|PRIVATE_?KEY|SECRET|TOKEN)(?:_|$)/i
+const EXECUTION_ENV_PATTERN =
+  /^(?:(?:BASH_ENV|ENV|NODE_EXTRA_CA_CERTS|NODE_PATH|NODE_REPL_EXTERNAL_MODULE|NODE_TLS_REJECT_UNAUTHORIZED)$|LD_|DYLD_)/i
+const MAX_ARRAY_ENTRIES = 1000
+const MAX_FRAMEWORKS = 100
+const MAX_STRING_BYTES = 256 * 1024
+const MAX_TIMEOUT_MS = 30 * 60 * 1000
+const MAX_VALIDATION_ERRORS = 50
 
+/**
+ * Validates a data-only Test Optimization manifest.
+ *
+ * @param {object} manifest parsed manifest
+ * @returns {string[]} bounded validation errors
+ */
 function validateManifest (manifest) {
   const errors = createErrorCollector()
+  if (!isObject(manifest)) return ['Manifest must be a JSON object.']
 
-  if (!manifest || typeof manifest !== 'object') {
-    return ['Manifest must be a JSON object.']
-  }
+  requiredString(manifest, 'schemaVersion', 'manifest', errors)
+  if (manifest.schemaVersion !== '2.0') errors.push('schemaVersion must be "2.0".')
+  requiredObject(manifest, 'repository', 'manifest', errors)
+  requiredObject(manifest, 'environment', 'manifest', errors)
+  requiredArray(manifest, 'frameworks', 'manifest', errors)
+  rejectExecutionFields(manifest, 'manifest', errors)
 
-  requiredString(manifest, 'schemaVersion', errors)
-  requiredObject(manifest, 'repository', errors)
-  requiredObject(manifest, 'environment', errors)
-  requiredArray(manifest, 'frameworks', errors)
-  if (Array.isArray(manifest.frameworks) && manifest.frameworks.length === 0) {
-    errors.push('frameworks must include at least one framework entry.')
-  }
-  validateArrayLimit(manifest, 'frameworks', MAX_FRAMEWORKS, errors)
-  validateArrayLimit(manifest, 'omitted', MAX_MANIFEST_ARRAY_ENTRIES, errors)
-  validateArrayLimit(manifest, 'omittedTestCommands', MAX_MANIFEST_ARRAY_ENTRIES, errors)
-
-  if (manifest.repository) {
-    requiredAbsolutePath(manifest.repository, 'root', errors)
-  }
-
-  if (manifest.ciDiscovery) {
-    validateCiDiscovery(manifest.ciDiscovery, 'ciDiscovery', errors)
+  if (isObject(manifest.repository)) {
+    requiredAbsolutePath(manifest.repository, 'root', 'repository', errors)
   }
 
   if (Array.isArray(manifest.frameworks)) {
-    const frameworks = manifest.frameworks.slice(0, MAX_FRAMEWORKS)
-    validateUniqueFrameworkIds(frameworks, errors)
-    validateUniqueArtifactIds(frameworks, errors)
-    validateDuplicateRunnableCoverage(frameworks, errors)
-    validateGeneratedPathCollisions(frameworks, errors)
-    for (const [index, framework] of frameworks.entries()) {
-      validateFramework(framework, index, errors)
+    if (manifest.frameworks.length === 0) errors.push('frameworks must not be empty.')
+    if (manifest.frameworks.length > MAX_FRAMEWORKS) {
+      errors.push(`frameworks must contain at most ${MAX_FRAMEWORKS} entries.`)
     }
+    validateFrameworks(manifest, errors)
   }
 
-  validateRepositoryContainedPaths(manifest, errors)
-
+  validateStringArray(manifest.omitted, 'omitted', errors)
+  validateAllStrings(manifest, 'manifest', errors)
   return errors.finalize()
 }
 
 /**
- * Rejects generated files or cleanup targets shared by multiple framework entries.
+ * Validates framework entries and cross-framework uniqueness.
  *
- * @param {object[]} frameworks manifest framework entries
- * @param {{push: function(string): void}} errors bounded validation error collector
+ * @param {object} manifest validation manifest
+ * @param {{push: function(string): void, full: function(): boolean}} errors error collector
  * @returns {void}
  */
-function validateGeneratedPathCollisions (frameworks, errors) {
-  const seen = new Map()
-  for (const [index, framework] of frameworks.entries()) {
-    const strategy = framework?.generatedTestStrategy
-    const frameworkPaths = new Map([
-      ...limitedArray(strategy?.files, MAX_GENERATED_FILES).map(file => file?.path),
-      ...limitedArray(strategy?.cleanupPaths, MAX_MANIFEST_ARRAY_ENTRIES),
-    ].filter(filename => typeof filename === 'string' && path.isAbsolute(filename))
-      .map(filename => [path.normalize(filename), filename]))
+function validateFrameworks (manifest, errors) {
+  const ids = new Set()
+  const artifactIds = new Set()
+  const generatedPaths = new Map()
 
-    for (const [key, filename] of frameworkPaths) {
-      const previous = seen.get(key)
-      if (previous === undefined) {
-        seen.set(key, index)
-        continue
-      }
-      errors.push(
-        `frameworks[${index}].generatedTestStrategy path ${JSON.stringify(filename)} conflicts with ` +
-        `frameworks[${previous}].generatedTestStrategy. Generated files and cleanup paths must be unique across ` +
-        'framework entries.'
-      )
-    }
-  }
-}
-
-function validateDuplicateRunnableCoverage (frameworks, errors) {
-  const seen = new Map()
-  for (const [index, framework] of frameworks.entries()) {
-    if (framework?.status !== 'runnable' || !framework.ciWiringCommand) continue
-    const key = JSON.stringify({
-      framework: framework.framework,
-      projectRoot: framework.project?.root,
-      existingTestCommand: commandExecutionShape(framework.existingTestCommand),
-      ciWiringCommand: commandExecutionShape(framework.ciWiringCommand),
-      ciInitializesDatadog: commandInitializesDatadog(framework.ciWiringCommand),
-    })
-    const previous = seen.get(key)
-    if (previous === undefined) {
-      seen.set(key, index)
+  for (const [index, framework] of manifest.frameworks.slice(0, MAX_FRAMEWORKS).entries()) {
+    if (errors.full()) return
+    const prefix = `frameworks[${index}]`
+    if (!isObject(framework)) {
+      errors.push(`${prefix} must be an object.`)
       continue
     }
-    errors.push(
-      `frameworks[${index}] duplicates runnable framework and CI command coverage from frameworks[${previous}]. ` +
-      'Keep one representative framework entry and record the other CI job as an omitted or duplicate candidate.'
-    )
-  }
-}
 
-function validateUniqueArtifactIds (frameworks, errors) {
-  const seen = new Map()
-  for (const [index, framework] of frameworks.entries()) {
-    if (typeof framework?.id !== 'string') continue
-    const artifactId = getArtifactId(framework.id)
-    const previous = seen.get(artifactId)
-    if (previous !== undefined && previous !== framework.id) {
+    requiredString(framework, 'id', prefix, errors)
+    requiredString(framework, 'framework', prefix, errors)
+    enumString(framework, 'status', STATUSES, prefix, errors)
+    if (framework.blockerCategory !== undefined &&
+      !BLOCKER_CATEGORY_VALUES.has(framework.blockerCategory)) {
       errors.push(
-        `frameworks[${index}].id collides with another framework artifact identifier after normalization.`
-      )
-    } else {
-      seen.set(artifactId, framework.id)
-    }
-  }
-}
-
-function commandExecutionShape (command) {
-  if (!command) return null
-  return {
-    argv: command.argv,
-    cwd: command.cwd,
-    shell: command.shell,
-    shellCommand: command.shellCommand,
-    usesShell: Boolean(command.usesShell),
-  }
-}
-
-function commandInitializesDatadog (command) {
-  const values = [
-    ...(command?.argv || []),
-    command?.shellCommand,
-    command?.env?.NODE_OPTIONS,
-  ].filter(Boolean).join(' ')
-  return /dd-trace\/ci\/init/.test(values)
-}
-
-function validateRepositoryContainedPaths (manifest, errors) {
-  const repositoryRoot = manifest.repository?.root
-  if (typeof repositoryRoot !== 'string' || !path.isAbsolute(repositoryRoot)) return
-
-  const frameworks = Array.isArray(manifest.frameworks) ? manifest.frameworks.slice(0, MAX_FRAMEWORKS) : []
-  for (const [index, framework] of frameworks.entries()) {
-    if (!framework || typeof framework !== 'object' || Array.isArray(framework)) continue
-    const prefix = `frameworks[${index}]`
-    containedPath(repositoryRoot, framework.project?.root, `${prefix}.project.root`, errors)
-    containedPath(repositoryRoot, framework.project?.packageJson, `${prefix}.project.packageJson`, errors)
-    for (const [configIndex, configFile] of
-      limitedArray(framework.project?.configFiles, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-      containedPath(repositoryRoot, configFile, `${prefix}.project.configFiles[${configIndex}]`, errors)
-    }
-
-    for (const [name, command] of getFrameworkCommands(framework)) {
-      containedPath(repositoryRoot, command?.cwd, `${prefix}.${name}.cwd`, errors)
-    }
-
-    containedPath(repositoryRoot, framework.ciWiring?.configFile, `${prefix}.ciWiring.configFile`, errors)
-    containedPath(repositoryRoot, framework.ciWiring?.workingDirectory, `${prefix}.ciWiring.workingDirectory`, errors)
-
-    const strategy = framework.generatedTestStrategy
-    containedPath(repositoryRoot, strategy?.testDirectory, `${prefix}.generatedTestStrategy.testDirectory`, errors)
-    for (const [fileIndex, file] of limitedArray(strategy?.files, MAX_GENERATED_FILES).entries()) {
-      containedPath(repositoryRoot, file?.path, `${prefix}.generatedTestStrategy.files[${fileIndex}].path`, errors)
-    }
-    for (const [cleanupIndex, cleanupPath] of
-      limitedArray(strategy?.cleanupPaths, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-      containedPath(
-        repositoryRoot,
-        cleanupPath,
-        `${prefix}.generatedTestStrategy.cleanupPaths[${cleanupIndex}]`,
-        errors
+        `${prefix}.blockerCategory must be one of ${[...BLOCKER_CATEGORY_VALUES].join(', ')} when provided.`
       )
     }
-    for (const [scenarioIndex, scenario] of
-      limitedArray(strategy?.scenarios, GENERATED_SCENARIO_IDS.size).entries()) {
-      for (const [identityIndex, identity] of
-        limitedArray(scenario?.testIdentities, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-        containedPath(
-          repositoryRoot,
-          identity?.file,
-          `${prefix}.generatedTestStrategy.scenarios[${scenarioIndex}].testIdentities[${identityIndex}].file`,
-          errors
-        )
-      }
+    requiredObject(framework, 'project', prefix, errors)
+    rejectExecutionFields(framework, prefix, errors)
+
+    if (typeof framework.framework === 'string' &&
+      framework.status !== 'unsupported_by_validator' &&
+      !FRAMEWORKS.has(framework.framework)) {
+      errors.push(`${prefix}.framework must be one of: ${[...FRAMEWORKS].join(', ')}.`)
     }
-  }
-}
 
-function getFrameworkCommands (framework) {
-  const commands = []
-  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
-    if (framework[name]) commands.push([name, framework[name]])
-  }
-  for (const [index, command] of limitedArray(framework.setup?.commands, MAX_SETUP_COMMANDS).entries()) {
-    commands.push([`setup.commands[${index}]`, command])
-  }
-  for (const [index, scenario] of
-    limitedArray(framework.generatedTestStrategy?.scenarios, GENERATED_SCENARIO_IDS.size).entries()) {
-    if (scenario?.runCommand) {
-      commands.push([`generatedTestStrategy.scenarios[${index}].runCommand`, scenario.runCommand])
+    if (typeof framework.id === 'string') {
+      if (ids.has(framework.id)) errors.push(`${prefix}.id must be unique.`)
+      ids.add(framework.id)
+      const artifactId = getArtifactId(framework.id)
+      if (artifactIds.has(artifactId)) errors.push(`${prefix}.id collides after artifact normalization.`)
+      artifactIds.add(artifactId)
     }
-  }
-  return commands
-}
 
-function containedPath (root, candidate, key, errors) {
-  if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return
-  const relative = path.relative(path.resolve(root), path.resolve(candidate))
-  if (relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))) return
-  errors.push(`${key} must be inside repository.root.`)
-}
+    validateProject(manifest.repository?.root, framework.project, `${prefix}.project`, errors)
+    validateCiWiring(manifest.repository?.root, framework.ciWiring, `${prefix}.ciWiring`, errors)
 
-function validateCiDiscovery (ciDiscovery, prefix, errors) {
-  if (!ciDiscovery || typeof ciDiscovery !== 'object' || Array.isArray(ciDiscovery)) {
-    errors.push(`${prefix} must be an object when present.`)
-    return
-  }
-
-  for (const field of ['searched', 'found', 'staticFound', 'warnings', 'notes', 'contradictions']) {
-    if (ciDiscovery[field] !== undefined) {
-      if (Array.isArray(ciDiscovery[field])) {
-        validateStringArray(ciDiscovery, field, errors, prefix)
-      } else {
-        errors.push(`${prefix}.${field} must be an array when present.`)
+    if (framework.status === 'runnable') {
+      if (typeof framework.allCandidatesRequireLocalSocket !== 'boolean') {
+        errors.push(`${prefix}.allCandidatesRequireLocalSocket must be a boolean.`)
       }
-    }
-  }
-
-  if (ciDiscovery.method !== undefined && typeof ciDiscovery.method !== 'string') {
-    errors.push(`${prefix}.method must be a string when present.`)
-  }
-}
-
-function validateFramework (framework, index, errors) {
-  const prefix = `frameworks[${index}]`
-  if (!framework || typeof framework !== 'object' || Array.isArray(framework)) {
-    errors.push(`${prefix} must be an object.`)
-    return
-  }
-  requiredString(framework, 'id', errors, prefix)
-  enumString(framework, 'framework', FRAMEWORKS, errors, prefix)
-  enumString(framework, 'status', STATUSES, errors, prefix)
-  requiredObject(framework, 'project', errors, prefix)
-
-  if (framework.project) {
-    requiredAbsolutePath(framework.project, 'root', errors, `${prefix}.project`)
-    optionalAbsolutePath(framework.project, 'packageJson', errors, `${prefix}.project`)
-    optionalAbsolutePathArray(framework.project, 'configFiles', errors, `${prefix}.project`)
-    validateArrayLimit(framework.project, 'configFiles', MAX_MANIFEST_ARRAY_ENTRIES, errors, `${prefix}.project`)
-  }
-
-  if (framework.status === 'runnable') {
-    requiredCommand(framework, 'existingTestCommand', errors, prefix, { datadogClean: true })
-    validateDatadogCleanCommand(framework.existingTestCommand, `${prefix}.existingTestCommand`, errors)
-    requiredObject(framework, 'preflight', errors, prefix)
-    validatePreflight(framework.preflight, `${prefix}.preflight`, errors)
-    requiredObject(framework, 'ciWiring', errors, prefix)
-  } else {
-    requireNonEmptyNotes(framework, errors, prefix)
-  }
-
-  if (framework.ciWiringCommand) {
-    requiredCommand(framework, 'ciWiringCommand', errors, prefix)
-  }
-
-  if (framework.ciWiring) {
-    validateCiWiring(framework, prefix, errors)
-  }
-
-  if (framework.forcedLocalCommand !== undefined) {
-    errors.push(
-      `${prefix}.forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic Reporting ` +
-      'and ciWiringCommand for the CI-shaped replay.'
-    )
-  }
-
-  if (framework.setup?.commands) {
-    if (Array.isArray(framework.setup.commands)) {
-      validateArrayLimit(framework.setup, 'commands', MAX_SETUP_COMMANDS, errors, `${prefix}.setup`)
-      for (const [commandIndex, command] of framework.setup.commands.slice(0, MAX_SETUP_COMMANDS).entries()) {
-        requiredCommand({ command }, 'command', errors, `${prefix}.setup.commands[${commandIndex}]`)
+      if (typeof framework.buildArtifactRequired !== 'boolean') {
+        errors.push(`${prefix}.buildArtifactRequired must be a boolean.`)
       }
+      validateRunnableFramework(manifest.repository?.root, framework, prefix, generatedPaths, errors)
     } else {
-      errors.push(`${prefix}.setup.commands must be an array.`)
+      for (const field of ['validation', 'preflight', 'generatedTestStrategy']) {
+        if (framework[field] !== undefined) {
+          errors.push(`${prefix}.${field} must be omitted when status is not runnable.`)
+        }
+      }
     }
-  }
-
-  if (framework.generatedTestStrategy) {
-    validateGeneratedTestStrategy(framework.generatedTestStrategy, `${prefix}.generatedTestStrategy`, errors)
+    validateStringArray(framework.notes, `${prefix}.notes`, errors)
   }
 }
 
 /**
- * Validates the approved upper bound for a representative test command.
+ * Validates project metadata.
  *
- * @param {object} preflight preflight declaration
- * @param {string} prefix manifest field path
- * @param {{push: function(string): void}} errors bounded validation error collector
+ * @param {string} repositoryRoot repository root
+ * @param {object} project project metadata
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
  * @returns {void}
  */
-function validatePreflight (preflight, prefix, errors) {
-  if (!preflight || typeof preflight !== 'object' || Array.isArray(preflight)) return
-
-  if (!Number.isInteger(preflight.maxTestCount) || preflight.maxTestCount < 1) {
-    errors.push(`${prefix}.maxTestCount must be a positive integer.`)
-  } else if (preflight.maxTestCount > MAX_REPRESENTATIVE_TESTS) {
-    errors.push(`${prefix}.maxTestCount must not exceed ${MAX_REPRESENTATIVE_TESTS}.`)
+function validateProject (repositoryRoot, project, prefix, errors) {
+  if (!isObject(project)) return
+  requiredString(project, 'name', prefix, errors)
+  requiredAbsolutePath(project, 'root', prefix, errors)
+  requiredAbsolutePath(project, 'packageJson', prefix, errors)
+  containedPath(repositoryRoot, project.root, `${prefix}.root`, errors)
+  containedPath(repositoryRoot, project.packageJson, `${prefix}.packageJson`, errors)
+  if (Array.isArray(project.configFiles)) {
+    if (project.configFiles.length > 20) errors.push(`${prefix}.configFiles must contain at most 20 entries.`)
+    for (const [index, filename] of project.configFiles.slice(0, 20).entries()) {
+      absolutePathValue(filename, `${prefix}.configFiles[${index}]`, errors)
+      containedPath(repositoryRoot, filename, `${prefix}.configFiles[${index}]`, errors)
+    }
+  } else {
+    errors.push(`${prefix}.configFiles must be an array.`)
   }
 }
 
-function validateGeneratedTestStrategy (strategy, prefix, errors) {
-  if (!['planned', 'verified', 'proposed', 'not_possible'].includes(strategy.status)) {
-    errors.push(`${prefix}.status must be planned, verified, proposed, or not_possible.`)
+/**
+ * Validates direct-runner fields and generated recipes.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} framework runnable framework entry
+ * @param {string} prefix error prefix
+ * @param {Map<string, string>} generatedPaths generated paths used by other frameworks
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateRunnableFramework (repositoryRoot, framework, prefix, generatedPaths, errors) {
+  if (!isObject(framework.validation)) {
+    errors.push(`${prefix}.validation must be an object for a runnable framework.`)
+    return
   }
 
-  const completeStrategy = strategy.status === 'planned' || strategy.status === 'verified'
-  if (completeStrategy) {
-    requiredArray(strategy, 'files', errors, prefix)
-    requiredArray(strategy, 'scenarios', errors, prefix)
-    requiredArray(strategy, 'cleanupPaths', errors, prefix)
-    validateCompleteGeneratedScenarioSet(strategy, prefix, errors)
-  } else if ((strategy.status === 'proposed' || strategy.status === 'not_possible') &&
-    (typeof strategy.reason !== 'string' || strategy.reason.trim() === '')) {
-    errors.push(`${prefix}.reason must explain why the generated test strategy is ${strategy.status}.`)
+  const validation = framework.validation
+  rejectExecutionFields(validation, `${prefix}.validation`, errors)
+  requiredAbsolutePath(validation, 'runner', `${prefix}.validation`, errors)
+  requiredAbsolutePath(validation, 'testFile', `${prefix}.validation`, errors)
+  if (!['bounded_direct_runner', 'instrumented_event_identity'].includes(validation.selectorScope)) {
+    errors.push(
+      `${prefix}.validation.selectorScope must be bounded_direct_runner or instrumented_event_identity.`
+    )
   }
+  containedPath(repositoryRoot, validation.runner, `${prefix}.validation.runner`, errors)
+  containedPath(repositoryRoot, validation.testFile, `${prefix}.validation.testFile`, errors)
+  validateFallbackTests(repositoryRoot, validation, `${prefix}.validation`, errors)
+  const runnerArgsError = getRunnerArgsError(framework.framework, validation.runnerArgs)
+  if (runnerArgsError) errors.push(`${prefix}.validation.runnerArgs ${runnerArgsError}.`)
+  if (validation.omittedRunnerOptions !== undefined) {
+    validateStringArray(validation.omittedRunnerOptions, `${prefix}.validation.omittedRunnerOptions`, errors)
+    for (const option of Array.isArray(validation.omittedRunnerOptions) ? validation.omittedRunnerOptions : []) {
+      if (!['-R', '--reporter', '--run', '--typecheck'].includes(option)) {
+        errors.push(`${prefix}.validation.omittedRunnerOptions contains unsupported option ${option}.`)
+      }
+    }
+  }
+  const runnerEnvironmentError = getRunnerEnvironmentError(validation.environment)
+  if (runnerEnvironmentError) errors.push(`${prefix}.validation.environment ${runnerEnvironmentError}.`)
+  if (!runnerArgsError &&
+    !runnerEnvironmentError &&
+    typeof framework.project?.root === 'string' &&
+    typeof repositoryRoot === 'string' &&
+    Array.isArray(framework.project?.configFiles)) {
+    const runnerInputError = getRunnerInputError(
+      validation.runnerArgs,
+      validation.environment,
+      framework.project?.root,
+      repositoryRoot,
+      framework.project?.configFiles
+    )
+    if (runnerInputError) errors.push(`${prefix}.validation runner configuration ${runnerInputError}.`)
+  }
+  validateStringArray(validation.requiredEnvVars, `${prefix}.validation.requiredEnvVars`, errors)
+  if (validation.requiredEnvVars) {
+    for (const name of validation.requiredEnvVars) {
+      if (!ENV_NAME_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
+      }
+      if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
+        errors.push(
+          `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
+            'TS_NODE_PROJECT.'
+        )
+      }
+      if (SECRET_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)
+      }
+      if (EXECUTION_ENV_PATTERN.test(name)) {
+        errors.push(`${prefix}.validation.requiredEnvVars must not inherit executable-loading environment variables.`)
+      }
+    }
+  }
+  if (!Number.isInteger(validation.timeoutMs) || validation.timeoutMs < 1 || validation.timeoutMs > MAX_TIMEOUT_MS) {
+    errors.push(`${prefix}.validation.timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`)
+  }
+
+  if (!isObject(framework.generatedTestStrategy)) {
+    errors.push(`${prefix}.generatedTestStrategy must be an object for a runnable framework.`)
+    return
+  }
+  validateGeneratedStrategy(repositoryRoot, framework, prefix, generatedPaths, errors)
+}
+
+/**
+ * Validates bounded fallback test paths and their statically discovered prerequisites.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} validation direct-runner validation data
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateFallbackTests (repositoryRoot, validation, prefix, errors) {
+  if (validation.fallbackTests === undefined) return
+  if (!Array.isArray(validation.fallbackTests)) {
+    errors.push(`${prefix}.fallbackTests must be an array.`)
+    return
+  }
+  if (validation.fallbackTests.length > 2) {
+    errors.push(`${prefix}.fallbackTests must contain at most 2 entries.`)
+  }
+
+  const testFiles = new Set()
+  for (const [index, fallback] of validation.fallbackTests.slice(0, 2).entries()) {
+    const fallbackPrefix = `${prefix}.fallbackTests[${index}]`
+    if (!isObject(fallback)) {
+      errors.push(`${fallbackPrefix} must be an object.`)
+      continue
+    }
+    rejectExecutionFields(fallback, fallbackPrefix, errors)
+    requiredAbsolutePath(fallback, 'testFile', fallbackPrefix, errors)
+    containedPath(repositoryRoot, fallback.testFile, `${fallbackPrefix}.testFile`, errors)
+    if (typeof fallback.buildArtifactRequired !== 'boolean') {
+      errors.push(`${fallbackPrefix}.buildArtifactRequired must be a boolean.`)
+    }
+    if (typeof fallback.localSocketRequired !== 'boolean') {
+      errors.push(`${fallbackPrefix}.localSocketRequired must be a boolean.`)
+    }
+    if (fallback.testFile === validation.testFile) {
+      errors.push(`${fallbackPrefix}.testFile must differ from ${prefix}.testFile.`)
+    }
+    if (testFiles.has(fallback.testFile)) {
+      errors.push(`${prefix}.fallbackTests must contain unique testFile values.`)
+    }
+    testFiles.add(fallback.testFile)
+  }
+}
+
+/**
+ * Validates canonical generated test data.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} framework framework entry
+ * @param {string} prefix framework error prefix
+ * @param {Map<string, string>} generatedPaths generated paths used by other frameworks
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateGeneratedStrategy (repositoryRoot, framework, prefix, generatedPaths, errors) {
+  const strategy = framework.generatedTestStrategy
+  if (!['planned', 'verified', 'not_possible'].includes(strategy.status)) {
+    errors.push(`${prefix}.generatedTestStrategy.status must be planned, verified, or not_possible.`)
+  }
+  if (strategy.status === 'not_possible') {
+    requiredString(strategy, 'reason', `${prefix}.generatedTestStrategy`, errors)
+    return
+  }
+
+  requiredAbsolutePath(strategy, 'testDirectory', `${prefix}.generatedTestStrategy`, errors)
+  containedPath(repositoryRoot, strategy.testDirectory, `${prefix}.generatedTestStrategy.testDirectory`, errors)
+  requiredArray(strategy, 'files', `${prefix}.generatedTestStrategy`, errors)
+  requiredArray(strategy, 'scenarios', `${prefix}.generatedTestStrategy`, errors)
+  requiredArray(strategy, 'cleanupPaths', `${prefix}.generatedTestStrategy`, errors)
 
   if (Array.isArray(strategy.files)) {
     if (strategy.files.length > MAX_GENERATED_FILES) {
-      errors.push(`${prefix}.files must contain at most ${MAX_GENERATED_FILES} generated files.`)
+      errors.push(`${prefix}.generatedTestStrategy.files must contain at most ${MAX_GENERATED_FILES} entries.`)
     }
     for (const [index, file] of strategy.files.slice(0, MAX_GENERATED_FILES).entries()) {
-      requiredAbsolutePath(file, 'path', errors, `${prefix}.files[${index}]`)
-      requiredArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
-      validateStringArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
+      const filePrefix = `${prefix}.generatedTestStrategy.files[${index}]`
+      if (!isObject(file)) {
+        errors.push(`${filePrefix} must be an object.`)
+        continue
+      }
+      requiredAbsolutePath(file, 'path', filePrefix, errors)
+      validateStringArray(file.contentLines, `${filePrefix}.contentLines`, errors)
+      containedPath(repositoryRoot, file.path, `${filePrefix}.path`, errors)
       const policyError = getGeneratedFileContentError(file.contentLines)
-      if (policyError) errors.push(`${prefix}.files[${index}].contentLines ${policyError}.`)
+      if (policyError) errors.push(`${filePrefix}.contentLines ${policyError}.`)
+      claimGeneratedPath(file.path, framework.id, filePrefix, generatedPaths, errors)
+    }
+  }
+
+  if (Array.isArray(strategy.cleanupPaths)) {
+    for (const [index, filename] of strategy.cleanupPaths.slice(0, MAX_ARRAY_ENTRIES).entries()) {
+      const pathPrefix = `${prefix}.generatedTestStrategy.cleanupPaths[${index}]`
+      absolutePathValue(filename, pathPrefix, errors)
+      containedPath(repositoryRoot, filename, pathPrefix, errors)
+      claimGeneratedPath(filename, framework.id, pathPrefix, generatedPaths, errors)
     }
   }
 
   if (Array.isArray(strategy.scenarios)) {
-    validateArrayLimit(strategy, 'scenarios', GENERATED_SCENARIO_IDS.size, errors, prefix)
-    for (const [index, scenario] of strategy.scenarios.slice(0, GENERATED_SCENARIO_IDS.size).entries()) {
-      requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
-      enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
-      requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`, { datadogClean: true })
-      validateDatadogCleanCommand(scenario.runCommand, `${prefix}.scenarios[${index}].runCommand`, errors)
-      validateScenarioIdentities(
-        scenario,
-        `${prefix}.scenarios[${index}]`,
-        errors,
-        completeStrategy
-      )
-      if (completeStrategy) {
-        validateGeneratedScenarioOutcome(scenario, `${prefix}.scenarios[${index}]`, errors)
+    if (strategy.scenarios.length !== GENERATED_SCENARIOS.size) {
+      errors.push(`${prefix}.generatedTestStrategy.scenarios must contain all three canonical scenarios.`)
+    }
+    const scenarioIds = new Set()
+    for (const [index, scenario] of strategy.scenarios.slice(0, GENERATED_SCENARIOS.size).entries()) {
+      const scenarioPrefix = `${prefix}.generatedTestStrategy.scenarios[${index}]`
+      if (!isObject(scenario)) {
+        errors.push(`${scenarioPrefix} must be an object.`)
+        continue
+      }
+      enumString(scenario, 'id', GENERATED_SCENARIOS, scenarioPrefix, errors)
+      rejectExecutionFields(scenario, scenarioPrefix, errors)
+      scenarioIds.add(scenario.id)
+      validateScenarioIdentity(repositoryRoot, scenario, scenarioPrefix, errors)
+      const expected = scenario.expectedWithoutDatadog
+      if (!isObject(expected) ||
+        expected.exitCode !== GENERATED_EXIT_CODES[scenario.id] ||
+        expected.observedTestCount !== 1) {
+        errors.push(`${scenarioPrefix}.expectedWithoutDatadog must retain the canonical exit code and one test.`)
       }
     }
+    for (const id of GENERATED_SCENARIOS) {
+      if (!scenarioIds.has(id)) errors.push(`${prefix}.generatedTestStrategy.scenarios is missing ${id}.`)
+    }
   }
 
-  optionalAbsolutePath(strategy, 'testDirectory', errors, prefix)
-  optionalAbsolutePathArray(strategy, 'cleanupPaths', errors, prefix)
+  const contractError = getGeneratedTestContractError(framework)
+  if (contractError) errors.push(`${prefix}.generatedTestStrategy ${contractError}`)
 }
 
-function validateCiWiring (framework, prefix, errors) {
-  const ciWiring = framework.ciWiring
-  if (!ciWiring || typeof ciWiring !== 'object' || Array.isArray(ciWiring)) {
-    errors.push(`${prefix}.ciWiring must be an object when present.`)
+/**
+ * Validates one generated test identity.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} scenario generated scenario
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateScenarioIdentity (repositoryRoot, scenario, prefix, errors) {
+  if (!Array.isArray(scenario.testIdentities) || scenario.testIdentities.length !== 1) {
+    errors.push(`${prefix}.testIdentities must contain exactly one identity.`)
     return
   }
-
-  if (!CI_WIRING_STATUSES.has(ciWiring.status)) {
-    errors.push(`${prefix}.ciWiring.status must be pass, fail, skip, or unknown.`)
+  const identity = scenario.testIdentities[0]
+  if (!isObject(identity)) {
+    errors.push(`${prefix}.testIdentities[0] must be an object.`)
+    return
   }
-
-  if (!CI_WIRING_REPLAYABILITIES.has(ciWiring.replayability)) {
-    errors.push(`${prefix}.ciWiring.replayability must be replayable or not_replayable.`)
-  }
-  if (Object.hasOwn(ciWiring, 'ciWiringCommand')) {
-    errors.push(`${prefix}.ciWiring.ciWiringCommand is misplaced; use ${prefix}.ciWiringCommand.`)
-  }
-  if (ciWiring.replayability === 'replayable' && !framework.ciWiringCommand) {
-    errors.push(`${prefix}.ciWiringCommand is required when ${prefix}.ciWiring.replayability is replayable.`)
-  }
-  if (ciWiring.replayability === 'not_replayable') {
-    if (ciWiring.status === 'pass' || ciWiring.status === 'fail') {
-      errors.push(`${prefix}.ciWiring.status must be skip or unknown when replayability is not_replayable.`)
-    }
-    if (framework.ciWiringCommand) {
-      errors.push(`${prefix}.ciWiringCommand must be omitted when ${prefix}.ciWiring.replayability is not_replayable.`)
-    }
-    if (!hasNonEmptyString(ciWiring.replayBlocker)) {
-      errors.push(`${prefix}.ciWiring.replayBlocker must explain why CI replay is not_replayable.`)
-    }
-  }
-
-  if (ciWiring.initialization !== undefined) {
-    validateCiInitialization(ciWiring.initialization, `${prefix}.ciWiring.initialization`, errors)
-  }
-
-  if (ciWiring.initialization?.status === 'not_configured' &&
-    commandInitializesDatadog(framework.ciWiringCommand)) {
-    errors.push(
-      `${prefix}.ciWiring.initialization.status is not_configured, but ${prefix}.ciWiringCommand adds dd-trace ` +
-      'initialization. The replay command must preserve the discovered CI configuration; remove the added ' +
-      'initialization or correct the initialization status and evidence.'
-    )
-  }
-
-  if (framework.ciWiringCommand) {
-    for (const field of ['provider', 'configFile', 'job', 'step', 'whySelected']) {
-      requiredString(ciWiring, field, errors, `${prefix}.ciWiring`)
-    }
-    requiredAbsolutePath(ciWiring, 'configFile', errors, `${prefix}.ciWiring`)
-    requiredAbsolutePath(ciWiring, 'workingDirectory', errors, `${prefix}.ciWiring`)
-    if (path.resolve(ciWiring.workingDirectory || '') !== path.resolve(framework.ciWiringCommand.cwd || '')) {
-      errors.push(`${prefix}.ciWiringCommand.cwd must match ${prefix}.ciWiring.workingDirectory.`)
-    }
-    if (ciWiring.shell !== undefined && ciWiring.shell !== null) {
-      if (typeof ciWiring.shell !== 'string' || ciWiring.shell.trim() === '') {
-        errors.push(`${prefix}.ciWiring.shell must be a non-empty string when present.`)
-      } else if (hasUnsafeExecutionCharacter(ciWiring.shell)) {
-        errors.push(`${prefix}.ciWiring.shell must not contain invisible or control characters.`)
-      }
-    }
-  }
-
-  if ((ciWiring.status === 'skip' || ciWiring.status === 'unknown') &&
-    !hasNonEmptyString(ciWiring.diagnosis) && !hasNonEmptyString(ciWiring.reason)) {
-    errors.push(`${prefix}.ciWiring must explain why CI wiring is ${ciWiring.status}.`)
-  }
+  requiredAbsolutePath(identity, 'file', `${prefix}.testIdentities[0]`, errors)
+  requiredString(identity, 'name', `${prefix}.testIdentities[0]`, errors)
+  requiredString(identity, 'suite', `${prefix}.testIdentities[0]`, errors)
+  containedPath(repositoryRoot, identity.file, `${prefix}.testIdentities[0].file`, errors)
 }
 
-function validateCiInitialization (initialization, prefix, errors) {
-  if (!initialization || typeof initialization !== 'object' || Array.isArray(initialization)) {
-    errors.push(`${prefix} must be an object when present.`)
+/**
+ * Validates inert CI evidence.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object|undefined} ciWiring CI evidence
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateCiWiring (repositoryRoot, ciWiring, prefix, errors) {
+  if (ciWiring === undefined) return
+  if (!isObject(ciWiring)) {
+    errors.push(`${prefix} must be an object.`)
     return
   }
+  rejectExecutionFields(ciWiring, prefix, errors, new Set(['command']))
+  for (const field of ['command', 'job', 'step']) optionalStringOrNull(ciWiring, field, prefix, errors)
+  optionalAbsolutePathOrNull(ciWiring, 'configFile', prefix, errors)
+  optionalAbsolutePathOrNull(ciWiring, 'workingDirectory', prefix, errors)
+  containedPath(repositoryRoot, ciWiring.configFile, `${prefix}.configFile`, errors)
+  containedPath(repositoryRoot, ciWiring.workingDirectory, `${prefix}.workingDirectory`, errors)
+  if (typeof ciWiring.reviewComplete !== 'boolean') errors.push(`${prefix}.reviewComplete must be a boolean.`)
+  validateStringArray(ciWiring.unresolved, `${prefix}.unresolved`, errors)
 
-  if (!CI_INITIALIZATION_STATUSES.has(initialization.status)) {
-    errors.push(`${prefix}.status must be configured, not_configured, or unknown.`)
-  }
-  if (Array.isArray(initialization.evidence)) {
-    validateStringArray(initialization, 'evidence', errors, prefix)
-    if (initialization.status !== 'unknown' && initialization.evidence.length === 0) {
-      errors.push(`${prefix}.evidence must explain the ${initialization.status} conclusion.`)
-    }
+  if (!isObject(ciWiring.initialization) ||
+    !INITIALIZATION_STATUSES.has(ciWiring.initialization.status)) {
+    errors.push(`${prefix}.initialization.status must be configured, not_configured, or unknown.`)
   } else {
-    errors.push(`${prefix}.evidence must be an array.`)
+    validateStringArray(ciWiring.initialization.evidence, `${prefix}.initialization.evidence`, errors)
   }
-}
-
-function hasNonEmptyString (value) {
-  return typeof value === 'string' && value.trim() !== ''
-}
-
-function validateDatadogCleanCommand (command, prefix, errors) {
-  for (const [name, value] of Object.entries(command?.env || {})) {
-    if (name.startsWith('DD_') || (name === 'NODE_OPTIONS' && /dd-trace/.test(String(value)))) {
-      errors.push(`${prefix}.env.${name} must not configure Datadog initialization for local validation.`)
-    }
-  }
-
-  const inlineInitialization = getInlineDatadogInitialization(command)
-  if (inlineInitialization) {
-    errors.push(
-      `${prefix} ${inlineInitialization} and must be Datadog-clean for local validation. ` +
-      'Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.'
-    )
-  }
-}
-
-function validateGeneratedScenarioOutcome (scenario, prefix, errors) {
-  const expected = scenario.expectedWithoutDatadog
-  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) {
-    errors.push(`${prefix}.expectedWithoutDatadog must be an object when generatedTestStrategy is planned or verified.`)
-    return
-  }
-
-  const expectedExitCode = GENERATED_SCENARIO_EXIT_CODES[scenario.id]
-  if (expectedExitCode !== undefined && expected.exitCode !== expectedExitCode) {
-    errors.push(`${prefix}.expectedWithoutDatadog.exitCode must be ${expectedExitCode} for ${scenario.id}.`)
-  }
-  if (expected.observedTestCount !== 1) {
-    errors.push(`${prefix}.expectedWithoutDatadog.observedTestCount must be 1 so the command isolates this scenario.`)
-  }
-}
-
-function validateCompleteGeneratedScenarioSet (strategy, prefix, errors) {
-  if (!Array.isArray(strategy.scenarios)) return
-
-  const seen = new Set()
-  for (const scenario of strategy.scenarios.slice(0, GENERATED_SCENARIO_IDS.size)) {
-    if (typeof scenario?.id === 'string') seen.add(scenario.id)
-  }
-
-  for (const scenarioId of GENERATED_SCENARIO_IDS) {
-    if (!seen.has(scenarioId)) {
-      errors.push(`${prefix}.scenarios must include generated scenario "${scenarioId}" when status is planned or ` +
-        'verified.')
-    }
-  }
-}
-
-function validateUniqueFrameworkIds (frameworks, errors) {
-  const seen = new Set()
-  for (const [index, framework] of frameworks.entries()) {
-    if (typeof framework?.id !== 'string') continue
-    if (seen.has(framework.id)) {
-      errors.push(`frameworks[${index}].id must be unique; duplicate "${framework.id}".`)
-    }
-    seen.add(framework.id)
-  }
-}
-
-function requireNonEmptyNotes (framework, errors, prefix) {
-  if (!Array.isArray(framework.notes) || framework.notes.length === 0) {
-    errors.push(`${prefix}.notes must include a reason when status is ${framework.status}.`)
-    return
-  }
-  validateStringArray(framework, 'notes', errors, prefix)
-}
-
-function validateScenarioIdentities (scenario, prefix, errors, required = false) {
-  if (!Array.isArray(scenario.testIdentities)) {
-    if (required) {
-      errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is planned or ` +
-        'verified.')
-    }
-    return
-  }
-
-  if (required && scenario.testIdentities.length === 0) {
-    errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is planned or verified.`)
-  }
-  validateArrayLimit(
-    { testIdentities: scenario.testIdentities },
-    'testIdentities',
-    MAX_MANIFEST_ARRAY_ENTRIES,
-    errors,
-    prefix
-  )
-
-  for (const [index, identity] of scenario.testIdentities.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-    const identityPrefix = `${prefix}.testIdentities[${index}]`
-    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
-      errors.push(`${identityPrefix} must be an object.`)
-      continue
-    }
-    requiredString(identity, 'name', errors, identityPrefix)
-    if (identity.suite !== undefined && identity.suite !== null && typeof identity.suite !== 'string') {
-      errors.push(`${identityPrefix}.suite must be a string or null when present.`)
-    }
-    optionalAbsolutePath(identity, 'file', errors, identityPrefix)
-  }
-}
-
-function requiredCommand (target, field, errors, prefix = '', options = {}) {
-  const value = target && target[field]
-  const key = join(prefix, field)
-  if (!value || typeof value !== 'object') {
-    errors.push(`${key} must be an object.`)
-    return
-  }
-  for (const name of Object.keys(value)) {
-    if (!COMMAND_FIELDS.has(name)) errors.push(`${key}.${name} is not an allowed command field.`)
-  }
-  if (value.usesShell !== undefined && typeof value.usesShell !== 'boolean') {
-    errors.push(`${key}.usesShell must be a boolean when present.`)
-  }
-  if (value.required !== undefined && typeof value.required !== 'boolean') {
-    errors.push(`${key}.required must be a boolean when present.`)
-  }
-  requiredAbsolutePath(value, 'cwd', errors, key)
-  rejectUnresolvedPlaceholder(value.cwd, `${key}.cwd`, errors)
-  if (value.shell !== undefined) {
-    requiredString(value, 'shell', errors, key)
-    rejectUnresolvedPlaceholder(value.shell, `${key}.shell`, errors)
-    if (!value.usesShell) errors.push(`${key}.shell requires usesShell to be true.`)
-    if (typeof value.shell === 'string' && hasUnsafeExecutionCharacter(value.shell)) {
-      errors.push(`${key}.shell must not contain invisible or control characters.`)
-    }
-  }
-  if (value.usesShell) {
-    requiredString(value, 'shellCommand', errors, key)
-    rejectUnresolvedPlaceholder(value.shellCommand, `${key}.shellCommand`, errors)
-    if (typeof value.shellCommand === 'string' && hasUnsafeInvisibleCharacter(value.shellCommand)) {
-      errors.push(`${key}.shellCommand must not contain invisible or control characters.`)
-    } else if (typeof value.shellCommand === 'string' && sanitizeString(value.shellCommand) !== value.shellCommand) {
-      errors.push(`${key}.shellCommand must not contain inline secret-like values. Put safe placeholders in env.`)
-    }
-  } else if (!Array.isArray(value.argv) || value.argv.length === 0) {
-    errors.push(`${key}.argv must be a non-empty array unless usesShell is true.`)
+  if (!isObject(ciWiring.transport) || !TRANSPORT_MODES.has(ciWiring.transport.mode)) {
+    errors.push(`${prefix}.transport.mode must be agent, agentless, none, or unknown.`)
   } else {
-    validateStringArray(value, 'argv', errors, key)
-    for (const [index, arg] of value.argv.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-      rejectUnresolvedPlaceholder(arg, `${key}.argv[${index}]`, errors)
-    }
-    if (value.argv.some(hasUnsafeExecutionCharacter)) {
-      errors.push(`${key}.argv must not contain invisible or control characters.`)
-    } else if (JSON.stringify(sanitizeForReport(value.argv)) !== JSON.stringify(value.argv)) {
-      errors.push(`${key}.argv must not contain inline secret-like values. Put safe placeholders in env.`)
-    }
+    validateStringArray(ciWiring.transport.evidence, `${prefix}.transport.evidence`, errors)
   }
-  if (value.env !== undefined) {
-    if (!value.env || typeof value.env !== 'object' || Array.isArray(value.env)) {
-      errors.push(`${key}.env must be an object when present.`)
-    } else {
-      const environmentEntries = Object.entries(value.env)
-      if (environmentEntries.length > MAX_MANIFEST_ARRAY_ENTRIES) {
-        errors.push(`${key}.env must contain at most ${MAX_MANIFEST_ARRAY_ENTRIES} entries.`)
-      }
-      for (const [name, envValue] of environmentEntries.slice(0, MAX_MANIFEST_ARRAY_ENTRIES)) {
-        if (!ENV_NAME_PATTERN.test(name)) {
-          errors.push(`${key}.env contains invalid variable name ${JSON.stringify(name)}.`)
-        }
-        if (typeof envValue !== 'string') errors.push(`${key}.env.${name} must be a string.`)
-        const validatePlaceholder = !(options.datadogClean && name.startsWith('DD_'))
-        if (typeof envValue === 'string' && hasUnsafeExecutionCharacter(envValue)) {
-          errors.push(`${key}.env.${name} must not contain invisible or control characters.`)
-        } else if (validatePlaceholder && typeof envValue === 'string' && containsSecretValue(name, envValue) &&
-          envValue !== SECRET_PLACEHOLDER) {
-          errors.push(`${key}.env.${name} must use the safe placeholder ${JSON.stringify(SECRET_PLACEHOLDER)}.`)
-        }
-        rejectUnresolvedPlaceholder(envValue, `${key}.env.${name}`, errors)
-      }
+}
+
+/**
+ * Rejects execution-shaped keys anywhere in a data object.
+ *
+ * @param {object} value object to inspect
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @param {Set<string>} [allowed] explicitly inert keys
+ * @returns {void}
+ */
+function rejectExecutionFields (value, prefix, errors, allowed = new Set()) {
+  if (!isObject(value)) return
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_EXECUTION_FIELDS.has(key) && !allowed.has(key)) {
+      errors.push(`${prefix}.${key} is not supported. Executable commands are validator-owned.`)
     }
   }
-  if (value.requiredEnvVars !== undefined) {
-    if (Array.isArray(value.requiredEnvVars)) {
-      validateArrayLimit(value, 'requiredEnvVars', MAX_MANIFEST_ARRAY_ENTRIES, errors, key)
-      for (const [index] of value.requiredEnvVars.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-        requiredString(value.requiredEnvVars, index, errors, `${key}.requiredEnvVars`)
-      }
-    } else {
-      errors.push(`${key}.requiredEnvVars must be an array when present.`)
+}
+
+/**
+ * Claims a generated path for one framework.
+ *
+ * @param {string} filename generated path
+ * @param {string} owner framework id
+ * @param {string} prefix error prefix
+ * @param {Map<string, string>} generatedPaths previously claimed paths
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function claimGeneratedPath (filename, owner, prefix, generatedPaths, errors) {
+  if (typeof filename !== 'string' || !path.isAbsolute(filename)) return
+  const normalized = path.normalize(filename)
+  const previousOwner = generatedPaths.get(normalized)
+  if (previousOwner !== undefined && previousOwner !== owner) {
+    errors.push(`${prefix} conflicts with another framework's generated or cleanup path.`)
+  }
+  generatedPaths.set(normalized, owner)
+}
+
+/**
+ * Validates every string in a bounded object graph.
+ *
+ * @param {unknown} value current value
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void, full: function(): boolean}} errors error collector
+ * @returns {void}
+ */
+function validateAllStrings (value, prefix, errors) {
+  if (errors.full()) return
+  if (typeof value === 'string') {
+    if (Buffer.byteLength(value) > MAX_STRING_BYTES) errors.push(`${prefix} exceeds the string size limit.`)
+    const inertCiLabel = /\.ciWiring\.(?:job|step)$/.test(prefix)
+    const text = inertCiLabel ? value.replaceAll(/[\uFE0E\uFE0F]/g, '') : value
+    if (hasUnsafeInvisibleCharacter(text)) errors.push(`${prefix} contains an unsafe invisible character.`)
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.slice(0, MAX_ARRAY_ENTRIES).entries()) {
+      validateAllStrings(item, `${prefix}[${index}]`, errors)
     }
+    return
   }
-  optionalAbsolutePathArray(value, 'outputPaths', errors, key)
-  if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {
-    errors.push(`${key}.timeoutMs must be a positive number when present.`)
-  } else if (value.timeoutMs > MAX_COMMAND_TIMEOUT_MS) {
-    errors.push(`${key}.timeoutMs must not exceed ${MAX_COMMAND_TIMEOUT_MS} ms.`)
+  if (isObject(value)) {
+    for (const [key, item] of Object.entries(value)) validateAllStrings(item, `${prefix}.${key}`, errors)
   }
 }
 
-function containsSecretValue (name, value) {
-  if (SAFE_SECRET_FIELD_VALUES.has(value.toLowerCase())) return false
-  return isSensitiveName(name) || sanitizeString(value) !== value
+/**
+ * Validates a required object.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function requiredObject (object, field, prefix, errors) {
+  if (!isObject(object[field])) errors.push(`${prefix}.${field} must be an object.`)
 }
 
-function rejectUnresolvedPlaceholder (value, key, errors) {
-  if (typeof value !== 'string' || !UNRESOLVED_PLACEHOLDER_PATTERN.test(value)) return
-  errors.push(`${key} contains an unresolved placeholder. Resolve it before live validation.`)
+/**
+ * Validates a required array.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function requiredArray (object, field, prefix, errors) {
+  if (!Array.isArray(object[field])) errors.push(`${prefix}.${field} must be an array.`)
 }
 
-function requiredObject (target, field, errors, prefix = '') {
-  const value = target && target[field]
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    errors.push(`${join(prefix, field)} must be an object.`)
+/**
+ * Validates a required string.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function requiredString (object, field, prefix, errors) {
+  if (typeof object?.[field] !== 'string' || object[field].trim() === '') {
+    errors.push(`${prefix}.${field} must be a non-empty string.`)
   }
 }
 
-function requiredArray (target, field, errors, prefix = '') {
-  if (!Array.isArray(target && target[field])) {
-    errors.push(`${join(prefix, field)} must be an array.`)
+/**
+ * Validates an enum string.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {Set<string>} values accepted values
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function enumString (object, field, values, prefix, errors) {
+  if (!values.has(object?.[field])) {
+    errors.push(`${prefix}.${field} must be one of: ${[...values].join(', ')}.`)
   }
 }
 
-function requiredString (target, field, errors, prefix = '') {
-  if (typeof (target && target[field]) !== 'string' || target[field].length === 0) {
-    errors.push(`${join(prefix, field)} must be a non-empty string.`)
+/**
+ * Validates a required absolute path.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function requiredAbsolutePath (object, field, prefix, errors) {
+  absolutePathValue(object?.[field], `${prefix}.${field}`, errors)
+}
+
+/**
+ * Validates an absolute path value.
+ *
+ * @param {unknown} value path value
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function absolutePathValue (value, prefix, errors) {
+  if (typeof value !== 'string' || !path.isAbsolute(value)) errors.push(`${prefix} must be an absolute path.`)
+}
+
+/**
+ * Validates an optional nullable absolute path.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function optionalAbsolutePathOrNull (object, field, prefix, errors) {
+  if (object[field] !== null && object[field] !== undefined &&
+    (typeof object[field] !== 'string' || !path.isAbsolute(object[field]))) {
+    errors.push(`${prefix}.${field} must be an absolute path or null.`)
   }
 }
 
-function enumString (target, field, values, errors, prefix = '') {
-  if (!values.has(target && target[field])) {
-    errors.push(`${join(prefix, field)} must be one of: ${[...values].join(', ')}.`)
+/**
+ * Validates an optional nullable string.
+ *
+ * @param {object} object parent object
+ * @param {string} field field name
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function optionalStringOrNull (object, field, prefix, errors) {
+  if (object[field] !== null && object[field] !== undefined && typeof object[field] !== 'string') {
+    errors.push(`${prefix}.${field} must be a string or null.`)
   }
 }
 
-function requiredAbsolutePath (target, field, errors, prefix = '') {
-  const value = target && target[field]
-  if (typeof value !== 'string' || !path.isAbsolute(value)) {
-    errors.push(`${join(prefix, field)} must be an absolute path.`)
-  } else if (hasUnsafeExecutionCharacter(value)) {
-    errors.push(`${join(prefix, field)} must not contain invisible or control characters.`)
-  }
-}
-
-function optionalAbsolutePath (target, field, errors, prefix = '') {
-  const value = target && target[field]
-  if (value === undefined || value === null) return
-  if (typeof value !== 'string' || !path.isAbsolute(value)) {
-    errors.push(`${join(prefix, field)} must be an absolute path when present.`)
-  } else if (hasUnsafeExecutionCharacter(value)) {
-    errors.push(`${join(prefix, field)} must not contain invisible or control characters.`)
-  }
-}
-
-function optionalAbsolutePathArray (target, field, errors, prefix = '') {
-  const value = target && target[field]
+/**
+ * Validates a string array when present.
+ *
+ * @param {unknown} value array value
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function validateStringArray (value, prefix, errors) {
   if (value === undefined) return
   if (!Array.isArray(value)) {
-    errors.push(`${join(prefix, field)} must be an array when present.`)
+    errors.push(`${prefix} must be an array of strings.`)
     return
   }
-
-  validateArrayLimit(target, field, MAX_MANIFEST_ARRAY_ENTRIES, errors, prefix)
-  for (const [index, item] of value.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-    if (typeof item !== 'string' || !path.isAbsolute(item)) {
-      errors.push(`${join(prefix, field)}[${index}] must be an absolute path.`)
-    } else if (hasUnsafeExecutionCharacter(item)) {
-      errors.push(`${join(prefix, field)}[${index}] must not contain invisible or control characters.`)
-    }
+  if (value.length > MAX_ARRAY_ENTRIES) errors.push(`${prefix} must contain at most ${MAX_ARRAY_ENTRIES} entries.`)
+  if (value.slice(0, MAX_ARRAY_ENTRIES).some(item => typeof item !== 'string')) {
+    errors.push(`${prefix} must contain only strings.`)
   }
 }
 
-function validateStringArray (target, field, errors, prefix = '') {
-  const value = target && target[field]
-  if (!Array.isArray(value)) return
-
-  validateArrayLimit(target, field, MAX_MANIFEST_ARRAY_ENTRIES, errors, prefix)
-  for (const [index, item] of value.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
-    if (typeof item !== 'string') {
-      errors.push(`${join(prefix, field)}[${index}] must be a string.`)
-    }
+/**
+ * Checks lexical repository containment.
+ *
+ * @param {string} root repository root
+ * @param {unknown} filename candidate path
+ * @param {string} prefix error prefix
+ * @param {{push: function(string): void}} errors error collector
+ * @returns {void}
+ */
+function containedPath (root, filename, prefix, errors) {
+  if (typeof root !== 'string' || !path.isAbsolute(root) ||
+    typeof filename !== 'string' || !path.isAbsolute(filename)) return
+  const relative = path.relative(path.resolve(root), path.resolve(filename))
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    errors.push(`${prefix} must be inside repository.root.`)
   }
 }
 
-function validateArrayLimit (target, field, limit, errors, prefix = '') {
-  const value = target && target[field]
-  if (Array.isArray(value) && value.length > limit) {
-    errors.push(`${join(prefix, field)} must contain at most ${limit} entries.`)
-  }
+/**
+ * Returns whether a value is a plain object.
+ *
+ * @param {unknown} value candidate value
+ * @returns {boolean} whether the value is an object
+ */
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function limitedArray (value, limit) {
-  return Array.isArray(value) ? value.slice(0, limit) : []
-}
-
+/**
+ * Creates a bounded error collector.
+ *
+ * @returns {{push: function(string): void, full: function(): boolean, finalize: function(): string[]}} collector
+ */
 function createErrorCollector () {
   const errors = []
-  let omitted = 0
-  Object.defineProperties(errors, {
-    push: {
-      value (...messages) {
-        for (const message of messages) {
-          if (this.length < MAX_VALIDATION_ERRORS - 1) {
-            Array.prototype.push.call(this, message)
-          } else {
-            omitted++
-          }
-        }
-        return this.length
-      },
+  let omitted = false
+  return {
+    push (message) {
+      if (errors.length < MAX_VALIDATION_ERRORS) {
+        errors.push(sanitizeString(message))
+      } else {
+        omitted = true
+      }
     },
-    finalize: {
-      value () {
-        if (omitted > 0) {
-          Array.prototype.push.call(this, `${omitted} additional validation error(s) omitted.`)
-        }
-        return this
-      },
+    full () {
+      return errors.length >= MAX_VALIDATION_ERRORS
     },
-  })
-  return errors
+    finalize () {
+      if (omitted) errors.push('Additional validation errors were omitted.')
+      return errors
+    },
+  }
 }
 
-function join (prefix, field) {
-  return prefix ? `${prefix}.${field}` : field
-}
-
-module.exports = {
-  MAX_FRAMEWORKS,
-  MAX_REPRESENTATIVE_TESTS,
-  MAX_VALIDATION_ERRORS,
-  validateManifest,
-}
+module.exports = { validateManifest }

@@ -14,6 +14,7 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -612,6 +613,41 @@ describe('Config', () => {
           `Expected alias value to be excluded from telemetry, got ${entry.name}=${value}`
         )
       }
+    })
+  })
+
+  describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
+    // RFC-1113: reported verbatim in configuration telemetry, always emitted
+    // (empty value with origin=default when unset). No effect on tracer behavior.
+    it('should default to an empty string and report it with origin=default when unset', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, '')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: '', origin: 'default' },
+      ])
+    })
+
+    it('should report the value verbatim with origin=env_var when set to true', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'true')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'true', origin: 'env_var' },
+      ])
+    })
+
+    it('should report an arbitrary value verbatim rather than collapsing to a boolean', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'false')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'false', origin: 'env_var' },
+      ])
     })
   })
 
@@ -2769,6 +2805,7 @@ describe('Config', () => {
       },
       rateLimit: 42,
       rules: RULES_JSON_PATH,
+      DD_APPSEC_AGENTIC_ONBOARDING: '',
       DD_APPSEC_SCA_ENABLED: undefined,
       stackTrace: {
         enabled: true,
@@ -2989,6 +3026,34 @@ describe('Config', () => {
       },
     })
   })
+
+  for (const exporter of [
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable telemetry by default for the ${exporter} Test Optimization worker`, () => {
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+
+    it(`should ignore explicit telemetry enablement in the ${exporter} Test Optimization worker`, () => {
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
+    })
+  }
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
     const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
@@ -3532,6 +3597,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3659,6 +3725,15 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
+      it('should leave the Test Management report setting unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, undefined)
+      })
+      it('should disable the Test Management report from the environment', () => {
+        process.env.DD_TEST_MANAGEMENT_REPORT_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_MANAGEMENT_REPORT_ENABLED, false)
+      })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
         const config = getConfig(options)
@@ -3723,12 +3798,6 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
         assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
-    })
-
-    it('disables telemetry if inside a jest worker', () => {
-      process.env.JEST_WORKER_ID = '1'
-      const config = getConfig(options)
-      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
 
@@ -4707,6 +4776,11 @@ rules:
       ])
     })
 
+    it('collapses only whitespace adjacent to a colon in header tags', () => {
+      const config = getConfig({ headerTags: ['  a : b  ', 'k : : v'] })
+      assert.deepStrictEqual(config.headerTags, ['  a:b  ', 'k::v'])
+    })
+
     it('should map tracing_tags to tags', () => {
       const config = getConfig({ tags: { foo: 'bar' } })
       assertObjectContains(config.tags, { foo: 'bar' })
@@ -5034,16 +5108,26 @@ rules:
           expected: { enabled: true, source: 'remote_config' },
         },
         {
-          name: 'falls back from an invalid source to legacy enablement',
+          name: 'disables the provider for an invalid source',
           source: 'other',
-          legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: false },
         },
         {
-          name: 'falls back from the reserved offline source to legacy enablement',
+          name: 'disables the provider for the reserved offline source',
+          source: 'offline',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for an invalid source despite legacy enablement',
+          source: 'other',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+        {
+          name: 'disables the provider for the reserved offline source despite legacy enablement',
           source: 'offline',
           legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: false },
         },
       ]) {
       it(name, () => {
@@ -5069,27 +5153,48 @@ rules:
       })
     }
 
-    it('falls back from an invalid source through calculated legacy precedence', () => {
+    it('disables an explicit unsupported source while preserving diagnostic context', () => {
       process.env.DD_FEATURE_FLAGS_ENABLED = 'true'
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
       process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
 
       const config = getConfig()
+      const warning = 'Unsupported Feature Flagging configuration source: ' +
+        "'offline' for DD_FEATURE_FLAGS_CONFIGURATION_SOURCE (source: env_var), provider disabled"
 
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
       assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
-      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'env_var')
-      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
       assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
-        { name: 'DD_FEATURE_FLAGS_ENABLED', value: true, origin: 'env_var' },
-        { name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', value: 'remote_config', origin: 'calculated' },
+        { name: 'DD_FEATURE_FLAGS_ENABLED', value: false, origin: 'calculated' },
+        {
+          name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
+          value: 'offline',
+          origin: 'env_var',
+          error: { message: warning },
+        },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])
+      sinon.assert.calledOnceWithExactly(log.warn, warning)
 
       config.setRemoteConfig({})
 
+      sinon.assert.calledOnce(log.warn)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('does not warn for an unsupported source when the stable kill switch disables the provider', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'false'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
+      sinon.assert.notCalled(log.warn)
       sinon.assert.notCalled(log.error)
     })
 

@@ -1,0 +1,1405 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const { EventEmitter } = require('node:events')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
+const { promisify } = require('node:util')
+
+const MochaTest = require('mocha/lib/test')
+const sinon = require('sinon')
+
+const MochaPlugin = require('../../datadog-plugin-mocha/src')
+const { channel, tracingChannel } = require('../src/helpers/instrument')
+const rewriter = require('../src/helpers/rewriter')
+const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  adjustRunnerFailuresForTestOptimization,
+  efdTests,
+} = require('../src/mocha/utils')
+const {
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_HAS_DYNAMIC_NAME,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_NAME,
+  TEST_STATUS,
+  TEST_SUITE,
+  TEST_SUITE_EXECUTION_ID,
+} = require('../../dd-trace/src/plugins/util/test')
+const {
+  CONFIGURATION_REQUEST,
+  CONFIGURATION_RESPONSE,
+  SUITE_FINISH,
+  WEBDRIVERIO_WORKER_ENV,
+  WORKER_READY,
+} = require('../src/mocha/webdriverio-protocol')
+
+const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
+const delayedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-delayed-worker.js')
+const disconnectedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-disconnected-worker.js')
+const regularMochaWorkerFixturePath = path.join(__dirname, 'fixtures', 'mocha-regular-worker.js')
+const fixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'local-runner',
+  'build',
+  'index.js'
+)
+const jasmineFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-jasmine-framework.mjs')
+const jasmineFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'jasmine-framework',
+  'build',
+  'index.js'
+)
+const launcherFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-launcher.mjs')
+const launcherFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'cli',
+  'build',
+  'index.js'
+)
+const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const utilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils',
+  'build',
+  'index.js'
+)
+const execFileAsync = promisify(execFile)
+
+describe('webdriverio instrumentation', () => {
+  it('rewrites the ESM launcher scheduler', () => {
+    const source = fs.readFileSync(launcherFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, launcherFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/cli:Launcher_startInstance/)
+  })
+
+  it('rewrites the ESM local runner and waits for coordinator shutdown', () => {
+    const source = fs.readFileSync(fixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, fixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_run/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM Jasmine adapter and reporter', () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_init/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineAdapter_run/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_specStarted/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteDone/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/jasmine-framework:JasmineReporter_suiteStarted/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('rewrites the ESM WebdriverIO test-function wrapper', () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+  })
+
+  it('waits for coordinator shutdown before preserving a LocalRunner.shutdown rejection', async () => {
+    const source = fs.readFileSync(fixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, fixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const shutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
+    const shutdownError = new Error('shutdown failed')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('coordinator')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    shutdownCh.subscribe(subscriber)
+
+    try {
+      const { LocalRunner } = await import(pathToFileURL(outputPath))
+      const resultPromise = new LocalRunner().shutdown(shutdownError)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      await assert.rejects(resultPromise, error => {
+        steps.push('rejected')
+        return error === shutdownError
+      })
+      assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator', 'rejected'])
+    } finally {
+      shutdownCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for coordinator readiness before resolving JasmineAdapter.init', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-init-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const initCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.resolveCallback = onDone => {
+          setImmediate(() => {
+            steps.push('coordinator')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    initCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const adapter = new JasmineAdapter([])
+      const resultPromise = adapter.init()
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      assert.strictEqual(await resultPromise, adapter)
+      assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator'])
+    } finally {
+      initCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('waits for Jasmine worker reporting before preserving a JasmineAdapter.run rejection', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const runCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_run')
+    const runError = new Error('Jasmine run failed')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('worker')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    runCh.subscribe(subscriber)
+
+    try {
+      const { JasmineAdapter } = await import(pathToFileURL(outputPath))
+      const resultPromise = new JasmineAdapter([]).run(runError)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      await assert.rejects(resultPromise, error => {
+        steps.push('rejected')
+        return error === runError
+      })
+      assert.deepStrictEqual(steps, ['asyncEnd', 'worker', 'rejected'])
+    } finally {
+      runCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('propagates complete launcher NODE_OPTIONS to worker environments', () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    process.env.NODE_OPTIONS = '--require dd-trace/ci/init'
+
+    function onTestFinish () {}
+
+    testFinishCh.subscribe(onTestFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const cases = [
+        {
+          runnerEnv: undefined,
+          expectedNodeOptions: '--require dd-trace/ci/init',
+        },
+        {
+          runnerEnv: { NODE_OPTIONS: '--require dd-trace/ci/init-custom' },
+          expectedNodeOptions: '--require dd-trace/ci/init --require dd-trace/ci/init-custom',
+        },
+        {
+          runnerEnv: { NODE_OPTIONS: '--no-warnings --require dd-trace/ci/init' },
+          expectedNodeOptions: '--no-warnings --require dd-trace/ci/init',
+        },
+      ]
+
+      for (const { runnerEnv, expectedNodeOptions } of cases) {
+        const localRunner = {
+          config: {
+            framework: 'mocha',
+            runnerEnv,
+          },
+        }
+        const runContext = {
+          self: localRunner,
+          arguments: [{ specs: [] }],
+        }
+
+        tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run').start.publish(runContext)
+
+        assert.deepStrictEqual(localRunner.config.runnerEnv, {
+          NODE_OPTIONS: expectedNodeOptions,
+          MOCHA_WORKER_ID: 'webdriverio',
+          [WEBDRIVERIO_WORKER_ENV]: 'true',
+        })
+      }
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
+    }
+  })
+
+  it('does not send Mocha worker messages over disconnected IPC', async () => {
+    await execFileAsync(process.execPath, [disconnectedWorkerFixturePath])
+  })
+
+  it('waits for worker payloads before completing Mocha', async () => {
+    await execFileAsync(process.execPath, [delayedWorkerFixturePath])
+  })
+
+  it('does not track WebdriverIO hook failures in regular Mocha workers', async () => {
+    await execFileAsync(process.execPath, [regularMochaWorkerFixturePath])
+  })
+
+  it('configures the Mocha worker plugin with the WebdriverIO framework', () => {
+    const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+    plugin.configure({ enabled: true })
+
+    try {
+      channel('ci:mocha:worker:configuration').publish({
+        libraryConfig: {},
+        repositoryRoot: process.cwd(),
+        testFramework: 'webdriverio',
+        testFrameworkAdapter: 'mocha',
+      })
+
+      assert.strictEqual(plugin.testFramework, 'webdriverio')
+      assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('keeps Jasmine suite results reported before basic-reporting configuration completes', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const modifiedFilesCh = channel('ci:mocha:modified-files')
+    const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const sessionStarts = []
+    const sessionFinishes = []
+    const suiteErrors = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    let advancedFeatureRequests = 0
+    let configurationRequests = 0
+    let finishConfiguration
+
+    function onTestFinish () {}
+    function onAdvancedFeatureRequest () {
+      advancedFeatureRequests++
+    }
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      assert.strictEqual(request.basicReportingOnly, true)
+      assert.strictEqual(request.disableTestImpactAnalysis, true)
+      assert.strictEqual(request.testFramework, 'webdriverio')
+      finishConfiguration = () => request.onDone({
+        libraryConfig: {},
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteError (event) {
+      suiteErrors.push(event.error)
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onAdvancedFeatureRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    modifiedFilesCh.subscribe(onAdvancedFeatureRequest)
+    testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteErrorCh.subscribe(onSuiteError)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'jasmine',
+          rootDir: process.cwd(),
+        },
+      }
+      const failedFile = path.join(process.cwd(), 'jasmine-failed.spec.js')
+      const passedFile = path.join(process.cwd(), 'jasmine-passed.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, [failedFile, passedFile])
+      worker.emit('message', {
+        name: WORKER_READY,
+        content: { testFrameworkAdapter: 'jasmine' },
+      })
+
+      reportSuiteFinish(worker, failedFile, 'fail', {
+        message: 'expected Jasmine suite failure',
+        stack: 'Error: expected Jasmine suite failure',
+      })
+      reportSuiteFinish(worker, passedFile)
+      assert.ok(finishConfiguration)
+      finishConfiguration()
+      await new Promise(setImmediate)
+
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(advancedFeatureRequests, 0)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
+      assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'jasmine')
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(suiteErrors.length, 1)
+      assert.strictEqual(suiteErrors[0].message, 'expected Jasmine suite failure')
+      assert.strictEqual(suiteErrors[0].stack, 'Error: expected Jasmine suite failure')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [failedFile, passedFile])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['fail', 'pass'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      modifiedFilesCh.unsubscribe(onAdvancedFeatureRequest)
+      testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteErrorCh.unsubscribe(onSuiteError)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
+    }
+  })
+
+  it('keeps failures when all executed EFD attempts fail and unused attempts are pending', () => {
+    const testName = 'mocha.test-suite.test-name'
+    const firstFailure = new MochaTest('first failure', () => {})
+    const secondFailure = new MochaTest('second failure', () => {})
+    const unusedRetry = new MochaTest('unused retry', () => {})
+    firstFailure.state = 'failed'
+    secondFailure.state = 'failed'
+    unusedRetry.pending = true
+    unusedRetry.state = 'pending'
+    efdTests[testName] = [firstFailure, secondFailure, unusedRetry]
+    const runner = {
+      failures: 2,
+      stats: { failures: 2 },
+    }
+
+    try {
+      adjustRunnerFailuresForTestOptimization(runner, { isEarlyFlakeDetectionEnabled: true })
+    } finally {
+      delete efdTests[testName]
+    }
+
+    assert.strictEqual(runner.failures, 2)
+    assert.strictEqual(runner.stats.failures, 2)
+  })
+
+  it('coordinates two Mocha workers under one session', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const modifiedFilesCh = channel('ci:mocha:modified-files')
+    const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
+    const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
+    const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
+
+    const sessionStarts = []
+    const sessionFinishes = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    const workerLogPayloads = []
+    const workerTelemetryPayloads = []
+    const workerTracePayloads = []
+    let advancedFeatureRequests = 0
+    let configurationRequests = 0
+    let skippableSuiteRequests = 0
+    const consoleWarn = sinon.stub(console, 'warn')
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    process.env.NODE_OPTIONS = '--require dd-trace/ci/init'
+
+    function onTestFinish () {}
+    function onKnownTestsRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({
+        knownTests: {
+          webdriverio: {
+            'first.spec.js': ['first test'],
+          },
+        },
+      })
+    }
+    function onModifiedFilesRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({
+        modifiedFiles: {
+          'first.spec.js': [1],
+        },
+      })
+    }
+    function onSkippableSuitesRequest (request) {
+      skippableSuiteRequests++
+      request.onDone({})
+    }
+    function onTestManagementTestsRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({
+        testManagementTests: {
+          webdriverio: {
+            suites: {
+              'second.spec.js': {
+                tests: {},
+              },
+            },
+          },
+        },
+      })
+    }
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      assert.strictEqual(request.testFramework, 'webdriverio')
+      assert.strictEqual(request.disableTestImpactAnalysis, true)
+      request.onDone({
+        isTestDynamicInstrumentationEnabled: true,
+        libraryConfig: {
+          earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
+          earlyFlakeDetectionFaultyThreshold: 30,
+          flakyTestRetriesCount: 5,
+          isCodeCoverageEnabled: true,
+          isCoverageReportUploadEnabled: true,
+          isDiEnabled: true,
+          isEarlyFlakeDetectionEnabled: true,
+          isFlakyTestRetriesEnabled: true,
+          isImpactedTestsEnabled: true,
+          isItrEnabled: true,
+          isKnownTestsEnabled: true,
+          isSuitesSkippingEnabled: true,
+          isTestManagementEnabled: true,
+          testManagementAttemptToFixRetries: 5,
+        },
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+    function onWorkerTrace (event) {
+      workerTracePayloads.push(event)
+    }
+    function onWorkerLogs (event) {
+      workerLogPayloads.push(event)
+    }
+    function onWorkerTelemetry (event) {
+      workerTelemetryPayloads.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onKnownTestsRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    modifiedFilesCh.subscribe(onModifiedFilesRequest)
+    skippableSuitesCh.subscribe(onSkippableSuitesRequest)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+    testManagementTestsCh.subscribe(onTestManagementTestsRequest)
+    workerReportLogsCh.subscribe(onWorkerLogs)
+    workerReportTelemetryCh.subscribe(onWorkerTelemetry)
+    workerReportTraceCh.subscribe(onWorkerTrace)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        _config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+          runnerEnv: {
+            NODE_OPTIONS: '--no-warnings',
+            USER_ENV: 'preserved',
+          },
+        },
+      }
+      const firstFile = path.join(process.cwd(), 'first.spec.js')
+      const secondFile = path.join(process.cwd(), 'second.spec.js')
+      const firstWorker = createWorker()
+      const secondWorker = createWorker()
+
+      registerWorker(localRunner, firstWorker, firstFile)
+      registerWorker(localRunner, secondWorker, secondFile)
+
+      assert.deepStrictEqual(localRunner._config.runnerEnv, {
+        USER_ENV: 'preserved',
+        NODE_OPTIONS: '--require dd-trace/ci/init --no-warnings',
+        MOCHA_WORKER_ID: 'webdriverio',
+        [WEBDRIVERIO_WORKER_ENV]: 'true',
+      })
+
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: {
+          name: WORKER_READY,
+          content: { frameworkVersion: '10.8.2' },
+        },
+      })
+      secondWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: {
+          name: WORKER_READY,
+          content: { frameworkVersion: '10.8.2' },
+        },
+      })
+      await new Promise(setImmediate)
+
+      requestConfiguration(firstWorker, firstFile, 'first-request')
+      requestConfiguration(secondWorker, secondFile, 'second-request')
+      await new Promise(setImmediate)
+
+      const firstTrace = JSON.stringify([[{
+        meta: {
+          [TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]: 'true',
+          [TEST_NAME]: 'first test',
+          [TEST_STATUS]: 'fail',
+          [TEST_SUITE]: 'first.spec.js',
+        },
+      }]])
+      const secondTrace = JSON.stringify([[{
+        meta: {
+          [TEST_HAS_DYNAMIC_NAME]: 'true',
+          [TEST_NAME]: 'dynamic 12345678',
+          [TEST_SUITE]: 'second.spec.js',
+        },
+      }]])
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, firstTrace],
+      })
+      secondWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, secondTrace],
+      })
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, 'first-logs'],
+      })
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, 'first-telemetry'],
+      })
+
+      assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
+      assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
+      assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
+      assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
+      assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
+        earlyFlakeDetectionFaultyThreshold: 30,
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
+        flakyTestRetriesCount: 5,
+        isCodeCoverageEnabled: false,
+        isCoverageReportUploadEnabled: false,
+        isDiEnabled: true,
+        isEarlyFlakeDetectionEnabled: true,
+        isFlakyTestRetriesEnabled: true,
+        isImpactedTestsEnabled: true,
+        isItrEnabled: false,
+        isKnownTestsEnabled: true,
+        isSuitesSkippingEnabled: false,
+        isTestDynamicInstrumentationEnabled: true,
+        isTestManagementTestsEnabled: true,
+        knownTests: {
+          mocha: {
+            'first.spec.js': ['first test'],
+          },
+        },
+        modifiedFiles: {
+          'first.spec.js': [1],
+        },
+        repositoryRoot: process.cwd(),
+        testFramework: 'webdriverio',
+        testManagementAttemptToFixRetries: 5,
+        testManagementTests: {
+          mocha: {
+            suites: {
+              'second.spec.js': {
+                tests: {},
+              },
+            },
+          },
+        },
+      })
+
+      reportSuiteFinish(firstWorker, firstFile, 'fail')
+      reportSuiteFinish(secondWorker, secondFile)
+      firstWorker.emit('exit', { exitCode: 1, retries: 1 })
+      secondWorker.emit('exit', { exitCode: 0, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(advancedFeatureRequests, 3)
+      assert.strictEqual(skippableSuiteRequests, 0)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
+      assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'mocha')
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'pass')
+      assert.strictEqual(sessionFinishes[0].isParallel, true)
+      assert.strictEqual(sessionFinishes[0].isEarlyFlakeDetectionEnabled, true)
+      assert.strictEqual(sessionFinishes[0].isTestManagementEnabled, true)
+      assert.strictEqual(sessionFinishes[0].isSuitesSkipped, false)
+      assert.deepStrictEqual(suiteStarts.map(({ testSuiteAbsolutePath }) => testSuiteAbsolutePath), [
+        firstFile,
+        secondFile,
+      ])
+      assert.strictEqual(new Set(suiteStarts.map(({ testSuiteExecutionId }) => testSuiteExecutionId)).size, 2)
+      assert.deepStrictEqual(workerTracePayloads, [
+        {
+          traces: firstTrace,
+          [TEST_SUITE_EXECUTION_ID]: suiteStarts[0].testSuiteExecutionId,
+        },
+        {
+          traces: secondTrace,
+          [TEST_SUITE_EXECUTION_ID]: suiteStarts[1].testSuiteExecutionId,
+        },
+      ])
+      assert.deepStrictEqual(workerLogPayloads, ['first-logs'])
+      assert.deepStrictEqual(workerTelemetryPayloads, ['first-telemetry'])
+      assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
+      assert.strictEqual(consoleWarn.callCount, 1)
+      assert.match(consoleWarn.firstCall.args[0], /Attempt to fix failed/)
+      assert.match(consoleWarn.firstCall.args[0], /second\.spec\.js › dynamic 12345678/)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onKnownTestsRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      modifiedFilesCh.unsubscribe(onModifiedFilesRequest)
+      skippableSuitesCh.unsubscribe(onSkippableSuitesRequest)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
+      testManagementTestsCh.unsubscribe(onTestManagementTestsRequest)
+      workerReportLogsCh.unsubscribe(onWorkerLogs)
+      workerReportTelemetryCh.unsubscribe(onWorkerTelemetry)
+      workerReportTraceCh.unsubscribe(onWorkerTrace)
+      consoleWarn.restore()
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
+    }
+  })
+
+  it('scopes test management summaries to each coordinator', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const consoleWarn = sinon.stub(console, 'warn')
+    const runs = [
+      {
+        file: path.join(process.cwd(), 'first.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'first test',
+        worker: createWorker(),
+      },
+      {
+        file: path.join(process.cwd(), 'second.spec.js'),
+        localRunner: { config: { framework: 'mocha', rootDir: process.cwd() } },
+        testName: 'second test',
+        worker: createWorker(),
+      },
+    ]
+
+    function onTestFinish () {}
+
+    testFinishCh.subscribe(onTestFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      for (let index = 0; index < runs.length; index++) {
+        const { file, localRunner, worker } = runs[index]
+        registerWorker(localRunner, worker, file)
+        requestConfiguration(worker, file, `request-${index}`)
+      }
+      await new Promise(setImmediate)
+
+      for (const { file, testName, worker } of runs) {
+        worker.emit('message', [
+          MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+          JSON.stringify([[{
+            meta: {
+              [TEST_MANAGEMENT_IS_QUARANTINED]: 'true',
+              [TEST_NAME]: testName,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: path.basename(file),
+            },
+          }]]),
+        ])
+        worker.emit('exit', { exitCode: 0, retries: 0 })
+      }
+
+      await finishLocalRunner(runs[0].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 1)
+      assert.match(consoleWarn.firstCall.args[0], /first\.spec\.js › first test/)
+      assert.doesNotMatch(consoleWarn.firstCall.args[0], /second\.spec\.js › second test/)
+
+      await finishLocalRunner(runs[1].localRunner)
+
+      assert.strictEqual(consoleWarn.callCount, 2)
+      assert.match(consoleWarn.secondCall.args[0], /second\.spec\.js › second test/)
+      assert.doesNotMatch(consoleWarn.secondCall.args[0], /first\.spec\.js › first test/)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      consoleWarn.restore()
+    }
+  })
+
+  it('uses the resolved launcher schedule before configuring the first lazy worker', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const knownFile = path.join(process.cwd(), 'root-known.spec.js')
+    const currentNewFile = path.join(process.cwd(), 'current-new.spec.js')
+    const futureNewFile = path.join(process.cwd(), 'future-new.spec.js')
+
+    function onTestFinish () {}
+    function onKnownTestsRequest (request) {
+      request.onDone({
+        knownTests: {
+          webdriverio: {
+            'root-known.spec.js': ['known test'],
+          },
+        },
+      })
+    }
+    function onLibraryConfiguration (request) {
+      request.onDone({
+        libraryConfig: {
+          earlyFlakeDetectionFaultyThreshold: 1,
+          isEarlyFlakeDetectionEnabled: true,
+          isKnownTestsEnabled: true,
+        },
+        repositoryRoot: process.cwd(),
+      })
+    }
+    function onSessionFinish (event) {
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onKnownTestsRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const launcher = {
+        runner: localRunner,
+        _schedule: [{
+          specs: [{ files: [futureNewFile] }],
+        }],
+      }
+      tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance').start.publish({
+        self: launcher,
+        arguments: [[knownFile, currentNewFile]],
+      })
+
+      const worker = createWorker()
+      registerWorker(localRunner, worker, [knownFile, currentNewFile])
+      requestConfiguration(worker, [knownFile, currentNewFile], 'first-request')
+      await new Promise(setImmediate)
+
+      const { configuration } = worker.sentMessages[0].content
+      assert.strictEqual(configuration.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(configuration.isEarlyFlakeDetectionFaulty, true)
+      assert.strictEqual(configuration.isKnownTestsEnabled, false)
+
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onKnownTestsRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('uses the worker suite-name root when evaluating EFD faultiness', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const knownFile = path.join(process.cwd(), 'known.spec.js')
+
+    function onTestFinish () {}
+    function onKnownTestsRequest (request) {
+      request.onDone({
+        knownTests: {
+          webdriverio: {
+            'known.spec.js': ['known test'],
+          },
+        },
+      })
+    }
+    function onLibraryConfiguration (request) {
+      request.onDone({
+        libraryConfig: {
+          earlyFlakeDetectionFaultyThreshold: 0,
+          isEarlyFlakeDetectionEnabled: true,
+          isKnownTestsEnabled: true,
+        },
+        repositoryRoot: path.dirname(process.cwd()),
+      })
+    }
+    function onSessionFinish (event) {
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onKnownTestsRequest)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, knownFile)
+      requestConfiguration(worker, knownFile, 'first-request')
+      await new Promise(setImmediate)
+
+      const { configuration } = worker.sentMessages[0].content
+      assert.strictEqual(configuration.isEarlyFlakeDetectionEnabled, true)
+      assert.strictEqual(configuration.isEarlyFlakeDetectionFaulty, undefined)
+      assert.strictEqual(configuration.isKnownTestsEnabled, true)
+
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onKnownTestsRequest)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('fails a terminal worker exit without marking sequential workers as parallel', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const firstFile = path.join(process.cwd(), 'first.spec.js')
+      const secondFile = path.join(process.cwd(), 'second.spec.js')
+      const firstWorker = createWorker()
+      const secondWorker = createWorker()
+
+      registerWorker(localRunner, firstWorker, firstFile)
+      requestConfiguration(firstWorker, firstFile, 'first-request')
+      reportSuiteFinish(firstWorker, firstFile)
+      firstWorker.emit('exit', { exitCode: 0, retries: 0 })
+
+      registerWorker(localRunner, secondWorker, secondFile)
+      requestConfiguration(secondWorker, secondFile, 'second-request')
+      reportSuiteFinish(secondWorker, secondFile)
+      secondWorker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports a worker failure before Mocha loads', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionStarts = []
+    const sessionFinishes = []
+    let configurationRequests = 0
+
+    function onTestFinish () {}
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      setImmediate(() => request.onDone({ repositoryRoot: process.cwd() }))
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, path.join(process.cwd(), 'first.spec.js'))
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].frameworkVersion, undefined)
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports a suite that fails after Mocha loads but before requesting configuration', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const sessionFinishes = []
+    const suiteStarts = []
+    const suiteFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'load-fail.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      worker.emit('message', {
+        name: WORKER_READY,
+        content: { frameworkVersion: '10.8.2' },
+      })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [file])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['fail'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
+    }
+  })
+
+  it('reports LocalRunner.run rejections before a worker exists', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    const runError = new Error('worker spawn failed')
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const runContext = {
+        self: localRunner,
+        arguments: [{ specs: [path.join(process.cwd(), 'first.spec.js')] }],
+      }
+      const runCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
+
+      runCh.start.publish(runContext)
+      runContext.error = runError
+      runCh.asyncEnd.publish(runContext)
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].error, runError)
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports LocalRunner.shutdown rejections after coordinator completion', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    const shutdownError = new Error('shutdown failed')
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const runContext = {
+        self: localRunner,
+        arguments: [{ specs: [] }],
+      }
+
+      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run').start.publish(runContext)
+      await finishLocalRunner(localRunner, shutdownError)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].error, shutdownError)
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('waits for in-flight coordinator initialization during shutdown', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    let completeConfiguration
+
+    function onTestFinish () {}
+    function onLibraryConfiguration (request) {
+      completeConfiguration = request.onDone
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, path.join(process.cwd(), 'first.spec.js'))
+      worker.emit('message', { name: WORKER_READY })
+
+      const shutdownPromise = finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 0)
+      completeConfiguration({ repositoryRoot: process.cwd() })
+      await shutdownPromise
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'skip')
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+})
+
+/**
+ * Creates a fake WebdriverIO worker instance.
+ *
+ * @returns {EventEmitter & {childProcess: object, sentMessages: object[]}}
+ */
+function createWorker () {
+  const worker = new EventEmitter()
+  worker.sentMessages = []
+  worker.childProcess = {
+    connected: true,
+    send (message, onDone) {
+      worker.sentMessages.push(message)
+      onDone?.()
+    },
+  }
+  return worker
+}
+
+/**
+ * Publishes the LocalRunner.run lifecycle for one worker.
+ *
+ * @param {object} localRunner
+ * @param {object} worker
+ * @param {string|string[]} file
+ * @returns {void}
+ */
+function registerWorker (localRunner, worker, file) {
+  const specs = Array.isArray(file) ? file : [file]
+  const context = {
+    self: localRunner,
+    arguments: [{ specs }],
+  }
+  const runCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
+  runCh.start.publish(context)
+  context.result = worker
+  runCh.asyncEnd.publish(context)
+}
+
+/**
+ * Publishes LocalRunner.shutdown completion and waits for the coordinator callback.
+ *
+ * @param {object} localRunner
+ * @param {unknown} [error]
+ * @returns {Promise<void>}
+ */
+function finishLocalRunner (localRunner, error) {
+  const context = { self: localRunner, error }
+  tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(context)
+  const callback = error ? context.rejectCallback : context.resolveCallback
+  return new Promise(callback)
+}
+
+/**
+ * Requests execution configuration from the coordinator.
+ *
+ * @param {EventEmitter} worker
+ * @param {string|string[]} file
+ * @param {string} requestId
+ * @returns {void}
+ */
+function requestConfiguration (worker, file, requestId) {
+  const files = Array.isArray(file) ? file : [file]
+  worker.emit('message', {
+    origin: 'datadog',
+    name: 'workerEvent',
+    args: {
+      name: CONFIGURATION_REQUEST,
+      content: {
+        files,
+        frameworkVersion: '10.8.2',
+        requestId,
+      },
+    },
+  })
+}
+
+/**
+ * Reports a suite result to the coordinator.
+ *
+ * @param {EventEmitter} worker
+ * @param {string} file
+ * @param {string} [status]
+ * @param {{message?: string, stack?: string}} [error]
+ * @returns {void}
+ */
+function reportSuiteFinish (worker, file, status = 'pass', error) {
+  worker.emit('message', {
+    origin: 'datadog',
+    name: 'workerEvent',
+    args: {
+      name: SUITE_FINISH,
+      content: {
+        results: [{ error, file, status }],
+      },
+    },
+  })
+}

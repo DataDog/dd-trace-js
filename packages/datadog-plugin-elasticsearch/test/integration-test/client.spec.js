@@ -18,20 +18,19 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // excluding 8.16.0 for esm tests, because it is not working: https://github.com/elastic/elasticsearch-js/issues/2466
   withVersions('elasticsearch', ['@elastic/elasticsearch'], '<8.16.0 || >8.16.0', (version, _, resolvedVersion) => {
+    const hasDefaultExport = semver.satisfies(resolvedVersion, '<9.3.2')
     useSandbox([`'@elastic/elasticsearch@${version}'`], false, [
       './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
 
-    before(async function () {
-      const hasDefaultExport = semver.satisfies(resolvedVersion, '<9.3.2')
-      if (hasDefaultExport) {
-        variants = varySandbox('server.mjs', 'elasticsearch', undefined, '@elastic/elasticsearch')
-      } else {
-        variants = varySandbox('server-v9.mjs', 'Client', undefined, '@elastic/elasticsearch', true)
-      }
+    const variants = varySandbox(hasDefaultExport ? 'server.mjs' : 'server-v9.mjs', {
+      bindingName: hasDefaultExport ? 'elasticsearch' : 'Client',
+      packageName: '@elastic/elasticsearch',
+      defaultExport: hasDefaultExport,
+      namedExports: hasDefaultExport ? [] : ['Client'],
+      namedExportBinding: hasDefaultExport ? undefined : 'direct',
     })
 
     beforeEach(async () => {
@@ -43,12 +42,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
-      it(`is instrumented loaded with ${variant}`, async function () {
-        if (!variants[variant]) {
-          this.skip()
-        }
-
+    for (const variant of Object.keys(variants)) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)

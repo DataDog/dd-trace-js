@@ -6,7 +6,7 @@ import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginCypress from 'eslint-plugin-cypress'
-import eslintPluginImport from 'eslint-plugin-import'
+import eslintPluginImport from 'eslint-plugin-import-x'
 import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
@@ -199,6 +199,7 @@ export default [
       '@stylistic/yield-star-spacing': ['error', 'both'],
       'accessor-pairs': ['error', { setWithoutGet: true, enforceForClassMembers: true }],
       'array-callback-return': ['error', { allowImplicit: false, checkForEach: false }],
+      'block-scoped-var': 'error',
       'brace-style': [ // TODO: Deprecated, use @stylistic/brace-style instead
         'error',
         '1tbs',
@@ -218,6 +219,7 @@ export default [
       'dot-notation': ['error', { allowKeywords: true }],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'func-call-spacing': ['error', 'never'], // TODO: Deprecated, use @stylistic/func-call-spacing instead
+      'grouped-accessor-pairs': ['error', 'getBeforeSet'],
       indent: [ // TODO: Deprecated, use @stylistic/indent instead
         'error',
         2,
@@ -259,13 +261,17 @@ export default [
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-amd': 'error',
       'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
+      'import/no-empty-named-blocks': 'error',
+      'import/no-import-module-exports': 'error',
+      'import/no-mutable-exports': 'error',
       'import/no-named-default': 'error',
       'import/no-self-import': 'error',
       'import/order': ['error', {
         // `dd-trace` must be allowed first (and is often intentionally required before any other module).
-        // eslint-plugin-import defaults can exclude some import types (notably `builtin`) from `pathGroups`,
+        // eslint-plugin-import-x defaults can exclude some import types (notably `builtin`) from `pathGroups`,
         // which would make the `dd-trace` exception below a no-op. Make this explicit.
         pathGroupsExcludedImportTypes: [],
         pathGroups: [
@@ -278,19 +284,27 @@ export default [
       }],
       'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
+      // The option keeps `@overload` blocks that document fewer params than the implementation.
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/check-template-names': 'error',
+      'jsdoc/check-types': 'error',
+      'jsdoc/no-bad-blocks': 'error',
+      'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
-      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
-      'jsdoc/require-param': 'off',
+      'jsdoc/require-param': 'error',
       'jsdoc/require-property-description': 'off',
+      'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
-      'jsdoc/require-returns-type': 'off',
       'jsdoc/require-returns': 'off',
+      'jsdoc/require-template': 'error',
+      'jsdoc/require-throws-description': 'error',
+      'jsdoc/require-yields-description': 'error',
       'jsdoc/tag-lines': 'off', // Alignment is not important for us.
       'n/handle-callback-err': ['error', '^(err|error)$'],
       'n/no-callback-literal': 'error',
@@ -303,6 +317,7 @@ export default [
       'no-array-constructor': 'error',
       'no-caller': 'error',
       'no-constant-condition': ['error', { checkLoops: false }], // override config from @eslint/js/recommended
+      'no-constructor-return': 'error',
       'no-empty': ['error', { allowEmptyCatch: true }], // override config from @eslint/js/recommended
       'no-eval': 'error',
       'no-extend-native': 'error',
@@ -351,9 +366,17 @@ export default [
       'object-shorthand': ['warn', 'properties'],
       'one-var': ['error', { initialized: 'never' }],
       'prefer-const': ['error', { destructuring: 'all' }],
+      'prefer-numeric-literals': 'error',
       'prefer-promise-reject-errors': 'error',
       'prefer-regex-literals': ['error', { disallowRedundantWrapping: true }],
+      // 6 errors. Attaching `cause` changes error output, so it needs its own change.
+      'preserve-caught-error': 'off',
+      'promise/no-new-statics': 'error',
+      'promise/no-return-in-finally': 'error',
+      'promise/no-return-wrap': 'error',
       'promise/param-names': 'error',
+      'promise/spec-only': 'error',
+      'promise/valid-params': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
       'use-isnan': [ // override config from @eslint/js/recommended
@@ -441,7 +464,6 @@ export default [
           'packages/dd-trace/src/llmobs/span_processor.js',
           // Test specs that intentionally mock the `_tags` field shape on a
           // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
-          'packages/dd-trace/test/opentracing/span_context.spec.js',
           'packages/dd-trace/test/priority_sampler.spec.js',
           'packages/dd-trace/test/sampling_rule.spec.js',
           'packages/dd-trace/test/span_sampler.spec.js',
@@ -456,16 +478,19 @@ export default [
           'packages/dd-trace/test/profiling/profilers/wall.spec.js',
           // Benchmark stubs that mock the `_tags` field shape on a fake span
           // context (their `getTag`/`getTags` mocks read from `_tags`).
-          'benchmark/stubs/span.js',
           'benchmark/sirun/exporting-pipeline/index.js',
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
+      // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
+      // callback, so returning the callback call would drop the event.
+      'n/callback-return': 'off',
       'n/hashbang': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
+      'n/no-mixed-requires': 'error',
       'n/no-process-exit': 'error',
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
@@ -484,7 +509,14 @@ export default [
       }],
       'no-console': 'error',
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      // 107 errors, all of them the `new Promise(resolve => setTimeout(resolve, ms))` shape.
+      // `no-async-promise-executor` already covers the executor footgun that loses errors.
+      'no-promise-executor-return': 'off',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-return-assign': 'error',
+      'no-template-curly-in-string': 'error',
+      'no-unmodified-loop-condition': 'error',
+      'no-unreachable-loop': 'error',
       'no-useless-assignment': 'error',
       'no-var': 'error',
       'no-void': ['error', { allowAsStatement: true }],
@@ -492,6 +524,10 @@ export default [
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
+      radix: 'error',
+      // 49 errors, all in single-flow init or test scaffolding. The one site with real
+      // concurrency (the debugger's breakpoint bookkeeping) already runs behind a lock.
+      'require-atomic-updates': 'off',
       'require-await': 'error',
       strict: 'error',
     },
@@ -503,33 +539,61 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'sonarjs/anchor-precedence': 'error',
+      'sonarjs/arguments-order': 'error',
+      'sonarjs/comma-or-logical-or-case': 'error',
       'sonarjs/duplicates-in-character-class': 'error',
+      'sonarjs/empty-string-repetition': 'error',
+      'sonarjs/inverted-assertion-arguments': 'error',
       'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-case-label-in-switch': 'error',
       'sonarjs/no-code-after-done': 'error',
+      'sonarjs/no-collection-size-mischeck': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-empty-after-reluctant': 'error',
+      'sonarjs/no-empty-collection': 'error',
+      'sonarjs/no-empty-group': 'error',
+      'sonarjs/no-equals-in-for-termination': 'error',
       'sonarjs/no-extra-arguments': 'error',
+      'sonarjs/no-globals-shadowing': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-identical-conditions': 'error',
       'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/no-invariant-returns': 'error',
+      'sonarjs/no-mixed-completion-style': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
       'sonarjs/no-redundant-assignments': 'error',
       'sonarjs/no-redundant-jump': 'error',
       'sonarjs/no-small-switch': 'error',
+      'sonarjs/no-unthrown-error': 'error',
       'sonarjs/no-unused-collection': 'error',
       'sonarjs/no-use-of-empty-return-value': 'error',
+      'sonarjs/no-variable-usage-before-declaration': 'error',
+      'sonarjs/non-existent-operator': 'error',
       'sonarjs/prefer-immediate-return': 'error',
+      'sonarjs/prefer-promise-shorthand': 'error',
       'sonarjs/prefer-single-boolean-return': 'error',
+      'sonarjs/prefer-while': 'error',
+      'sonarjs/reduce-initial-value': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
+      'sonarjs/slow-regex': 'error',
       'sonarjs/stable-tests': 'error',
+      'sonarjs/synchronous-suite-callback': 'error',
       'sonarjs/test-check-exception': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
       'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
+      // SonarJS rules marked `requiresTypeChecking` report nothing without a TypeScript program, so they
+      // read as clean while catching nothing. Enabling them needs typescript-eslint wired up first.
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
+      // 37 errors, all false positives: those suites are built by shared helper factories
+      // (`assertPromise`, `prepareTestServerForIast`) instead of literal `it()` calls.
+      'sonarjs/no-empty-test-file': 'off',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
@@ -580,41 +644,121 @@ export default [
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
-      // Overriding recommended unicorn rules
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
-      'unicorn/expiring-todo-comments': 'off',
-      'unicorn/explicit-length-check': 'off', // 68 errors
-      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
-      'unicorn/prevent-abbreviations': 'off', // too strict
+      // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/iteration-fallback-style': 'error',
+      'unicorn/no-unsafe-dom-html': 'error',
+      'unicorn/no-unused-properties': 'error',
+
+      // Overriding recommended unicorn rules.
+      // Rules not listed here are left at the `recommended` default. The entries below
+      // document deliberate exceptions. Volume markers stay coarse so they do not drift:
+      // `few` is under ten sites, `many` is tens, `lots` is hundreds or more.
+      'unicorn/catch-error-name': ['off', { name: 'err' }], // lots
+      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // lots
+      'unicorn/name-replacements': 'off', // lots | naming churn (split out of prevent-abbreviations)
+      'unicorn/prevent-abbreviations': 'off', // Its replacements moved to name-replacements
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
       'unicorn/no-array-sort': 'off', // Node.js 20
+      'unicorn/prefer-abort-signal-any': 'off', // Node.js 18.17
+      'unicorn/prefer-dispose': 'off', // Explicit resource management (newer Node.js)
+      'unicorn/prefer-group-by': 'off', // Node.js 21
+      'unicorn/prefer-iterator-helpers': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-promise-try': 'off', // Promise.try (Node.js 24)
+      'unicorn/prefer-promise-with-resolvers': 'off', // few | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)
+      'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
+      'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
 
-      // These rules could potentially evaluated again at a much later point
+      // These rules could potentially be evaluated again at a much later point
+      'unicorn/class-reference-in-static-methods': 'off', // few
+      'unicorn/consistent-class-member-order': 'off', // many | ordering churn
+      'unicorn/consistent-conditional-object-spread': 'off', // many
+      'unicorn/explicit-length-check': 'off', // Not a big advantage
+      'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-computed-property-existence-check': 'off', // lots | needs an audit
+      'unicorn/no-declarations-before-early-exit': 'off', // many
+      'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
-      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
+      'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
+      'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
+      'unicorn/no-unreadable-array-destructuring': 'off', // few | not autofixable, needs manual rewrite
+      'unicorn/no-unreadable-for-of-expression': 'off', // many
+      'unicorn/no-unreadable-object-destructuring': 'off', // many
+      'unicorn/no-unsafe-string-replacement': 'off', // many | replacement callbacks reduce readability
+      'unicorn/no-useless-recursion': 'off', // few | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
+      'unicorn/prefer-early-return': 'off', // many | tension with our positive-`if` style
+      'unicorn/prefer-number-is-safe-integer': 'off', // many
+      'unicorn/prefer-object-iterable-methods': 'off', // many
+      'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
+      'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
+      'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
+      'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
+      'unicorn/single-line-block-comment-style': 'off', // lots | preserve compact JSDoc typedefs
 
       // The following rules should not be activated!
+      'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
       'unicorn/import-style': 'off', // Questionable benefit
+      'unicorn/max-nested-calls': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
-      'unicorn/no-hex-escape': 'off', // Questionable benefit
+      'unicorn/no-array-splice': 'off', // toSpliced copies the whole array (perf)
+      'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
+      'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
+      'unicorn/no-negated-array-predicate': 'off', // Predicate inversion is harder to read and creates churn
+      'unicorn/no-negated-comparison': 'off', // Opposite comparisons do not preserve NaN handling
+      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
+      'unicorn/no-return-array-push': 'off', // Questionable benefit
+      'unicorn/no-this-outside-of-class': 'off', // This will not work for us
+      'unicorn/no-top-level-assignment-in-function': 'off', // Module-level singletons are assigned from functions
+      'unicorn/no-useless-else': 'off', // Covered by core no-else-return
+      'unicorn/operator-assignment': 'off', // Covered by core operator-assignment
+      'unicorn/prefer-array-last-methods': 'off', // Questionable benefit
+      'unicorn/prefer-await': 'off', // We avoid async/await in production hot paths
+      'unicorn/prefer-dom-node-html-methods': 'off', // Browser compatibility and different serialization semantics
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
+      'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
+      'unicorn/prefer-minimal-ternary': 'off', // Conflicts with our restricted-syntax rule on require(cond ? a : b)
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
-      'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
+      'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
+      'unicorn/prefer-reflect-apply': 'off', // lots | questionable benefit
+      'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
+      'unicorn/prefer-split-limit': 'off', // A limit is slower than getSegment; the rest read every segment
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
+      'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+
+      // These remaining rules need focused rewrites before activation.
+      'unicorn/no-confusing-array-splice': 'off', // few
+      'unicorn/no-for-each': 'off', // many | we already prefer for-of in production
+      'unicorn/no-unnecessary-global-this': 'off', // few | explicit globals are clearer
+      'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
+      'unicorn/prefer-continue': 'off', // many
+      'unicorn/prefer-ternary': 'off', // many
+    },
+  },
+  {
+    name: 'dd-trace/unicorn/all',
+    // Unicorn is otherwise limited to production code, and `sonarjs/no-ignored-exceptions`
+    // reports only a subset of the unused catch bindings in tests and fixtures.
+    plugins: {
+      unicorn: eslintPluginUnicorn,
+    },
+    rules: {
+      'unicorn/consistent-date-clone': 'error',
+      'unicorn/prefer-optional-catch-binding': 'error',
     },
   },
   {
@@ -653,6 +797,7 @@ export default [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
       'packages/datadog-instrumentations/test/helpers/check-require-cache/**/*.js',
+      'packages/datadog-instrumentations/test/helpers/hook-module-views/**/*.js',
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
@@ -676,6 +821,7 @@ export default [
     files: [
       'init.js',
       'packages/dd-trace/src/guardrails/**/*',
+      'packages/dd-trace/src/log/levels.js', // Required by the guardrails logger.
       'version.js',
     ],
     settings: {
@@ -707,6 +853,8 @@ export default [
       }],
       'no-var': 'off', // Only supported in Node.js 6+
       'object-shorthand': 'off', // Only supported in Node.js 4+
+      // The binding cannot be dropped without optional catch binding (Node.js 10+).
+      'sonarjs/no-ignored-exceptions': 'off',
       'unicorn/prefer-includes': 'off', // Only supported in Node.js 6+
       'unicorn/prefer-number-properties': 'off', // Only supported in Node.js 0.12+
       'unicorn/prefer-optional-catch-binding': 'off', // Only supported in Node.js 10+
@@ -843,7 +991,6 @@ export default [
       },
     },
     rules: {
-      'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
     },
   },
@@ -899,6 +1046,21 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/openfeature',
+    plugins: {
+      promise: eslintPluginPromise,
+    },
+    files: [
+      'packages/dd-trace/src/openfeature/**/*.js',
+      'packages/dd-trace/test/openfeature/**/*.js',
+    ],
+    rules: {
+      // The OpenFeature hook API defines `finally(hookContext, evalDetails)`, which the rule
+      // reads as `Promise.prototype.finally`.
+      'promise/valid-params': 'off',
     },
   },
   {
