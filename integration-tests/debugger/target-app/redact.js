@@ -17,6 +17,9 @@ fastify.get('/', function () {
   const secretSymbol = Symbol('password')
   const obj = { username: 'alice', password: 'shh!', [secretSymbol]: 'shh!' }
   const map = new Map([['username', 'alice'], ['password', 'shh!'], [secretSymbol, 'shh!']])
+  const vmMap = require('node:vm').runInNewContext("new Map([['password', 'shh!']])")
+  const proxy = new Proxy({ password: 'shh!' }, {})
+  const bigMap = new Map([['k0', 0], ['k1', 1], ['k2', 2], ['k3', 3], ['password', 'shh!']])
   /* eslint-enable no-unused-vars */
 
   return { hello: 'world' } // BREAKPOINT: /

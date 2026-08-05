@@ -51,21 +51,40 @@ function compileSegments (segments) {
   let result = '['
   for (let i = 0; i < segments.length; i++) {
     const { str, dsl, json } = segments[i]
-    result += str === undefined
-      ? `(() => {
+    if (str === undefined) {
+      // The direct-reference identifier (e.g. 'password' for `{password}` or `{user.password}`)
+      // is passed to $dd_inspectSegment so it can redact by name, matching the snapshot path;
+      // it is undefined when the segment is not a statically-named reference.
+      result += `(() => {
           try {
             const result = ${compile(json)}
-            return $dd_inspectSegment(result)
+            return $dd_inspectSegment(result, ${JSON.stringify(directReferenceIdentifier(json))})
           } catch (e) {
             return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
           }
         })()`
-      : JSON.stringify(str)
+    } else {
+      result += JSON.stringify(str)
+    }
     if (i !== segments.length - 1) {
       result += ','
     }
   }
   return `${result}]`
+}
+
+// Returns the terminal identifier a segment references directly, or undefined when the segment
+// is not a direct reference with a statically-known name. `{ref: 'x'}` yields 'x';
+// `{getmember: [obj, 'x']}` and `{index: [obj, 'x']}` yield 'x'; computed or dynamic terminals
+// (e.g. `obj[k]`, method calls) yield undefined and fall through to value serialization.
+function directReferenceIdentifier (json) {
+  if (json === null || typeof json !== 'object') return
+  const [type, value] = Object.entries(json)[0]
+  if (type === 'ref') {
+    if (typeof value === 'string') return value
+  } else if ((type === 'getmember' || type === 'index') && Array.isArray(value) && typeof value[1] === 'string') {
+    return value[1]
+  }
 }
 
 // TODO: Consider storing some of these functions that doesn't require closure access to the current scope on `process`

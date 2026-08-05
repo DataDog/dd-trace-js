@@ -27,6 +27,7 @@ require('./remote_config')
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
+  const $dd_types = global.require('node:util').types;
   const $dd_segmentInspectOptions = {
     depth: 0,
     customInspect: false,
@@ -52,8 +53,18 @@ const templateExpressionSetupCode = `
   };
   const $dd_redactSegmentValue = (value) => {
     if (value === null || typeof value !== 'object') return value;
-    if (value instanceof Map) {
-      if (!$dd_hasRedactedKey(value.keys())) return value;
+    if ($dd_types.isMap(value)) {
+      // Only the first maxArrayLength entries are rendered, so scanning past that
+      // window cannot affect the output. Bounding the scan keeps the common
+      // large-Map case constant-time on the paused application thread.
+      const $dd_max = $dd_segmentInspectOptions.maxArrayLength;
+      let $dd_index = 0;
+      let $dd_hasRenderedRedactedKey = false;
+      for (const key of value.keys()) {
+        if ($dd_index++ >= $dd_max) break;
+        if ($dd_isRedactedIdentifier(key)) { $dd_hasRenderedRedactedKey = true; break; }
+      }
+      if (!$dd_hasRenderedRedactedKey) return value;
       const redacted = new Map();
       for (const [key, val] of value) redacted.set(key, $dd_isRedactedIdentifier(key) ? '[redacted]' : val);
       return redacted;
@@ -72,8 +83,18 @@ const templateExpressionSetupCode = `
     }
     return redacted;
   };
-  const $dd_inspectSegment = (value) =>
-    typeof value === 'string' ? value : $dd_inspect($dd_redactSegmentValue(value), $dd_segmentInspectOptions);
+  const $dd_inspectSegment = (value, directRefIdentifier) => {
+    // A template that references a sensitive identifier directly (e.g. the password
+    // local, or user.password) yields a primitive with no key context, so redact by
+    // the reference name the compiler passed in, matching the snapshot path.
+    if (directRefIdentifier !== undefined && $dd_isRedactedIdentifier(directRefIdentifier)) return '[redacted]';
+    if (typeof value === 'string') return value;
+    // Proxies are rendered as a fixed token: enumerating one via Reflect.ownKeys
+    // would run its traps (customer code) in the paused frame, and letting
+    // util.inspect render the target would leak a proxy-wrapped secret.
+    if (value !== null && typeof value === 'object' && $dd_types.isProxy(value)) return '[Proxy]';
+    return $dd_inspect($dd_redactSegmentValue(value), $dd_segmentInspectOptions);
+  };
 `
 const getDDTagsExpression = `(() => {
   const context = global.require('dd-trace').scope().active()?.context();
