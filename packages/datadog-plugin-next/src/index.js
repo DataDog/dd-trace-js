@@ -52,8 +52,10 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    const httpParentSpan = parentSpan?._integrationName === 'http' ? parentSpan : undefined
-    return { ...store, span, req, httpParentSpan }
+    const isHttpParent = parentSpan?._integrationName === 'http'
+    const httpParentSpan = isHttpParent ? parentSpan : undefined
+    const httpParentReq = isHttpParent ? web.getRequest(parentSpan) : undefined
+    return { ...store, span, req, httpParentSpan, httpParentReq }
   }
 
   error ({ span, error }) {
@@ -105,7 +107,7 @@ class NextPlugin extends ServerPlugin {
 
     if (!store) return
 
-    const { span, req, httpParentSpan } = store
+    const { span, req, httpParentReq, httpParentSpan } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
@@ -136,8 +138,10 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
+    const routeRequest = httpParentReq || req
+    web.setRouteOrEndpointTag(routeRequest)
     setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
-    web.setRoute(req, page)
+    web.setRoute(routeRequest, page)
   }
 
   configure (config) {
