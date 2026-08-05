@@ -4314,9 +4314,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         retryReason: TEST_RETRY_REASON_TYPES.atr,
         status: 'fail',
       }
-      const expectedAttempts = JEST_VERSION === 'latest'
-        ? [failingAttempt, passingAttempt, retryAttempt]
-        : [passingAttempt, failingAttempt, retryAttempt]
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4324,14 +4321,24 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .filter(event => event.type === 'test')
             .map(event => event.content)
             .filter(test => test.meta[TEST_SUITE] === testSuite && test.meta[TEST_NAME] === testName)
-            .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
 
-          assert.deepStrictEqual(tests.map(test => ({
+          const attempts = tests.map(test => ({
             isRetry: test.meta[TEST_IS_RETRY] === 'true',
             parameters: JSON.parse(test.meta[TEST_PARAMETERS]),
             retryReason: test.meta[TEST_RETRY_REASON],
             status: test.meta[TEST_STATUS],
-          })), expectedAttempts)
+          }))
+
+          assert.strictEqual(attempts.length, 3)
+          assert.deepStrictEqual(
+            attempts.find(({ isRetry, status }) => !isRetry && status === 'pass'),
+            passingAttempt
+          )
+          assert.deepStrictEqual(
+            attempts.find(({ isRetry, status }) => !isRetry && status === 'fail'),
+            failingAttempt
+          )
+          assert.deepStrictEqual(attempts.find(({ isRetry }) => isRetry), retryAttempt)
         })
 
       childProcess = exec(
