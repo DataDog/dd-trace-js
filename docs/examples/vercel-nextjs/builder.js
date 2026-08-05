@@ -94,61 +94,23 @@ async function stageTracerFiles (tracerRoot, workPath) {
   const { nodeFileTrace } = require('@vercel/nft')
   const traceBase = await fs.realpath(findTraceBase(tracerRoot))
   tracerRoot = await fs.realpath(tracerRoot)
-  const manifest = JSON.parse(await fs.readFile(path.join(tracerRoot, 'package.json'), 'utf8'))
-  const packageRequire = Module.createRequire(path.join(tracerRoot, 'package.json'))
-  // The tracer loads vendored modules and features dynamically, so NFT alone
-  // cannot discover its complete runtime.
-  const packageFiles = await listPackageFiles(tracerRoot)
-  const entrypoints = [path.join(tracerRoot, 'initialize.mjs')]
-
-  for (const dependency of [
-    ...Object.keys(manifest.dependencies || {}),
-    ...Object.keys(manifest.optionalDependencies || {}),
-  ]) {
-    try {
-      entrypoints.push(packageRequire.resolve(dependency))
-    } catch (error) {
-      if (error.code !== 'MODULE_NOT_FOUND') throw error
-    }
-  }
-
-  const { fileList } = await nodeFileTrace(entrypoints, {
+  const { fileList } = await nodeFileTrace([
+    path.join(tracerRoot, 'initialize.mjs'),
+    path.join(tracerRoot, 'init.js'),
+  ], {
     base: traceBase,
     processCwd: workPath,
   })
-  for (const filePath of packageFiles) fileList.add(path.relative(traceBase, filePath))
-
-  const runtimeRoot = path.join(workPath, '.datadog', 'vercel-runtime')
-  const filePathMap = {}
-
-  await fs.rm(runtimeRoot, { force: true, recursive: true })
 
   for (const relativePath of fileList) {
     const source = path.join(traceBase, relativePath)
-    const destination = path.join(runtimeRoot, relativePath)
+    const tracerPath = relativePath.startsWith('node_modules/dd-trace/')
+      ? relativePath
+      : path.join('node_modules', 'dd-trace', relativePath)
+    const destination = path.join(workPath, tracerPath)
     await fs.mkdir(path.dirname(destination), { recursive: true })
     await fs.copyFile(source, destination)
-    filePathMap[toPosixPath(relativePath)] = toPosixPath(path.relative(workPath, destination))
   }
-
-  return filePathMap
-}
-
-async function listPackageFiles (directory) {
-  const files = []
-
-  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue
-    const entryPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...await listPackageFiles(entryPath))
-    if (entry.isFile()) files.push(entryPath)
-  }
-
-  return files
-}
-
-function toPosixPath (filePath) {
-  return filePath.split(path.sep).join('/')
 }
 
 async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
@@ -162,25 +124,12 @@ async function instrumentBuildOutput (outputPath, tracerRoot, workPath) {
   }
 
   const functionPaths = await findFunctionPaths(functionsPath)
-  const nodeFunctions = []
-
   for (const functionPath of functionPaths) {
     const configPath = path.join(functionPath, '.vc-config.json')
     const config = JSON.parse(await fs.readFile(configPath, 'utf8'))
     if (!String(config.runtime).startsWith('nodejs')) continue
 
-    nodeFunctions.push({ config, configPath })
-  }
-
-  if (nodeFunctions.length === 0) return
-
-  const tracerFilePathMap = await stageTracerFiles(tracerRoot, workPath)
-
-  for (const { config, configPath } of nodeFunctions) {
-    config.filePathMap = {
-      ...config.filePathMap,
-      ...tracerFilePathMap,
-    }
+    await stageTracerFiles(tracerRoot, functionPath)
     config.environment = {
       ...config.environment,
       NODE_OPTIONS: mergeNodeOptions(config.environment?.NODE_OPTIONS),
@@ -206,7 +155,6 @@ module.exports = {
   build,
   findTraceBase,
   instrumentBuildOutput,
-  listPackageFiles,
   mergeNodeOptions,
   resolveTracerRoot,
   stageTracerFiles,
