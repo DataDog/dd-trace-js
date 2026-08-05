@@ -267,8 +267,8 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRoute({ originalUrl: '/x', params: {} }), null)
     })
 
-    // No express is loaded here, so the route-dialect gate must refuse despite the component tag.
-    it('returns null when the Express route dialect is not v8', () => {
+    // The host never loaded path-to-regexp 8 here, so there is no parser to read the route with.
+    it('returns null when no path-to-regexp 8 adapter is available', () => {
       const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
       const req = { originalUrl: '/users/1', params: { id: '1' } }
       const web = require('../../../src/plugins/util/web')

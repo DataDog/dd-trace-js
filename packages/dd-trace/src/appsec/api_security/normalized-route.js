@@ -2,7 +2,6 @@
 
 const { HTTP_ROUTE } = require('../../../../../ext/tags')
 const web = require('../../plugins/util/web')
-const { getExpressRouteDialect } = require('../../../../datadog-instrumentations/src/express')
 const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
 
 /**
@@ -17,8 +16,8 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * Design: Express 5 / path-to-regexp 8 only. The route is parsed once by path-to-regexp's `parse()`
  * (token tree → segment templates, cached per route string). Per-request presence of optional
  * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
- * only optional groups (no param to capture) are dropped (rendered absent). Requires Express 5 (its
- * route grammar); anything else gets no tag.
+ * only optional groups (no param to capture) are dropped (rendered absent). Express 4 ships
+ * path-to-regexp 0.x, which has no `parse()` → no tag.
  */
 
 // path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
@@ -100,7 +99,7 @@ function tokensToSegments (ptTokens) {
   if (cur) segments.push(cur)
 
   let trailingSlash = false
-  const last = segments[segments.length - 1]
+  const last = segments.at(-1)
   if (last && last.tokens.length === 0 && last.group === 0) {
     trailingSlash = true
     segments.pop()
@@ -430,9 +429,9 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // Routes are read as Express 5 grammar; 4's differs ('/a{2}' matches '/aa' there), so a v4 or
-      // mixed process must not be normalized. A loaded path-to-regexp 8 alone wouldn't prove v5.
-      if (getExpressRouteDialect() !== 'express5') return null
+      // Routes are read as Express 5 grammar. Known gap: an Express 4 app that pulls path-to-regexp 8
+      // in through a dependency is read with it too, and the grammars disagree ('/a{2}' matches '/aa'
+      // under 4). Closing that needs the dialect of the router that recorded the route, per request.
       const parse = getParse()
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null
