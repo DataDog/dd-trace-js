@@ -298,6 +298,13 @@ describe(`cucumber@${version} commonJS`, () => {
   it('forwards telemetry from parallel workers', async () => {
     receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+      })
     const telemetryPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
         const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
@@ -309,7 +316,7 @@ describe(`cucumber@${version} commonJS`, () => {
       })
 
     childProcess = exec(
-      parallelModeCommand,
+      './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2',
       {
         cwd,
         env: {
@@ -319,11 +326,16 @@ describe(`cucumber@${version} commonJS`, () => {
         },
       }
     )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-    await Promise.all([
+    const [[exitCode]] = await Promise.all([
       once(childProcess, 'exit'),
+      eventsPromise,
       telemetryPromise,
     ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
   })
 
   onlyLatestIt('waits for the final payload before the programmatic run resolves', async () => {
