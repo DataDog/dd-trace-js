@@ -1,6 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
-import type { plugins } from '..';
+import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -421,6 +421,14 @@ tracer.use('vitest');
 tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
 
+type PluginUse = <P extends PluginName>(plugin: P, config?: PluginOptions[P] | boolean) => Tracer
+const usePlugin: PluginUse = tracer.use.bind(tracer)
+usePlugin('express', { service: 'name' })
+// @ts-expect-error Only built-in plugin names are supported.
+usePlugin('unknown-plugin')
+// @ts-expect-error Redis options must not be accepted by the express plugin.
+usePlugin('express', { splitByInstance: true })
+
 tracer.use('express', false)
 tracer.use('express', { enabled: false })
 tracer.use('express', { service: 'name' });
@@ -679,6 +687,28 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     label: 'toxicity',
     metricType: 'boolean',
     value: 'true'
+  })
+
+  // submit end-user feedback
+  llmobs.submitFeedback({
+    label: 'thumbs_up',
+    metricType: 'boolean',
+    value: true,
+    submitter: { id: 'user-123', type: 'user' },
+    span: llmobsSpanCtx
+  })
+
+  llmobs.submitFeedback({
+    label: 'comment',
+    metricType: 'text',
+    value: 'this answer was helpful',
+    submitter: { id: 'user-123' },
+    feedbackJoinKey: 'my-join-key',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now(),
+    assessment: 'pass',
+    reasoning: 'the user was satisfied'
   })
 })
 

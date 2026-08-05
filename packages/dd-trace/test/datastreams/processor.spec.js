@@ -4,12 +4,13 @@ const assert = require('node:assert/strict')
 const { hostname } = require('node:os')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const propagationHash = require('../../src/propagation-hash')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -217,6 +218,10 @@ describe('DataStreamsProcessor', () => {
     clearTimeout(processor.timer)
   })
 
+  afterEach(() => {
+    propagationHash.configure(null)
+  })
+
   it('should construct', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
@@ -328,11 +333,9 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('should include ProcessTags when propagation is enabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
     const processTags = require('../../src/process-tags')
     processTags.initialize()
 
-    // Configure and enable the feature
     propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
     processor.recordCheckpoint(mockCheckpoint)
@@ -347,15 +350,9 @@ describe('DataStreamsProcessor', () => {
       processTags.serialized.split(','),
       'ProcessTags should match process-tags module as array'
     )
-
-    // Cleanup
-    propagationHash.configure(null)
   })
 
   it('should not include ProcessTags when propagation is disabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
-
-    // Ensure the feature is disabled
     propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     processor.recordCheckpoint(mockCheckpoint)
@@ -365,9 +362,6 @@ describe('DataStreamsProcessor', () => {
     const payload = call.args[0]
 
     assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
-
-    // Cleanup
-    propagationHash.configure(null)
   })
 })
 

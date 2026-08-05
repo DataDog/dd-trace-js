@@ -210,7 +210,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
 
@@ -426,7 +426,7 @@ describe('Plugin', () => {
               try {
                 // Passing invalid arguments should cause an error
                 nativeProducer.produce()
-              } catch (err) {
+              } catch {
                 // Error is expected
               }
 
@@ -537,7 +537,7 @@ describe('Plugin', () => {
                   resource: testTopic,
                 })
 
-                const parentId = parseInt(span.parent_id.toString())
+                const parentId = parseInt(span.parent_id.toString(), 10)
                 assert.ok(parentId > 0, `Expected ${parentId} > 0`)
               }, { timeoutMs: 10000 })
               nativeConsumer.setDefaultConsumeTimeout(10)

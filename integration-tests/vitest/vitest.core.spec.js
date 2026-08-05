@@ -52,9 +52,15 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_CODE_COVERAGE_ENABLED,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
@@ -461,6 +467,189 @@ versions.forEach((version) => {
       assert.strictEqual(code, 0, testOutput)
     })
 
+    /**
+     * Runs Vitest typechecking with TIA settings and gathers all TIA payloads.
+     *
+     * @param {{ suitesToSkip: string[], testFilter?: string, env?: typeof process.env }} options
+     * @param {(payloads: object[]) => void} assertPayloads
+     * @returns {Promise<void>}
+     */
+    async function runTypecheckTiaTest ({ suitesToSkip, testFilter = '', env = {} }, assertPayloads) {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip(suitesToSkip.map(suite => ({
+        type: 'suite',
+        attributes: { suite },
+      })))
+      testOutput = ''
+
+      childProcess = exec(
+        `./node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs${testFilter} --reporter=verbose`,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+            ...env,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) =>
+          url === '/api/v2/citestcycle' ||
+          url === '/api/v2/citestcov' ||
+          url === '/api/v2/ci/tests/skippable',
+        assertPayloads,
+        { hardTimeout: 60_000 }
+      )
+
+      assert.strictEqual(childProcess.exitCode, 0, testOutput)
+    }
+
+    typecheckIt('does not advertise or enable TIA for typecheck-only runs', async () => {
+      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+      await runTypecheckTiaTest({
+        suitesToSkip: [typecheckSuite],
+        testFilter: ` ${typecheckSuite}`,
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false, testOutput)
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false, testOutput)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+        assert.ok(metadataEntries.length > 0, testOutput)
+        for (const metadata of metadataEntries) {
+          assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+        }
+
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        assert.strictEqual(testSuites.length, 1, testOutput)
+        assert.strictEqual(testSuites[0].content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+      })
+    })
+
+    typecheckIt('applies TIA only to runtime suites in mixed typecheck runs', async () => {
+      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+      const skippedRuntimeSuite = 'ci-visibility/vitest-tests/tia-first.mjs'
+      const runningRuntimeSuite = 'ci-visibility/vitest-tests/tia-second.mjs'
+      await runTypecheckTiaTest({
+        suitesToSkip: [typecheckSuite, skippedRuntimeSuite],
+        env: { TYPECHECK_MIXED: 'true' },
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), true)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+        assert.ok(metadataEntries.length > 0, testOutput)
+        for (const metadata of metadataEntries) {
+          assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+        }
+
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        const typecheckEvent = testSuites.find(({ content }) => content.meta[TEST_SUITE] === typecheckSuite).content
+        const skippedRuntimeEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === skippedRuntimeSuite).content
+        const runningRuntimeEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === runningRuntimeSuite).content
+
+        assert.strictEqual(testSuites.length, 3, testOutput)
+        assert.strictEqual(typecheckEvent.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(skippedRuntimeEvent.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(skippedRuntimeEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+        assert.strictEqual(runningRuntimeEvent.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+        assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+        const suiteById = new Map(testSuites.map(({ content }) => [
+          Number(content.test_suite_id),
+          content.meta[TEST_SUITE],
+        ]))
+        const coverages = payloads
+          .filter(({ url }) => url === '/api/v2/citestcov')
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content }) => content.coverages)
+        const runtimeCoverage = coverages.find(coverage =>
+          suiteById.get(coverage.test_suite_id) === runningRuntimeSuite
+        )
+
+        assert.ok(runtimeCoverage, testOutput)
+        assert.deepStrictEqual(
+          runtimeCoverage.files.map(({ filename }) => filename).sort(),
+          [
+            runningRuntimeSuite,
+            'ci-visibility/vitest-tests/bad-sum.mjs',
+          ].sort()
+        )
+      })
+    })
+
+    typecheckIt('does not skip a runtime suite that is also selected for typechecking', async () => {
+      const runtimeOnlySuite = 'ci-visibility/vitest-tests/tia-first.mjs'
+      const overlappingSuite = 'ci-visibility/vitest-tests/tia-typescript.test.ts'
+      await runTypecheckTiaTest({
+        suitesToSkip: [runtimeOnlySuite, overlappingSuite],
+        env: {
+          TYPECHECK_MIXED: 'true',
+          TYPECHECK_OVERLAP: 'true',
+        },
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), true)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        const runtimeOnlyEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === runtimeOnlySuite).content
+        const overlappingEvents =
+            testSuites.filter(({ content }) => content.meta[TEST_SUITE] === overlappingSuite)
+
+        assert.strictEqual(testSuites.length, 4, testOutput)
+        assert.strictEqual(runtimeOnlyEvent.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(runtimeOnlyEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+        assert.strictEqual(overlappingEvents.length, 2)
+        assert.ok(overlappingEvents.every(({ content }) => content.meta[TEST_STATUS] === 'pass'))
+        assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+        const suiteById = new Map(testSuites.map(({ content }) => [
+          Number(content.test_suite_id),
+          content.meta[TEST_SUITE],
+        ]))
+        const coverages = payloads
+          .filter(({ url }) => url === '/api/v2/citestcov')
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content }) => content.coverages)
+        const overlappingCoverage = coverages.find(coverage =>
+          suiteById.get(coverage.test_suite_id) === overlappingSuite
+        )
+
+        assert.ok(overlappingCoverage, testOutput)
+        assert.deepStrictEqual(
+          overlappingCoverage.files.map(({ filename }) => filename).sort(),
+          [
+            overlappingSuite,
+            'ci-visibility/vitest-tests/tia-typescript-source.ts',
+          ].sort()
+        )
+      })
+    })
+
     typecheckIt('honors Known Tests metadata for typecheck tests', async () => {
       receiver.setSettings({
         early_flake_detection: {
@@ -593,6 +782,12 @@ versions.forEach((version) => {
                     attempt_to_fix: true,
                   },
                 },
+                'typecheck can report skipped assertion': {
+                  properties: {
+                    attempt_to_fix: true,
+                    quarantined: true,
+                  },
+                },
                 'typecheck nested suite can report nested disabled assertion': {
                   properties: {
                     disabled: true,
@@ -617,6 +812,9 @@ versions.forEach((version) => {
           const attemptToFixTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report attempt-to-fix assertion'
           )
+          const skippedAttemptToFixTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report skipped assertion'
+          )
           const nestedDisabledTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck nested suite can report nested disabled assertion'
           )
@@ -624,6 +822,7 @@ versions.forEach((version) => {
           assert.ok(disabledTest, testOutput)
           assert.ok(quarantinedTest, testOutput)
           assert.ok(attemptToFixTest, testOutput)
+          assert.ok(skippedAttemptToFixTest, testOutput)
           assert.ok(nestedDisabledTest, testOutput)
 
           assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
@@ -636,6 +835,10 @@ versions.forEach((version) => {
 
           assert.strictEqual(attemptToFixTest.meta[TEST_STATUS], 'pass')
           assert.strictEqual(attemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
 
           assert.strictEqual(nestedDisabledTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(nestedDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
@@ -659,10 +862,15 @@ versions.forEach((version) => {
 
       const [[code]] = await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         eventsPromise,
       ])
 
       assert.strictEqual(code, 0, testOutput)
+      assert.match(testOutput, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
+      assert.match(testOutput, /Disabled: 2 tests skipped\./)
+      assert.match(testOutput, /Quarantined: 1 test run; all passed\./)
     })
 
     typecheckIt('does not fail the typecheck run for Test Management managed failures', async () => {
@@ -1017,7 +1225,40 @@ versions.forEach((version) => {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-      // No skippable_tests test: vitest does not request skippable suites (TIA unsupported).
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails',
+        async () => {
+          receiver.setSkippableSuitesResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+              const testModule = events.find(event => event.type === 'test_module_end')
+              assert.ok(testModule, 'should have test module event')
+              assert.strictEqual(
+                testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS],
+                'true'
+              )
+              const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+              assert.ok(testSuiteEvent, 'should have test suite event')
+              assert.strictEqual(
+                testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS],
+                'true'
+              )
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            })
+          childProcess = exec('./node_modules/.bin/vitest run', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
 
       it(
         'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',

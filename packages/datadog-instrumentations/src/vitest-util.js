@@ -1,6 +1,12 @@
 'use strict'
 
+const fs = require('node:fs')
+
 const log = require('../../dd-trace/src/log')
+const {
+  EMPTY_EFD_RETRY_POLICY,
+  hasEfdRetries,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { channel } = require('./helpers/instrument')
 
 // test hooks
@@ -28,8 +34,24 @@ const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
+const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+const workerReportTelemetryCh = channel('ci:vitest:worker-report:telemetry')
 const codeCoverageReportCh = channel('ci:vitest:coverage-report')
+
+/**
+ * Resolves a path without failing Test Optimization when the path is unavailable.
+ *
+ * @param {string} filepath
+ * @returns {string}
+ */
+function realpath (filepath) {
+  try {
+    return fs.realpathSync(filepath)
+  } catch {
+    return filepath
+  }
+}
 
 function findExportByName (pkg, name) {
   for (const [key, value] of Object.entries(pkg)) {
@@ -95,8 +117,7 @@ function getProvidedContext () {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
       _ddTestPropertiesByFilepath: testPropertiesByFilepath,
-      _ddEarlyFlakeDetectionNumRetries: numRepeats,
-      _ddEarlyFlakeDetectionSlowTestRetries: slowTestRetries,
+      _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
@@ -110,14 +131,18 @@ function getProvidedContext () {
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
       _ddCodeOwnersEntries: codeOwnersEntries,
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddItrCorrelationId: itrCorrelationId,
+      _ddUnskippableSuites: unskippableSuites,
+      _ddForcedToRunSuites: forcedToRunSuites,
     } = globalThis.__vitest_worker__.providedContext
+    const retryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
 
     return {
       isDiEnabled: _ddIsDiEnabled,
-      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled && hasEfdRetries(retryPolicy),
       testPropertiesByFilepath,
-      numRepeats,
-      slowTestRetries: slowTestRetries ?? {},
+      earlyFlakeDetectionRetryPolicy: retryPolicy,
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
@@ -131,6 +156,10 @@ function getProvidedContext () {
       testCommand,
       repositoryRoot,
       codeOwnersEntries,
+      isCodeCoverageEnabled,
+      itrCorrelationId,
+      unskippableSuites,
+      forcedToRunSuites,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -138,8 +167,7 @@ function getProvidedContext () {
       isDiEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       testPropertiesByFilepath: {},
-      numRepeats: 0,
-      slowTestRetries: {},
+      earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
@@ -153,6 +181,10 @@ function getProvidedContext () {
       testCommand: undefined,
       repositoryRoot: undefined,
       codeOwnersEntries: undefined,
+      isCodeCoverageEnabled: false,
+      itrCorrelationId: undefined,
+      unskippableSuites: {},
+      forcedToRunSuites: {},
     }
   }
 }
@@ -230,8 +262,11 @@ module.exports = {
   testManagementTestsCh,
   modifiedFilesCh,
   workerReportTraceCh,
+  workerReportCoverageCh,
   workerReportLogsCh,
+  workerReportTelemetryCh,
   codeCoverageReportCh,
+  realpath,
   findExportByName,
   getTestRunnerExport,
   getTypeTasks,

@@ -120,7 +120,7 @@ class TestFileIndex {
   /** @type {boolean} */
   #nocase
 
-  /** @type {NodeJS.Platform} */
+  /** @type {typeof process.platform} */
   #platform
 
   /** @type {Map<string, InstanceType<typeof Minimatch>>} */
@@ -137,7 +137,7 @@ class TestFileIndex {
 
   /**
    * @param {string[]} files Sorted repository-relative POSIX paths.
-   * @param {{ nocase: boolean, platform: NodeJS.Platform }} options
+   * @param {{ nocase: boolean, platform: typeof process.platform }} options
    */
   constructor (files, { nocase, platform }) {
     this.files = files

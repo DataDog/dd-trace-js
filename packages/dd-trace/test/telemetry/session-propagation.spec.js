@@ -60,7 +60,7 @@ describe('session-propagation', () => {
 
   /**
    * @param {Record<string, string>} additions
-   * @returns {NodeJS.ProcessEnv}
+   * @returns {typeof process.env}
    */
   function createExpectedEnv (additions) {
     return {

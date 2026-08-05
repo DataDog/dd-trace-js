@@ -71,6 +71,14 @@ describe('loader hook', () => {
     assert.strictEqual(result.includesSecurityControl, true)
   })
 
+  it('applies security controls from the PM2 environment', () => {
+    const result = initializeLoaderHook({
+      pm2_env: JSON.stringify({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: securityControls }),
+    })
+
+    assert.strictEqual(result.includesSecurityControl, true)
+  })
+
   it('applies security controls from stable config', () => {
     writeFileSync(
       localConfigPath,
