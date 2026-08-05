@@ -221,6 +221,22 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(resourceAttrs['deployment.environment.name'], 'test')
     })
 
+    it('replaces cached resource attributes', () => {
+      const localTransformer = new OtlpStatsTransformer(
+        { 'datadog.runtime_id': 'initial-id' }, 'http/json', false, DEFAULT_SERVICE
+      )
+
+      localTransformer.updateResourceAttributes({ 'datadog.runtime_id': 'refreshed-id' })
+
+      const payload = JSON.parse(
+        localTransformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS)
+      )
+      assert.deepStrictEqual(payload.resourceMetrics[0].resource.attributes, [{
+        key: 'datadog.runtime_id',
+        value: { stringValue: 'refreshed-id' },
+      }])
+    })
+
     it('emits a single scopeMetrics and tags data points whose service differs from the default', () => {
       const drained = makeDrained(12340000000000, [
         makeSpan({ service: 'svc', resource: 'GET /foo' }),
