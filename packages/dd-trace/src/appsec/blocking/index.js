@@ -201,7 +201,7 @@ function handleResults (actions, req, res, rootSpan, abortController) {
 }
 
 /**
- * @param {import('../config/config-base')} [config] - Tracer configuration
+ * @param {import('../../config/config-base')} [config] - Tracer configuration
  */
 function setTemplates (config) {
   templates.html.body = config?.appsec?.blockedTemplateHtml
