@@ -23,27 +23,12 @@ function tagOperationsAreEmpty (operations) {
 // Dataset record: { input, expectedOutput?, metadata?, tags?, id? }.
 // `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
-  #version
-
-  constructor (input, expectedOutput = null, metadata = {}, id = null, version = null, tags = []) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null, tags = []) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
     this.tags = validateTagsList(tags)
     this.id = id ?? null
-    this.#version = version ?? null
-  }
-
-  /**
-   * @returns {number | string | null} The dataset version where this record became valid.
-   */
-  version () {
-    return this.#version
-  }
-
-  _setVersion (version) {
-    this.#version = version ?? null
-    return this
   }
 }
 
@@ -51,18 +36,13 @@ function recordIdFromCreatedRecord (record) {
   return String(record?.id ?? '')
 }
 
-function recordVersionFromCreatedRecord (record) {
-  return typeof record?.version === 'function' ? record.version() : null
+function recordsFromMutationResult (result) {
+  if (Array.isArray(result)) return result
+  return Array.isArray(result?.records) ? result.records : []
 }
 
-function versionFromCreatedRecords (records) {
-  const versions = records
-    .map(recordVersionFromCreatedRecord)
-    .filter(version => version != null)
-    .map(Number)
-    .filter(Number.isFinite)
-  if (versions.length === 0) return null
-  return Math.max(...versions)
+function versionFromMutationResult (result) {
+  return result?.version ?? null
 }
 
 function serializedRecord (rec) {
@@ -140,7 +120,7 @@ class Dataset {
   addRecord (recordOrInput, expectedOutput, metadata, tags) {
     const record = recordOrInput instanceof DatasetRecord
       ? recordOrInput
-      : new DatasetRecord(recordOrInput, expectedOutput, metadata, null, null, tags)
+      : new DatasetRecord(recordOrInput, expectedOutput, metadata, null, tags)
     this.#records.push(record)
     return this
   }
@@ -270,27 +250,26 @@ class Dataset {
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map(serializedRecord)
 
-    let response
+    let result
     try {
-      response = await this.#client.appendDatasetRecords(projectId, this.#id, records)
+      result = await this.#client.appendDatasetRecords(projectId, this.#id, records)
     } catch (err) {
       throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
     }
 
-    this.#updateVersionFromRecords(response)
+    this.#updateVersionFromMutationResult(result)
+    const responseRecords = recordsFromMutationResult(result)
 
     let pushedCount = 0
-    for (const [index, node] of response.entries()) {
+    for (const [index, node] of responseRecords.entries()) {
       const recordId = recordIdFromCreatedRecord(node)
       if (recordId !== '') {
         pushedCount++
         pending[index].id = recordId
       }
-      const recordVersion = recordVersionFromCreatedRecord(node)
-      if (recordVersion !== null) pending[index]._setVersion(recordVersion)
       this.#recordIds.push(recordId)
     }
-    for (let i = response.length; i < pending.length; i++) this.#recordIds.push('')
+    for (let i = responseRecords.length; i < pending.length; i++) this.#recordIds.push('')
 
     // Advance by the snapshotted pending count, not the live records length,
     // so records added while this push was in flight aren't skipped by the next push.
@@ -307,9 +286,9 @@ class Dataset {
       updateRecords.push({ id: recordId, tag_operations: serializedTagOperations(operations) })
     }
 
-    let response
+    let result
     try {
-      response = await this.#client.batchUpdateDatasetRecords(projectId, this.#id, {
+      result = await this.#client.batchUpdateDatasetRecords(projectId, this.#id, {
         insert_records: [],
         update_records: updateRecords,
         delete_records: [],
@@ -320,13 +299,12 @@ class Dataset {
       throw new Error(`Failed to update tags for dataset '${this.#name}': ${err.message}`)
     }
 
-    this.#updateVersionFromRecords(response)
-    this.#updateRecordVersions(response)
+    this.#updateVersionFromMutationResult(result)
     this.#pendingTagOperations.clear()
   }
 
-  #updateVersionFromRecords (records) {
-    const pushedVersion = versionFromCreatedRecords(records)
+  #updateVersionFromMutationResult (result) {
+    const pushedVersion = versionFromMutationResult(result)
     if (pushedVersion === null) {
       // The dataset contents changed, but the backend did not report the new
       // version. Avoid pinning later experiments to the pre-append create version.
@@ -334,20 +312,6 @@ class Dataset {
     } else {
       this.#version = pushedVersion
       this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
-    }
-  }
-
-  #updateRecordVersions (records) {
-    const versionsById = new Map()
-    for (const record of records) {
-      const recordId = recordIdFromCreatedRecord(record)
-      const recordVersion = recordVersionFromCreatedRecord(record)
-      if (recordId !== '' && recordVersion !== null) versionsById.set(recordId, recordVersion)
-    }
-
-    for (const record of this.#records) {
-      const recordVersion = versionsById.get(record.id)
-      if (recordVersion !== undefined) record._setVersion(recordVersion)
     }
   }
 

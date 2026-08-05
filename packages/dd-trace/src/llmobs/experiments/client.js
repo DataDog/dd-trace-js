@@ -32,9 +32,30 @@ function datasetRecordFromResource (resource) {
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
     String(resource?.id ?? attrs.id ?? '') || null,
-    attrs.valid_from_version ?? attrs.version ?? null,
     attrs.tags ?? []
   )
+}
+
+function datasetVersionFromResource (resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  return attrs.valid_from_version ?? attrs.version ?? null
+}
+
+function datasetVersionFromResources (resources) {
+  const versions = resources
+    .map(datasetVersionFromResource)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
+function datasetMutationResultFromResources (resources) {
+  return {
+    records: resources.map(datasetRecordFromResource),
+    version: datasetVersionFromResources(resources),
+  }
 }
 
 function datasetFromResource (client, projectId, resource) {
@@ -174,7 +195,7 @@ class ExperimentsClient {
     const resources = Array.isArray(response?.records)
       ? response.records
       : (Array.isArray(response?.data) ? response.data : [])
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
   }
 
   async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
@@ -196,7 +217,7 @@ class ExperimentsClient {
       }
     )
     const resources = Array.isArray(response?.data) ? response.data : []
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
   }
 
   async listDatasetRecords (projectId, datasetId, options = {}) {

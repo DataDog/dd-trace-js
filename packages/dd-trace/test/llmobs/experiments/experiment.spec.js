@@ -12,6 +12,20 @@ function defaultAppendRecordAttributes (_record, index) {
   return { valid_from_version: 2 }
 }
 
+function versionFromRecordAttributes (attributes) {
+  return attributes.valid_from_version ?? attributes.version ?? null
+}
+
+function versionFromRecordAttributesList (attributes) {
+  const versions = attributes
+    .map(versionFromRecordAttributes)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
 function client () {
   return new ExperimentsClient({
     apiKey: 'k',
@@ -36,28 +50,28 @@ function clientWithMockBackend ({
   }
   c.appendDatasetRecords = async (projectId, datasetId, records) => {
     requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
-    return records.map((record, index) => {
-      const attributes = appendRecordAttributes(record, index)
-      return new DatasetRecord(
+    const recordAttributes = records.map((record, index) => appendRecordAttributes(record, index))
+    return {
+      records: records.map((record, index) => new DatasetRecord(
         record.input,
         record.expected_output,
         record.metadata,
         record.id ?? `rec-${index}`,
-        attributes.valid_from_version ?? attributes.version ?? null,
         record.tags ?? []
-      )
-    })
+      )),
+      version: versionFromRecordAttributesList(recordAttributes),
+    }
   }
   c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
     requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
-    return (attributes.update_records ?? []).map((record, index) => new DatasetRecord(
+    const records = (attributes.update_records ?? []).map(record => new DatasetRecord(
       {},
       null,
       {},
       record.id,
-      3 + index,
       []
     ))
+    return { records, version: records.length === 0 ? null : 3 }
   }
   c.createExperiment = async (attributes) => {
     requests.push({ method: 'createExperiment', attributes })
@@ -126,7 +140,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const append = requests.find(request => request.method === 'appendDatasetRecords')
     assert.deepEqual(append.records[0].tags, ['source:synthetic'])
     assert.deepEqual(dataset.records()[0].tags, ['source:synthetic'])
-    assert.equal(dataset.records()[0].version(), 2)
+    assert.equal(dataset.version(), 2)
   })
 
   it('updates tags on existing dataset records with backend tag operations', async () => {
@@ -137,7 +151,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'desc',
       'ds',
       'proj',
-      [new DatasetRecord('a', 'b', {}, 'rec-1', 2, ['segment:old'])],
+      [new DatasetRecord('a', 'b', {}, 'rec-1', ['segment:old'])],
       ['rec-1'],
       2,
       2
@@ -153,7 +167,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       { id: 'rec-1', tag_operations: { set: ['segment:final'] } },
     ])
     assert.deepEqual(dataset.records()[0].tags, ['segment:final'])
-    assert.equal(dataset.records()[0].version(), 3)
     assert.equal(dataset.version(), 3)
   })
 
@@ -165,7 +178,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'desc',
       'ds',
       'proj',
-      [new DatasetRecord('a', 'b', {}, 'rec-1', 2, ['segment:gold'])],
+      [new DatasetRecord('a', 'b', {}, 'rec-1', ['segment:gold'])],
       ['rec-1'],
       2,
       2,
@@ -312,7 +325,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
-      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', 2, ['source:test']))
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', ['source:test']))
       .addRecord({ inputData: 'payload' }, 'expected', { explicit: true }, ['case:explicit'])
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
@@ -323,7 +336,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(record.metadata, { m: 1 })
     assert.deepEqual(record.tags, ['source:test'])
     assert.equal(record.id, 'rec')
-    assert.equal(record.version(), 2)
     assert.deepEqual(
       { ...record },
       { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, tags: ['source:test'], id: 'rec' }

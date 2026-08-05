@@ -380,8 +380,7 @@ describe('LLMObs Experiments facade', () => {
       }))
 
       await dataset.push()
-      assert.equal(dataset.records()[0].version(), 1)
-      assert.equal(dataset.records()[1].version(), 1)
+      assert.equal(dataset.version(), 1)
       dataset.addTags(1, ['split:eval'])
       dataset.removeTags(1, ['split:train'])
       await dataset.push()
@@ -394,7 +393,7 @@ describe('LLMObs Experiments facade', () => {
 
       assert.deepEqual(pulled.filterTags(), ['split:eval'])
       assert.deepEqual(pulled.records().map(record => record.id).sort(), ['tagged-a', 'tagged-b'])
-      assert.equal(dataset.records()[1].version(), 2)
+      assert.equal(dataset.version(), 2)
       assert.deepEqual(pulled.records().find(record => record.id === 'tagged-a').tags, ['split:eval', 'topic:math'])
       assert.deepEqual(pulled.records().find(record => record.id === 'tagged-b').tags, ['split:eval'])
     })

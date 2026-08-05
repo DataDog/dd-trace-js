@@ -57,7 +57,7 @@ class Experiments {
           recordIds.add(record.id)
         }
         dataset.addRecord(
-          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, null, record.tags)
+          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, record.tags)
         )
       }
     }
