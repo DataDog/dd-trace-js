@@ -16,10 +16,15 @@ const EXPLICIT_BOUNDS_SECONDS = [
 
 const SPAN_KIND_METRIC_MAP = {
   internal: 'SPAN_KIND_INTERNAL',
+  SPAN_KIND_INTERNAL: 'SPAN_KIND_INTERNAL',
   server: 'SPAN_KIND_SERVER',
+  SPAN_KIND_SERVER: 'SPAN_KIND_SERVER',
   client: 'SPAN_KIND_CLIENT',
+  SPAN_KIND_CLIENT: 'SPAN_KIND_CLIENT',
   producer: 'SPAN_KIND_PRODUCER',
+  SPAN_KIND_PRODUCER: 'SPAN_KIND_PRODUCER',
   consumer: 'SPAN_KIND_CONSUMER',
+  SPAN_KIND_CONSUMER: 'SPAN_KIND_CONSUMER',
 }
 
 /**
@@ -203,9 +208,14 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @returns {import('@opentelemetry/api').Attributes}
    */
   #buildAttributes (aggKey) {
-    const raw = { 'span.name': aggKey.resource, 'service.name': aggKey.service }
+    const raw = {
+      'span.name': aggKey.resource,
+      'service.name': aggKey.service,
+      'span.kind': SPAN_KIND_METRIC_MAP[aggKey.spanKind] ?? 'SPAN_KIND_INTERNAL',
+    }
 
-    if (aggKey.spanKind) raw['span.kind'] = SPAN_KIND_METRIC_MAP[aggKey.spanKind] ?? aggKey.spanKind
+    if (this.#otelSemanticsEnabled) return raw
+
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
@@ -218,12 +228,10 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
     // TODO: additional_metric_tags support is still evolving/TBD across most SDKs; not implemented here yet.
 
-    if (!this.#otelSemanticsEnabled) {
-      raw['datadog.operation.name'] = aggKey.name
-      if (aggKey.type) raw['datadog.span.type'] = aggKey.type
-      if (aggKey.synthetics) raw['datadog.origin'] = 'synthetics'
-      raw['datadog.is_trace_root'] = aggKey.isTraceRoot
-    }
+    raw['datadog.operation.name'] = aggKey.name
+    if (aggKey.type) raw['datadog.span.type'] = aggKey.type
+    if (aggKey.synthetics) raw['datadog.origin'] = 'synthetics'
+    raw['datadog.is_trace_root'] = aggKey.isTraceRoot
 
     return raw
   }

@@ -123,6 +123,7 @@ describe('SpanAggKey', () => {
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
     assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
+    assert.strictEqual(key.isTraceRoot, true)
   })
 
   it('should include HTTP method and route in aggregation key', () => {

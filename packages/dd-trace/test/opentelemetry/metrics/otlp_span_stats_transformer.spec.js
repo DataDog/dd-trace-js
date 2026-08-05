@@ -140,6 +140,22 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_SERVER')
     })
 
+    it('defaults missing and unknown span.kind values to SPAN_KIND_INTERNAL', () => {
+      const spans = [
+        makeSpan(),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'unknown' } }),
+      ]
+      const drained = makeDrained(12340000000000, spans)
+      assert.strictEqual(drained[0].bucket.size, 2)
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 2)
+      assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_INTERNAL')
+    })
+
     it('keeps root and non-root distributions separate when datadog.is_trace_root is exported', () => {
       const spans = [
         makeSpan(),
@@ -169,15 +185,16 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'UNAVAILABLE')
     })
 
-    it('omits optional attributes when not present on the span', () => {
+    it('omits optional HTTP attributes when not present on the span', () => {
       const payload = JSON.parse(
         transformer.transform(makeDrained(12340000000000, [makeSpan({ meta: {} })]), BUCKET_SIZE_NS)
       )
-      const keys = dataPointsOf(payload)[0].attributes.map(a => a.key)
+      const attrs = attrMapOf(dataPointsOf(payload)[0])
 
-      for (const key of ['http.response.status_code', 'http.request.method', 'http.route', 'span.kind']) {
-        assert.ok(!keys.includes(key), `${key} should be omitted`)
+      for (const key of ['http.response.status_code', 'http.request.method', 'http.route']) {
+        assert.ok(!(key in attrs), `${key} should be omitted`)
       }
+      assert.strictEqual(attrs['span.kind'], 'SPAN_KIND_INTERNAL')
     })
 
     it('converts duration to seconds with fixed bounds and a sketch-derived distribution', () => {
@@ -298,22 +315,26 @@ describe('OtlpStatsTransformer', () => {
       transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true)
     })
 
-    it('emits only OTel attributes (no dd.*) while keeping status.code on errors', () => {
+    it('emits only the SMC default attributes', () => {
       const span = makeTopLevelSpan({
         error: 1,
-        meta: { [HTTP_STATUS_CODE]: 500, [HTTP_METHOD]: 'GET' },
+        meta: {
+          [HTTP_STATUS_CODE]: 500,
+          [HTTP_METHOD]: 'GET',
+          [HTTP_ROUTE]: '/users/:id',
+          [GRPC_STATUS_CODE]: 'INTERNAL',
+          [ORIGIN_KEY]: 'synthetics',
+        },
       })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
       const attrs = attrMapOf(dataPointsOf(payload)[0])
 
-      assert.ok(
-        !Object.keys(attrs).some(k => k.startsWith('datadog.')),
-        'no datadog.* attributes in OTel-semantics mode'
-      )
-      assert.deepStrictEqual(
-        { name: attrs['span.name'], method: attrs['http.request.method'], status: attrs['status.code'] },
-        { name: 'GET /foo', method: 'GET', status: 'STATUS_CODE_ERROR' }
-      )
+      assert.deepStrictEqual(attrs, {
+        'span.name': 'GET /foo',
+        'service.name': 'svc',
+        'span.kind': 'SPAN_KIND_INTERNAL',
+        'status.code': 'STATUS_CODE_ERROR',
+      })
     })
 
     it('coalesces dimensions hidden by OTel-semantics mode', () => {
