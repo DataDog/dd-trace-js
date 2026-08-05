@@ -13,6 +13,7 @@ const {
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
+const { REDACTED_IDENTIFIERS } = require('./snapshot/redaction')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
@@ -24,6 +25,10 @@ require('./remote_config')
 /** @typedef {import('node:inspector').Debugger.EvaluateOnCallFrameReturnType} EvaluateOnCallFrameResult */
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
+// Redaction of log-probe messages runs inside the paused application process, so the redacted-identifier
+// set is embedded into the evaluated code. Values are redacted before interpolation, matching the snapshot
+// path (see snapshot/processor.js) so that a template referencing an object or map (e.g. `{user}`) does not
+// leak sensitive fields the snapshot would redact.
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
   const $dd_segmentInspectOptions = {
@@ -33,6 +38,37 @@ const templateExpressionSetupCode = `
     maxStringLength: 8 * 1024,
     breakLength: Infinity
   };
+  const $dd_redactedIdentifiers = new Set(${JSON.stringify([...REDACTED_IDENTIFIERS])});
+  const $dd_isRedactedIdentifier = (key) =>
+    typeof key === 'string' && $dd_redactedIdentifiers.has(key.toLowerCase().replace(/[-_@$.]/g, ''));
+  const $dd_hasRedactedKey = (keys) => {
+    for (const key of keys) if ($dd_isRedactedIdentifier(key)) return true;
+    return false;
+  };
+  const $dd_redactSegmentValue = (value) => {
+    if (value === null || typeof value !== 'object') return value;
+    if (value instanceof Map) {
+      if (!$dd_hasRedactedKey(value.keys())) return value;
+      const redacted = new Map();
+      for (const [key, val] of value) redacted.set(key, $dd_isRedactedIdentifier(key) ? '[redacted]' : val);
+      return redacted;
+    }
+    const keys = Reflect.ownKeys(value);
+    if (!$dd_hasRedactedKey(keys)) return value;
+    const redacted = Object.create(Object.getPrototypeOf(value));
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if ($dd_isRedactedIdentifier(key)) {
+        Object.defineProperty(redacted, key,
+          { value: '[redacted]', writable: true, enumerable: descriptor.enumerable, configurable: true });
+      } else {
+        Object.defineProperty(redacted, key, descriptor);
+      }
+    }
+    return redacted;
+  };
+  const $dd_inspectSegment = (value) =>
+    typeof value === 'string' ? value : $dd_inspect($dd_redactSegmentValue(value), $dd_segmentInspectOptions);
 `
 const getDDTagsExpression = `(() => {
   const context = global.require('dd-trace').scope().active()?.context();
