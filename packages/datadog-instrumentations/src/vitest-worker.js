@@ -13,6 +13,7 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
@@ -393,9 +394,9 @@ function isEfdSuiteAdmissionAllowed (task, providedContext, testSuite) {
   requestEfdSuiteAdmission ||= import(VITEST_EFD_SUITE_ADMISSION_FILE)
     .then(module => module.requestEfdSuiteAdmission)
   admission = requestEfdSuiteAdmission.then(request => request({
-    directory: providedContext.efdSuiteAdmissionDirectory,
     hasNewTest: hasRunnableNewTest(task.file, providedContext),
     requestCode: VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+    responseCode: VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
     testSuite: testSuite || task.file.filepath,
   }))
   fileToEfdSuiteAdmission.set(task.file, admission)
@@ -494,11 +495,15 @@ function wrapVitestTestRunner (VitestTestRunner) {
       !attemptToFixTasks.has(task) &&
       !disabledTasks.has(task) &&
       (modifiedTasks.has(task) || newTasks.has(task))
-    if (isEfdCandidate && await isEfdSuiteAdmissionAllowed(task, providedContext, testProperties.testSuite)) {
-      efdRetryTasks.add(task)
-      disableFrameworkRetries(task)
-      task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-      taskToStatuses.set(task, [])
+    if (isEfdCandidate) {
+      const isAdmissionAllowed = !providedContext.isEfdSuiteAdmissionEnabled ||
+        await isEfdSuiteAdmissionAllowed(task, providedContext, testProperties.testSuite)
+      if (isAdmissionAllowed) {
+        efdRetryTasks.add(task)
+        disableFrameworkRetries(task)
+        task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+        taskToStatuses.set(task, [])
+      }
     }
 
     return onBeforeRunTask.apply(this, arguments)

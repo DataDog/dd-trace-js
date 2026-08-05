@@ -11,14 +11,14 @@ const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
 const efdSuiteAdmissionBrowserCommand = providedContext.efdSuiteAdmissionBrowserCommand
-const efdSuiteAdmissionDirectory = providedContext.efdSuiteAdmissionDirectory
-const efdSuiteAdmissionLogMarker = providedContext.efdSuiteAdmissionLogMarker
 const efdSuiteAdmissionRequestCode = providedContext.efdSuiteAdmissionRequestCode
+const efdSuiteAdmissionResponseCode = providedContext.efdSuiteAdmissionResponseCode
 const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || {
   durationRetryCounts: [],
   schedulingRetryCount: 0,
 }
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
@@ -59,14 +59,14 @@ if (isNoWorkerInitActive) {
   beforeAll(async function ({}, suite) {
     suite ||= arguments[0]
     const efdSuiteCandidate = getEarlyFlakeDetectionSuiteCandidate(suite)
-    const isEfdSuiteAdmissionAllowed = !efdSuiteCandidate || await requestEfdSuiteAdmission({
-      browserCommand: efdSuiteAdmissionBrowserCommand,
-      directory: efdSuiteAdmissionDirectory,
-      hasNewTest: efdSuiteCandidate.hasNewTest,
-      logMarker: efdSuiteAdmissionLogMarker,
-      requestCode: efdSuiteAdmissionRequestCode,
-      testSuite: efdSuiteCandidate.testSuite,
-    })
+    const isEfdSuiteAdmissionAllowed = !efdSuiteCandidate || !isEfdSuiteAdmissionEnabled ||
+      await requestEfdSuiteAdmission({
+        browserCommand: efdSuiteAdmissionBrowserCommand,
+        hasNewTest: efdSuiteCandidate.hasNewTest,
+        requestCode: efdSuiteAdmissionRequestCode,
+        responseCode: efdSuiteAdmissionResponseCode,
+        testSuite: efdSuiteCandidate.testSuite,
+      })
     applyExecutionChanges(suite, isEfdSuiteAdmissionAllowed)
   })
 

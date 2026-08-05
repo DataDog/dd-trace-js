@@ -114,7 +114,7 @@ function getProvidedContext () {
   try {
     const {
       _ddIsEarlyFlakeDetectionEnabled,
-      _ddEfdSuiteAdmissionDirectory: efdSuiteAdmissionDirectory,
+      _ddIsEfdSuiteAdmissionEnabled: isEfdSuiteAdmissionEnabled,
       _ddIsDiEnabled,
       _ddTestPropertiesByFilepath: testPropertiesByFilepath,
       _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
@@ -140,7 +140,7 @@ function getProvidedContext () {
 
     return {
       isDiEnabled: _ddIsDiEnabled,
-      efdSuiteAdmissionDirectory,
+      isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled && hasEfdRetries(retryPolicy),
       testPropertiesByFilepath,
       earlyFlakeDetectionRetryPolicy: retryPolicy,
@@ -166,7 +166,7 @@ function getProvidedContext () {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
-      efdSuiteAdmissionDirectory: undefined,
+      isEfdSuiteAdmissionEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       testPropertiesByFilepath: {},
       earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,

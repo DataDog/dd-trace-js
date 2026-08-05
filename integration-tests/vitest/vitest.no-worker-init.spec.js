@@ -834,6 +834,7 @@ describe('vitest no-worker init instrumentation selection', () => {
 
 SUPPORTED_VERSIONS.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
+    const runtimeEfdSuiteAdmissionIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     let cwd, receiver, childProcess, testOutput
 
     useSandbox([
@@ -1754,7 +1755,7 @@ describe('impacted test', () => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    it('stops no-worker EFD retries when the new-suite threshold is exceeded', async () => {
+    runtimeEfdSuiteAdmissionIt('stops no-worker EFD retries when the new-suite threshold is exceeded', async () => {
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,

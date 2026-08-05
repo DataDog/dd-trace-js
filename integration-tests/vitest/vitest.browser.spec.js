@@ -79,6 +79,7 @@ function getTestByName (tests, name) {
 describe(`vitest@${vitestVersion} Browser Mode`, function () {
   this.timeout(180_000)
 
+  const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
   let childProcess
   let cwd
   let receiver
@@ -709,7 +710,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  it('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
+  runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
     receiver.setSettings({
       early_flake_detection: {
         enabled: true,

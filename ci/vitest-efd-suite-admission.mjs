@@ -1,25 +1,26 @@
+const ADMISSION_TIMEOUT_MS = 5000
+
 let nextRequestId = 0
-let nodeTransport
+let nodeTransportPromise
+const pendingAdmissionRequests = new Map()
 
 /**
  * Requests permission from the Vitest main process to schedule EFD retries for one suite.
  *
  * @param {{
  *   browserCommand?: string,
- *   directory?: string,
  *   hasNewTest: boolean,
- *   logMarker?: string,
  *   requestCode: number,
+ *   responseCode: number,
  *   testSuite: string
  * }} options
  * @returns {Promise<boolean>}
  */
 export async function requestEfdSuiteAdmission ({
   browserCommand,
-  directory,
   hasNewTest,
-  logMarker,
   requestCode,
+  responseCode,
   testSuite,
 }) {
   const browserCommands = globalThis.__vitest_browser_runner__?.commands
@@ -31,124 +32,77 @@ export async function requestEfdSuiteAdmission ({
     )
   }
 
-  if (directory && logMarker) {
-    return requestLegacyEfdSuiteAdmission({
-      directory,
-      hasNewTest,
-      logMarker,
-      testSuite,
-    })
+  nodeTransportPromise ||= getNodeTransport(responseCode)
+  const transport = await nodeTransportPromise
+  if (!transport) return false
+
+  const requestId = ++nextRequestId
+  const response = new Promise(resolve => {
+    const timeout = setTimeout(() => finishAdmissionRequest(requestId, false), ADMISSION_TIMEOUT_MS)
+    timeout.unref?.()
+    pendingAdmissionRequests.set(requestId, { resolve, timeout })
+  })
+
+  try {
+    transport.postMessage([requestCode, { hasNewTest, requestId, testSuite }])
+  } catch {
+    finishAdmissionRequest(requestId, false)
   }
-
-  const transport = nodeTransport ||= await getNodeTransport()
-  if (!transport || !directory) return false
-
-  const { requestId, response } = await getAdmissionResponse(directory)
-  const data = {
-    hasNewTest,
-    requestId,
-    testSuite,
-  }
-  const message = transport.usesTinypoolProtocol
-    ? {
-        __tinypool_worker_message__: true,
-        data,
-        interprocessCode: requestCode,
-      }
-    : [requestCode, data]
-
-  transport.postMessage(message)
   return response
 }
 
 /**
- * Sends an EFD admission request through the console-log RPC available in Vitest 3.
+ * Resolves and removes one pending EFD admission request.
  *
- * @param {{ directory: string, hasNewTest: boolean, logMarker: string, testSuite: string }} options
- * @returns {Promise<boolean>}
+ * @param {number} requestId
+ * @param {boolean} allowed
+ * @returns {void}
  */
-async function requestLegacyEfdSuiteAdmission ({ directory, hasNewTest, logMarker, testSuite }) {
-  const rpc = globalThis.__vitest_worker__?.rpc
-  if (typeof rpc?.onUserConsoleLog !== 'function') return false
+function finishAdmissionRequest (requestId, allowed) {
+  const request = pendingAdmissionRequests.get(requestId)
+  if (!request) return
 
-  try {
-    const { requestId, response } = await getAdmissionResponse(directory)
-    const rpcResult = rpc.onUserConsoleLog({
-      [logMarker]: true,
-      content: '',
-      hasNewTest,
-      requestId,
-      testSuite,
-      time: Date.now(),
-      type: 'stdout',
-    })
-    rpcResult?.catch?.(() => {})
-    return response
-  } catch {}
-  return false
+  clearTimeout(request.timeout)
+  pendingAdmissionRequests.delete(requestId)
+  request.resolve(allowed)
 }
 
 /**
- * Creates a unique response path and waits for the Vitest main process to acknowledge it.
+ * Handles an EFD admission response from the Vitest main process.
  *
- * @param {string} directory
- * @returns {Promise<{ requestId: string, response: Promise<boolean> }>}
+ * @param {unknown} message
+ * @param {number} responseCode
+ * @returns {void}
  */
-async function getAdmissionResponse (directory) {
-  const { threadId } = await import('node:worker_threads')
-  const requestId = `${globalThis.process.pid}-${threadId}-${++nextRequestId}`
-  const responsePath = `${directory}/${requestId}`
-  const fs = await import('node:fs')
-  const response = new Promise(resolve => {
-    const watcher = fs.watch(directory, (_event, filename) => {
-      if (String(filename) !== requestId) return
+function handleAdmissionResponse (message, responseCode) {
+  if (!Array.isArray(message) || message[0] !== responseCode) return
 
-      fs.promises.readFile(responsePath, 'utf8').then(allowed => {
-        clearTimeout(timeout)
-        watcher.close()
-        fs.promises.unlink(responsePath).catch(() => {})
-        resolve(allowed === '1')
-      }, () => {})
-    })
-    const timeout = setTimeout(() => {
-      watcher.close()
-      resolve(false)
-    }, 5000)
-    timeout.unref?.()
-  })
-  return { requestId, response }
-}
-
-/**
- * Returns the native transport exposed to the current Vitest Node.js worker.
- *
- * @returns {Promise<{
- *   postMessage: (message: unknown) => void,
- *   usesTinypoolProtocol: boolean
- * }|undefined>}
- */
-async function getNodeTransport () {
-  const vitestPort = globalThis.__vitest_worker__?.ctx?.port
-  if (typeof vitestPort?.postMessage === 'function') {
-    return {
-      postMessage: vitestPort.postMessage.bind(vitestPort),
-      usesTinypoolProtocol: false,
-    }
+  const { allowed, requestId } = message[1] || {}
+  if (Number.isSafeInteger(requestId)) {
+    finishAdmissionRequest(requestId, allowed === true)
   }
+}
 
+/**
+ * Returns the direct process or thread transport used by Vitest 4 workers.
+ *
+ * @param {number} responseCode
+ * @returns {Promise<{ postMessage: (message: unknown) => void }|undefined>}
+ */
+async function getNodeTransport (responseCode) {
   if (typeof globalThis.process?.send === 'function') {
+    globalThis.process.on('message', message => handleAdmissionResponse(message, responseCode))
     return {
       postMessage: globalThis.process.send.bind(globalThis.process),
-      usesTinypoolProtocol: !!globalThis.process.env.TINYPOOL_WORKER_ID,
     }
   }
 
   if (globalThis.process?.versions?.node) {
     const { isMainThread, parentPort } = await import('node:worker_threads')
     if (!isMainThread && parentPort) {
+      parentPort.on('message', message => handleAdmissionResponse(message, responseCode))
       return {
         postMessage: parentPort.postMessage.bind(parentPort),
-        usesTinypoolProtocol: false,
       }
     }
   }

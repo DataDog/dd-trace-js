@@ -1,22 +1,23 @@
 'use strict'
 
-const { ChildProcess } = require('node:child_process')
-const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
 
+const satisfies = require('../../../vendor/dist/semifies')
+
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
   collectTestOptimizationSummariesFromTraces,
+  getIsFaultyEarlyFlakeDetection,
   logTestOptimizationSummary,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
@@ -60,7 +61,6 @@ const {
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const workerProcesses = new WeakSet()
-const handledWorkerMessages = new WeakSet()
 const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
@@ -90,7 +90,6 @@ let isVitestNoWorkerInitActive = false
 let isVitestBrowserModeActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
-let areWorkerMessageEmittersWrapped = false
 let skippableSuites = []
 let skippedSuites = []
 let unskippableSuites = {}
@@ -104,12 +103,10 @@ let hasSelectedSuites = false
 let itrCorrelationId
 let tiaRepositoryRoot = process.cwd()
 let activeNoWorkerInitState
-let efdSuiteAdmissionDirectory
-let isEfdSuiteTrackerActive = false
+let isEfdSuiteAdmissionEnabled = false
 let maximumSuitesWithNewTests = 0
 const admittedEfdSuites = new Set()
 const suitesWithNewTests = new Set()
-const VITEST_EFD_SUITE_ADMISSION_REQUEST_ID_RE = /^\d+-\d+-\d+$/
 const tinyPoolClassWrappers = new WeakMap()
 const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
 const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
@@ -242,12 +239,21 @@ function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
  * @returns {void}
  */
 function resetEfdSuiteTracker () {
-  cleanupEfdSuiteAdmissionDirectory()
   activeNoWorkerInitState = undefined
-  isEfdSuiteTrackerActive = false
+  isEfdSuiteAdmissionEnabled = false
   maximumSuitesWithNewTests = 0
   admittedEfdSuites.clear()
   suitesWithNewTests.clear()
+}
+
+/**
+ * Returns whether Vitest exposes the worker transports used for runtime EFD suite admission.
+ *
+ * @param {string} frameworkVersion
+ * @returns {boolean}
+ */
+function supportsEfdSuiteAdmission (frameworkVersion) {
+  return satisfies(frameworkVersion, '>=4.0.0')
 }
 
 /**
@@ -267,31 +273,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
     earlyFlakeDetectionFaultyThreshold,
     testSuites.size * earlyFlakeDetectionFaultyThreshold / 100
   ))
-  if (isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)) {
-    try {
-      efdSuiteAdmissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-vitest-efd-'))
-    } catch (error) {
-      isEarlyFlakeDetectionEnabled = false
-      log.error('Could not create the Vitest EFD suite admission directory: %s', error?.message)
-    }
-  }
-  isEfdSuiteTrackerActive = true
-}
-
-/**
- * Removes the directory used to acknowledge EFD admission requests from Node.js workers.
- *
- * @returns {void}
- */
-function cleanupEfdSuiteAdmissionDirectory () {
-  if (!efdSuiteAdmissionDirectory) return
-
-  try {
-    fs.rmSync(efdSuiteAdmissionDirectory, { force: true, recursive: true })
-  } catch (error) {
-    log.error('Could not remove the Vitest EFD suite admission directory: %s', error?.message)
-  }
-  efdSuiteAdmissionDirectory = undefined
+  isEfdSuiteAdmissionEnabled = true
 }
 
 /**
@@ -302,7 +284,7 @@ function cleanupEfdSuiteAdmissionDirectory () {
  * @returns {boolean}
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
-  if (!isEfdSuiteTrackerActive || typeof testSuite !== 'string') return false
+  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
   if (admittedEfdSuites.has(testSuite)) return true
   if (isEarlyFlakeDetectionFaulty) return false
 
@@ -324,28 +306,6 @@ function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
 
   admittedEfdSuites.add(testSuite)
   return true
-}
-
-/**
- * Records an EFD admission request and writes its response for the requesting Node.js worker.
- *
- * @param {string} testSuite
- * @param {boolean} hasNewTest
- * @param {string} requestId
- * @returns {void}
- */
-function acknowledgeEfdSuiteAdmission (testSuite, hasNewTest, requestId) {
-  if (!efdSuiteAdmissionDirectory || !VITEST_EFD_SUITE_ADMISSION_REQUEST_ID_RE.test(requestId)) return
-
-  const allowed = reserveEarlyFlakeDetectionSuite(testSuite, hasNewTest)
-  const responsePath = path.join(efdSuiteAdmissionDirectory, requestId)
-  const temporaryResponsePath = `${responsePath}.tmp`
-  try {
-    fs.writeFileSync(temporaryResponsePath, allowed ? '1' : '0')
-    fs.renameSync(temporaryResponsePath, responsePath)
-  } catch (error) {
-    log.error('Could not acknowledge Vitest EFD suite admission: %s', error?.message)
-  }
 }
 
 function resetSuiteSkippingRunState () {
@@ -700,7 +660,7 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsDiEnabled: false,
     _ddIsEarlyFlakeDetectionEnabled: false,
     _ddEarlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
-    _ddEfdSuiteAdmissionDirectory: undefined,
+    _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -861,16 +821,32 @@ async function runMainProcessSetup (
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
-        knownTestsBySuite = knownTests.vitest
-        shouldSendTestProperties = true
-        configureEfdSuiteTracker(currentTestFilepaths, repositoryRoot)
-        if (!shouldInstallNoWorkerInit) {
-          setProvidedContext(ctx, {
-            _ddEfdSuiteAdmissionDirectory: efdSuiteAdmissionDirectory,
-            _ddIsKnownTestsEnabled: isKnownTestsEnabled,
-            _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-            _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
-          }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+        if (supportsEfdSuiteAdmission(frameworkVersion)) {
+          configureEfdSuiteTracker(currentTestFilepaths, repositoryRoot)
+        } else {
+          const projectSuites = currentTestFilepaths.map(testFilepath => getTestSuitePath(testFilepath, repositoryRoot))
+          isEarlyFlakeDetectionFaulty = getIsFaultyEarlyFlakeDetection(
+            projectSuites,
+            knownTests.vitest,
+            earlyFlakeDetectionFaultyThreshold
+          )
+          if (isEarlyFlakeDetectionFaulty) {
+            isEarlyFlakeDetectionEnabled = false
+            log.warn('New test detection is disabled because the number of new tests is too high.')
+          }
+        }
+
+        if (!isEarlyFlakeDetectionFaulty) {
+          knownTestsBySuite = knownTests.vitest
+          shouldSendTestProperties = true
+          if (!shouldInstallNoWorkerInit) {
+            setProvidedContext(ctx, {
+              _ddIsEfdSuiteAdmissionEnabled: isEfdSuiteAdmissionEnabled,
+              _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+              _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
+              _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
+            }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+          }
         }
       } else {
         isEarlyFlakeDetectionFaulty = true
@@ -944,7 +920,6 @@ async function runMainProcessSetup (
     noWorkerInit.configure(ctx, frameworkVersion, reporterTestSpecifications, {
       knownTests,
       knownTestsBySuite,
-      efdSuiteAdmissionDirectory,
       modifiedFiles,
       repositoryRoot,
       flakyTestRetriesConfiguration,
@@ -953,7 +928,6 @@ async function runMainProcessSetup (
       testPropertiesByFilepath: testPropertiesByFilepath || {},
       testSessionConfiguration,
     }, {
-      acknowledgeEfdSuiteAdmission,
       reserveEarlyFlakeDetectionSuite,
       shouldReportTestModule: shouldInstallBrowserReporter ? isBrowserTestModule : undefined,
       state: activeNoWorkerInitState,
@@ -969,6 +943,7 @@ function getNoWorkerInitState () {
   return {
     attemptToFixExecutions,
     earlyFlakeDetectionRetryPolicy,
+    isEfdSuiteAdmissionEnabled,
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
@@ -1233,7 +1208,6 @@ function getFinishWrapper (exitOrClose) {
     })
 
     await flushPromise
-    cleanupEfdSuiteAdmissionDirectory()
 
     // If coverage was generated, publish coverage report channel for upload
     if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
@@ -1772,8 +1746,9 @@ function threadHandler (thread) {
   }
   workerProcesses.add(workerProcess)
   workerProcess.on('message', (message) => {
-    if (handleEfdAdmissionMessage(message)) return
-    handleTinypoolWorkerMessage(message)
+    if (message.__tinypool_worker_message__ && message.data) {
+      handleWorkerReport(message.interprocessCode, message.data)
+    }
   })
 }
 
@@ -1874,7 +1849,7 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (
-          handleEfdAdmissionMessage(message) ||
+          handleEfdAdmissionMessage(this, interprocessCode, data) ||
           handleWorkerReport(interprocessCode, data)
         ) {
           // If we execute the callback vitest crashes, as the message is not supported
@@ -1890,32 +1865,35 @@ function getWrappedOn (on) {
 /**
  * Handles an EFD suite admission request sent through a Vitest worker transport.
  *
- * @param {unknown} message
+ * @param {object} workerProcess
+ * @param {number} interprocessCode
+ * @param {object} data
  * @returns {boolean}
  */
-function handleEfdAdmissionMessage (message) {
-  let interprocessCode
-  let data
-  if (Array.isArray(message)) {
-    [interprocessCode, data] = message
-  } else if (message?.__tinypool_worker_message__) {
-    interprocessCode = message.interprocessCode
-    data = message.data
-  }
+function handleEfdAdmissionMessage (workerProcess, interprocessCode, data) {
   if (interprocessCode !== VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE) return false
-  if (handledWorkerMessages.has(message)) return true
 
-  handledWorkerMessages.add(message)
-  handleWorkerReport(interprocessCode, data)
+  const response = [VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE, {
+    allowed: reserveEarlyFlakeDetectionSuite(data?.testSuite, data?.hasNewTest === true),
+    requestId: data?.requestId,
+  }]
+  try {
+    if (typeof workerProcess.send === 'function') {
+      workerProcess.send(response, (error) => {
+        if (error) {
+          log.error('Could not send Vitest EFD suite admission response: %s', error.message)
+        }
+      })
+    } else {
+      workerProcess.postMessage(response)
+    }
+  } catch (error) {
+    log.error('Could not send Vitest EFD suite admission response: %s', error?.message)
+  }
   return true
 }
 
 function handleWorkerReport (interprocessCode, data) {
-  if (interprocessCode === VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE) {
-    acknowledgeEfdSuiteAdmission(data?.testSuite, data?.hasNewTest === true, data?.requestId)
-    return true
-  }
-
   if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
     collectTestOptimizationSummariesFromTraces(data, {
       newTestsWithDynamicNames,
@@ -1943,59 +1921,12 @@ function handleWorkerReport (interprocessCode, data) {
   return false
 }
 
-/**
- * Handles Datadog payloads sent through Tinypool's interprocess message protocol.
- *
- * @param {object} message
- * @returns {void}
- */
-function handleTinypoolWorkerMessage (message) {
-  if (
-    !message?.__tinypool_worker_message__ ||
-    !message.data ||
-    handledWorkerMessages.has(message)
-  ) {
-    return
-  }
-
-  handledWorkerMessages.add(message)
-  handleWorkerReport(message.interprocessCode, message.data)
-}
-
 function wrapMessagePortOn () {
   if (isMessagePortWrapped) return
 
   isMessagePortWrapped = true
   shimmer.wrap(MessagePort.prototype, 'on', getWrappedOn)
   shimmer.wrap(MessagePort.prototype, 'addListener', getWrappedOn)
-}
-
-/**
- * Installs early message interception before Vitest attaches its worker listeners.
- *
- * @returns {void}
- */
-function wrapWorkerMessageEmitters () {
-  if (areWorkerMessageEmittersWrapped) return
-
-  areWorkerMessageEmittersWrapped = true
-  shimmer.wrap(ChildProcess.prototype, 'emit', getWorkerMessageEmitWrapper)
-  shimmer.wrap(MessagePort.prototype, 'emit', getWorkerMessageEmitWrapper)
-}
-
-/**
- * Wraps a worker event emitter to observe EFD admission requests.
- *
- * @param {(...args: unknown[]) => boolean} emit
- * @returns {(...args: unknown[]) => boolean}
- */
-function getWorkerMessageEmitWrapper (emit) {
-  return function (event, message) {
-    if (event === 'message') {
-      handleEfdAdmissionMessage(message)
-    }
-    return emit.apply(this, arguments)
-  }
 }
 
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
@@ -2035,8 +1966,6 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   }
   return cliApiPackage
 }
-
-wrapWorkerMessageEmitters()
 
 addHook({
   name: 'tinypool',

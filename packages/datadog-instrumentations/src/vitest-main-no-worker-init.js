@@ -15,6 +15,7 @@ const {
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getTestName,
@@ -49,7 +50,6 @@ const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WO
 const VITEST_NO_WORKER_INIT_MINIMUM_VERSION = '3.2.6'
 const VITEST_DEFAULT_POOL = 'forks'
 const VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND = '__dd_vitest_efd_suite_admission'
-const VITEST_EFD_SUITE_ADMISSION_LOG_MARKER = '__ddVitestEfdSuiteAdmission'
 const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -347,11 +347,9 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
       earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
       efdSuiteAdmissionBrowserCommand: VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND,
-      efdSuiteAdmissionDirectory: setupData.efdSuiteAdmissionDirectory,
-      efdSuiteAdmissionLogMarker: satisfies(frameworkVersion, '<4.0.0')
-        ? VITEST_EFD_SUITE_ADMISSION_LOG_MARKER
-        : undefined,
       efdSuiteAdmissionRequestCode: VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+      efdSuiteAdmissionResponseCode: VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
+      isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
@@ -364,7 +362,6 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
   }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
 
   installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state, {
-    acknowledgeEfdSuiteAdmission: options.acknowledgeEfdSuiteAdmission,
     shouldReportTestModule,
   })
 }
@@ -579,7 +576,6 @@ function installMainProcessReporter (
   if (!ctx?.reporters) return
 
   const reporterState = {
-    acknowledgeEfdSuiteAdmission: options.acknowledgeEfdSuiteAdmission,
     frameworkVersion,
     isActive: true,
     shouldReportTestModule: options.shouldReportTestModule,
@@ -634,10 +630,6 @@ function createMainProcessReporter (reporterState) {
       }
     },
 
-    onUserConsoleLog (consoleLog) {
-      if (handleLegacyEfdSuiteAdmission(consoleLog)) return false
-    },
-
     onWatcherRerun () {
       for (const testSuiteCtx of testSuiteContexts.values()) {
         testSuiteFinishCh.publish({
@@ -673,20 +665,6 @@ function createMainProcessReporter (reporterState) {
   function shouldReport (testModule) {
     return isReporterActive() &&
       (!reporterState.shouldReportTestModule || reporterState.shouldReportTestModule(testModule))
-  }
-
-  /**
-   * Handles EFD admission requests encoded as Vitest 3 console-log RPC messages.
-   *
-   * @param {object} consoleLog
-   * @returns {boolean}
-   */
-  function handleLegacyEfdSuiteAdmission (consoleLog) {
-    if (consoleLog?.[VITEST_EFD_SUITE_ADMISSION_LOG_MARKER] !== true) return false
-
-    const { hasNewTest, requestId, testSuite } = consoleLog
-    reporterState.acknowledgeEfdSuiteAdmission?.(testSuite, hasNewTest === true, requestId)
-    return true
   }
 
   function recordTaskAttemptStatus (taskId, status, attemptCount) {
@@ -909,6 +887,7 @@ function createMainProcessReporter (reporterState) {
       !isAttemptToFix &&
       state.isKnownTestsEnabled &&
       knownTests &&
+      (state.isEfdSuiteAdmissionEnabled || !state.isEarlyFlakeDetectionFaulty) &&
       !knownTests.includes(testName)
     )
     const isModified = testProperties?.isModified === true
