@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
 const workerThreads = require('node:worker_threads')
 
@@ -68,6 +69,14 @@ const sourceFile = process.env.BREAKPOINT_FILE
 const line = Number(process.env.BREAKPOINT_LINE)
 assert(sourceFile, 'BREAKPOINT_FILE environment variable must be set')
 assert(!Number.isNaN(line), 'BREAKPOINT_LINE environment variable must be a number')
+const expectedBreakpoint = TRACK_PROBE_OUTPUT
+  ? 'data.n = n // BREAKPOINT HERE!'
+  : 'return n // BREAKPOINT HERE!'
+assert.equal(
+  fs.readFileSync(sourceFile, 'utf8').split('\n')[line - 1]?.trim(),
+  expectedBreakpoint,
+  `BREAKPOINT_LINE must point at "${expectedBreakpoint}"`
+)
 
 const breakpoint = { sourceFile, line }
 const config = {
