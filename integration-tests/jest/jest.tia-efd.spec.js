@@ -72,6 +72,7 @@ const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const onlyBeforeJest30It = JEST_VERSION !== 'latest' && Number(JEST_VERSION.split('.')[0]) < 30 ? it : it.skip
+const onlyJest28AndLaterIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28 ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 const isJestCoverageBackfillSupported = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
@@ -1807,7 +1808,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('keeps concurrent originals and EFD retries concurrent', async () => {
+    onlyJest28AndLaterIt('keeps concurrent originals and EFD retries concurrent', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-sibling-test.js'
       const newTestName = 'early flake detection concurrent siblings new test waits for its known sibling'
