@@ -431,7 +431,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
-    if (runner.suite.hasOnly()) {
+    if (typeof runner.suite.hasOnly === 'function' && runner.suite.hasOnly()) {
       runner.suite.filterOnly()
     }
     const numTestsToRun = runner.grepTotal(runner.suite)
