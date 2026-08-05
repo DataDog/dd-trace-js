@@ -1,12 +1,16 @@
 'use strict'
 
 const assert = require('node:assert')
+const { execFile: executeFile } = require('node:child_process')
 const fs = require('node:fs/promises')
 const Module = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
+const { promisify } = require('node:util')
 
 const { build, instrumentBuildOutput, mergeNodeOptions, validateTracerRoot } = require('./builder')
+
+const execFile = promisify(executeFile)
 
 describe('Vercel Next Builder prototype', () => {
   let outputPath
@@ -25,7 +29,16 @@ describe('Vercel Next Builder prototype', () => {
       dependencies: { 'tracer-dependency': '1.0.0' },
       optionalDependencies: { 'missing-optional-dependency': '1.0.0' },
     }))
-    await fs.writeFile(path.join(tracerRoot, 'initialize.mjs'), 'globalThis.__datadogInitialized = true\n')
+    await fs.writeFile(
+      path.join(tracerRoot, 'initialize.mjs'),
+      "import * as Module from 'node:module'\n" +
+        'const require = Module.createRequire(import.meta.url)\n' +
+        "require('./init.js')\n"
+    )
+    await fs.writeFile(
+      path.join(tracerRoot, 'init.js'),
+      "globalThis.__datadogInitialized = require('tracer-dependency')\n"
+    )
     await fs.mkdir(path.join(tracerRoot, 'vendor'), { recursive: true })
     await fs.writeFile(path.join(tracerRoot, 'vendor', 'runtime.js'), 'module.exports = true\n')
 
@@ -35,14 +48,14 @@ describe('Vercel Next Builder prototype', () => {
       name: 'tracer-dependency',
       version: '1.0.0',
     }))
-    await fs.writeFile(path.join(dependencyRoot, 'index.js'), 'module.exports = true\n')
+    await fs.writeFile(path.join(dependencyRoot, 'index.js'), "module.exports = 'traced'\n")
   })
 
   afterEach(async () => {
     await fs.rm(outputPath, { force: true, recursive: true })
   })
 
-  it('packages dd-trace and preloads it for Node functions without changing handlers', async () => {
+  it('traces dd-trace into every Node function without changing handlers', async () => {
     const nodeFunction = path.join(outputPath, 'functions', 'api', 'ping.func')
     const edgeFunction = path.join(outputPath, 'functions', 'api', 'edge.func')
     await fs.mkdir(nodeFunction, { recursive: true })
@@ -56,6 +69,9 @@ describe('Vercel Next Builder prototype', () => {
       handler: 'index.js',
       runtime: 'edge',
     }))
+    const applicationDependencyRoot = path.join(nodeFunction, 'node_modules', 'tracer-dependency')
+    await fs.mkdir(applicationDependencyRoot, { recursive: true })
+    await fs.writeFile(path.join(applicationDependencyRoot, 'index.js'), "module.exports = 'application'\n")
 
     await instrumentBuildOutput(outputPath, tracerRoot, workPath)
 
@@ -68,20 +84,21 @@ describe('Vercel Next Builder prototype', () => {
       '--import=dd-trace/initialize.mjs --enable-source-maps'
     )
     assert.strictEqual(nodeConfig.environment.USER_SETTING, 'preserved')
-    assert.strictEqual(
-      nodeConfig.filePathMap['node_modules/dd-trace/initialize.mjs'],
-      '.datadog/vercel-runtime/node_modules/dd-trace/initialize.mjs'
+    await fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace', 'initialize.mjs'))
+    await fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace', 'init.js'))
+    await fs.access(
+      path.join(nodeFunction, 'node_modules', 'dd-trace', 'node_modules', 'tracer-dependency', 'index.js')
     )
+    await assert.rejects(fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace', 'vendor', 'runtime.js')))
     assert.strictEqual(
-      nodeConfig.filePathMap['node_modules/tracer-dependency/index.js'],
-      '.datadog/vercel-runtime/node_modules/tracer-dependency/index.js'
+      await fs.readFile(path.join(applicationDependencyRoot, 'index.js'), 'utf8'),
+      "module.exports = 'application'\n"
     )
-    assert.strictEqual(
-      nodeConfig.filePathMap['node_modules/dd-trace/vendor/runtime.js'],
-      '.datadog/vercel-runtime/node_modules/dd-trace/vendor/runtime.js'
-    )
-    await fs.access(path.join(workPath, nodeConfig.filePathMap['node_modules/dd-trace/initialize.mjs']))
-    await assert.rejects(fs.access(path.join(nodeFunction, 'node_modules', 'dd-trace')))
+    const { stdout } = await execFile(process.execPath, ['--eval', 'process.stdout.write(__datadogInitialized)'], {
+      cwd: nodeFunction,
+      env: { ...process.env, NODE_OPTIONS: nodeConfig.environment.NODE_OPTIONS },
+    })
+    assert.strictEqual(stdout, 'traced')
 
     assert.deepStrictEqual(edgeConfig, { handler: 'index.js', runtime: 'edge' })
     await assert.rejects(fs.access(path.join(edgeFunction, 'node_modules', 'dd-trace')))
@@ -151,6 +168,6 @@ describe('Vercel Next Builder prototype', () => {
     const config = JSON.parse(await fs.readFile(path.join(functionPath, '.vc-config.json'), 'utf8'))
     assert.strictEqual(config.handler, '___next_launcher.cjs')
     assert.strictEqual(config.environment.NODE_OPTIONS, '--import=dd-trace/initialize.mjs')
-    assert.ok(config.filePathMap['node_modules/dd-trace/initialize.mjs'])
+    await fs.access(path.join(functionPath, 'node_modules', 'dd-trace', 'initialize.mjs'))
   })
 })

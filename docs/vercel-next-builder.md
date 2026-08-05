@@ -6,12 +6,17 @@ must not attempt to load the Node tracer.
 
 The prototype in [`examples/vercel-nextjs`](./examples/vercel-nextjs/README.md)
 delegates to `@vercel/next.build()`. When the official Builder returns a public
-Build Output API directory, it stages the published `dd-trace` package and uses
-Vercel's Node File Trace for its declared runtime dependencies. It maps that
-runtime into each Node `.func` and prepends
+Build Output API directory, it traces `dd-trace/initialize.mjs` into each Node
+`.func` with Vercel's Node File Trace and prepends
 `--import=dd-trace/initialize.mjs` to each function's existing `NODE_OPTIONS`.
+Non-tracer dependencies in that closure are nested under `dd-trace`, so the
+Builder does not overwrite the application's runtime dependencies.
 It preserves handlers and Edge output and does not use project-global
 `NODE_OPTIONS`, Trace Drain, source mapping, debug logging, or customer secrets.
+Next.js already lists `dd-trace` as a server external, so it stays outside
+function source bundles. NFT's per-function closure provides the corresponding
+runtime files; no post-build external-dependency configuration is needed or
+supported.
 The Datadog integration configures direct OTLP intake for traces, logs, and
 metrics independently of the Builder's packaging work.
 
