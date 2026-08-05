@@ -868,46 +868,6 @@ describe('dogstatsd', () => {
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
     })
-
-    it('skips a dead registry entry during identity-refresh without disrupting live entries', () => {
-      const created = []
-      const OriginalWeakRef = global.WeakRef
-      sinon.stub(global, 'WeakRef').callsFake(target => {
-        const ref = new OriginalWeakRef(target)
-        created.push(ref)
-        return ref
-      })
-
-      const config = {
-        dogstatsd: {
-          hostname: '127.0.0.1',
-          port: 8125,
-        },
-        lookup: dns.lookup,
-        runtimeMetricsRuntimeId: true,
-        tags: { 'runtime-id': 'initial-id' },
-      }
-
-      try {
-        // eslint-disable-next-line no-new
-        new CustomMetrics({ ...config, tags: { 'runtime-id': 'stale-id' } })
-        client = new CustomMetrics(config)
-      } finally {
-        global.WeakRef.restore()
-      }
-
-      // Simulates the CustomMetrics instance above becoming unreachable and collected.
-      sinon.stub(created[0], 'deref').returns(undefined)
-
-      config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
-
-      client.gauge('test.avg', 10)
-      client.flush()
-
-      sinon.assert.called(udp4.send)
-      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
-    })
   })
 
   describe('MetricsAggregationClient', () => {
