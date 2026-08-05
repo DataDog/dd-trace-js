@@ -873,6 +873,7 @@ describe('RemoteConfig', () => {
   })
 
   describe('refreshClientId', () => {
+    let refreshIdentity
     let uuidStub
     let RemoteConfigWithId
 
@@ -883,6 +884,11 @@ describe('RemoteConfig', () => {
       uuidStub.onSecondCall().returns('new-client-id-uuid')
 
       RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        'dc-polyfill': {
+          channel: sinon.stub().returns({
+            subscribe: (listener) => { refreshIdentity = listener },
+          }),
+        },
         '../../../../vendor/dist/crypto-randomuuid': uuidStub,
         './scheduler': Scheduler,
         '../../../../package.json': { version: '3.0.0' },
@@ -903,7 +909,7 @@ describe('RemoteConfig', () => {
       const rcInstance = new RemoteConfigWithId(config)
       assert.strictEqual(rcInstance.state.client.id, '1234-5678')
 
-      channel('datadog:identity:update').publish(config)
+      refreshIdentity(config)
 
       assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
@@ -926,15 +932,13 @@ describe('RemoteConfig', () => {
         '_dd.rc.client_id:old-client-id',
       ])
 
-      channel('datadog:identity:update').publish(rcConfig)
+      refreshIdentity(rcConfig)
 
-      // Other RemoteConfig instances accumulated on the shared channel by earlier tests also
-      // react to this publish, so we can't pin the exact winning uuid here — only that this
-      // instance's tags getter picked up a fresh value instead of the stale snapshot.
       const refreshedTags = rcInstance.state.client.client_tracer.tags
-      assert.strictEqual(refreshedTags[0], 'runtime-id:runtimeId')
-      assert.notStrictEqual(refreshedTags[1], '_dd.rc.client_id:old-client-id')
-      assert.match(refreshedTags[1], /^_dd\.rc\.client_id:/)
+      assert.deepStrictEqual(refreshedTags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:new-client-id-uuid',
+      ])
     })
 
     it('should set clientId to the value returned by uuid', () => {
@@ -946,12 +950,9 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      channel('datadog:identity:update').publish(rcConfig)
+      refreshIdentity(rcConfig)
 
-      // Other RemoteConfig instances accumulated on the shared channel by earlier tests
-      // also react to this publish, so we can't pin the exact winning uuid here — only
-      // that this instance's guard fired and replaced the original value.
-      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old')
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
     })
 
     it('should update config.tags[_dd.rc.client_id] when it exists', () => {
@@ -966,9 +967,9 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      channel('datadog:identity:update').publish(rcConfig)
+      refreshIdentity(rcConfig)
 
-      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old-client-id')
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
     })
 
     it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
@@ -980,13 +981,13 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      channel('datadog:identity:update').publish(rcConfig)
+      refreshIdentity(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
     })
 
     it('should call uuid again to generate the new ID', () => {
-      channel('datadog:identity:update').publish(config)
+      refreshIdentity(config)
 
       // once at module load for the initial clientId, once on refresh
       sinon.assert.calledTwice(uuidStub)
@@ -998,7 +999,7 @@ describe('RemoteConfig', () => {
       const error = new Error('boom')
       uuidStub.onSecondCall().throws(error)
 
-      channel('datadog:identity:update').publish(config)
+      refreshIdentity(config)
 
       sinon.assert.calledWith(log.error, '[RC] Error refreshing identity', error)
     })
