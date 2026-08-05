@@ -661,6 +661,31 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   cb(new Error('boom'))
 })
 
+// messages carrying image parts, inline and by attachment key
+llmobs.annotate({
+  inputData: [{
+    content: 'what is in this image',
+    imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }]
+  }],
+  outputData: [{
+    content: 'a pixel',
+    imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }]
+  }]
+})
+
+// an image part carries exactly one of content or attachmentKey
+type ImagePart = import('..').llmobs.ImagePart
+const inlineImagePart: ImagePart = { mimeType: 'image/png', content: 'iVBORw0KGgo=' }
+const keyedImagePart: ImagePart = { mimeType: 'image/jpeg', attachmentKey: 'key-123' }
+// @ts-expect-error An image part must carry either content or attachmentKey.
+const emptyImagePart: ImagePart = { mimeType: 'image/png' }
+// @ts-expect-error An image part must not carry both content and attachmentKey.
+const overspecifiedImagePart: ImagePart = {
+  mimeType: 'image/png',
+  content: 'iVBORw0KGgo=',
+  attachmentKey: 'key-123'
+}
+
 // wrap a function
 llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
