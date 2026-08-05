@@ -877,12 +877,7 @@ describe('Plugin', function () {
             .catch(done)
         })
 
-        // From next 15.4.1 the app-route handler builds its NextRequest from a copy of
-        // `NextRequestAdapter.fromNodeNextRequest` that next bundles into the app build
-        // (dist/build/templates/app-route.js), so the file hook that maps the node request to
-        // the NextRequest never fires and a user-set `req.error` cannot reach the span. Capturing
-        // it again needs the runtime `onRequestError` hook rather than file instrumentation.
-        if (satisfies(pkg.version, '>=13.3.0 <15.4.1')) {
+        if (satisfies(pkg.version, '>=13.3.0')) {
           it('should attach the error to the span from a NextRequest', done => {
             agent
               .assertSomeTraces(traces => {
@@ -908,7 +903,9 @@ describe('Plugin', function () {
                 if (err.response.status !== 500) done(err)
               })
           })
-        } else if (satisfies(pkg.version, '>=15.4.1')) {
+        }
+
+        if (satisfies(pkg.version, '>=15.4.1')) {
           it('should attach a thrown app-route error to the span via onRequestError', done => {
             agent
               .assertSomeTraces(traces => {
@@ -1042,12 +1039,28 @@ describe('compiled Next runtimes', () => {
     ]
 
     for (const [runtime, exportName, method, args] of cases) {
-      const returned = {}
+      const returned = {
+        handleResponse: {},
+        prepare: {},
+        route: {},
+      }
       class RouteModule {
+        prepare (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned.prepare
+        }
+
+        handleResponse (...received) {
+          assert.strictEqual(this, routeModule)
+          assert.deepStrictEqual(received, args)
+          return returned.handleResponse
+        }
+
         [method] (...received) {
           assert.strictEqual(this, routeModule)
           assert.deepStrictEqual(received, args)
-          return returned
+          return returned.route
         }
       }
       const routeModule = new RouteModule()
@@ -1055,19 +1068,66 @@ describe('compiled Next runtimes', () => {
       const hook = getHook(runtime)
       hook({ [exportName]: RouteModule })
 
-      assert.strictEqual(routeModule[method](...args), returned)
+      if (runtime !== 'pages-api') {
+        assert.strictEqual(routeModule.prepare(...args), returned.prepare)
+        assert.strictEqual(routeModule.handleResponse(...args), returned.handleResponse)
+      }
+      assert.strictEqual(routeModule[method](...args), returned.route)
     }
   })
 
+  it('bypasses the shared lifecycle when the last subscriber is removed after prepare', async () => {
+    class RouteModule {
+      prepare () {
+        return Promise.resolve({})
+      }
+
+      /** @param {{responseGenerator: () => Promise<unknown>}} options */
+      handleResponse ({ responseGenerator }) {
+        return responseGenerator()
+      }
+    }
+
+    class AppPageRouteModule extends RouteModule {}
+    getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+    const startChannel = dc.channel('apm:next:request:start')
+    const onStart = () => {}
+    startChannel.subscribe(onStart)
+    const routeModule = new AppPageRouteModule()
+    const request = { headers: {}, method: 'GET', url: '/disabled-after-prepare' }
+    await routeModule.prepare(request, new http.ServerResponse(request), {})
+    startChannel.unsubscribe(onStart)
+
+    const result = await routeModule.handleResponse({
+      req: request,
+      responseGenerator: () => Promise.resolve('response'),
+    })
+    assert.strictEqual(result, 'response')
+  })
+
   describe('as the first tracing entrypoint', () => {
+    let tracer
+
+    class RouteModule {
+      prepare () {
+        return Promise.resolve({})
+      }
+
+      /** @param {{responseGenerator: () => Promise<unknown>}} options */
+      handleResponse ({ responseGenerator }) {
+        return responseGenerator()
+      }
+    }
+
     before(async () => {
-      await agent.load('next')
+      tracer = await agent.load('next')
       dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
     })
     after(() => agent.close())
 
     it('traces an App Route lifecycle with status and incoming context', async () => {
-      class AppRouteRouteModule {
+      class AppRouteRouteModule extends RouteModule {
         definition = { pathname: '/api/first-entry' }
 
         handle () {
@@ -1108,14 +1168,186 @@ describe('compiled Next runtimes', () => {
       })
 
       assert.strictEqual(storage('legacy').getStore(), undefined)
-      const response = await new AppRouteRouteModule().handle(request, {})
-      assert.strictEqual(response.status, 201)
+      const nodeResponse = new http.ServerResponse(request)
+      const routeModule = new AppRouteRouteModule()
+      const nextRequest = { headers: {}, method: 'GET', url: '/api/first-entry' }
+      await routeModule.prepare(request, nodeResponse, {})
+      const response = await routeModule.handleResponse({
+        req: request,
+        responseGenerator: async () => {
+          const response = await routeModule.handle(nextRequest, {})
+          return { value: { status: response.status } }
+        },
+      })
+      assert.strictEqual(response.value.status, 201)
       await trace
       assert.deepStrictEqual(lifecycle, ['start', 'page', 'finish'])
       dc.channel('apm:next:request:start').unsubscribe(onStart)
       dc.channel('apm:next:page:load').unsubscribe(onPage)
       dc.channel('apm:next:request:finish').unsubscribe(onFinish)
     })
+
+    it('bypasses the shared lifecycle when prepare was not called', async () => {
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/without-prepare' }
+      }
+
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      let starts = 0
+      const onStart = () => starts++
+      dc.channel('apm:next:request:start').subscribe(onStart)
+      const result = await new AppPageRouteModule().handleResponse({
+        req: { headers: {}, method: 'GET', url: '/without-prepare' },
+        responseGenerator: () => Promise.resolve('response'),
+      })
+      dc.channel('apm:next:request:start').unsubscribe(onStart)
+
+      assert.strictEqual(result, 'response')
+      assert.strictEqual(starts, 0)
+    })
+
+    const cachedRuntimeCases = [
+      {
+        exportName: 'AppRouteRouteModule',
+        label: 'App Route',
+        method: 'handle',
+        pathname: '/api/cached',
+        runtime: 'app-route',
+      },
+      {
+        exportName: 'AppPageRouteModule',
+        label: 'App Page',
+        method: 'render',
+        pathname: '/cached',
+        runtime: 'app-page',
+      },
+    ]
+
+    for (const { exportName, label, method, pathname, runtime } of cachedRuntimeCases) {
+      it(`traces a cached ${label} response`, async () => {
+        class CompiledRouteModule extends RouteModule {
+          handleResponse () {
+            return Promise.resolve({
+              isMiss: false,
+              isStale: false,
+              value: { status: 202 },
+            })
+          }
+
+          [method] () {
+            assert.fail('a cache hit should not invoke the response generator')
+          }
+
+          definition = { pathname }
+        }
+
+        getCompiledRuntimeHook(runtime)({ [exportName]: CompiledRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: pathname }
+        const response = new http.ServerResponse(request)
+        const routeModule = new CompiledRouteModule()
+        const parentResource = `cache-hit-${runtime}`
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertNextRequestTrace (traces) {
+          let nextRequestSpan
+          let nextRequestSpanCount = 0
+
+          for (const span of traces[0]) {
+            if (span.name === 'next.request') {
+              nextRequestSpan = span
+              nextRequestSpanCount++
+            }
+          }
+
+          assert.strictEqual(nextRequestSpanCount, 1)
+          assert.strictEqual(nextRequestSpan.resource, `GET ${pathname}`)
+          assert.strictEqual(nextRequestSpan.meta['http.status_code'], '202')
+        }
+        const tracePromise = agent.assertSomeTraces(assertNextRequestTrace, {
+          rejectFirst: true,
+          spanResourceMatch: new RegExp(pathname),
+        })
+
+        await Promise.all([
+          tracer.trace(parentResource, async () => {
+            await routeModule.prepare(request, response, {})
+            return routeModule.handleResponse({
+              req: request,
+              responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
+            })
+          }),
+          tracePromise,
+        ])
+      })
+
+      it(`does not create a request span for stale ${label} background revalidation`, async () => {
+        let responseGenerator
+
+        class CompiledRouteModule extends RouteModule {
+          /** @param {{responseGenerator: () => Promise<unknown>}} options */
+          handleResponse (options) {
+            responseGenerator = options.responseGenerator
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          [method] () {
+            return runtime === 'app-route'
+              ? Promise.reject(new Error('stale App Route revalidation error'))
+              : Promise.resolve({ metadata: { statusCode: 200 } })
+          }
+
+          onRequestError () {
+            return Promise.resolve()
+          }
+
+          definition = { pathname }
+        }
+
+        getCompiledRuntimeHook(runtime)({ [exportName]: CompiledRouteModule })
+
+        const request = { headers: {}, method: 'GET', url: pathname }
+        const response = new http.ServerResponse(request)
+        const routeModule = new CompiledRouteModule()
+        await routeModule.prepare(request, response, {})
+        await routeModule.handleResponse({
+          req: request,
+          responseGenerator: async () => {
+            try {
+              return runtime === 'app-route'
+                ? await routeModule[method]({ headers: {}, method: 'GET' }, {})
+                : await routeModule[method](request, response, { page: pathname })
+            } catch (error) {
+              await routeModule.onRequestError(request, error)
+              throw error
+            }
+          },
+        })
+        assert.strictEqual(typeof responseGenerator, 'function')
+
+        /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+        function assertNoNextRequestTrace (traces) {
+          let nextRequestSpanCount = 0
+          for (const span of traces[0]) {
+            if (span.name === 'next.request') nextRequestSpanCount++
+          }
+          assert.strictEqual(nextRequestSpanCount, 0)
+        }
+        const parentResource = `stale-revalidation-${runtime}`
+        const tracePromise = agent.assertSomeTraces(assertNoNextRequestTrace, {
+          rejectFirst: true,
+          spanResourceMatch: new RegExp(parentResource),
+        })
+        const revalidate = runtime === 'app-route'
+          ? () => assert.rejects(responseGenerator, /stale App Route revalidation error/)
+          : responseGenerator
+
+        await Promise.all([
+          tracer.trace(parentResource, revalidate),
+          tracePromise,
+        ])
+      })
+    }
 
     it('records Pages API errors and status without an existing request store', async () => {
       class PagesAPIRouteModule {
@@ -1153,7 +1385,7 @@ describe('compiled Next runtimes', () => {
     })
 
     it('records App Page errors and status without an existing request store', async () => {
-      class AppPageRouteModule {
+      class AppPageRouteModule extends RouteModule {
         definition = { pathname: '/first-entry' }
 
         render () {
@@ -1179,14 +1411,89 @@ describe('compiled Next runtimes', () => {
       })
 
       assert.strictEqual(storage('legacy').getStore(), undefined)
+      const request = { headers: {}, method: 'GET', url: '/first-entry' }
+      const routeModule = new AppPageRouteModule()
+      await routeModule.prepare(request, response, {})
       await assert.rejects(
-        new AppPageRouteModule().render({ headers: {}, method: 'GET', url: '/first-entry' }, response, {
-          page: '/first-entry',
+        routeModule.handleResponse({
+          req: request,
+          responseGenerator: () => routeModule.render(request, response, { page: '/first-entry' }),
         }),
         /App Page first-entry error/
       )
       assert.strictEqual(response.statusCode, 500)
       await trace
+    })
+
+    it('passes the Node response to App Route hooks without disabling the plugin', async () => {
+      const hookResponses = []
+      /**
+       * @param {import('../../dd-trace/src/opentracing/span')} _span
+       * @param {import('node:http').IncomingMessage} _request
+       * @param {import('node:http').ServerResponse} response
+       */
+      const requestHook = (_span, _request, response) => {
+        hookResponses.push(response)
+        response.getHeader('content-type')
+      }
+      agent.reload('next', { hooks: { request: requestHook } })
+
+      class AppRouteRouteModule extends RouteModule {
+        definition = { pathname: '/api/response-hook' }
+
+        handle () {
+          return Promise.resolve({ status: 200 })
+        }
+      }
+
+      class PagesAPIRouteModule {
+        definition = { page: '/api/response-hook-sentinel' }
+
+        render () {
+          return Promise.resolve()
+        }
+      }
+
+      getCompiledRuntimeHook('app-route')({ AppRouteRouteModule })
+      getCompiledRuntimeHook('pages-api')({ PagesAPIRouteModule })
+
+      const routeRequest = { headers: {}, method: 'GET', url: '/api/response-hook' }
+      const routeResponse = new http.ServerResponse(routeRequest)
+      const routeModule = new AppRouteRouteModule()
+      await routeModule.prepare(routeRequest, routeResponse, {})
+      await routeModule.handleResponse({
+        req: routeRequest,
+        responseGenerator: () => routeModule.handle({ headers: {}, method: 'GET' }, {}),
+      })
+
+      const sentinelRequest = { headers: {}, method: 'GET', url: '/api/response-hook-sentinel' }
+      const sentinelResponse = new http.ServerResponse(sentinelRequest)
+      /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
+      function assertNextRequestTrace (traces) {
+        let nextRequestSpan
+        for (const span of traces[0]) {
+          if (span.name === 'next.request') {
+            nextRequestSpan = span
+            break
+          }
+        }
+
+        assert.ok(nextRequestSpan, 'next.request span should exist after the App Route hook')
+      }
+      const tracePromise = agent.assertSomeTraces(assertNextRequestTrace, {
+        rejectFirst: true,
+        spanResourceMatch: /response-hook-sentinel/,
+      })
+
+      await Promise.all([
+        tracer.trace('response-hook-sentinel', () => {
+          return new PagesAPIRouteModule().render(sentinelRequest, sentinelResponse, {
+            page: '/api/response-hook-sentinel',
+          })
+        }),
+        tracePromise,
+      ])
+      assert.deepStrictEqual(hookResponses, [routeResponse, sentinelResponse])
     })
   })
 })
