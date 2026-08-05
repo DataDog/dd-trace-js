@@ -12,6 +12,7 @@
       "run": "node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-without-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-without-vulnerability.js\"",
       "env": {
+        "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "OPERATIONS": "30000"
@@ -25,6 +26,7 @@
       "run": "node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-with-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-with-vulnerability.js\"",
       "env": {
+        "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "OPERATIONS": "9500"
@@ -34,6 +36,7 @@
       "run": "node --require ../../../init.js insecure-bank.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
       "env": {
+        "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1"
       }
     }

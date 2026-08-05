@@ -39,6 +39,7 @@
       "run": "node --require ../../../init.js insecure-bank.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
       "env": {
+        "DD_INJECT_FORCE": "true",
         "DD_APPSEC_ENABLED": "1"
       }
     }
