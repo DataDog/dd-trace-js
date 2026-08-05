@@ -29,7 +29,7 @@
         "DD_INJECT_FORCE": "true",
         "DD_IAST_ENABLED": "1",
         "DD_REMOTE_CONFIGURATION_ENABLED": "false",
-        "OPERATIONS": "9500"
+        "OPERATIONS": "11500"
       }
     },
     "startup-time-iast-enabled": {
