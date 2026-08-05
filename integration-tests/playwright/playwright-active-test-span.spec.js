@@ -232,8 +232,9 @@ versions.forEach((version) => {
             const eventFinishedTestEvents = telemetryEvents
               .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
+            assert.ok(eventFinishedTestEvents.length > 0, 'test event telemetry from a worker should be sent')
             eventFinishedTestEvents.forEach(({ tags }) => {
-              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+              assert.ok(tags.includes('is_rum:true'), `Got: ${inspect(tags)}`)
               assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
             })
           })

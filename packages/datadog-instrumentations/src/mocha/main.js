@@ -17,6 +17,7 @@ const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
   getCoveredFilesFromCoverage,
@@ -100,6 +101,7 @@ const mochaGlobalRunCh = channel('ci:mocha:global:run')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
@@ -994,6 +996,8 @@ function onMessage (message) {
         attemptToFixExecutions,
       })
       workerReportTraceCh.publish(payload)
+    } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
     }
   }
 }

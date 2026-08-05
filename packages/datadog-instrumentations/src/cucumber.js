@@ -21,6 +21,7 @@ const {
   getTestSuitePath,
   getRelativeCoverageFiles,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
@@ -62,6 +63,7 @@ const modifiedFilesCh = channel('ci:cucumber:modified-files')
 const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:cucumber:worker-report:telemetry')
 
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
@@ -301,6 +303,10 @@ function handleDdWorkerMessage (message) {
     if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
       collectTestOptimizationSummariesFromTraces(payload, { attemptToFixExecutions })
       workerReportTraceCh.publish(payload)
+      return true
+    }
+    if (messageCode === CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
       return true
     }
   }
