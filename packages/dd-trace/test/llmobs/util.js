@@ -341,6 +341,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
   }
 
   const expectedEvaluationMetric = {
+    event_kind: 'evaluation',
     join_on: {
       span: {
         trace_id: joinOn.span.traceId,
