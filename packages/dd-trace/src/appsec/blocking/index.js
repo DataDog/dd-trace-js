@@ -1,10 +1,10 @@
 'use strict'
 
-const { LRUCache } = require('../../../../vendor/dist/lru-cache')
-const log = require('../log')
-const web = require('../plugins/util/web')
-const blockedTemplates = require('./blocked_templates')
-const { updateBlockFailureMetric } = require('./telemetry')
+const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
+const log = require('../../log')
+const web = require('../../plugins/util/web')
+const { updateBlockFailureMetric } = require('../telemetry')
+const blockedTemplates = require('./templates')
 
 // Bounded by the LRU as defense-in-depth: getSpecificKey already keys on the
 // resolved route (or the path with the query string stripped) so cardinality
@@ -182,7 +182,26 @@ function getBlockingAction (actions) {
 }
 
 /**
- * @param {import('../config/config-base')} [config] - Tracer configuration
+ * Turns a WAF result's actions into a blocking response, when one is requested.
+ * Single seam from WAF output to {@link block}, shared by every request/response/auth handler.
+ *
+ * @param {Record<string, unknown>|undefined} actions WAF result actions.
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {object} rootSpan
+ * @param {AbortController} abortController
+ */
+function handleResults (actions, req, res, rootSpan, abortController) {
+  if (!actions || !req || !res || !rootSpan || !abortController) return
+
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    block(req, res, rootSpan, abortController, blockingAction)
+  }
+}
+
+/**
+ * @param {import('../../config/config-base')} [config] - Tracer configuration
  */
 function setTemplates (config) {
   templates.html.body = config?.appsec?.blockedTemplateHtml
@@ -233,6 +252,7 @@ module.exports = {
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,
+  handleResults,
   setTemplates,
   isBlocked,
   setDefaultBlockingActionParameters,
