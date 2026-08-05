@@ -13,16 +13,45 @@ class NoopDataset {
       input: record.inputData,
       expectedOutput: record.expectedOutput ?? null,
       metadata: record.metadata ?? {},
+      tags: record.tags ?? [],
     }))
   }
 
-  addRecord (input, expectedOutput, metadata) {
-    this.#records.push({ id: null, input, expectedOutput: expectedOutput ?? null, metadata: metadata ?? {} })
+  addRecord (input, expectedOutput, metadata, tags) {
+    this.#records.push({
+      id: null,
+      input,
+      expectedOutput: expectedOutput ?? null,
+      metadata: metadata ?? {},
+      tags: tags ?? [],
+    })
     return this
   }
 
   push () {
     return Promise.resolve({ pushedCount: 0, totalCount: 0 })
+  }
+
+  addTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    record.tags = [...new Set([...(record.tags ?? []), ...tags])].sort()
+    return this
+  }
+
+  removeTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    const removed = new Set(tags)
+    record.tags = (record.tags ?? []).filter(tag => !removed.has(tag)).sort()
+    return this
+  }
+
+  replaceTags (index, tags) {
+    const record = this.#records[index]
+    if (!record) return this
+    record.tags = [...tags]
+    return this
   }
 
   name () {

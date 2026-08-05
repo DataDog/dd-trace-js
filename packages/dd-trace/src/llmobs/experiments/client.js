@@ -32,7 +32,8 @@ function datasetRecordFromResource (resource) {
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
     String(resource?.id ?? attrs.id ?? '') || null,
-    attrs.valid_from_version ?? attrs.version ?? null
+    attrs.valid_from_version ?? attrs.version ?? null,
+    attrs.tags ?? []
   )
 }
 
@@ -176,10 +177,35 @@ class ExperimentsClient {
     return resources.map(datasetRecordFromResource)
   }
 
+  async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
+    const response = await this.request(
+      'POST',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/batch_update`,
+      {
+        data: {
+          type: 'datasets',
+          id: datasetId,
+          attributes: {
+            insert_records: attributes.insert_records ?? [],
+            update_records: attributes.update_records ?? [],
+            delete_records: attributes.delete_records ?? [],
+            deduplicate: attributes.deduplicate !== false,
+            create_new_version: attributes.create_new_version !== false,
+          },
+        },
+      }
+    )
+    const resources = Array.isArray(response?.data) ? response.data : []
+    return resources.map(datasetRecordFromResource)
+  }
+
   async listDatasetRecords (projectId, datasetId, options = {}) {
     const query = new URLSearchParams()
     if (options.cursor) query.set('page[cursor]', options.cursor)
     if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
+    if (Array.isArray(options.tags)) {
+      for (const tag of options.tags) query.append('filter[tags]', tag)
+    }
     const response = await this.request(
       'GET',
       `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`

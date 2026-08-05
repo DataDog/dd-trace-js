@@ -126,10 +126,12 @@ describe('LLMObs Experiments facade', () => {
       const exp = createExperiments(enabledConfig())
       const dataset = exp.createDataset('d', {
         description: 'desc',
-        records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
+        records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' }, tags: ['suite:unit'] }],
       })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(typeof dataset.addTags, 'function')
       assert.equal(dataset.records()[0].input, 'in')
+      assert.deepEqual(dataset.records()[0].tags, ['suite:unit'])
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
     })
@@ -155,6 +157,19 @@ describe('LLMObs Experiments facade', () => {
           records: [{ id: '', inputData: 'a' }],
         }),
         /record id must be a non-empty string/
+      )
+    })
+
+    it('rejects malformed dataset record tags', async () => {
+      assert.throws(
+        () => createExperiments(enabledConfig()).createDataset('d', {
+          records: [{ inputData: 'a', tags: ['missing-separator'] }],
+        }),
+        /Tags must be in 'key:value' format/
+      )
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('d', { tags: ['missing-separator'] }),
+        /Tags must be in 'key:value' format/
       )
     })
 
@@ -200,6 +215,7 @@ describe('LLMObs Experiments facade', () => {
           inputData: { question: 'q' },
           expectedOutput: { answer: 'a' },
           metadata: { source: 'test' },
+          tags: ['suite:noop'],
         }],
       })
       dataset.addRecord('input only')
@@ -217,8 +233,9 @@ describe('LLMObs Experiments facade', () => {
           input: { question: 'q' },
           expectedOutput: { answer: 'a' },
           metadata: { source: 'test' },
+          tags: ['suite:noop'],
         },
-        { id: null, input: 'input only', expectedOutput: null, metadata: {} },
+        { id: null, input: 'input only', expectedOutput: null, metadata: {}, tags: [] },
       ])
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
 
@@ -236,8 +253,14 @@ describe('LLMObs Experiments facade', () => {
 
   describe('pullDataset', () => {
     it('pulls records from the backend client with pagination and an explicit version', async () => {
-      const firstRecord = { id: 'r1', input: { value: 1 }, expectedOutput: 'one', metadata: { page: 1 } }
-      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
+      const firstRecord = {
+        id: 'r1',
+        input: { value: 1 },
+        expectedOutput: 'one',
+        metadata: { page: 1 },
+        tags: ['split:train'],
+      }
+      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 }, tags: ['split:test'] }
       const { listDatasetRecords } = stubPullDatasetClient({
         datasets: [datasetResource({ name: 'remote-dataset', id: 'ds', description: 'desc', latestVersion: 4 })],
         pages: [
@@ -249,6 +272,7 @@ describe('LLMObs Experiments facade', () => {
       const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', {
         expectedRecordCount: 2,
         maxWaitMs: 0,
+        tags: ['split:train'],
         version: 2,
       })
 
@@ -258,11 +282,20 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.projectId(), 'proj')
       assert.equal(dataset.version(), 2)
       assert.equal(dataset.latestVersion(), 4)
+      assert.deepEqual(dataset.filterTags(), ['split:train'])
       assert.deepEqual(dataset.records(), [firstRecord, secondRecord])
       assert.deepEqual(dataset.recordIds(), ['r1', ''])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
-      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
+      assert.deepEqual(listDatasetRecords.firstCall.args, [
+        'proj',
+        'ds',
+        { cursor: '', tags: ['split:train'], version: 2 },
+      ])
+      assert.deepEqual(listDatasetRecords.secondCall.args, [
+        'proj',
+        'ds',
+        { cursor: 'next-page', tags: ['split:train'], version: 2 },
+      ])
     })
 
     it('uses the latest dataset version when no version is requested', async () => {
@@ -274,7 +307,7 @@ describe('LLMObs Experiments facade', () => {
       const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 })
 
       assert.equal(dataset.version(), 5)
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 5 }])
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', tags: [], version: 5 }])
     })
 
     it('surfaces list failures from the backend client', async () => {

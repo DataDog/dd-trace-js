@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
-const { Dataset, DatasetRecord } = require('./dataset')
+const { Dataset, DatasetRecord, validateTagsList } = require('./dataset')
 const { Experiment } = require('./experiment')
 const NoopExperiments = require('./noop')
 
@@ -56,7 +56,9 @@ class Experiments {
           if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
           recordIds.add(record.id)
         }
-        dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
+        dataset.addRecord(
+          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, null, record.tags)
+        )
       }
     }
     return dataset
@@ -64,9 +66,11 @@ class Experiments {
 
   // Pull an existing dataset by name (with its records). Polls with exponential
   // backoff to absorb read-after-write lag; pass `expectedRecordCount` to also
-  // wait until that many records are readable.
+  // wait until that many records are readable. Pass `tags` to filter records by
+  // dataset record tags.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000, version } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, tags, version } = options
+    const filterTags = validateTagsList(tags)
     const projectId = await this.#client.ensureProjectId()
 
     let pulledDataset = null
@@ -99,6 +103,7 @@ class Experiments {
           // eslint-disable-next-line no-await-in-loop
           const page = await this.#client.listDatasetRecords(projectId, pulledDataset.id(), {
             cursor,
+            tags: filterTags,
             version: datasetVersion,
           })
           for (const record of page.records) {
@@ -144,7 +149,8 @@ class Experiments {
       records,
       recordIds,
       datasetVersion,
-      latestVersion
+      latestVersion,
+      filterTags
     )
   }
 

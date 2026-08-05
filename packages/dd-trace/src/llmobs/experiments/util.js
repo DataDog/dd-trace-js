@@ -187,6 +187,20 @@ function buildExperimentTagObject (userTags, autoTags) {
 }
 
 /**
+ * @param {string[] | undefined} tags
+ * @returns {Record<string, string>}
+ */
+function recordTagsToObject (tags) {
+  const result = {}
+  if (!Array.isArray(tags)) return result
+  for (const tag of tags) {
+    const separator = tag.indexOf(':')
+    if (separator > 0) result[tag.slice(0, separator)] = tag.slice(separator + 1)
+  }
+  return result
+}
+
+/**
  * @param {number} ms
  * @returns {Promise<void>}
  */
@@ -214,6 +228,7 @@ module.exports = {
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   sleep,
   stringify,
   validateEvaluatorName,
