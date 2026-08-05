@@ -2,9 +2,28 @@
 
 const os = require('node:os')
 
+const { channel } = require('dc-polyfill')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+const resourceAttributeRefreshers = new Map()
+
+function refreshActiveResourceAttributes () {
+  for (const refreshResourceAttributes of resourceAttributeRefreshers.values()) {
+    refreshResourceAttributes()
+  }
+}
+
+/**
+ * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {{
+ *   signalType: string,
+ *   updateResourceAttributes: (resourceAttributes: Attributes) => void
+ * }} ResourceAttributeExporter
+ */
+
 /**
  * @param {import('../config/config-base')} config
- * @returns {import('@opentelemetry/api').Attributes}
+ * @returns {Attributes}
  */
 function buildResourceAttributes (config) {
   const { service, version, env, ...tags } = config.tags
@@ -20,4 +39,17 @@ function buildResourceAttributes (config) {
   return resourceAttributes
 }
 
-module.exports = buildResourceAttributes
+/**
+ * @param {ResourceAttributeExporter} exporter
+ * @param {() => Attributes} buildResourceAttributes
+ */
+function registerResourceAttributeRefresh (exporter, buildResourceAttributes) {
+  if (resourceAttributeRefreshers.size === 0) {
+    identityRefreshChannel.subscribe(refreshActiveResourceAttributes)
+  }
+  resourceAttributeRefreshers.set(exporter.signalType, () => {
+    exporter.updateResourceAttributes(buildResourceAttributes())
+  })
+}
+
+module.exports = { buildResourceAttributes, registerResourceAttributeRefresh }
