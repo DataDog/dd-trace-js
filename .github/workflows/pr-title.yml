@@ -69,8 +69,8 @@ jobs:
               per_page: 100,
             })
             const files = []
-            for (const file of changedFiles) files.push(file.filename)
-            const { isInternalOnly } = require('./scripts/release/changelog')
+            const { appendChangedPaths, isInternalOnly } = require('./scripts/release/changelog')
+            appendChangedPaths(files, changedFiles)
             if (/^(?:feat|fix|perf|docs)$/.test(type) && isInternalOnly(files)) {
               core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
                 'Use test, bench, ci, or chore.')

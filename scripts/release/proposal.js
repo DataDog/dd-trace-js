@@ -117,9 +117,12 @@ try {
   const notesEntries = []
   for (const sha of notesShas) {
     if (!sha) continue
+    const subject = capture(`git show -s --format=%s ${sha}`)
+    const match = subject.match(pullRequestNumberPattern)
     notesEntries.push({
-      sha,
-      subject: capture(`git show -s --format=%s ${sha}`),
+      commitRef: sha,
+      pullRequestNumber: match ? Number.parseInt(match[1], 10) : undefined,
+      subject,
     })
   }
   const breakingEntries = isPreRelease
@@ -331,7 +334,7 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
       'gh pr list --repo DataDog/dd-trace-js --state merged --limit 1000' +
       ` --label=${label}` +
       ` --search "base:${main} merged:>=${mergedAfter} merged:<=${mergedBefore}"` +
-      ' --json number,title,mergeCommit,author'
+      ' --json number,title,mergeCommit'
     ))
 
     for (const pullRequest of pullRequests) {
@@ -343,9 +346,9 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
 
   return [...pullRequestsByNumber.values()].map(pullRequest => {
     return {
-      sha: pullRequest.mergeCommit?.oid || `pull-request-${pullRequest.number}`,
+      commitRef: pullRequest.mergeCommit?.oid,
+      pullRequestNumber: pullRequest.number,
       subject: `${pullRequest.title} (#${pullRequest.number})`,
-      author: pullRequest.author?.login ? `@${pullRequest.author.login}` : undefined,
     }
   })
 }

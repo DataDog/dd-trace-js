@@ -48,6 +48,7 @@ describe('release metadata', () => {
             },
           },
           pullRequest0: {
+            __typename: 'PullRequest',
             number: 123,
             title: 'fix(core): preserve the complete pull request context',
             author: { login: 'pull-request-author' },
@@ -56,7 +57,7 @@ describe('release metadata', () => {
               pageInfo: { hasNextPage: false },
             },
             files: {
-              nodes: [{ path: 'first-page.js' }],
+              nodes: [{ path: 'first-page.js', changeType: 'MODIFIED' }],
               pageInfo: { hasNextPage: true },
             },
           },
@@ -73,14 +74,14 @@ describe('release metadata', () => {
       },
     }))
     capture.onThirdCall().returns(JSON.stringify([
-      [{ filename: 'first-page.js' }],
+      [{ filename: 'first-page.js', previous_filename: 'previous-first-page.js' }],
       [{ filename: 'second-page.js' }],
     ]))
     const { hydrateReleaseEntries } = loadMetadata(capture)
 
     assert.deepStrictEqual(hydrateReleaseEntries([
-      { sha: '0123456789', subject: 'fix(core): preserve context (#123)' },
-      { sha: '89abcdef01', subject: 'fix(core): preserve direct commit context' },
+      { commitRef: '0123456789', pullRequestNumber: 123, subject: 'fix(core): preserve context (#123)' },
+      { commitRef: '89abcdef01', subject: 'fix(core): preserve direct commit context' },
     ]), [
       {
         sha: FULL_SHA,
@@ -92,7 +93,7 @@ describe('release metadata', () => {
           { name: '@pull-request-author', login: 'pull-request-author' },
         ],
         labels: ['appsec', 'ai-guard'],
-        files: ['first-page.js', 'second-page.js'],
+        files: ['first-page.js', 'previous-first-page.js', 'second-page.js'],
       },
       {
         sha: OTHER_FULL_SHA,
@@ -101,7 +102,7 @@ describe('release metadata', () => {
       },
     ])
     assert.strictEqual(capture.firstCall.args[0], 'git rev-parse 0123456789 89abcdef01')
-    assert.match(capture.secondCall.args[0], /pullRequest0: pullRequest\(number: 123\)/)
+    assert.match(capture.secondCall.args[0], /pullRequest0: issueOrPullRequest\(number: 123\)/)
     assert.strictEqual(
       capture.thirdCall.args[0],
       'gh api "repos/DataDog/dd-trace-js/pulls/123/files?per_page=100" --paginate --slurp'
@@ -124,11 +125,12 @@ describe('release metadata', () => {
         repository: {
           commit0: { authors: { nodes: [], pageInfo: { hasNextPage: false } } },
           pullRequest0: {
+            __typename: 'PullRequest',
             number: 123,
             title: 'fix(core): preserve context',
             labels: { nodes: [], pageInfo: { hasNextPage: false } },
             files: {
-              nodes: [{ path: 'packages/dd-trace/src/index.js' }],
+              nodes: [{ path: 'packages/dd-trace/src/index.js', changeType: 'MODIFIED' }],
               pageInfo: { hasNextPage: false },
             },
           },
@@ -138,10 +140,112 @@ describe('release metadata', () => {
     const { hydrateReleaseEntries } = loadMetadata(capture)
 
     const entries = hydrateReleaseEntries([
-      { sha: '0123456789', subject: 'fix(core): preserve context (#123)' },
+      { commitRef: '0123456789', pullRequestNumber: 123, subject: 'fix(core): preserve context (#123)' },
     ])
 
     assert.deepStrictEqual(entries[0].files, ['packages/dd-trace/src/index.js'])
+    assert.strictEqual(capture.callCount, 2)
+  })
+
+  it('uses the REST file pages when a file was renamed', () => {
+    const capture = sinon.stub()
+    capture.onFirstCall().returns(FULL_SHA)
+    capture.onSecondCall().returns(JSON.stringify({
+      data: {
+        repository: {
+          commit0: { authors: { nodes: [], pageInfo: { hasNextPage: false } } },
+          pullRequest0: {
+            __typename: 'PullRequest',
+            number: 123,
+            title: 'fix(core): move context metadata',
+            labels: { nodes: [], pageInfo: { hasNextPage: false } },
+            files: {
+              nodes: [{ path: 'scripts/release/metadata.js', changeType: 'RENAMED' }],
+              pageInfo: { hasNextPage: false },
+            },
+          },
+        },
+      },
+    }))
+    capture.onThirdCall().returns(JSON.stringify([[
+      {
+        filename: 'scripts/release/metadata.js',
+        previous_filename: 'packages/dd-trace/src/metadata.js',
+      },
+    ]]))
+    const { hydrateReleaseEntries } = loadMetadata(capture)
+
+    const entries = hydrateReleaseEntries([
+      { commitRef: '0123456789', pullRequestNumber: 123, subject: 'fix(core): move context metadata (#123)' },
+    ])
+
+    assert.deepStrictEqual(entries[0].files, [
+      'scripts/release/metadata.js',
+      'packages/dd-trace/src/metadata.js',
+    ])
+  })
+
+  it('keeps commit metadata when a reference resolves to an issue', () => {
+    const capture = sinon.stub()
+    capture.onFirstCall().returns(FULL_SHA)
+    capture.onSecondCall().returns(JSON.stringify({
+      data: {
+        repository: {
+          commit0: {
+            authors: {
+              nodes: [{ name: 'Jane Doe', email: 'jane@example.com' }],
+              pageInfo: { hasNextPage: false },
+            },
+          },
+          pullRequest0: { __typename: 'Issue' },
+        },
+      },
+    }))
+    const { hydrateReleaseEntries } = loadMetadata(capture)
+
+    const entries = hydrateReleaseEntries([
+      { commitRef: '0123456789', pullRequestNumber: 9648, subject: 'fix(core): preserve context (#9648)' },
+    ])
+
+    assert.deepStrictEqual(entries, [{
+      sha: FULL_SHA,
+      subject: 'fix(core): preserve context (#9648)',
+      contributors: [{ name: 'Jane Doe' }],
+    }])
+  })
+
+  it('hydrates pull request metadata without a merge commit', () => {
+    const capture = sinon.stub().returns(JSON.stringify({
+      data: {
+        repository: {
+          pullRequest0: {
+            __typename: 'PullRequest',
+            number: 123,
+            title: 'feat(core)!: remove legacy context',
+            author: { login: 'pull-request-author' },
+            labels: { nodes: [{ name: 'appsec' }], pageInfo: { hasNextPage: false } },
+            files: {
+              nodes: [{ path: 'packages/dd-trace/src/index.js', changeType: 'MODIFIED' }],
+              pageInfo: { hasNextPage: false },
+            },
+          },
+        },
+      },
+    }))
+    const { hydrateReleaseEntries } = loadMetadata(capture)
+
+    const entries = hydrateReleaseEntries([
+      { pullRequestNumber: 123, subject: 'feat(core)!: remove legacy context (#123)' },
+    ])
+
+    assert.deepStrictEqual(entries, [{
+      sha: 'pull-request-123',
+      subject: 'feat(core)!: remove legacy context (#123)',
+      contributors: [{ name: '@pull-request-author', login: 'pull-request-author' }],
+      labels: ['appsec'],
+      files: ['packages/dd-trace/src/index.js'],
+    }])
+    assert.doesNotMatch(capture.firstCall.args[0], /commit0:/)
   })
 
   it('rejects truncated contributor and label metadata', () => {
@@ -158,6 +262,7 @@ describe('release metadata', () => {
           repository: {
             commit0: { authors: { nodes: [], pageInfo: { hasNextPage: authors } } },
             pullRequest0: {
+              __typename: 'PullRequest',
               number: 123,
               title: 'fix(core): preserve context',
               labels: { nodes: [], pageInfo: { hasNextPage: labels } },
@@ -169,7 +274,9 @@ describe('release metadata', () => {
       const { hydrateReleaseEntries } = loadMetadata(capture)
 
       assert.throws(
-        () => hydrateReleaseEntries([{ sha: '0123456789', subject: 'fix(core): preserve context (#123)' }]),
+        () => hydrateReleaseEntries([
+          { commitRef: '0123456789', pullRequestNumber: 123, subject: 'fix(core): preserve context (#123)' },
+        ]),
         { message: `GitHub metadata for ${FULL_SHA} exceeds one page.` }
       )
     }
@@ -182,7 +289,7 @@ describe('release metadata', () => {
     const { hydrateReleaseEntries } = loadMetadata(capture)
 
     assert.throws(
-      () => hydrateReleaseEntries([{ sha: '0123456789', subject: 'fix(core): preserve context' }]),
+      () => hydrateReleaseEntries([{ commitRef: '0123456789', subject: 'fix(core): preserve context' }]),
       { message: 'GitHub metadata query failed: rate limit exceeded' }
     )
   })

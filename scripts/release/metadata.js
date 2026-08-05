@@ -1,8 +1,8 @@
 'use strict'
 
 const { capture } = require('./helpers/terminal')
+const { appendChangedPaths } = require('./changelog')
 
-const PULL_REQUEST_PATTERN = /\(#([0-9]+)\)$/
 const QUERY_CHUNK_SIZE = 50
 const NON_HUMAN_LOGINS = new Set(['claude', 'copilot', 'cursoragent', 'dependabot', 'github-actions'])
 const NON_HUMAN_EMAILS = new Set([
@@ -19,12 +19,21 @@ const NON_HUMAN_EMAILS = new Set([
  */
 
 /**
- * @typedef {object} ReleaseEntry
- * @property {string} sha
+ * @typedef {object} CommitMetadataEntry
  * @property {string} subject
- * @property {Contributor[]} [contributors]
- * @property {string[]} [labels]
- * @property {string[]} [files]
+ * @property {string} commitRef
+ * @property {number} [pullRequestNumber]
+ */
+
+/**
+ * @typedef {object} PullRequestMetadataEntry
+ * @property {string} subject
+ * @property {string} [commitRef]
+ * @property {number} pullRequestNumber
+ */
+
+/**
+ * @typedef {CommitMetadataEntry|PullRequestMetadataEntry} MetadataEntry
  */
 
 /**
@@ -37,11 +46,12 @@ const NON_HUMAN_EMAILS = new Set([
 
 /**
  * @typedef {object} GitHubPullRequest
+ * @property {'PullRequest'} __typename
  * @property {number} number
  * @property {string} title
  * @property {GitHubContributor} [author]
  * @property {{ nodes: Array<{ name: string }>, pageInfo: { hasNextPage: boolean } }} labels
- * @property {{ nodes: Array<{ path: string }>, pageInfo: { hasNextPage: boolean } }} files
+ * @property {{ nodes: Array<{ path: string, changeType: string }>, pageInfo: { hasNextPage: boolean } }} files
  */
 
 /**
@@ -50,39 +60,45 @@ const NON_HUMAN_EMAILS = new Set([
  */
 
 /**
- * @param {ReleaseEntry[]} entries
+ * @param {MetadataEntry[]} entries
  */
 function hydrateReleaseEntries (entries) {
   if (entries.length === 0) return entries
 
-  const shas = []
-  const pullRequestNumbers = []
+  const commitRefs = []
   for (const entry of entries) {
-    shas.push(entry.sha)
-    const match = entry.subject.match(PULL_REQUEST_PATTERN)
-    pullRequestNumbers.push(match ? Number.parseInt(match[1], 10) : undefined)
+    if (entry.commitRef !== undefined) commitRefs.push(entry.commitRef)
+  }
+  const resolvedShas = commitRefs.length === 0
+    ? []
+    : capture(`git rev-parse ${commitRefs.join(' ')}`).split('\n')
+  const fullShas = []
+  const pullRequestNumbers = []
+  let commitIndex = 0
+  for (const entry of entries) {
+    fullShas.push(entry.commitRef === undefined ? undefined : resolvedShas[commitIndex++])
+    pullRequestNumbers.push(entry.pullRequestNumber)
   }
 
-  const fullShas = capture(`git rev-parse ${shas.join(' ')}`).split('\n')
   const metadata = readGitHubMetadata(fullShas, pullRequestNumbers)
   const hydrated = []
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]
     const { commit, pullRequest } = metadata[i]
-    if (commit.authors.pageInfo.hasNextPage || pullRequest?.labels.pageInfo.hasNextPage) {
-      throw new Error(`GitHub metadata for ${fullShas[i]} exceeds one page.`)
+    const sha = fullShas[i] ?? `pull-request-${entry.pullRequestNumber}`
+    if (commit?.authors.pageInfo.hasNextPage || pullRequest?.labels.pageInfo.hasNextPage) {
+      throw new Error(`GitHub metadata for ${sha} exceeds one page.`)
     }
     const contributors = readContributors(commit, pullRequest)
-    if (pullRequestNumbers[i] === undefined) {
-      hydrated.push({ ...entry, sha: fullShas[i], contributors })
+    if (!pullRequest) {
+      hydrated.push({ sha, subject: entry.subject, contributors })
       continue
     }
 
     const labels = []
     for (const label of pullRequest.labels.nodes) labels.push(label.name)
     hydrated.push({
-      ...entry,
-      sha: fullShas[i],
+      sha,
       subject: `${pullRequest.title} (#${pullRequest.number})`,
       contributors,
       labels,
@@ -94,7 +110,7 @@ function hydrateReleaseEntries (entries) {
 }
 
 /**
- * @param {string[]} shas
+ * @param {Array<string|undefined>} shas
  * @param {Array<number|undefined>} pullRequestNumbers
  */
 function readGitHubMetadata (shas, pullRequestNumbers) {
@@ -103,13 +119,17 @@ function readGitHubMetadata (shas, pullRequestNumbers) {
     const end = Math.min(start + QUERY_CHUNK_SIZE, shas.length)
     let fields = ''
     for (let i = start; i < end; i++) {
-      fields += `commit${i}: object(oid: "${shas[i]}") { ... on Commit { ` +
-        'authors(first: 100) { nodes { name email user { login } } pageInfo { hasNextPage } } } } '
+      const sha = shas[i]
+      if (sha !== undefined) {
+        fields += `commit${i}: object(oid: "${sha}") { ... on Commit { ` +
+          'authors(first: 100) { nodes { name email user { login } } pageInfo { hasNextPage } } } } '
+      }
       const pullRequestNumber = pullRequestNumbers[i]
       if (pullRequestNumber !== undefined) {
-        fields += `pullRequest${i}: pullRequest(number: ${pullRequestNumber}) { number title author { login } ` +
+        fields += `pullRequest${i}: issueOrPullRequest(number: ${pullRequestNumber}) { __typename ` +
+          '... on PullRequest { number title author { login } ' +
           'labels(first: 100) { nodes { name } pageInfo { hasNextPage } } ' +
-          'files(first: 100) { nodes { path } pageInfo { hasNextPage } } } '
+          'files(first: 100) { nodes { path changeType } pageInfo { hasNextPage } } } } '
       }
     }
 
@@ -121,9 +141,10 @@ function readGitHubMetadata (shas, pullRequestNumbers) {
     const repository = response.data.repository
     for (let i = start; i < end; i++) {
       const pullRequestNumber = pullRequestNumbers[i]
+      const pullRequest = pullRequestNumber === undefined ? undefined : repository[`pullRequest${i}`]
       metadata[i] = {
-        commit: repository[`commit${i}`],
-        pullRequest: pullRequestNumber === undefined ? undefined : repository[`pullRequest${i}`],
+        commit: shas[i] === undefined ? undefined : repository[`commit${i}`],
+        pullRequest: pullRequest?.__typename === 'PullRequest' ? pullRequest : undefined,
       }
     }
   }
@@ -131,12 +152,14 @@ function readGitHubMetadata (shas, pullRequestNumbers) {
 }
 
 /**
- * @param {GitHubCommit} commit
+ * @param {GitHubCommit|undefined} commit
  * @param {GitHubPullRequest|undefined} pullRequest
  */
 function readContributors (commit, pullRequest) {
   const contributors = new Map()
-  for (const author of commit.authors.nodes) addContributor(contributors, author)
+  if (commit) {
+    for (const author of commit.authors.nodes) addContributor(contributors, author)
+  }
   if (pullRequest?.author) addContributor(contributors, pullRequest.author)
   return [...contributors.values()]
 }
@@ -145,7 +168,15 @@ function readContributors (commit, pullRequest) {
  * @param {GitHubPullRequest} pullRequest
  */
 function readFiles (pullRequest) {
-  if (!pullRequest.files.pageInfo.hasNextPage) {
+  let renamed = false
+  for (const file of pullRequest.files.nodes) {
+    if (file.changeType === 'RENAMED') {
+      renamed = true
+      break
+    }
+  }
+
+  if (!renamed && !pullRequest.files.pageInfo.hasNextPage) {
     const files = []
     for (const file of pullRequest.files.nodes) files.push(file.path)
     return files
@@ -156,7 +187,7 @@ function readFiles (pullRequest) {
   ))
   const files = []
   for (const page of pages) {
-    for (const file of page) files.push(file.filename)
+    appendChangedPaths(files, page)
   }
   return files
 }

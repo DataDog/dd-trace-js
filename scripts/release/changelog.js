@@ -137,6 +137,12 @@ for (const [product, scopes] of PRODUCTS) {
  */
 
 /**
+ * @typedef {object} ChangedFile
+ * @property {string} filename
+ * @property {string} [previous_filename]
+ */
+
+/**
  * @typedef {object} CommitEntry
  * @property {string} sha
  * @property {string} subject
@@ -248,6 +254,18 @@ function parseChange (entry, options = {}) {
     pr: subjectWithPullRequest.pr,
     revert: parsed.isRevert,
     contributors: entry.contributors ?? [],
+  }
+}
+
+/**
+ * @param {string[]} paths
+ * @param {ChangedFile[]} changedFiles
+ * @returns {void}
+ */
+function appendChangedPaths (paths, changedFiles) {
+  for (const file of changedFiles) {
+    paths.push(file.filename)
+    if (file.previous_filename) paths.push(file.previous_filename)
   }
 }
 
@@ -549,6 +567,7 @@ function renderPullRequest (number) {
 }
 
 module.exports = {
+  appendChangedPaths,
   createReleaseChangelog,
   isInternalOnly,
 }

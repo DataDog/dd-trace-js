@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { createReleaseChangelog } = require('./changelog')
+const { appendChangedPaths, createReleaseChangelog, isInternalOnly } = require('./changelog')
 
 /**
  * @param {number} number
@@ -364,6 +364,28 @@ describe('release changelog', () => {
       `- **OpenTelemetry:** Preserve OpenTelemetry attributes ${prLink(9004)}`,
       '',
     ].join('\n'))
+  })
+
+  it('classifies renamed files using both paths', () => {
+    const publicToInternalFiles = []
+
+    appendChangedPaths(publicToInternalFiles, [
+      { filename: 'scripts/release/metadata.js', previous_filename: 'packages/dd-trace/src/metadata.js' },
+    ])
+
+    assert.deepStrictEqual(publicToInternalFiles, [
+      'scripts/release/metadata.js',
+      'packages/dd-trace/src/metadata.js',
+    ])
+    assert.strictEqual(isInternalOnly(publicToInternalFiles), false)
+
+    const internalToInternalFiles = []
+
+    appendChangedPaths(internalToInternalFiles, [
+      { filename: 'scripts/release/metadata.js', previous_filename: 'scripts/release/old-metadata.js' },
+    ])
+
+    assert.strictEqual(isInternalOnly(internalToInternalFiles), true)
   })
 
   it('classifies public release-note types from changed paths', () => {
