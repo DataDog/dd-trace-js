@@ -3,16 +3,21 @@
 // Dataset record: { input, expectedOutput?, metadata?, id? }.
 // `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
+  #version
+
   constructor (input, expectedOutput = null, metadata = {}, id = null, version = null) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
     this.id = id ?? null
-    Object.defineProperty(this, 'version', {
-      value: version ?? null,
-      enumerable: false,
-      writable: true,
-    })
+    this.#version = version ?? null
+  }
+
+  /**
+   * @returns {number | string | null} The dataset version where this record became valid.
+   */
+  version () {
+    return this.#version
   }
 }
 
@@ -22,7 +27,7 @@ function recordIdFromCreatedRecord (record) {
 
 function versionFromCreatedRecords (records) {
   const versions = records
-    .map(record => record.version)
+    .map(record => record.version())
     .filter(version => version != null)
     .map(Number)
     .filter(Number.isFinite)

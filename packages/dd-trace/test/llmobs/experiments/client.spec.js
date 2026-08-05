@@ -110,7 +110,7 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.equal(listed.some(item => item.id() === dataset.id()), true)
 
     const records = await client.listDatasetRecords(projectId, dataset.id(), {
-      version: createdRecords.find(record => record.version !== null)?.version ?? dataset.version(),
+      version: createdRecords.find(record => record.version() !== null)?.version() ?? dataset.version(),
     })
     assert.equal(records.after, '')
     assert.equal(records.records.length, 2)
@@ -154,7 +154,7 @@ describe('LLMObs Experiments control-plane client', () => {
 
     await waitForBackend(5_000)
     const records = await client.listDatasetRecords(projectId, dataset.id(), {
-      version: customRecords.find(record => record.version !== null)?.version ?? dataset.version(),
+      version: customRecords.find(record => record.version() !== null)?.version() ?? dataset.version(),
     })
     assert.equal(records.after, '')
     assert.deepEqual(records.records.map(record => record.id).sort(), ['custom-a', 'custom-b'])
@@ -186,7 +186,7 @@ describe('LLMObs Experiments control-plane client', () => {
       ensure_unique: true,
       run_count: 1,
       metadata: { tags: ['source:client-test'] },
-      dataset_version: createdRecords[0].version ?? dataset.version(),
+      dataset_version: createdRecords[0].version() ?? dataset.version(),
     })
 
     assert.match(experiment.experimentId, /\S+/)

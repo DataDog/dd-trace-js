@@ -232,7 +232,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
-      .addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', 2))
       .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
@@ -241,6 +241,9 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.input, 'in')
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
+    assert.equal(record.id, 'rec')
+    assert.equal(record.version(), 2)
+    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
