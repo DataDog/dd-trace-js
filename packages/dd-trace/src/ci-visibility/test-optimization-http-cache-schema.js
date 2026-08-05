@@ -137,7 +137,7 @@ function validateSkippableTestsResponse (response, options = {}) {
   if (response.meta !== undefined) {
     assertObject(response.meta, 'Invalid skippable tests response: meta must be an object')
   }
-  if (response.meta?.coverage !== undefined) {
+  if (response.meta?.coverage !== undefined && response.meta.coverage !== null) {
     assertObject(response.meta.coverage, 'Invalid skippable tests response: meta.coverage must be an object')
   }
   if (response.meta?.correlation_id !== undefined && typeof response.meta.correlation_id !== 'string') {
