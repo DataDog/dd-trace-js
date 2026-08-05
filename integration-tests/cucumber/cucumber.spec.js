@@ -295,6 +295,49 @@ describe(`cucumber@${version} commonJS`, () => {
     ])
   })
 
+  it('forwards telemetry from parallel workers', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+      })
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+        const testFinishedMetric = telemetryMetrics.find(({ metric, tags }) =>
+          metric === 'event_finished' && tags.includes('event_type:test')
+        )
+
+        assert.ok(testFinishedMetric, 'test event telemetry from a worker should be sent')
+      })
+
+    childProcess = exec(
+      './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2',
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+      telemetryPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   onlyLatestIt('waits for the final payload before the programmatic run resolves', async () => {
     const completionOrder = []
     const completedMessage = 'programmatic Cucumber run completed'
@@ -620,11 +663,7 @@ describe(`cucumber@${version} commonJS`, () => {
           })
       })
 
-      const runModes = ['serial']
-
-      if (version !== '7.0.0') { // only on latest or 9 if node is old
-        runModes.push('parallel')
-      }
+      const runModes = ['serial', 'parallel']
 
       runModes.forEach((runMode) => {
         it(`(${runMode}) can run and report tests`, (done) => {

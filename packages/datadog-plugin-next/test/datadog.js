@@ -22,7 +22,10 @@ const tracer = require('../../..').init({
 }).use('next', process.env.WITH_CONFIG ? config : true)
 
 if (process.env.WITH_HTTP !== 'false') {
-  tracer.use('http')
+  const httpConfig = process.env.WITH_HTTP_RESOURCE_RENAMING === 'true'
+    ? { resourceRenamingEnabled: true }
+    : true
+  tracer.use('http', httpConfig)
 }
 
 module.exports = tracer

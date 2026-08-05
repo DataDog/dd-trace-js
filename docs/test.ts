@@ -688,6 +688,28 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     metricType: 'boolean',
     value: 'true'
   })
+
+  // submit end-user feedback
+  llmobs.submitFeedback({
+    label: 'thumbs_up',
+    metricType: 'boolean',
+    value: true,
+    submitter: { id: 'user-123', type: 'user' },
+    span: llmobsSpanCtx
+  })
+
+  llmobs.submitFeedback({
+    label: 'comment',
+    metricType: 'text',
+    value: 'this answer was helpful',
+    submitter: { id: 'user-123' },
+    feedbackJoinKey: 'my-join-key',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now(),
+    assessment: 'pass',
+    reasoning: 'the user was satisfied'
+  })
 })
 
 // annotate a span
