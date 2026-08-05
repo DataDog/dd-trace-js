@@ -1,5 +1,6 @@
 'use strict'
 
+const { readDatadogTraceId, readTraceparent } = require('../../dd-trace/src/carrier')
 const DatadogSpanContext = require('../../dd-trace/src/opentracing/span_context')
 
 const TRACE_ID_UPPER_TAG = '_dd.p.tid'
@@ -38,7 +39,7 @@ function createWebSocketSpanContext (spanContext) {
  * @returns {boolean}
  */
 function hasTraceHeaders (headers) {
-  return !!(headers && (headers['x-datadog-trace-id'] || headers.traceparent))
+  return !!(headers && (readDatadogTraceId(headers) || readTraceparent(headers)))
 }
 
 /**
