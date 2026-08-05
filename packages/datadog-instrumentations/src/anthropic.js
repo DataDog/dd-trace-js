@@ -46,22 +46,22 @@ function waitForVerdict (promise, verdict) {
 
 /**
  * @param {Array<unknown>} args
- * @returns {Array<unknown>}
+ * @returns {Array<unknown>|undefined}
  */
 function snapshotLifecycleArgs (args) {
   const options = args[0]
-  if (!options || typeof options !== 'object') return args
+  if (!options || typeof options !== 'object') return
 
   const input = { messages: options.messages }
   if (options.system !== undefined) input.system = options.system
 
-  const snapshot = [...args]
   try {
+    const snapshot = [...args]
     snapshot[0] = { ...options, ...structuredClone(input) }
+    return snapshot
   } catch {
-    // Custom non-cloneable message content is left untouched rather than breaking the request.
+    // Evaluating mutable input could inspect a different prompt than the provider received.
   }
-  return snapshot
 }
 
 /**
@@ -115,6 +115,24 @@ function wrapResponseReader (response, method, ctx, getVerdict) {
   })
 }
 
+/**
+ * @param {object} response
+ * @param {object} ctx
+ * @param {(body: object) => Promise<void>|undefined} getVerdict
+ */
+function wrapRawResponse (response, ctx, getVerdict) {
+  wrapResponseReader(response, 'json', ctx, getVerdict)
+  wrapResponseReader(response, 'text', ctx, getVerdict)
+
+  if (typeof response.clone !== 'function') return
+
+  shimmer.wrap(response, 'clone', clone => function (...args) {
+    const clonedResponse = clone.apply(this, args)
+    wrapRawResponse(clonedResponse, ctx, getVerdict)
+    return clonedResponse
+  })
+}
+
 function wrapStreamIterator (iterator, ctx) {
   return function (...args) {
     const itr = iterator.apply(this, args)
@@ -145,8 +163,10 @@ function wrapCreate (create) {
     const options = args[0]
     const stream = options?.stream
 
-    const hasLifecycle = !stream && (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
-    const lifecycleArgs = hasLifecycle ? snapshotLifecycleArgs(args) : args
+    const lifecycleRequested = !stream &&
+      (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
+    const lifecycleArgs = lifecycleRequested ? snapshotLifecycleArgs(args) : undefined
+    const hasLifecycle = lifecycleArgs !== undefined
 
     if (!anthropicTracingChannel.start.hasSubscribers && !hasLifecycle) {
       return create.apply(this, args)
@@ -220,8 +240,7 @@ function wrapCreate (create) {
                   messagesAfterChannel.hasSubscribers) &&
                 wrappedResponse !== response) {
                 wrappedResponse = response
-                wrapResponseReader(response, 'json', ctx, getAfterVerdict)
-                wrapResponseReader(response, 'text', ctx, getAfterVerdict)
+                wrapRawResponse(response, ctx, getAfterVerdict)
               }
 
               if (afterVerdict) return afterVerdict.then(() => response)

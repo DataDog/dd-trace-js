@@ -639,7 +639,7 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
 
     before(() => {
       const hookCallbacks = loadAnthropicInstrumentation()
-      ;({ Anthropic } = require(`../../../versions/@anthropic-ai/sdk@${version}`).get())
+      Anthropic = require(`../../../versions/@anthropic-ai/sdk@${version}`).get().Anthropic
       const probe = new Anthropic({ apiKey: 'test' })
       applyShim(hookCallbacks, 'resources/messages/messages', probe.messages.constructor)
     })
@@ -677,6 +677,40 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
         assert.strictEqual(calls.length, 2)
         assert.strictEqual(calls[0].args[0].messages[0].content, 'original')
         assert.strictEqual(calls[1].args[0].messages[0].content, 'original')
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('does not evaluate mutable request state when the lifecycle snapshot fails', async () => {
+      const fetchStarted = createDeferred()
+      const { calls, unsubscribe } = subscribeAutoResolve([messagesBeforeChannel, messagesAfterChannel])
+      let sentBody
+      const client = new Anthropic({
+        apiKey: 'test',
+        fetch: (url, init) => {
+          sentBody = JSON.parse(init.body)
+          fetchStarted.resolve()
+          return Promise.resolve(jsonResponse({
+            id: 'msg_1',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Hi' }],
+          }))
+        },
+      })
+      const options = createAnthropicRequest()
+      options.messages[0].content = 'original'
+      options.messages[0].nonCloneable = () => {}
+      const apiPromise = client.messages.create(options)
+
+      try {
+        await fetchStarted.promise
+        options.messages[0].content = 'mutated'
+        await apiPromise.parse()
+
+        assert.strictEqual(sentBody.messages[0].content, 'original')
+        assert.strictEqual(Object.hasOwn(sentBody.messages[0], 'nonCloneable'), false)
+        assert.strictEqual(calls.length, 0)
       } finally {
         unsubscribe()
       }
@@ -722,6 +756,22 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       try {
         const response = await apiPromise.asResponse()
         await assert.rejects(response.json(), { name: 'AIGuardAbortError', message: 'blocked' })
+      } finally {
+        messagesAfterChannel.unsubscribe(onAfter)
+      }
+    })
+
+    it('blocks output read through a cloned real SDK response', async () => {
+      const error = lifecycleAbortError()
+      const onAfter = ctx => blockLifecycle(ctx, error)
+      messagesAfterChannel.subscribe(onAfter)
+
+      const body = { id: 'msg_1', role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
+      const apiPromise = clientReturning(jsonResponse(body)).messages.create(createAnthropicRequest())
+
+      try {
+        const response = await apiPromise.asResponse()
+        await assert.rejects(response.clone().json(), error)
       } finally {
         messagesAfterChannel.unsubscribe(onAfter)
       }
