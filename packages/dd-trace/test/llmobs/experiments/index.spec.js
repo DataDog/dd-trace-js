@@ -2,12 +2,26 @@
 
 const assert = require('node:assert/strict')
 const { afterEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
 const { createExperiments } = require('../../../src/llmobs/experiments')
 const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
+
+const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
+
+class VcrExperimentsClient extends ExperimentsClient {
+  constructor (options) {
+    super(options)
+    this.apiBase = EXPERIMENTS_VCR_API_BASE
+  }
+}
+
+const { createExperiments: createVcrExperiments } = proxyquire('../../../src/llmobs/experiments', {
+  './client': { ExperimentsClient: VcrExperimentsClient },
+})
 
 const enabledConfig = (overrides = {}) => ({
   site: 'datadoghq.com',
@@ -45,25 +59,24 @@ describe('LLMObs Experiments facade', () => {
       apiKey: process.env.DD_API_KEY ?? 'test-api-key',
       appKey: process.env.DD_APP_KEY ?? 'test-app-key',
       site: process.env.DD_SITE ?? 'datadoghq.com',
-      apiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
-        'http://127.0.0.1:9126/vcr/datadog-experiments',
       projectName: backendProjectName,
     }
   }
 
   function backendClient () {
-    return new ExperimentsClient(backendClientOptions())
+    const client = new ExperimentsClient(backendClientOptions())
+    client.apiBase = EXPERIMENTS_VCR_API_BASE
+    return client
   }
 
   function backendExperiments () {
     const options = backendClientOptions()
-    return createExperiments(enabledConfig({
+    return createVcrExperiments(enabledConfig({
       site: options.site,
       DD_API_KEY: options.apiKey,
       DD_APP_KEY: options.appKey,
       llmobs: {
         DD_LLMOBS_ENABLED: true,
-        experimentsApiBase: options.apiBase,
         mlApp: options.projectName,
       },
     }))

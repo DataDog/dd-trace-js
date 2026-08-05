@@ -36,7 +36,6 @@ class Experiments {
       apiKey: config.DD_API_KEY,
       appKey: config.DD_APP_KEY,
       site: config.site,
-      apiBase: config.llmobs?.experimentsApiBase,
       projectName: this.#projectName,
     })
   }

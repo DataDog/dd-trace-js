@@ -17,7 +17,6 @@ function client () {
     apiKey: 'k',
     appKey: 'a',
     site: 'datadoghq.com',
-    apiBase: 'https://api.datadoghq.com',
     projectName: 'my-app',
   })
 }

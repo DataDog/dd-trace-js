@@ -5,6 +5,8 @@ const { afterEach, describe, it } = require('mocha')
 
 const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
 
+const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
+
 function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -42,14 +44,14 @@ describe('LLMObs Experiments control-plane client', () => {
   })
 
   function backendClient () {
-    return new ExperimentsClient({
+    const client = new ExperimentsClient({
       apiKey: process.env.DD_API_KEY ?? 'test-api-key',
       appKey: process.env.DD_APP_KEY ?? 'test-app-key',
       site: process.env.DD_SITE ?? 'datadoghq.com',
-      apiBase: process.env.DD_LLMOBS_EXPERIMENTS_API_BASE ??
-        'http://127.0.0.1:9126/vcr/datadog-experiments',
       projectName: backendProjectName,
     })
+    client.apiBase = EXPERIMENTS_VCR_API_BASE
+    return client
   }
 
   function trackBackendDataset (client, projectId, datasetId) {

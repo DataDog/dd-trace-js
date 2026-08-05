@@ -63,16 +63,16 @@ class ExperimentsClient {
   #site
   #projectName
   #timeout
-  #apiBase
+  apiBase
   #cachedProjectId
 
-  constructor ({ apiKey, appKey, site, apiBase, projectName, timeout = 30_000 } = {}) {
+  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000 } = {}) {
     this.#apiKey = apiKey
     this.#appKey = appKey
     this.#site = site
     this.#projectName = projectName
     this.#timeout = timeout
-    this.#apiBase = apiBase?.replace(/\/$/, '') ?? `https://${apiHost(this.#site)}`
+    this.apiBase = `https://${apiHost(this.#site)}`
     this.#cachedProjectId = null
   }
 
@@ -98,7 +98,7 @@ class ExperimentsClient {
   // Low-level request. Builds https://api.<site><path>, attaches both keys, and
   // returns the parsed JSON body. Throws with status + body on a non-2xx.
   async request (method, path, body) {
-    const url = `${this.#apiBase}${path}`
+    const url = `${this.apiBase}${path}`
     const headers = {
       'DD-API-KEY': this.#apiKey,
       'DD-APPLICATION-KEY': this.#appKey,
