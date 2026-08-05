@@ -241,6 +241,18 @@ describe('OpenTelemetry Logs', () => {
       assert.deepStrictEqual(emittedRecord.attributes, { key: 'value' })
     })
 
+    for (const invalidTimestamp of [null, NaN, Infinity, new Date('invalid'), [], [1], [1, NaN]]) {
+      it(`rejects invalid timestamps: ${String(invalidTimestamp)}`, () => {
+        const { logs, loggerProvider } = setupLogs()
+        const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+        const logger = logs.getLogger('test')
+
+        assert.throws(() => logger.emit({ body: 'invalid timestamp', timestamp: invalidTimestamp }), TypeError)
+        assert.throws(() => logger.emit({ body: 'invalid observed timestamp', observedTimestamp: invalidTimestamp }), TypeError)
+        sinon.assert.notCalled(onEmit)
+      })
+    }
+
     it('normalizes all OpenTelemetry timestamp input types without losing precision', () => {
       mockOtlpExport((decoded) => {
         const records = decoded.resourceLogs[0].scopeLogs[0].logRecords

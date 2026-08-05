@@ -13,24 +13,42 @@ const { VERSION: packageVersion } = require('../../../../../version')
 const MAX_DATE_MILLISECONDS = 8.64e15
 const NANOSECONDS_PER_SECOND = 1e9
 
+function isValidHrTime (hrTime) {
+  return Array.isArray(hrTime) &&
+    hrTime.length === 2 &&
+    Number.isInteger(hrTime[0]) &&
+    Number.isInteger(hrTime[1]) &&
+    hrTime[1] >= 0 &&
+    hrTime[1] < NANOSECONDS_PER_SECOND
+}
+
 function toHrTime (timestamp) {
-  if (typeof timestamp !== 'number') {
-    return timeInputToHrTime(timestamp)
+  let hrTime
+  if (typeof timestamp === 'number') {
+    if (!Number.isFinite(timestamp)) {
+      throw new TypeError('Invalid timestamp')
+    }
+
+    // Older versions documented numeric timestamps as Unix nanoseconds.
+    if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
+      const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
+      hrTime = [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
+    } else if (timestamp >= 0 && timestamp <= performance.now()) {
+      // A number within this process's elapsed time is a performance timestamp.
+      hrTime = timeInputToHrTime(timestamp)
+    } else {
+      // All other numbers are Unix milliseconds, including historical dates.
+      hrTime = millisToHrTime(timestamp)
+    }
+  } else {
+    hrTime = timeInputToHrTime(timestamp)
   }
 
-  // Older versions documented numeric timestamps as Unix nanoseconds.
-  if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
-    const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
-    return [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
+  if (!isValidHrTime(hrTime)) {
+    throw new TypeError('Invalid timestamp')
   }
 
-  // A number within this process's elapsed time is a performance timestamp.
-  if (timestamp >= 0 && timestamp <= performance.now()) {
-    return timeInputToHrTime(timestamp)
-  }
-
-  // All other numbers are Unix milliseconds, including historical dates.
-  return millisToHrTime(timestamp)
+  return hrTime
 }
 
 /**
@@ -92,8 +110,10 @@ class Logger {
     }
 
     const record = { ...logRecord }
-    const timestamp = logRecord.timestamp === undefined ? Date.now() : logRecord.timestamp
-    record.timestamp = toHrTime(timestamp)
+    const timestamp = logRecord.timestamp === undefined
+      ? millisToHrTime(Date.now())
+      : toHrTime(logRecord.timestamp)
+    record.timestamp = timestamp
     record.context = logRecord.context || context.active()
 
     if (logRecord.observedTimestamp !== undefined) {
