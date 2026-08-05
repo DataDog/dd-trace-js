@@ -101,6 +101,10 @@ describe('otel-thread-ctx', () => {
         ThreadContext: StubThreadContext,
         getContext: sinon.stub().callsFake(() => activeContext),
         clearContext: sinon.stub().callsFake(() => setActive()),
+        getProcessContextAttributes: sinon.stub().returns({
+          'threadlocal.schema_version': 'nodejs_v1_dev',
+          'threadlocal.attribute_key_map': [],
+        }),
       },
     }
 
@@ -167,6 +171,25 @@ describe('otel-thread-ctx', () => {
         pprof: {
           '@noCallThru': true,
           otelThreadCtx: { ThreadContext: StubThreadContext /* no getContext/clearContext */ },
+        },
+      })
+      assert.equal(m.start(), false)
+      sinon.assert.calledWithMatch(log.warn, /otelThreadCtx API/)
+    })
+
+    it('returns false when otelThreadCtx is missing getProcessContextAttributes', () => {
+      // start() must refuse to install subscribers if the metadata publisher
+      // can't be produced — otherwise the writer emits records that no reader
+      // can decode.
+      const m = loadModule({
+        pprof: {
+          '@noCallThru': true,
+          otelThreadCtx: {
+            ThreadContext: StubThreadContext,
+            getContext: sinon.stub(),
+            clearContext: sinon.stub(),
+            // no getProcessContextAttributes
+          },
         },
       })
       assert.equal(m.start(), false)
@@ -372,6 +395,17 @@ describe('otel-thread-ctx', () => {
   })
 
   describe('getThreadLocalMetadata()', () => {
+    // start() is always called before getThreadLocalMetadata() in the
+    // real init sequence (proxy.js kicks off the writer, then storeConfig()
+    // pulls the metadata). getThreadLocalMetadata is a no-op unless start
+    // succeeded, so every happy-path test runs start() first.
+    it('returns undefined when start() has not been called', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub()
+      const m = loadModule()
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.getProcessContextAttributes)
+    })
+
     it('returns the process-context snapshot in libdatadog-nodejs shape', () => {
       pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
         'threadlocal.schema_version': 'nodejs_v1_dev',
@@ -380,6 +414,7 @@ describe('otel-thread-ctx', () => {
         'threadlocal.tagged_size': 8,
       })
       const m = loadModule()
+      assert.equal(m.start(), true)
       const md = m.getThreadLocalMetadata()
       sinon.assert.calledOnceWithExactly(
         pprofStub.otelThreadCtx.getProcessContextAttributes,
@@ -395,34 +430,6 @@ describe('otel-thread-ctx', () => {
         { key: 'threadlocal.tagged_size', intValue: 8 })
     })
 
-    it('returns undefined when @datadog/pprof is not installed', () => {
-      const m = loadModule({ pprof: { '@noCallThru': true } })
-      assert.equal(m.getThreadLocalMetadata(), undefined)
-      sinon.assert.calledWithMatch(log.warn, /pprof unavailable|does not expose/)
-    })
-
-    it('returns undefined on non-Linux platforms', () => {
-      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
-      const m = loadModule()
-      assert.equal(m.getThreadLocalMetadata(), undefined)
-    })
-
-    it('returns undefined when AsyncContextFrame is inactive', () => {
-      const m = loadModule({ storage: { '@noCallThru': true, isACFActive: false } })
-      assert.equal(m.getThreadLocalMetadata(), undefined)
-    })
-
-    it('returns undefined when otelThreadCtx.getProcessContextAttributes is missing', () => {
-      const m = loadModule({
-        pprof: {
-          '@noCallThru': true,
-          otelThreadCtx: { /* no getProcessContextAttributes */ },
-        },
-      })
-      assert.equal(m.getThreadLocalMetadata(), undefined)
-      sinon.assert.calledWithMatch(log.warn, /does not expose getProcessContextAttributes/)
-    })
-
     it('encodes string-valued extra attributes as stringValue', () => {
       pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
         'threadlocal.schema_version': 'nodejs_v1_dev',
@@ -430,6 +437,7 @@ describe('otel-thread-ctx', () => {
         'threadlocal.runtime.name': 'nodejs',
       })
       const m = loadModule()
+      assert.equal(m.start(), true)
       const md = m.getThreadLocalMetadata()
       assert.deepEqual(md.extraAttributes, [
         { key: 'threadlocal.runtime.name', stringValue: 'nodejs' },
@@ -443,6 +451,7 @@ describe('otel-thread-ctx', () => {
         'threadlocal.weird': true, // booleans aren't wired through yet
       })
       const m = loadModule()
+      assert.equal(m.start(), true)
       assert.throws(() => m.getThreadLocalMetadata(), /unsupported value type/)
     })
   })

@@ -208,7 +208,8 @@ function start () {
   const ns = pprofMod.otelThreadCtx
   if (!ns || typeof ns.ThreadContext !== 'function' ||
       typeof ns.getContext !== 'function' ||
-      typeof ns.clearContext !== 'function') {
+      typeof ns.clearContext !== 'function' ||
+      typeof ns.getProcessContextAttributes !== 'function') {
     log.warn(
       'OTEP-4947 thread context writer: installed @datadog/pprof does not expose the otelThreadCtx API'
     )
@@ -239,30 +240,17 @@ function start () {
 //
 //   { attributeKeys, schemaVersion, extraAttributes: [{ key, intValue|stringValue }] }
 //
-// Returns undefined if @datadog/pprof isn't installed or doesn't expose the
-// otelThreadCtx.getProcessContextAttributes helper, or if the runtime
-// can't actually run the writer (non-Linux, or Linux without
-// AsyncContextFrame). Callers should treat that as "no threadlocal
-// block" (equivalent to the flag being off) — otherwise we'd publish
-// process-context metadata advertising a decodable OTEP-4947 stream
+// Returns undefined unless start() succeeded. Callers should treat that as
+// "no threadlocal block" (equivalent to the flag being off) — otherwise we'd
+// publish process-context metadata advertising a decodable OTEP-4947 stream
 // while no writer is producing records.
 function getThreadLocalMetadata () {
-  if (process.platform !== 'linux' || !isACFActive) return
-  let pprofMod
-  try {
-    pprofMod = require('@datadog/pprof')
-  } catch (e) {
-    log.warn('OTEP-4947 thread context: @datadog/pprof unavailable', e)
-    return
-  }
-  const ns = pprofMod.otelThreadCtx
-  if (!ns || typeof ns.getProcessContextAttributes !== 'function') {
-    log.warn(
-      'OTEP-4947 thread context: installed @datadog/pprof does not expose getProcessContextAttributes'
-    )
-    return
-  }
-  const pca = ns.getProcessContextAttributes(ATTRIBUTE_KEYS)
+  if (!started) return
+  // start() verified @datadog/pprof.otelThreadCtx exposes the full API
+  // surface (ThreadContext/getContext/clearContext/getProcessContextAttributes),
+  // so this require is a cached lookup and the method is guaranteed present.
+  const pca = require('@datadog/pprof').otelThreadCtx
+    .getProcessContextAttributes(ATTRIBUTE_KEYS)
   const extraAttributes = []
   for (const [key, value] of Object.entries(pca)) {
     if (key === 'threadlocal.schema_version' || key === 'threadlocal.attribute_key_map') continue
