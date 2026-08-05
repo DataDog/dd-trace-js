@@ -5,6 +5,7 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const { trackExport } = require('../../serverless/pending_exports')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -88,6 +89,18 @@ class OtlpHttpExporterBase {
       },
     }
 
+    const finishExport = trackExport()
+    let completed = false
+    const complete = (result) => {
+      if (completed) return
+      completed = true
+      try {
+        resultCallback(result)
+      } finally {
+        finishExport()
+      }
+    }
+
     legacyStorage.run({ noop: true }, () => {
       const req = this.#transport.request(options, (res) => {
         let data = ''
@@ -99,23 +112,23 @@ class OtlpHttpExporterBase {
         res.once('end', () => {
           // @ts-expect-error - res.statusCode can be undefined
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            resultCallback({ code: 0 })
+            complete({ code: 0 })
           } else {
             const error = new Error(`HTTP ${res.statusCode}: ${data}`)
-            resultCallback({ code: 1, error })
+            complete({ code: 1, error })
           }
         })
       })
 
       req.on('error', (error) => {
         log.error('Error sending OTLP %s:', this.signalType, error)
-        resultCallback({ code: 1, error })
+        complete({ code: 1, error })
       })
 
       req.once('timeout', () => {
         req.destroy()
         const error = new Error('Request timeout')
-        resultCallback({ code: 1, error })
+        complete({ code: 1, error })
       })
 
       req.write(payload)
