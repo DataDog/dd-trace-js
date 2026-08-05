@@ -13,6 +13,34 @@ const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
 const queryParsedChannel = channel('apm:next:query-parsed')
 
+/**
+ * @typedef {import('node:http').IncomingMessage & {
+ *   error?: unknown,
+ *   originalRequest?: import('node:http').IncomingMessage
+ * }} NextNodeRequest
+ *
+ * @typedef {import('node:http').ServerResponse & {
+ *   originalResponse?: import('node:http').ServerResponse
+ * }} NextNodeResponse
+ *
+ * @typedef {object} NextRequest
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextRequestContext
+ * @property {NextNodeRequest} req
+ * @property {NextNodeResponse} res
+ * @property {boolean} [finishOnResponse]
+ * @property {unknown} [error]
+ * @property {NextRequest} [nextRequest]
+ *
+ * @typedef {object} HandleResponseOptions
+ * @property {NextNodeRequest} req
+ * @property {(...args: unknown[]) => Promise<unknown>} responseGenerator
+ *
+ * @typedef {object} ResponseCacheEntry
+ * @property {{ status?: number }} [value]
+ */
+
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
@@ -149,7 +177,16 @@ function getRequestMeta (req, key) {
   return typeof key === 'string' ? meta[key] : meta
 }
 
-function instrument (req, res, handler, error) {
+/**
+ * @template T
+ * @param {NextNodeRequest} req
+ * @param {NextNodeResponse} res
+ * @param {(ctx: NextRequestContext) => Promise<T>} handler
+ * @param {unknown} [error]
+ * @param {boolean} [finishOnResponse]
+ * @returns {Promise<T>}
+ */
+function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
@@ -165,7 +202,7 @@ function instrument (req, res, handler, error) {
 
   requests.add(req)
 
-  const ctx = { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
   if (queryParsedChannel.hasSubscribers && req.url) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
@@ -225,6 +262,11 @@ function finish (ctx, result, err) {
   finishChannel.publish(ctx)
 }
 
+/**
+ * @param {NextNodeRequest} req
+ * @param {NextRequestContext | undefined} ctx
+ * @param {unknown} error
+ */
 function publishError (req, ctx, error) {
   if (!error) return
 
@@ -242,7 +284,7 @@ function publishError (req, ctx, error) {
     ctx.error = error
     errorChannel.publish(ctx)
   } else {
-    errorChannel.publish({ error })
+    errorChannel.publish({ req, error })
   }
 }
 
@@ -327,18 +369,31 @@ function wrapPrepare (prepare) {
   }
 }
 
+/**
+ * @param {(...args: unknown[]) => unknown} responseGenerator
+ * @param {object} routeModule
+ * @param {NextNodeRequest} req
+ * @returns {(...args: unknown[]) => unknown}
+ */
 function wrapResponseGenerator (responseGenerator, routeModule, req) {
   return function () {
     // Next calls the route module before the generator's first await. Limit the association to that
     // synchronous call so concurrent requests can share the route module instance safely.
     activeRouteRequests.set(routeModule, req)
-    const result = responseGenerator.apply(this, arguments)
-    activeRouteRequests.delete(routeModule)
-    return result
+    try {
+      return responseGenerator.apply(this, arguments)
+    } finally {
+      activeRouteRequests.delete(routeModule)
+    }
   }
 }
 
-function wrapHandleResponse (handleResponse, appRoute) {
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @param {boolean} finishOnResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapHandleResponse (handleResponse, finishOnResponse) {
   return function (options) {
     const req = options.req
     const res = routeResponses.get(req)
@@ -348,7 +403,7 @@ function wrapHandleResponse (handleResponse, appRoute) {
       return handleResponse.apply(this, arguments)
     }
 
-    if (appRoute) {
+    if (!finishOnResponse) {
       options.responseGenerator = wrapResponseGenerator(options.responseGenerator, this, req)
     }
 
@@ -369,16 +424,24 @@ function wrapHandleResponse (handleResponse, appRoute) {
 
         throw error
       })
-    })
+    }, undefined, finishOnResponse)
   }
 }
 
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
 function wrapAppRouteHandleResponse (handleResponse) {
-  return wrapHandleResponse(handleResponse, true)
+  return wrapHandleResponse(handleResponse, false)
 }
 
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
 function wrapAppPageHandleResponse (handleResponse) {
-  return wrapHandleResponse(handleResponse, false)
+  return wrapHandleResponse(handleResponse, true)
 }
 
 function instrumentRouteModule (RouteModule, wrappers, handleErrors) {

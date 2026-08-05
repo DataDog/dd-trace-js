@@ -11,15 +11,44 @@ const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-fou
 const reusedNextRequestStores = new WeakSet()
 const nextParentRoutes = new WeakMap()
 
+/**
+ * @typedef {Record<string, unknown> & {
+ *   span: import('../../dd-trace/src/opentracing/span'),
+ *   req: import('node:http').IncomingMessage
+ * }} NextRequestStore
+ *
+ * @typedef {object} NextRequest
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextRequestContext
+ * @property {import('node:http').IncomingMessage} req
+ * @property {import('node:http').ServerResponse} res
+ * @property {NextRequest} [nextRequest]
+ * @property {boolean} [finishOnResponse]
+ * @property {boolean} [handlerFinished]
+ * @property {boolean} [responseFinished]
+ * @property {NextRequestStore} [currentStore]
+ *
+ * @typedef {object} NextErrorContext
+ * @property {import('../../dd-trace/src/opentracing/span')} [span]
+ * @property {unknown} error
+ * @property {object} [req]
+ */
+
 class NextPlugin extends ServerPlugin {
   static id = 'next'
+
+  /** @type {WeakMap<import('node:http').IncomingMessage, NextRequestContext>} */
+  #deferredRequestContexts = new WeakMap()
 
   constructor (...args) {
     super(...args)
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
+  /** @param {NextRequestContext} ctx */
+  bindStart (ctx) {
+    const { req, res } = ctx
     const store = storage('legacy').getStore()
     const parentSpan = store?.span
     if (parentSpan?._integrationName === this.constructor.id) {
@@ -55,10 +84,31 @@ class NextPlugin extends ServerPlugin {
     analyticsSampler.sample(span, this.config.measured, true)
 
     const httpParentSpan = parentSpan?._integrationName === 'http' ? parentSpan : undefined
+    if (ctx.finishOnResponse) {
+      const currentStore = { ...store, span, req, httpParentSpan }
+      ctx.currentStore = currentStore
+      this.#deferredRequestContexts.set(req, ctx)
+      const onResponseFinish = () => {
+        res.removeListener('finish', onResponseFinish)
+        res.removeListener('close', onResponseFinish)
+        ctx.responseFinished = true
+        if (!ctx.handlerFinished) return
+
+        this.#finishDeferred(ctx)
+      }
+      res.once('finish', onResponseFinish)
+      res.once('close', onResponseFinish)
+      return currentStore
+    }
+
     return { ...store, span, req, httpParentSpan }
   }
 
-  error ({ span, error }) {
+  /** @param {NextErrorContext} ctx */
+  error ({ span, error, req }) {
+    if (!span && req) {
+      span = this.#deferredRequestContexts.get(req)?.currentStore?.span
+    }
     if (!span) {
       const store = storage('legacy').getStore()
       if (!store) return
@@ -69,8 +119,29 @@ class NextPlugin extends ServerPlugin {
     this.addError(error, span)
   }
 
-  finish ({ req, res, nextRequest = {} }) {
-    const store = storage('legacy').getStore()
+  /** @param {NextRequestContext} ctx */
+  finish (ctx) {
+    if (ctx.finishOnResponse) {
+      ctx.handlerFinished = true
+      if (!ctx.responseFinished) return
+
+      this.#finishDeferred(ctx)
+      return
+    }
+
+    this.#finish(ctx)
+  }
+
+  /** @param {NextRequestContext} ctx */
+  #finishDeferred (ctx) {
+    this.#deferredRequestContexts.delete(ctx.req)
+    this.#finish(ctx)
+  }
+
+  /** @param {NextRequestContext} ctx */
+  #finish (ctx) {
+    const { req, res, nextRequest = {} } = ctx
+    const store = ctx.currentStore ?? storage('legacy').getStore()
 
     if (!store) return
     if (reusedNextRequestStores.has(store)) return
