@@ -4,10 +4,12 @@ const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
 const clearTimeoutGuard = require('../timeout-guard')('appsec server')
+const assertReplayValidated = require('./mock-native-appsec')
 
 require('../noop-request')
 
 // AppSec is enabled from env config.
+// eslint-disable-next-line import/order -- the request and WAF mocks must load before tracer initialization
 const tracer = require('../../..').init()
 // Fail loudly if the tracer did not load: a broken require would otherwise
 // measure a plain server and silently "pass".
@@ -29,6 +31,7 @@ function handleRequest (req, res) {
 
   connectionsMade++
   if (connectionsMade === warmup) {
+    assertReplayValidated()
     guard.loopStart()
   } else if (connectionsMade === reqs + warmup) {
     guard.done(0.1)

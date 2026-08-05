@@ -16,6 +16,7 @@ for (const { payload } of sample) {
 }
 
 let validateNextContext = true
+let replayValidated = false
 
 class ReplayingDDWAF {
   /**
@@ -65,6 +66,7 @@ class ReplayingDDWAF {
         if (validate) {
           assert.strictEqual(callIndex, sample.length)
           assert.deepStrictEqual(payloads, expectedPayloads)
+          replayValidated = true
         }
         this.disposed = true
       },
@@ -77,6 +79,10 @@ class ReplayingDDWAF {
   dispose () {}
 }
 
+function assertReplayValidated () {
+  assert.ok(replayValidated, 'AppSec did not run the replayed WAF context during warmup')
+}
+
 require.cache[nativeAppsecPath] = {
   children: [],
   exports: { DDWAF: ReplayingDDWAF },
@@ -85,3 +91,5 @@ require.cache[nativeAppsecPath] = {
   loaded: true,
   paths: [],
 }
+
+module.exports = assertReplayValidated

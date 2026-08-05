@@ -4,19 +4,6 @@
   "instructions": true,
   "iterations": 30,
   "variants": {
-    "control": {
-      "cpus": 2,
-      "iterations": 5,
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
-      "env": {
-        "DD_APPSEC_ENABLED": "0",
-        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
-        "OPERATIONS": "210000"
-      }
-    },
     "appsec-enabled": {
       "cpus": 2,
       "iterations": 11,

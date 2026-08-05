@@ -13,6 +13,7 @@
       },
       "env": {
         "DEPTH": "0",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "OPERATIONS": "3650",
         "WITH_TRACER": "1"
       }
@@ -24,6 +25,7 @@
       },
       "env": {
         "COLLAPSE": "1",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "OPERATIONS": "2600",
         "DEPTH": "6",
         "WITH_TRACER": "1"
@@ -38,6 +40,7 @@
       },
       "env": {
         "COLLAPSE": "0",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
         "OPERATIONS": "600",
         "DEPTH": "4",
         "WITH_TRACER": "1"
