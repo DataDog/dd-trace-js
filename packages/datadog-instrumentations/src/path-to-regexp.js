@@ -32,47 +32,43 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // Capture path-to-regexp 8.x's `parse()` and `match()` together (Express 5). Probe `parse` for the
-  // v8 TokenData shape ({ tokens: [...] }) and adopt this module's `match()` only when it holds. Tying
-  // both to the same confirmed-v8 module stops a later-loaded older major — whose `parse` returns a
-  // bare array, or whose `match` shares the { params } shape — from clobbering a working v8 adapter.
-  if (typeof moduleExports?.parse === 'function' && typeof moduleExports?.match === 'function') {
-    const parse = moduleExports.parse
-    const match = moduleExports.match
-    let probe
-    try {
-      probe = parse('/')
-    } catch {
-      // not a usable v8 module
+  return moduleExports
+})
+
+// 8.x only: earlier majors also expose `parse`/`match`, but with incompatible shapes — 7.x returns
+// `{ tokens }` too, yet its tokens are bare strings rather than typed nodes. Gating on the version
+// keeps those from installing adapters the consumers would misread.
+addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
+  const { parse, match } = moduleExports
+
+  if (typeof parse === 'function' && typeof match === 'function') {
+    parseTokens = pattern => {
+      let result
+      try {
+        result = parse(pattern)
+      } catch {
+        return
+      }
+      if (Array.isArray(result?.tokens)) return result
     }
-    if (Array.isArray(probe?.tokens)) {
-      parseTokens = pattern => {
+
+    makeMatcher = route => {
+      let matcher
+      try {
+        // Callers read which params matched, never their values: skipping decode is faster and
+        // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
+        matcher = match(route, { decode: false })
+      } catch {
+        return
+      }
+      return url => {
         let result
         try {
-          result = parse(pattern)
+          result = matcher(url)
         } catch {
           return
         }
-        if (Array.isArray(result?.tokens)) return result
-      }
-      makeMatcher = route => {
-        let matcher
-        try {
-          // Callers read which params matched, never their values: skipping decode is faster and
-          // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
-          matcher = match(route, { decode: false })
-        } catch {
-          return
-        }
-        return url => {
-          let result
-          try {
-            result = matcher(url)
-          } catch {
-            return
-          }
-          return result ? result.params : undefined
-        }
+        return result ? result.params : undefined
       }
     }
   }

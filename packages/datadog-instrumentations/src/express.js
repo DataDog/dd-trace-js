@@ -156,14 +156,14 @@ addHook({ name: 'express', versions: ['>=5.0.0'], file: 'lib/express.js' }, expr
 })
 
 /**
- * Grammar the loaded Express majors declare routes in: v5 uses path-to-regexp v8, v4 its own (where
+ * Grammar the loaded Express majors declare routes in: 5 uses path-to-regexp 8, 4 its own (where
  * `{2}`/`|` are live regex). A process can serve both, and a route string can't then be attributed
  * to either, hence 'mixed'.
- * @returns {'v8' | 'legacy' | 'mixed' | undefined}
+ * @returns {'express5' | 'express4' | 'mixed' | undefined}
  */
 function getExpressRouteDialect () {
-  if (express4Loaded) return express5Loaded ? 'mixed' : 'legacy'
-  return express5Loaded ? 'v8' : undefined
+  if (express4Loaded) return express5Loaded ? 'mixed' : 'express4'
+  return express5Loaded ? 'express5' : undefined
 }
 
 addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express => {

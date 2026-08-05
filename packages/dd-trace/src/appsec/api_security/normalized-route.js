@@ -14,11 +14,11 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * segment = one element, multiple params combine as {a+b}, a catch-all is a single terminal element;
  * (6) optional param elements are resolved per request against the matched URL.
  *
- * Design: Express 5 / path-to-regexp v8 only. The route is parsed once by path-to-regexp's `parse()`
+ * Design: Express 5 / path-to-regexp 8 only. The route is parsed once by path-to-regexp's `parse()`
  * (token tree → segment templates, cached per route string). Per-request presence of optional
  * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
  * only optional groups (no param to capture) are dropped (rendered absent). Requires Express 5 (its
- * v8 route grammar); anything else gets no tag.
+ * route grammar); anything else gets no tag.
  */
 
 // path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
@@ -379,7 +379,7 @@ function presenceBitmask (optionalGroups, present) {
 }
 
 /**
- * Normalize an Express route string. Express 5 only: `parse`/`makeMatcher` are path-to-regexp v8's
+ * Normalize an Express route string. Express 5 only: `parse`/`makeMatcher` are path-to-regexp 8's
  * `parse()` and a `match()` factory; returns null when either is unavailable (Express 4).
  * @param {string} route - route string (the http.route value)
  * @param {object|null|undefined} params - req.params (fallback when the URL doesn't match)
@@ -430,9 +430,9 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // Routes are read as v8 grammar; v4's differs ('/a{2}' matches '/aa' there), so a v4 or mixed
-      // process must not be normalized. A loaded v8 path-to-regexp alone wouldn't prove v5.
-      if (getExpressRouteDialect() !== 'v8') return null
+      // Routes are read as Express 5 grammar; 4's differs ('/a{2}' matches '/aa' there), so a v4 or
+      // mixed process must not be normalized. A loaded path-to-regexp 8 alone wouldn't prove v5.
+      if (getExpressRouteDialect() !== 'express5') return null
       const parse = getParse()
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null
