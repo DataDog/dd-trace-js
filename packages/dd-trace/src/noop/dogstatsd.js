@@ -16,8 +16,4 @@ module.exports = class NoopDogStatsDClient {
   histogram () {}
 
   flush () {}
-
-  sendTelemetry () {}
-
-  recordMetric () {}
 }
