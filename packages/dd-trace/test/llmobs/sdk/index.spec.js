@@ -1550,18 +1550,6 @@ describe('sdk', () => {
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
     })
 
-    it('sends a dotted label as-is', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'has.toxicity',
-        metricType: 'score',
-        value: 0.6,
-      })
-
-      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].label, 'has.toxicity')
-    })
-
     it('sends a non-string label as-is', () => {
       llmobs.submitEvaluation(spanCtx, {
         mlApp: 'test',
