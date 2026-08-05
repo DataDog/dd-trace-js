@@ -1109,6 +1109,41 @@ describe('sdk', () => {
       })
     })
 
+    it('annotates llm io with image parts for an llm span', () => {
+      const inputData = [
+        { role: 'user', content: 'describe this', imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=' }] },
+      ]
+      const outputData = [
+        { role: 'assistant', content: 'bands', imageParts: [{ mimeType: 'image/jpeg', attachmentKey: 'key-123' }] },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.messages': [
+            {
+              role: 'user',
+              content: 'describe this',
+              image_parts: [{ mime_type: 'image/png', content: 'iVBORw0KGgo=' }],
+            },
+          ],
+          '_ml_obs.meta.output.messages': [
+            {
+              role: 'assistant',
+              content: 'bands',
+              image_parts: [{ mime_type: 'image/jpeg', attachment_key: 'key-123' }],
+            },
+          ],
+        })
+      })
+    })
+
     it('annotates embedding io for an embedding span', () => {
       const inputData = [{ text: 'input text' }]
       const outputData = 'documents embedded'

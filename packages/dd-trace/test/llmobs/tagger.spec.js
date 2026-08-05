@@ -1136,7 +1136,7 @@ describe('tagger', () => {
           )
         })
 
-        it('throws when neither content nor attachmentKey is set', () => {
+        it('throws when neither content nor attachmentKey is present', () => {
           const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png' }] }]
 
           assert.throws(
@@ -1145,7 +1145,7 @@ describe('tagger', () => {
           )
         })
 
-        it('throws when both content and attachmentKey are set', () => {
+        it('throws when both content and attachmentKey are present', () => {
           const messages = [
             { content: 'a', imageParts: [{ mimeType: 'image/png', content: 'iVBORw0KGgo=', attachmentKey: 'k' }] },
           ]
@@ -1156,16 +1156,18 @@ describe('tagger', () => {
           )
         })
 
-        it('throws for a non-string content', () => {
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
           const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', content: 5 }] }]
 
           assert.throws(
             () => tagger.tagLLMIO(span, messages, undefined),
-            { message: 'Image part content must be a base64-encoded string.' }
+            err =>
+              err.message === 'Image part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
           )
         })
 
-        it('throws for a non-string attachmentKey, tagged for telemetry', () => {
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
           const messages = [{ content: 'a', imageParts: [{ mimeType: 'image/png', attachmentKey: 5 }] }]
 
           assert.throws(
