@@ -53,6 +53,7 @@ describe('LLMObs Experiments facade', () => {
   const backendExperimentName = `${backendProjectName}-experiment`
   const backendRichExperimentDatasetName = `${backendProjectName}-rich-experiment-dataset`
   const backendRichExperimentName = `${backendProjectName}-rich-experiment`
+  const backendTaggedDatasetName = `${backendProjectName}-tagged-dataset`
 
   function backendClientOptions () {
     return {
@@ -352,6 +353,47 @@ describe('LLMObs Experiments facade', () => {
         }),
         /Dataset 'remote-dataset' has 0 record\(s\) after 0ms, expected 1/
       )
+    })
+  })
+
+  describe('backend dataset operations', () => {
+    it('pushes, updates, and pulls dataset record tags through the VCR backend', async function () {
+      const exp = backendExperiments()
+      const dataset = trackBackendDataset(exp.createDataset(backendTaggedDatasetName, {
+        description: 'created by a dd-trace-js experiments tagged records VCR test',
+        records: [
+          {
+            id: 'tagged-a',
+            inputData: { value: 1 },
+            expectedOutput: { value: 2 },
+            metadata: { source: 'client-record-tags-test' },
+            tags: ['split:eval', 'topic:math'],
+          },
+          {
+            id: 'tagged-b',
+            inputData: { value: 2 },
+            expectedOutput: { value: 3 },
+            metadata: { source: 'client-record-tags-test' },
+            tags: ['split:train'],
+          },
+        ],
+      }))
+
+      await dataset.push()
+      dataset.addTags(1, ['split:eval'])
+      dataset.removeTags(1, ['split:train'])
+      await dataset.push()
+
+      const pulled = await exp.pullDataset(backendTaggedDatasetName, {
+        expectedRecordCount: 2,
+        maxWaitMs: 0,
+        tags: ['split:eval'],
+      })
+
+      assert.deepEqual(pulled.filterTags(), ['split:eval'])
+      assert.deepEqual(pulled.records().map(record => record.id).sort(), ['tagged-a', 'tagged-b'])
+      assert.deepEqual(pulled.records().find(record => record.id === 'tagged-a').tags, ['split:eval', 'topic:math'])
+      assert.deepEqual(pulled.records().find(record => record.id === 'tagged-b').tags, ['split:eval'])
     })
   })
 
