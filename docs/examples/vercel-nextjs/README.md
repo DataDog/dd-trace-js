@@ -2,16 +2,15 @@
 
 This prototype shows the Builder boundary required to initialize `dd-trace`
 through Next.js's supported instrumentation hook. Before delegating to Vercel's
-official `@vercel/next` Builder, it adds `dd-trace` as a production dependency
-and writes `instrumentation.ts`. Next then builds and traces its normal Node
-function output. It also prepends the early `dd-trace/initialize.mjs` preload
-to each Node function's local `NODE_OPTIONS`. Edge initialization is skipped.
+official `@vercel/next` Builder, it writes `instrumentation.ts`. Next then
+builds and traces its normal Node function output. It also prepends the early
+`dd-trace/initialize.mjs` preload to each Node function's local `NODE_OPTIONS`.
+Edge initialization is skipped.
 
 ## Application Setup
 
-No application source, Next.js configuration, or `dd-trace` dependency is
-required. The published Builder owns the supported tracer version so its
-runtime artifact is reproducible and tested as one release unit.
+Install `dd-trace` as a production dependency in the application before
+deploying. The Builder does not modify package manifests or lockfiles.
 
 ## Builder Setup
 
@@ -30,10 +29,6 @@ generated hook makes the tracer visible to that pass; the function-local preload
 performs initialization before Next. The Builder does not copy tracer files or
 add unsupported function settings.
 
-Projects using `npm ci`, `yarn --frozen-lockfile`, or immutable installs must
-add `dd-trace` to production dependencies and commit the updated lockfile. The
-Builder fails before calling those incompatible install commands.
-
 Use Vercel's normal source-build deployment path. The Datadog integration must
 configure direct OTLP endpoints and encrypted headers for traces, logs, and
 metrics. It must also enable `OTEL_TRACES_EXPORTER=otlp`,
@@ -46,6 +41,6 @@ to their application, and `DD_TRACE_DEBUG` remains disabled in production.
 `@datadog/vercel-next-builder` is not published by this repository. This
 directory is therefore a tested prototype and onboarding contract, not a
 customer-installable release. Publishing the Builder requires a package owner,
-package manifest with `@vercel/next`, `@vercel/build-utils`, and `dd-trace`
-dependencies, registry/release workflow, and live Vercel acceptance before this
-configuration can be supported.
+package manifest with `@vercel/next` and `@vercel/build-utils` dependencies,
+registry/release workflow, and live Vercel acceptance before this configuration
+can be supported.

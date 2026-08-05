@@ -49,28 +49,12 @@ async function findFunctionPaths (directory) {
   return functionPaths
 }
 
-async function readBuildFile (file) {
-  const chunks = []
-
-  for await (const chunk of file.toStream()) chunks.push(chunk)
-
-  return Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString('utf8')
-}
-
 function createBuildFile (FileBlob, data) {
   return new FileBlob({ data, contentType: 'application/javascript' })
 }
 
-function hasFrozenInstallCommand (installCommand) {
-  return /\bnpm\s+ci\b|--frozen-lockfile|--immutable/.test(installCommand || '')
-}
-
-async function prepareBuildInput (options, tracerVersion, FileBlob) {
+function prepareBuildInput (options, FileBlob) {
   const directory = path.posix.dirname(options.entrypoint)
-  const packagePath = getProjectPath(directory, 'package.json')
-  const packageFile = options.files[packagePath]
-
-  if (!packageFile) throw new Error(`Expected ${packagePath} in the Vercel build input`)
 
   const existingInstrumentation = getInstrumentationPaths(directory).find(filePath => options.files[filePath])
   if (existingInstrumentation) {
@@ -80,26 +64,6 @@ async function prepareBuildInput (options, tracerVersion, FileBlob) {
     )
   }
 
-  const packageJson = JSON.parse(await readBuildFile(packageFile))
-  const dependencies = { ...packageJson.dependencies }
-  const developmentDependency = packageJson.devDependencies?.['dd-trace']
-
-  if (hasFrozenInstallCommand(options.config?.installCommand) && !dependencies['dd-trace']) {
-    throw new Error(
-      'Cannot add dd-trace with a frozen install command. ' +
-        'Add dd-trace to production dependencies and update the lockfile.'
-    )
-  }
-
-  dependencies['dd-trace'] = dependencies['dd-trace'] || developmentDependency || tracerVersion
-
-  if (developmentDependency) {
-    const { 'dd-trace': ignored, ...devDependencies } = packageJson.devDependencies
-    packageJson.devDependencies = devDependencies
-  }
-
-  packageJson.dependencies = dependencies
-  options.files[packagePath] = createBuildFile(FileBlob, `${JSON.stringify(packageJson, null, 2)}\n`)
   options.files[getProjectPath(directory, 'instrumentation.ts')] = createBuildFile(FileBlob, INSTRUMENTATION_SOURCE)
 }
 
@@ -131,10 +95,8 @@ async function build (options) {
   const { FileBlob } = require('@vercel/build-utils')
   // eslint-disable-next-line n/no-missing-require -- Declared by the published Builder package.
   const { build: buildNext } = require('@vercel/next')
-  // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require -- Builder dependency.
-  const { version } = require('dd-trace/package.json')
 
-  await prepareBuildInput(options, version, FileBlob)
+  prepareBuildInput(options, FileBlob)
   const result = await buildNext(options)
 
   if (result.buildOutputPath) await instrumentBuildOutput(result.buildOutputPath)
@@ -145,7 +107,6 @@ async function build (options) {
 module.exports = {
   build,
   getInstrumentationPaths,
-  hasFrozenInstallCommand,
   instrumentBuildOutput,
   mergeNodeOptions,
   prepareBuildInput,

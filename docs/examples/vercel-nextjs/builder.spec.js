@@ -4,11 +4,9 @@ const assert = require('node:assert')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { Readable } = require('node:stream')
 
 const {
   getInstrumentationPaths,
-  hasFrozenInstallCommand,
   instrumentBuildOutput,
   prepareBuildInput,
 } = require('./builder')
@@ -17,33 +15,23 @@ class FileBlob {
   constructor ({ data }) {
     this.data = data
   }
-
-  toStream () {
-    return Readable.from(this.data)
-  }
 }
 
 function file (data) {
   return new FileBlob({ data })
 }
 
-function getFileData (file) {
-  return JSON.parse(file.data)
-}
-
 describe('Vercel Next Builder prototype', () => {
-  it('adds an instrumentation entrypoint and production tracer dependency before the Next build', async () => {
+  it('adds an instrumentation entrypoint before the Next build without changing dependencies', () => {
     const options = {
       entrypoint: 'package.json',
-      files: { 'package.json': file('{"name":"app"}') },
+      files: { 'package.json': file('{"name":"app","dependencies":{"dd-trace":"7.0.0"}}') },
     }
+    const packageFile = options.files['package.json']
 
-    await prepareBuildInput(options, '7.0.0', FileBlob)
+    prepareBuildInput(options, FileBlob)
 
-    assert.deepStrictEqual(getFileData(options.files['package.json']), {
-      name: 'app',
-      dependencies: { 'dd-trace': '7.0.0' },
-    })
+    assert.strictEqual(options.files['package.json'], packageFile)
     assert.strictEqual(options.files['instrumentation.ts'].data, `export function register () {
   if (process.env.NEXT_RUNTIME !== 'edge') {
     require('dd-trace/init')
@@ -52,24 +40,7 @@ describe('Vercel Next Builder prototype', () => {
 `)
   })
 
-  it('moves an existing development tracer dependency to production dependencies', async () => {
-    const options = {
-      entrypoint: 'apps/web/package.json',
-      files: {
-        'apps/web/package.json': file('{"devDependencies":{"dd-trace":"6.0.0","typescript":"5.0.0"}}'),
-      },
-    }
-
-    await prepareBuildInput(options, '7.0.0', FileBlob)
-
-    assert.deepStrictEqual(getFileData(options.files['apps/web/package.json']), {
-      dependencies: { 'dd-trace': '6.0.0' },
-      devDependencies: { typescript: '5.0.0' },
-    })
-    assert.ok(options.files['apps/web/instrumentation.ts'])
-  })
-
-  it('refuses to overwrite root or src instrumentation files', async () => {
+  it('refuses to overwrite root or src instrumentation files', () => {
     for (const instrumentationPath of getInstrumentationPaths('.')) {
       const options = {
         entrypoint: 'package.json',
@@ -80,8 +51,8 @@ describe('Vercel Next Builder prototype', () => {
       }
       const existingFile = options.files[instrumentationPath]
 
-      await assert.rejects(
-        prepareBuildInput(options, '7.0.0', FileBlob),
+      assert.throws(
+        () => prepareBuildInput(options, FileBlob),
         new RegExp(`Cannot add Datadog instrumentation because ${instrumentationPath} already exists`)
       )
       assert.strictEqual(options.files[instrumentationPath], existingFile)
@@ -115,19 +86,5 @@ describe('Vercel Next Builder prototype', () => {
     } finally {
       await fs.rm(outputPath, { force: true, recursive: true })
     }
-  })
-
-  it('requires a direct dependency before a frozen install', async () => {
-    const options = {
-      config: { installCommand: 'npm ci' },
-      entrypoint: 'package.json',
-      files: { 'package.json': file('{"name":"app"}') },
-    }
-
-    assert.strictEqual(hasFrozenInstallCommand(options.config.installCommand), true)
-    await assert.rejects(
-      prepareBuildInput(options, '7.0.0', FileBlob),
-      /Add dd-trace to production dependencies and update the lockfile/
-    )
   })
 })
