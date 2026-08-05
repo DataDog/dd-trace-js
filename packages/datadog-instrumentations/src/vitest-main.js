@@ -729,6 +729,7 @@ async function runMainProcessSetup (
       isEarlyFlakeDetectionEnabled = false
     } else {
       knownTests = currentKnownTestsResponse.knownTests
+      log.debug('Known tests received by Vitest: %j', knownTests)
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {

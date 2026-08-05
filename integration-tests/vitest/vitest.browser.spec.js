@@ -681,7 +681,11 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       },
       known_tests_enabled: true,
     })
-    receiver.setKnownTests({ vitest: {} })
+    receiver.setKnownTests({
+      vitest: {
+        'known-suite.mjs': ['known test'],
+      },
+    })
 
     const payloadsPromise = gatherEvents(events => {
       const tests = getEventContents(events, 'test')
@@ -700,11 +704,15 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     })
 
     const [exitCode] = await Promise.all([
-      runVitest('browser-efd.mjs'),
+      runVitest('browser-efd.mjs', { DD_TRACE_DEBUG: 'true' }),
       payloadsPromise,
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)
+    assert.match(
+      testOutput,
+      /Known tests received by Vitest: {"vitest":{"known-suite.mjs":\["known test"\]}}/
+    )
   })
 
   it('uses an unmocked clock for browser attempt durations and EFD retries', async () => {
