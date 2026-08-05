@@ -13,11 +13,24 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // per-metric tags, and append to the 1KB datagram buffer (Buffer.from on each
 // overflow). The aggregated variant drives the MetricsAggregationClient tag
 // tree that runtime metrics build before flushing. The UDP socket is stubbed so
-// nothing leaves the process — the bench measures the in-process formatting and
-// buffering only.
+// nothing leaves the process — the bench measures the in-process formatting,
+// buffering, and send boundary only.
+const sockets = []
+let lastPayload
+
+function discard () {}
+
 class BenchClient extends DogStatsDClient {
   _socket () {
-    return { send () {}, on () {}, unref () {} }
+    const socket = {
+      send (buffer) { lastPayload = buffer },
+      on () {},
+      unref () {},
+    }
+
+    sockets.push(socket)
+
+    return socket
   }
 }
 
@@ -35,11 +48,12 @@ for (let i = 0; i < 12; i++) MANY_TAGS.push(`dim_${i}:value_${i}`)
 
 function preflight () {
   client._add(NAME, 42, 'g', FEW_TAGS)
-  assert.ok(client._buffer.includes(NAME) && client._buffer.includes('env:bench'),
+  client.flush()
+  const payload = lastPayload.toString()
+  assert.ok(payload.includes(NAME) && payload.includes('env:bench'),
     '_add did not format the metric line with global tags')
-  client._buffer = ''
-  client._offset = 0
-  client._queue = []
+
+  for (const socket of sockets) socket.send = discard
 }
 preflight()
 
@@ -59,8 +73,8 @@ if (VARIANT === 'aggregated') {
   const type = VARIANT === 'no-tags' ? 'c' : 'g'
   for (let i = 0; i < OPERATIONS; i++) {
     client._add(NAME, i, type, tags)
-    // Drain the datagram queue without sending so memory stays flat.
-    if ((i & 0x7FF) === 0) client._queue.length = 0
+    // Flush through the stubbed transport so memory stays flat.
+    if ((i & 0x7FF) === 0) client.flush()
   }
 }
 guard.done()
