@@ -94,6 +94,21 @@ function getOperation (document, operationName) {
 }
 
 /**
+ * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
+ * @param {string} signature
+ * @param {string | undefined} type
+ * @param {string | undefined} name
+ */
+function refineRequestSpanMetadata (requestSpan, signature, type, name) {
+  if (!requestSpan || requestSpan.ddRequestRefined) return
+  requestSpan.ddRequestRefined = true
+
+  if (signature) requestSpan.setTag('resource.name', signature)
+  if (type) requestSpan.setTag('graphql.operation.type', type)
+  if (name) requestSpan.setTag('graphql.operation.name', name)
+}
+
+/**
  * Refine the top-level graphql.request span (mercurius) from the parsed
  * document and cache the metadata so the JIT warm path — where no sub-span
  * fires — can recover the same tags at the request boundary.
@@ -304,4 +319,5 @@ module.exports = {
   isApolloHealthCheck,
   isApolloHealthCheckSource,
   refineRequestSpan,
+  refineRequestSpanMetadata,
 }

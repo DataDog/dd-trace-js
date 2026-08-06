@@ -909,10 +909,9 @@ describe('Plugin', () => {
         })
 
         it('publishes apm:graphql:resolve:start for every sibling of a collapsed list', async () => {
-          // The collapse knob dedupes span creation, not channel publishes. IAST
-          // taint-tracking mutates each call's own args object; if siblings 2..N
-          // skip the publish, those args objects never get tainted and a sink
-          // reached through sibling N misses the vulnerability.
+          // The collapse knob dedupes span creation, not channel publishes. Each
+          // subscriber invocation receives that resolver call's own args object;
+          // skipping siblings would leave downstream consumers with incomplete data.
           const startCh = dc.channel('apm:graphql:resolve:start')
           const argsByPath = new Map()
           const handler = (ctx) => {
@@ -1793,10 +1792,9 @@ describe('Plugin', () => {
         })
 
         it('throws AbortError when the execute abortController is aborted before execute runs', async () => {
-          // AppSec's WAF blocks a malicious request by aborting the execute ctx
-          // on apm:graphql:execute:start. callInAsyncScope sees the signal and
-          // throws AbortError before exe runs; the field-resolver path never
-          // fires for this query.
+          // A start-channel subscriber can stop the execute context. callInAsyncScope
+          // sees the signal and throws AbortError before execute runs; the
+          // field-resolver path never fires for this query.
           const startCh = dc.channel('apm:graphql:execute:start')
           const handler = (ctx) => {
             ctx.abortController.abort()
@@ -1902,6 +1900,27 @@ describe('Plugin', () => {
           } finally {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
           }
+        })
+
+        it('should not fail with an argument-less directive ' +
+          'and with subscription to datadog:graphql:resolver:start', async () => {
+          const source = 'query MyQuery { hello(name: "world") @cached }'
+          const document = graphql.parse(source)
+          delete document.definitions[0].selectionSet.selections[0].directives[0].arguments
+
+          const resolverInfo = []
+          const handler = ({ resolverInfo: info }) => {
+            resolverInfo.push(info)
+          }
+          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+
+          try {
+            await graphql.execute({ schema, document })
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+          }
+
+          assert.deepStrictEqual(resolverInfo, [{ hello: { name: 'world', title: null } }])
         })
 
         it('should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
@@ -2924,12 +2943,27 @@ describe('Plugin', () => {
           }
         }
 
+        let throwingHook
+
+        /** @param {'execute' | 'parse' | 'resolve' | 'validate'} name */
+        function throwHookError (name) {
+          if (throwingHook === name) throw new Error(`${name} hook boom`)
+        }
+
         const config = {
           hooks: {
-            execute: sinon.spy(executeHook),
-            parse: sinon.spy((span, document, operation) => {}),
-            validate: sinon.spy(validateHook),
-            resolve: sinon.spy((span, field) => {}),
+            execute: sinon.spy((span, args, result) => {
+              executeHook(span, args, result)
+              throwHookError('execute')
+            }),
+            parse: sinon.spy(() => throwHookError('parse')),
+            validate: sinon.spy((span, document, errors) => {
+              validateHook(span, document, errors)
+              throwHookError('validate')
+            }),
+            resolve: sinon.spy((span, field) => {
+              throwHookError('resolve')
+            }),
           },
         }
 
@@ -2951,9 +2985,12 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        afterEach(() => Object.keys(config.hooks).forEach(
-          key => config.hooks[key].resetHistory()
-        ))
+        afterEach(() => {
+          throwingHook = undefined
+          for (const hook of Object.values(config.hooks)) {
+            hook.resetHistory()
+          }
+        })
 
         after(() => agent.close())
 
@@ -3278,6 +3315,61 @@ describe('Plugin', () => {
             assertion,
             graphql.graphql({ schema, source: resolveSource }),
           ])
+        })
+
+        it('should finish spans when hooks throw', async () => {
+          const rejections = []
+          /** @param {unknown} reason */
+          const onRejection = reason => rejections.push(reason)
+          process.on('unhandledRejection', onRejection)
+
+          try {
+            for (const testCase of [
+              { hook: 'parse', spanName: 'graphql.parse' },
+              { hook: 'validate', spanName: 'graphql.validate' },
+              { hook: 'execute', spanName: expectedSchema.server.opName },
+              { hook: 'resolve', spanName: 'graphql.resolve' },
+            ]) {
+              throwingHook = testCase.hook
+              const operationName = `${testCase.hook}HookThrows`
+              const source = `query ${operationName} { hello(name: "world") }`
+              const assertion = agent.assertSomeTraces(traces => {
+                const span = traces[0].find(span => span.name === testCase.spanName)
+                assert.ok(span, `expected ${testCase.spanName} span`)
+                assert.strictEqual(span.error, 0)
+              }, testCase.hook === 'execute' || testCase.hook === 'resolve'
+                ? { spanResourceMatch: new RegExp(operationName) }
+                : undefined)
+
+              let result
+              if (testCase.hook === 'parse') {
+                ;[, result] = await Promise.all([
+                  assertion,
+                  (async () => graphql.parse(source))(),
+                ])
+                assert.strictEqual(result.kind, 'Document')
+              } else if (testCase.hook === 'validate') {
+                const document = graphql.parse(source)
+                ;[, result] = await Promise.all([
+                  assertion,
+                  (async () => graphql.validate(schema, document))(),
+                ])
+                assert.deepStrictEqual(result, [])
+              } else {
+                ;[, result] = await Promise.all([
+                  assertion,
+                  graphql.graphql({ schema, source }),
+                ])
+                assert.strictEqual(result.data.hello, 'world')
+                assert.strictEqual(result.errors, undefined)
+              }
+            }
+            await new Promise(resolve => setImmediate(resolve))
+          } finally {
+            process.removeListener('unhandledRejection', onRejection)
+          }
+
+          assert.deepStrictEqual(rejections.map(reason => reason?.message), [])
         })
       })
 
