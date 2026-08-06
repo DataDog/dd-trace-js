@@ -49,7 +49,7 @@ const {
   getRawJestTestName,
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
-} = require('../../datadog-plugin-jest/src/util')
+} = require('../../dd-trace/src/plugins/util/jest')
 const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
