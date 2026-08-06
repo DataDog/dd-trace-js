@@ -625,11 +625,16 @@ module.exports = {
       })
     })
 
-    agent.put('/v0.5/traces', (req, res) => {
+    // v0.5 is not implemented here: answer 404 so a writer probing it falls back
+    // to v0.4, as it would against an Agent that does not advertise the endpoint.
+    agent.all('/v0.5/traces', (req, res) => {
       res.status(404).end()
     })
 
+    // Both methods the Agent accepts for trace intake: the legacy writer sends
+    // PUT, and a writer built on libdatadog sends POST.
     agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v0.4/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 

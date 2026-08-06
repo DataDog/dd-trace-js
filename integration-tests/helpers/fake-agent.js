@@ -383,14 +383,18 @@ function buildExpressServer (agent) {
     res.json({ endpoints })
   })
 
-  app.put('/v0.4/traces', (req, res) => {
+  const handleV04Traces = (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
       payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
-  })
+  }
+  // Both methods the Agent accepts for trace intake: the legacy writer sends
+  // PUT, and a writer built on libdatadog sends POST.
+  app.put('/v0.4/traces', handleV04Traces)
+  app.post('/v0.4/traces', handleV04Traces)
 
   app.post('/v0.7/config', (req, res) => {
     const {
