@@ -495,12 +495,12 @@ describe('rewriter loader', () => {
     })
   })
 
-  it('falls back to the compile hook on Electron', function () {
+  it('falls back to the compile hook on the last Electron without the validator fix', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
     }
 
-    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-electron-'))
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-electron-unfixed-'))
     const packageDirectory = join(root, 'node_modules', 'ai')
 
     mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
@@ -508,11 +508,7 @@ describe('rewriter loader', () => {
     writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
     // Electron's `electron:electron` modules make Node's load hook validation
     // throw on the default step, so the hook must not be installed there.
-    writeFileSync(join(root, 'spoof-electron.cjs'), `
-      const Module = require('node:module')
-      Object.defineProperty(process.versions, 'electron', { value: '41.10.4' })
-      globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})] = Module.prototype._compile
-    `)
+    writeElectronSpoof(root, '42.8.1')
     writeFileSync(join(root, 'main.js'), `
       const Module = require('node:module')
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
@@ -538,6 +534,50 @@ describe('rewriter loader', () => {
 
     assert.deepStrictEqual(result, {
       compileChanged: true,
+      starts: 1,
+      value: 'tracer',
+    })
+  })
+
+  it('installs the load hook on the first Electron with the validator fix', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-electron-fixed-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), decoratedCommonJSSource)
+    // Electron 43.0.0 exempts `electron:` URLs from the strict source validation
+    // that rejects the load hook below it, so the hook is installed again.
+    writeElectronSpoof(root, '43.0.0')
+    writeFileSync(join(root, 'main.js'), `
+      const Module = require('node:module')
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = require('ai').getTracer()
+      console.log(JSON.stringify({
+        compileUnchanged: Module.prototype._compile === originalCompile,
+        starts,
+        value,
+      }))
+    `)
+
+    const result = runFixture(root, 'main.js', {
+      NODE_OPTIONS: [
+        `--require ${join(root, 'spoof-electron.cjs')}`,
+        `--require ${rewriterLoaderPath}`,
+      ].join(' '),
+    })
+
+    assert.deepStrictEqual(result, {
+      compileUnchanged: true,
       starts: 1,
       value: 'tracer',
     })
@@ -697,6 +737,14 @@ function writeEsmAiPackage (prefix) {
   writeFileSync(join(packageDirectory, 'dist', 'index.js'), source)
 
   return root
+}
+
+function writeElectronSpoof (root, version) {
+  writeFileSync(join(root, 'spoof-electron.cjs'), `
+    const Module = require('node:module')
+    Object.defineProperty(process.versions, 'electron', { value: ${JSON.stringify(version)} })
+    globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})] = Module.prototype._compile
+  `)
 }
 
 function writeCompileCapture (root) {

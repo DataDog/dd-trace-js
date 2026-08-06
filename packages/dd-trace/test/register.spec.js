@@ -66,26 +66,37 @@ describe('register.js', () => {
     assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
   })
 
-  it('falls back to the async loader on Electron', () => {
+  it('falls back to the async loader on the last Electron without the validator fix', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(true)
     const supportsSyncHooks = sinon.stub().throws(new Error('should not be called'))
 
     // Electron's `electron:electron` modules make Node reject the default load
     // step as soon as any load hook is registered.
-    Object.defineProperty(process.versions, 'electron', { configurable: true, value: '41.10.4' })
-
-    try {
+    withElectronVersion('42.8.1', () => {
       loadRegister({ register, registerSyncLoaderHooks, supportsSyncHooks })
-    } finally {
-      delete process.versions.electron
-    }
+    })
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
     sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.notCalled(emitWarning)
     assertSyncSourceRewritingInactive()
+  })
+
+  it('registers sync loader hooks on the first Electron with the validator fix', () => {
+    const register = sinon.stub()
+    const registerSyncLoaderHooks = sinon.stub().returns(true)
+
+    // Electron 43.0.0 exempts `electron:` URLs from the strict source validation.
+    withElectronVersion('43.0.0', () => {
+      loadRegister({ register, registerSyncLoaderHooks, supportsSyncHooks: () => true })
+    })
+
+    sinon.assert.calledOnce(registerSyncLoaderHooks)
+    sinon.assert.notCalled(register)
+    sinon.assert.notCalled(emitWarning)
+    assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
   })
 
   it('warns and falls back if sync loader registration returns false', () => {
@@ -181,6 +192,16 @@ describe('register.js', () => {
 
 function assertSyncSourceRewritingInactive () {
   assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], undefined)
+}
+
+function withElectronVersion (version, fn) {
+  Object.defineProperty(process.versions, 'electron', { configurable: true, value: version })
+
+  try {
+    fn()
+  } finally {
+    delete process.versions.electron
+  }
 }
 
 function createThrowingLoaderHook (error) {
