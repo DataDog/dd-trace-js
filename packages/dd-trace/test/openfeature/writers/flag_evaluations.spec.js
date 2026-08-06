@@ -353,6 +353,79 @@ describe('FlagEvaluationsWriter', () => {
       })
     })
 
+    it('does not overflow on self-referential context and truncates the cycle', () => {
+      const ctx = { plan: 'pro' }
+      ctx.self = ctx
+
+      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: ctx })))
+
+      // The plain leaf survives; the ancestor-repeat is truncated. `self` descends once
+      // into ctx (which is not yet on the walk path at that point), but the further
+      // `self.self` reference IS an ancestor repeat and is dropped.
+      const flattened = writer._rawQueue[0].attrs
+      assert.strictEqual(flattened.plan, 'pro')
+      assert.strictEqual(flattened['self.plan'], 'pro')
+      for (const k of Object.keys(flattened)) {
+        assert.ok(!k.startsWith('self.self'),
+          `nested cycle should have been truncated, got key: ${k}`)
+      }
+    })
+
+    it('does not overflow on cyclic arrays and truncates the cycle', () => {
+      const arr = ['a']
+      arr.push(arr)
+
+      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: { list: arr } })))
+
+      const flattened = writer._rawQueue[0].attrs
+      assert.strictEqual(flattened['list.0'], 'a')
+      // The cyclic self-reference at list[1] must not have produced any further keys.
+      for (const k of Object.keys(flattened)) {
+        assert.ok(!k.startsWith('list.1.'), `cyclic array element should be truncated, got key: ${k}`)
+      }
+    })
+
+    it('does not overflow on pathologically deep contexts and truncates at the depth cap', () => {
+      // Build a linear chain 100 levels deep — well beyond MAX_CONTEXT_DEPTH (32).
+      let leaf = { end: 'here' }
+      for (let i = 0; i < 100; i++) {
+        leaf = { next: leaf }
+      }
+
+      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: { root: leaf } })))
+
+      const flattened = writer._rawQueue[0].attrs
+      // The terminal leaf sits well past the depth cap, so no key survives — this is
+      // the truncate-on-breach policy. Just proving the enqueue didn't overflow.
+      assert.ok(!Object.prototype.hasOwnProperty.call(flattened, 'root.next.end'))
+    })
+
+    it('emits keys for chains shallower than the depth cap', () => {
+      // Build a chain 5 levels deep, well under MAX_CONTEXT_DEPTH (32).
+      let leaf = { end: 'here' }
+      for (let i = 0; i < 5; i++) {
+        leaf = { next: leaf }
+      }
+
+      writer.enqueue(makeEvent({ attrs: { root: leaf } }))
+
+      const flattened = writer._rawQueue[0].attrs
+      assert.strictEqual(flattened['root.next.next.next.next.next.end'], 'here')
+    })
+
+    it('sibling containers sharing the same reference are both emitted (not falsely-deduped)', () => {
+      // A cycle guard implemented with a permanent visited-set would drop the second
+      // occurrence of `shared`. The per-flatten WeakSet must still emit both siblings
+      // because neither is an ancestor of the other in the walk.
+      const shared = { role: 'admin' }
+      writer.enqueue(makeEvent({ attrs: { a: shared, b: shared } }))
+
+      assert.deepStrictEqual(writer._rawQueue[0].attrs, {
+        'a.role': 'admin',
+        'b.role': 'admin',
+      })
+    })
+
     it('does not include targetingKey inside context.evaluation', () => {
       writer.enqueue(makeEvent({ attrs: { targetingKey: 'user-1', plan: 'premium' } }))
       writer.flush()

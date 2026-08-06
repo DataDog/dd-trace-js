@@ -45,6 +45,11 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 const MAX_CONTEXT_FIELDS = 256
 const MAX_FIELD_LENGTH = 256
 
+// Depth cap for context flattening. Mirrors Java DDEvaluator.MAX_SNAPSHOT_DEPTH.
+// Guards against exotic inputs beyond the cycle-set guarantee. Values at or beyond
+// this depth are dropped rather than emitted, matching the cycle-truncation policy.
+const MAX_CONTEXT_DEPTH = 32
+
 // Type-tag bytes for canonical context key encoding.
 // Distinct per JS type so that, e.g., int 1 and string "1" cannot alias.
 const TAG_STRING = 's'
@@ -129,36 +134,12 @@ function isPlainObject (value) {
 }
 
 /**
- * @param {string} prefix
- * @param {unknown} value
- * @param {Record<string, unknown>} out
- * @returns {void}
- */
-function flattenValue (prefix, value, out) {
-  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
-    return
-  }
-
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      flattenValue(`${prefix}.${i}`, value[i], out)
-    }
-    return
-  }
-
-  if (isPlainObject(value)) {
-    for (const key of Object.keys(value)) {
-      flattenValue(`${prefix}.${key}`, value[key], out)
-    }
-    return
-  }
-
-  out[prefix] = value
-}
-
-/**
- * Flattens nested context attributes into dot-notation keys and removes targetingKey,
- * which is emitted separately as targeting_key.
+ * Iteratively flattens nested context attributes into dot-notation keys and removes
+ * the top-level targetingKey (emitted separately as targeting_key). Uses an explicit
+ * work stack plus an ancestor-container set with add-on-descent / delete-on-post-visit,
+ * so cyclic contexts truncate at the ancestor repeat instead of overflowing the JS
+ * call stack, while sibling references to the same object still emit at both sites.
+ * Traversal is capped at MAX_CONTEXT_DEPTH to guard against pathologically deep inputs.
  *
  * @param {Record<string, unknown>} attrs
  * @returns {Record<string, unknown>}
@@ -167,9 +148,65 @@ function flattenContext (attrs) {
   if (!attrs) return {}
 
   const out = {}
-  for (const key of Object.keys(attrs)) {
+  // ancestors tracks containers currently on the walk path; a container is added
+  // when we descend into it and removed after all its descendants are processed.
+  // This matches the Java IdentityHashMap add/remove pattern: cycles (ancestor
+  // repeats) truncate, but sibling references to the same object still emit.
+  const ancestors = new WeakSet()
+  // Stack entries are one of:
+  //   ['leaf', prefix, value, depth]   → try to emit as scalar
+  //   ['exit', value]                  → post-visit marker; remove from ancestors
+  const stack = []
+  const keys = Object.keys(attrs)
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const key = keys[i]
     if (key === 'targetingKey') continue
-    flattenValue(key, attrs[key], out)
+    stack.push(['leaf', key, attrs[key], 1])
+  }
+
+  while (stack.length > 0) {
+    const frame = stack.pop()
+
+    if (frame[0] === 'exit') {
+      ancestors.delete(frame[1])
+      continue
+    }
+
+    const prefix = frame[1]
+    const value = frame[2]
+    const depth = frame[3]
+
+    if (value === undefined ||
+        typeof value === 'function' ||
+        typeof value === 'symbol' ||
+        typeof value === 'bigint') {
+      continue
+    }
+
+    const isArray = Array.isArray(value)
+    if (isArray || isPlainObject(value)) {
+      if (depth >= MAX_CONTEXT_DEPTH) continue
+      if (ancestors.has(value)) continue // cycle — truncate
+
+      ancestors.add(value)
+      stack.push(['exit', value])
+
+      if (isArray) {
+        // Push in reverse so pop order matches natural iteration order.
+        for (let i = value.length - 1; i >= 0; i--) {
+          stack.push(['leaf', `${prefix}.${i}`, value[i], depth + 1])
+        }
+      } else {
+        const childKeys = Object.keys(value)
+        for (let i = childKeys.length - 1; i >= 0; i--) {
+          const k = childKeys[i]
+          stack.push(['leaf', `${prefix}.${k}`, value[k], depth + 1])
+        }
+      }
+      continue
+    }
+
+    out[prefix] = value
   }
   return out
 }
