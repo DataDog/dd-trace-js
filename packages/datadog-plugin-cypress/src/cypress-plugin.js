@@ -78,6 +78,7 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
+  isMarkedAsUnskippable,
   recordAttemptToFixExecution,
   recordTestManagementExecution,
   logAttemptToFixTestExecution,
@@ -86,7 +87,6 @@ const {
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
