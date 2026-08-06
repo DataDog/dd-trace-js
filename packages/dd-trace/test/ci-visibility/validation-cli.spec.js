@@ -18,6 +18,7 @@ const {
   EXECUTION_LOCK_FILENAME,
 } = require('../../../../ci/test-optimization-validation/execution-lock')
 const { createManifestScaffold } = require('../../../../ci/test-optimization-validation/manifest-scaffold')
+const { DD_MAJOR } = require('../../../../version')
 const {
   createRepositoryFixture,
   removeFixture,
@@ -26,6 +27,7 @@ const {
 
 const PACKAGE_ROOT = path.resolve(__dirname, '../../../..')
 const VALIDATOR = path.join(PACKAGE_ROOT, 'ci', 'validate-test-optimization.js')
+const CYPRESS_UNSUPPORTED_VERSION = DD_MAJOR >= 6 ? '11.2.0' : '6.6.0'
 
 describe('test optimization validation CLI', () => {
   it('uses only published files and runtime dependencies', () => {
@@ -172,8 +174,8 @@ describe('test optimization validation CLI', () => {
       const installedPackageJsonPath = path.join(fixture.root, 'node_modules', 'cypress', 'package.json')
       for (const filename of [packageJsonPath, installedPackageJsonPath]) {
         const packageJson = JSON.parse(fs.readFileSync(filename))
-        if (filename === packageJsonPath) packageJson.devDependencies.cypress = '11.2.0'
-        else packageJson.version = '11.2.0'
+        if (filename === packageJsonPath) packageJson.devDependencies.cypress = CYPRESS_UNSUPPORTED_VERSION
+        else packageJson.version = CYPRESS_UNSUPPORTED_VERSION
         fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
       }
       assert.strictEqual(runCli(fixture.root, ['--init-manifest', '--framework', 'cypress']).status, 0)

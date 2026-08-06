@@ -196,14 +196,11 @@ class Kinesis extends BaseAwsSdkPlugin {
       try {
         parsedAttributes = JSON.parse(recordDataAsString(record.Data))
       } catch {
-        // Non-JSON record. Skip DSM context for this entry; the
-        // checkpoint payload size below is still reported.
+        // Non-JSON record: it carries no context, so the checkpoint below starts a new pathway.
       }
 
       const payloadSize = getSizeOrZero(record.Data)
-      if (parsedAttributes?._datadog) {
-        this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
-      }
+      this.tracer.decodeDataStreamsContext(parsedAttributes?._datadog)
       this.tracer.setCheckpoint(tags, span, payloadSize)
     }
   }
