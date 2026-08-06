@@ -1,11 +1,14 @@
 'use strict'
 
-const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
+const { once } = require('node:events')
+const http = require('node:http')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { httpAgent } = require('../../src/exporters/common/agents')
 const propagationHash = require('../../src/propagation-hash')
 const agent = require('./agent')
 
@@ -39,6 +42,67 @@ describe('test agent helper', () => {
       await agent.load([])
       const secondId = global._ddtrace._tracer._config.tags['runtime-id']
       assert.notStrictEqual(secondId, firstId)
+    })
+
+    it('removes the exporter keep-alive socket from the shared pool on close', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      await agent.close()
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
+    it('finishes closing when an active exporter socket closes', async () => {
+      const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+      const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+
+      try {
+        await agent.load([])
+        const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+        agent.server.prependOnceListener('connection', socket => socket.pause())
+        const request = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const socketAssigned = once(request, 'socket')
+        const requestErrored = once(request, 'error')
+        request.end()
+        const [socket] = await socketAssigned
+        const socketFreeListenerCount = socket.listenerCount('free')
+
+        const closing = agent.close()
+        socket.destroy()
+        await Promise.all([closing, requestErrored])
+
+        assert.strictEqual(socket.listenerCount('free'), socketFreeListenerCount)
+        assert.strictEqual(origin in httpAgent.sockets, false)
+        assert.strictEqual(origin in httpAgent.freeSockets, false)
+        assert.strictEqual(origin in httpAgent.requests, false)
+      } finally {
+        if (remoteConfigurationEnabled === undefined) {
+          delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+        } else {
+          process.env.DD_REMOTE_CONFIGURATION_ENABLED = remoteConfigurationEnabled
+        }
+        if (telemetryEnabled === undefined) {
+          delete process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+        } else {
+          process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = telemetryEnabled
+        }
+      }
     })
 
     it('rebuilds the tracer when tracerConfig differs between consecutive loads', async () => {
