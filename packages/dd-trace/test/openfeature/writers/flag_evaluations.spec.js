@@ -25,6 +25,10 @@ describe('FlagEvaluationsWriter', () => {
     targetingKey: 'user-1',
     evalTimeMs: 1760000000000,
     attrs: { plan: 'premium', count: 5 },
+    // Existing suites cover the pre-PII wire shape (raw targeting_key + context).
+    // Default to consent-on here so those assertions still hold; PII tests set
+    // observeFullEvaluationData: false explicitly.
+    observeFullEvaluationData: true,
     ...overrides,
   })
 
@@ -789,6 +793,203 @@ describe('FlagEvaluationsWriter', () => {
       writer.enqueue(makeEvent())
       clock.tick(10000)
       sinon.assert.calledOnce(request)
+    })
+  })
+
+  describe('observeFullEvaluationData', () => {
+    // Canonical vector from the RFC. MUST match Java / Go / Python / Ruby / PHP / .NET.
+    const CANONICAL_INPUT = 'jane.doe@datadoghq.com'
+    const CANONICAL_HASH =
+      'sha256_b4698f9b6d186781fa8dc59e533578fa2d8379a46b1cf6db85cda6aa9c99e51b'
+
+    it('hashes targeting_key when observeFullEvaluationData is false', () => {
+      writer.enqueue(makeEvent({
+        targetingKey: CANONICAL_INPUT,
+        attrs: {},
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations[0].targeting_key, CANONICAL_HASH)
+    })
+
+    it('preserves raw targeting_key when observeFullEvaluationData is true', () => {
+      writer.enqueue(makeEvent({
+        targetingKey: CANONICAL_INPUT,
+        observeFullEvaluationData: true,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations[0].targeting_key, CANONICAL_INPUT)
+    })
+
+    it('omits context on the wire when observeFullEvaluationData is false', () => {
+      writer.enqueue(makeEvent({
+        attrs: { plan: 'premium', email: 'jane@example.com' },
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const event = payload.flagEvaluations[0]
+      assert.strictEqual(Object.hasOwn(event, 'context'), false,
+        'consent-off events MUST omit the context.evaluation dimension entirely')
+    })
+
+    it('includes context on the wire when observeFullEvaluationData is true', () => {
+      writer.enqueue(makeEvent({
+        attrs: { plan: 'premium' },
+        observeFullEvaluationData: true,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.deepStrictEqual(payload.flagEvaluations[0].context, { evaluation: { plan: 'premium' } })
+    })
+
+    it('separates buckets by consent value even when other dimensions match', () => {
+      writer.enqueue(makeEvent({ targetingKey: 'u1', attrs: {}, observeFullEvaluationData: false }))
+      writer.enqueue(makeEvent({ targetingKey: 'u1', attrs: {}, observeFullEvaluationData: true }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 2,
+        'mixed-consent evaluations MUST NOT merge into one bucket')
+      const targetingKeys = payload.flagEvaluations.map(e => e.targeting_key).sort()
+      // One hashed (sha256_ prefix), one raw ('u1'). Distinct.
+      assert.ok(targetingKeys.some(k => k === 'u1'), targetingKeys.join(','))
+      assert.ok(targetingKeys.some(k => k.startsWith('sha256_')), targetingKeys.join(','))
+    })
+
+    it('merges consent-off events across distinct contexts into one bucket', () => {
+      // Regression guard for concern:consent-off-bucket-keying (Java pilot lesson).
+      // When consent is off the hook passes attrs={}, so distinct upstream contexts
+      // collapse to one bucket at aggregation time — the bucket key must not carry
+      // dimensions that the wire event drops.
+      writer.enqueue(makeEvent({
+        targetingKey: 'u1',
+        attrs: {}, // hook zeroed it out because consent was off
+        observeFullEvaluationData: false,
+      }))
+      writer.enqueue(makeEvent({
+        targetingKey: 'u1',
+        attrs: {}, // same, from a different original context
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 1)
+      assert.strictEqual(payload.flagEvaluations[0].evaluation_count, 2)
+    })
+
+    it('keeps consent-on events with distinct contexts distinct', () => {
+      writer.enqueue(makeEvent({
+        targetingKey: 'u1',
+        attrs: { plan: 'premium' },
+        observeFullEvaluationData: true,
+      }))
+      writer.enqueue(makeEvent({
+        targetingKey: 'u1',
+        attrs: { plan: 'basic' },
+        observeFullEvaluationData: true,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 2)
+    })
+
+    it('hashes once per bucket at flush cadence, not per evaluation', () => {
+      const hashSpy = sinon.spy(FlagEvaluationsWriter, 'hashTargetingKey')
+      try {
+        // 10 evaluations sharing one (flag, variant, allocation, targetingKey) bucket
+        for (let i = 0; i < 10; i++) {
+          writer.enqueue(makeEvent({
+            targetingKey: CANONICAL_INPUT,
+            attrs: {},
+            observeFullEvaluationData: false,
+          }))
+        }
+        writer.flush()
+
+        sinon.assert.calledOnce(hashSpy)
+      } finally {
+        hashSpy.restore()
+      }
+    })
+
+    it('does not leak the raw targeting_key in payload bytes when consent is off', () => {
+      const raw = 'user-secret@example.com'
+      writer.enqueue(makeEvent({
+        targetingKey: raw,
+        attrs: {},
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      // Assert on the serialized payload string, not on decoded objects. A
+      // decode-then-inspect check misses raw values that route into unexpected
+      // fields (e.g., through a stringified error message).
+      const payloadString = request.getCall(0).args[0]
+      assert.strictEqual(payloadString.includes(raw), false,
+        'raw targeting key MUST NOT appear anywhere in the wire bytes')
+      assert.ok(payloadString.includes('sha256_'),
+        'consent-off payload MUST carry the hashed prefix')
+    })
+
+    it('does not leak PII context values in payload bytes when consent is off', () => {
+      const raw = 'user-secret@example.com'
+      writer.enqueue(makeEvent({
+        targetingKey: 'u1',
+        // The hook zeros attrs to {} when consent is off; a well-behaved test
+        // documents the invariant explicitly.
+        attrs: {},
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      const payloadString = request.getCall(0).args[0]
+      assert.strictEqual(payloadString.includes(raw), false)
+    })
+
+    it('coerces non-boolean observeFullEvaluationData to false (fail-closed)', () => {
+      // Direct-caller defense in depth: the hook already coerces, but the writer
+      // is a documented internal surface. A wrong-typed value must not opt-in.
+      for (const value of [undefined, null, 1, 0, 'true', 'false', {}, []]) {
+        writer.enqueue(makeEvent({
+          targetingKey: CANONICAL_INPUT,
+          attrs: {},
+          observeFullEvaluationData: value,
+        }))
+      }
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      // All wrong-typed values coerce to false → all merge into one hashed bucket.
+      assert.strictEqual(payload.flagEvaluations.length, 1,
+        'all non-strict-true values MUST resolve to false and share one bucket')
+      assert.strictEqual(payload.flagEvaluations[0].targeting_key, CANONICAL_HASH)
+    })
+
+    it('runtime_default_used still emits when consent is off', () => {
+      // The runtime_default_used dimension is orthogonal to consent — it comes
+      // from the SDK's evaluation outcome, not the UFC.
+      writer.enqueue(makeEvent({
+        variant: '', // absent → runtime default
+        targetingKey: CANONICAL_INPUT,
+        attrs: {},
+        observeFullEvaluationData: false,
+      }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const event = payload.flagEvaluations[0]
+      assert.strictEqual(event.runtime_default_used, true)
+      assert.strictEqual(event.targeting_key, CANONICAL_HASH)
+      assert.strictEqual(Object.hasOwn(event, 'variant'), false)
     })
   })
 })

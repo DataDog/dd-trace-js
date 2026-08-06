@@ -1,5 +1,7 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
+
 const {
   FLAGEVALUATIONS_ENDPOINT,
   EVP_PROXY_AGENT_BASE_PATH,
@@ -352,6 +354,13 @@ function eventEvaluationCount (event) {
 /**
  * Builds the full-tier bucket key string from schema-visible dimensions only.
  *
+ * Consent leads the key so mixed-consent evaluations cannot merge into one
+ * bucket and inherit one policy; the AND-fold on the entry field is defense in
+ * depth only. When consent is off, `targetingKey` still contributes as the RAW
+ * value (not the hash) — hashing happens once at flush cadence, keeping the
+ * bucket-key contract identical between consent-on and consent-off aggregation.
+ *
+ * @param {boolean} observeFullEvaluationData
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
@@ -360,22 +369,24 @@ function eventEvaluationCount (event) {
  * @param {string} ctxKey
  * @returns {string}
  */
-function makeFullKey (flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey) {
+function makeFullKey (observeFullEvaluationData, flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey) {
   // NUL separator: safe because length-delimited ctxKey cannot contain NUL as a separator
-  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}\0${targetingKey}\0${ctxKey}`
+  return `${observeFullEvaluationData ? '1' : '0'}\0` +
+    `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}\0${targetingKey}\0${ctxKey}`
 }
 
 /**
  * Builds the degraded-tier bucket key string (drops targetingKey + context).
  *
+ * @param {boolean} observeFullEvaluationData
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
  * @param {string} errorMessage
  * @returns {string}
  */
-function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
-  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}`
+function makeDegradedKey (observeFullEvaluationData, flagKey, variant, allocationKey, errorMessage) {
+  return `${observeFullEvaluationData ? '1' : '0'}\0${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}`
 }
 
 /**
@@ -383,10 +394,14 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  * @property {string} flagKey
  * @property {string} variant - empty string means absent (runtime_default)
  * @property {string} allocationKey
- * @property {string} targetingKey
+ * @property {string} targetingKey - RAW subject id. Hashed at flush cadence when
+ *   observeFullEvaluationData is false (never mutated on the entry itself).
  * @property {string} errorMessage
  * @property {number} evalTimeMs
- * @property {Record<string, unknown>} attrs - Flattened and pruned context attributes
+ * @property {Record<string, unknown>} attrs - Flattened and pruned context attributes.
+ *   The EVP hook passes an empty object when observeFullEvaluationData is false.
+ * @property {boolean} observeFullEvaluationData - Consent snapshot taken at evaluation
+ *   time. Consent-off events emit a `sha256_`-prefixed targeting_key and no context.
  */
 
 /**
@@ -394,13 +409,16 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  * @property {string} flagKey
  * @property {string} variant
  * @property {string} allocationKey
- * @property {string} targetingKey
+ * @property {string} targetingKey - RAW subject id; hashed lazily at flush when
+ *   observeFullEvaluationData is false.
  * @property {string} errorMessage
  * @property {number} count
  * @property {number} first
  * @property {number} last
  * @property {boolean} runtimeDefault
  * @property {Record<string, unknown> | null} contextAttrs
+ * @property {boolean} observeFullEvaluationData - AND-folded on merge as defense in
+ *   depth. Bucket-key partitioning already makes this a no-op unless the key drifts.
  */
 
 /**
@@ -413,6 +431,7 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  * @property {number} first
  * @property {number} last
  * @property {boolean} runtimeDefault
+ * @property {boolean} observeFullEvaluationData
  */
 
 /**
@@ -549,6 +568,16 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       return false
     }
 
+    // Strict boolean coercion — defense in depth. The hook already stamps a
+    // strict boolean; this guards direct callers (tests, future integrations).
+    const observeFullEvaluationData = event.observeFullEvaluationData === true
+
+    // Consent-off skips pruneContext entirely: the hook passed an empty attrs
+    // object, and the emitted event omits `context.evaluation`. Running
+    // pruneContext on `{}` is cheap (fast path returns immediately), but the
+    // explicit skip documents the invariant and avoids the shortest-path call.
+    const attrs = observeFullEvaluationData ? pruneContext(event.attrs || {}) : {}
+
     this._rawQueue.push({
       flagKey: event.flagKey,
       variant: event.variant ?? '',
@@ -556,7 +585,8 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       targetingKey: event.targetingKey ?? '',
       errorMessage: event.errorMessage ?? '',
       evalTimeMs: event.evalTimeMs,
-      attrs: pruneContext(event.attrs || {}),
+      attrs,
+      observeFullEvaluationData,
     })
 
     if (!this._drainScheduled) {
@@ -595,11 +625,14 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     const targetingKey = event.targetingKey ?? ''
     const errorMessage = event.errorMessage ?? ''
     const attrs = event.attrs || {}
+    const observeFullEvaluationData = event.observeFullEvaluationData === true
 
     const ctxKey = canonicalContextKey(attrs)
     const isRuntimeDefault = variant === ''
 
-    const fKey = makeFullKey(flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey)
+    const fKey = makeFullKey(
+      observeFullEvaluationData, flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey
+    )
 
     // Fast path: existing full-tier bucket
     const existing = this._full.get(fKey)
@@ -607,13 +640,19 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       existing.count++
       if (evalTimeMs < existing.first) existing.first = evalTimeMs
       if (evalTimeMs > existing.last) existing.last = evalTimeMs
+      // AND-fold: consent is already partitioned by the bucket key, so this is a
+      // no-op today. Defense in depth against a future key-shape refactor that
+      // drops consent from the key — consent-off would then dominate any merge.
+      if (!observeFullEvaluationData) existing.observeFullEvaluationData = false
       return
     }
 
     // Check per-flag cap
     const perFlagCount = this._perFlagFullCount.get(flagKey) ?? 0
     if (perFlagCount >= this._perFlagCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(
+        flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault, observeFullEvaluationData
+      )
       return
     }
 
@@ -622,7 +661,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     // Check global cap
     if (this._globalCount >= this._globalCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(
+        flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault, observeFullEvaluationData
+      )
       return
     }
 
@@ -638,6 +679,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
       contextAttrs: hasOwnKey(attrs) ? attrs : null,
+      observeFullEvaluationData,
     })
     this._globalCount++
   }
@@ -652,14 +694,18 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @param {string} errorMessage
    * @param {number} evalTimeMs
    * @param {boolean} isRuntimeDefault
+   * @param {boolean} observeFullEvaluationData
    */
-  _addToDegraded (flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault) {
-    const dKey = makeDegradedKey(flagKey, variant, allocationKey, errorMessage)
+  _addToDegraded (
+    flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault, observeFullEvaluationData
+  ) {
+    const dKey = makeDegradedKey(observeFullEvaluationData, flagKey, variant, allocationKey, errorMessage)
     const existing = this._degraded.get(dKey)
     if (existing) {
       existing.count++
       if (evalTimeMs < existing.first) existing.first = evalTimeMs
       if (evalTimeMs > existing.last) existing.last = evalTimeMs
+      if (!observeFullEvaluationData) existing.observeFullEvaluationData = false
       return
     }
 
@@ -678,6 +724,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       first: evalTimeMs,
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
+      observeFullEvaluationData,
     })
   }
 
@@ -734,12 +781,23 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       }
 
       if (entry.runtimeDefault) ev.runtime_default_used = true
-      if (entry.targetingKey) ev.targeting_key = entry.targetingKey
+      if (entry.targetingKey) {
+        // Consent-off entries carry the RAW subject on the in-memory entry so N
+        // evaluations sharing one subject collapse into 1 bucket. Hashing runs
+        // once here at flush cadence — one crypto call per unique bucket rather
+        // than one per evaluation. The raw value never crosses the process
+        // boundary; it lives only on the entry for the flush interval.
+        ev.targeting_key = entry.observeFullEvaluationData
+          ? entry.targetingKey
+          : FlagEvaluationsWriter.hashTargetingKey(entry.targetingKey)
+      }
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
       if (entry.errorMessage) ev.error = { message: entry.errorMessage }
       // `contextAttrs` is null when the pruned context was empty (see _aggregate);
       // when non-null it is guaranteed non-empty, so no re-probe is needed here.
+      // When consent is off, contextAttrs is null by construction — the hook
+      // passed empty attrs, so hasOwnKey(attrs) was false in _aggregate.
       if (entry.contextAttrs !== null) {
         ev.context = { evaluation: entry.contextAttrs }
       }
@@ -915,6 +973,22 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    */
   makePayload (events) {
     return { context: this._context, flagEvaluations: events }
+  }
+
+  /**
+   * Cross-SDK targeting-key fingerprint. Unsalted SHA-256 over the raw UTF-8
+   * bytes exactly as received — no trim, no case fold, no Unicode normalization.
+   * Output: literal `sha256_` prefix + 64-char lowercase hex digest (71 chars).
+   *
+   * The canonical vector `"jane.doe@datadoghq.com"` MUST hash to
+   * `sha256_b4698f9b6d186781fa8dc59e533578fa2d8379a46b1cf6db85cda6aa9c99e51b`
+   * byte-for-byte on every SDK; otherwise cross-language subject counts diverge.
+   *
+   * @param {string} value
+   * @returns {string}
+   */
+  static hashTargetingKey (value) {
+    return 'sha256_' + createHash('sha256').update(value, 'utf8').digest('hex')
   }
 
   _resetAggregationState () {
