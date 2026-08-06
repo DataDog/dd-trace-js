@@ -6,6 +6,7 @@ const { afterEach, describe, it } = require('mocha')
 const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
 
 const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
+const EXPERIMENTS_VCR_TIMEOUT_MS = 20_000
 
 function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -26,7 +27,8 @@ function recordDataByInputValue (records) {
     .sort((left, right) => left.input.value - right.input.value)
 }
 
-describe('LLMObs Experiments control-plane client', () => {
+describe('LLMObs Experiments control-plane client', function () {
+  this.timeout(EXPERIMENTS_VCR_TIMEOUT_MS)
   const backendDatasets = []
   const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
   const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
