@@ -55,12 +55,25 @@ function getFormat (result, context) {
   // Synchronous hooks report a require() dependency load with a `require`
   // condition but no format. A present format is authoritative instead: ESM
   // loaded through require() reports `format: 'module'` and still needs rewrite.
-  const { conditions } = context
-  if (!conditions) return
-
-  for (let i = 0; i < conditions.length; i++) {
-    if (conditions[i] === 'require') return 'commonjs'
-  }
+  if (hasRequireCondition(context.conditions)) return 'commonjs'
 }
 
-module.exports = { getFormat, loadSync, rewriteResult }
+/**
+ * Whether the load came from `require()` rather than `import`. Node reports the
+ * `require` condition for every require() load, including the CommonJS
+ * entrypoint and ESM pulled in through require(esm).
+ *
+ * @param {string[]|undefined} conditions
+ * @returns {boolean}
+ */
+function hasRequireCondition (conditions) {
+  if (!conditions) return false
+
+  for (let i = 0; i < conditions.length; i++) {
+    if (conditions[i] === 'require') return true
+  }
+
+  return false
+}
+
+module.exports = { getFormat, hasRequireCondition, loadSync, rewriteResult }

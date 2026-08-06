@@ -32,12 +32,9 @@ const registerNodeOptions = [
   coverageNodeOptions,
   `--import ${join(repositoryRoot, 'register.js')}`,
 ].filter(Boolean).join(' ')
-const [nodeMajor, nodeMinor, nodePatch] = process.versions.node.split('.').map(Number)
-const isSyncLoaderVersionSupported = nodeMajor >= 26 ||
-  (nodeMajor === 25 && nodeMinor >= 1) ||
-  (nodeMajor === 24 && (nodeMinor > 11 || (nodeMinor === 11 && nodePatch >= 1))) ||
-  (nodeMajor === 22 && (nodeMinor > 22 || (nodeMinor === 22 && nodePatch >= 3)))
-const supportsSynchronousLoader = isSyncLoaderVersionSupported && supportsSyncHooks()
+// Below this, `module.registerHooks` either does not exist or predates
+// nodejs/node#59929, so every loader path falls back to the compile hook.
+const supportsSynchronousLoader = supportsSyncHooks()
 
 describe('rewriter loader', () => {
   let load
@@ -191,7 +188,7 @@ describe('rewriter loader', () => {
     const withHashbang = loadSync(url, { format: 'commonjs' }, () => ({ source: decoratedCommonJSSource }))
     const withoutHashbang = loadSync(url, { format: 'commonjs' }, () => ({ source: strictCommonJSSource }))
 
-    assert.ok(!withHashbang.source.startsWith('#!'))
+    assert.doesNotMatch(withHashbang.source, /^#!/)
     // Orchestrion emits the same line count either way, so an extra hashbang line
     // would desynchronise the generated source map from the emitted source.
     assert.strictEqual(withHashbang.source.split('\n').length, withoutHashbang.source.split('\n').length)
@@ -294,7 +291,7 @@ describe('rewriter loader', () => {
   })
 
   it('rewrites CommonJS from the entrypoint hook without a preloaded loader', function () {
-    if (!supportsRegisterHooks) {
+    if (!supportsSynchronousLoader) {
       this.skip()
     }
 
@@ -336,7 +333,7 @@ describe('rewriter loader', () => {
   })
 
   it('rewrites CommonJS entrypoint loads from the entrypoint hook', function () {
-    if (!supportsRegisterHooks) {
+    if (!supportsSynchronousLoader) {
       this.skip()
     }
 
@@ -364,17 +361,13 @@ describe('rewriter loader', () => {
     assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
   })
 
-  it('leaves ESM to the loader when only the entrypoint hook is installed', function () {
-    if (!supportsRegisterHooks) {
+  it('rewrites ESM required from CommonJS from the entrypoint hook', function () {
+    if (!supportsSynchronousLoader) {
       this.skip()
     }
 
-    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-entrypoint-esm-'))
-    const packageDirectory = join(root, 'node_modules', 'ai')
+    const root = writeEsmAiPackage('dd-rewriter-loader-entrypoint-require-esm-')
 
-    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
-    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","type":"module","main":"dist/index.js"}')
-    writeFileSync(join(packageDirectory, 'dist', 'index.js'), source)
     writeFileSync(join(root, 'main.js'), `
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
@@ -389,7 +382,85 @@ describe('rewriter loader', () => {
       NODE_OPTIONS: `--require ${rewriterLoaderPath}`,
     })
 
+    assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
+  })
+
+  it('leaves imported ESM to the loader when only the entrypoint hook is installed', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = writeEsmAiPackage('dd-rewriter-loader-entrypoint-import-esm-')
+
+    writeFileSync(join(root, 'main.mjs'), `
+      import { createRequire } from 'node:module'
+
+      const require = createRequire(import.meta.url)
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const { getTracer } = await import('ai')
+      const value = getTracer()
+      console.log(JSON.stringify({ starts, value }))
+    `)
+
+    const result = runFixture(root, 'main.mjs', {
+      NODE_OPTIONS: `--require ${rewriterLoaderPath}`,
+    })
+
     assert.deepStrictEqual(result, { starts: 0, value: 'tracer' })
+  })
+
+  it('falls back to the compile hook on runtimes below the load hook fix', function () {
+    if (!supportsRegisterHooks) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-unfixed-runtime-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    // Node 24.0.0 ships registerHooks but predates nodejs/node#59929, so a load
+    // hook there throws ERR_INVALID_RETURN_PROPERTY_VALUE on the nullish
+    // CommonJS source Node reports for builtins.
+    writeFileSync(join(root, 'spoof-runtime.cjs'), `
+      const Module = require('node:module')
+      Object.defineProperty(process.versions, 'node', { value: '24.0.0' })
+      globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})] = Module.prototype._compile
+    `)
+    writeFileSync(join(root, 'main.js'), `
+      const Module = require('node:module')
+      require('node:zlib')
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = require('ai').getTracer()
+      console.log(JSON.stringify({
+        compileChanged: Module.prototype._compile !== originalCompile,
+        starts,
+        value,
+      }))
+    `)
+
+    const result = runFixture(root, 'main.js', {
+      NODE_OPTIONS: [
+        `--require ${join(root, 'spoof-runtime.cjs')}`,
+        `--require ${rewriterLoaderPath}`,
+      ].join(' '),
+    })
+
+    assert.deepStrictEqual(result, {
+      compileChanged: true,
+      starts: 1,
+      value: 'tracer',
+    })
   })
 
   it('falls back to the compile hook without Module.registerHooks', () => {
@@ -464,7 +535,7 @@ describe('rewriter loader', () => {
   })
 
   it('installs the entrypoint hook without patching the compiler', function () {
-    if (!supportsRegisterHooks) {
+    if (!supportsSynchronousLoader) {
       this.skip()
     }
 
@@ -513,7 +584,6 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
   })
-
 })
 
 function createAiModuleUrl () {
@@ -536,6 +606,17 @@ function assertCommonJSRewritten (rewrittenSource) {
   assert.match(rewrittenSource, /require\(".*dc-polyfill/)
   assert.match(rewrittenSource, /tr_ch_apm_tracingChannel/)
   assert.match(rewrittenSource, /orchestrion:ai:getTracer/)
+}
+
+function writeEsmAiPackage (prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix))
+  const packageDirectory = join(root, 'node_modules', 'ai')
+
+  mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+  writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","type":"module","main":"dist/index.js"}')
+  writeFileSync(join(packageDirectory, 'dist', 'index.js'), source)
+
+  return root
 }
 
 function writeCompileCapture (root) {
