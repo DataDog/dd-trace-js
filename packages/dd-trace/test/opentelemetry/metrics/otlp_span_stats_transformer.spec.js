@@ -158,17 +158,18 @@ describe('OtlpStatsTransformer', () => {
       const spans = [
         makeSpan(),
         makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'unknown' } }),
+        makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'SPAN_KIND_UNSPECIFIED' } }),
         makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'toString' } }),
         makeSpan({ meta: { [HTTP_STATUS_CODE]: 200, [SPAN_KIND]: 'constructor' } }),
       ]
       const drained = makeDrained(12340000000000, spans)
-      assert.strictEqual(drained[0].bucket.size, 4)
+      assert.strictEqual(drained[0].bucket.size, 5)
 
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
       assert.strictEqual(points.length, 1)
-      assert.strictEqual(points[0].count, 4)
+      assert.strictEqual(points[0].count, 5)
       assert.strictEqual(attrMapOf(points[0])['span.kind'], 'SPAN_KIND_INTERNAL')
     })
 
