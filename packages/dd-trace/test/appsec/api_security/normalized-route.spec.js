@@ -267,6 +267,20 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRoute({ originalUrl: '/x', params: {} }), null)
     })
 
+    // A process can serve both Express majors while the parser adapters are process-wide, so the
+    // major is decided per request off the serving app.
+    it('returns null for an Express 4 request even when a parser is available', () => {
+      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
+      const req = { originalUrl: '/users/1', params: { id: '1' }, app: { del () {} } }
+      const web = require('../../../src/plugins/util/web')
+      const root = sinon.stub(web, 'root').returns(span)
+      try {
+        assert.equal(normalizeRoute(req), null)
+      } finally {
+        root.restore()
+      }
+    })
+
     // The host never loaded path-to-regexp 8 here, so there is no parser to read the route with.
     it('returns null when no path-to-regexp 8 adapter is available', () => {
       const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }

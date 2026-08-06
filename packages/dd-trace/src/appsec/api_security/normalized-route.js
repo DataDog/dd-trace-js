@@ -429,9 +429,11 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // Routes are read as Express 5 grammar. Known gap: an Express 4 app that pulls path-to-regexp 8
-      // in through a dependency is read with it too, and the grammars disagree ('/a{2}' matches '/aa'
-      // under 4). Closing that needs the dialect of the router that recorded the route, per request.
+      // Routes are read as Express 5 grammar, and 4's differs ('/a{2}' matches '/aa' there), so skip
+      // Express 4. Decided per request off the serving app — a process can load both majors, and the
+      // parser adapters are process-wide — via the legacy `app.del` alias that Express 5 removed.
+      if (typeof req.app?.del === 'function') return null
+
       const parse = getParse()
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null
