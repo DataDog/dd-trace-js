@@ -7,7 +7,14 @@ globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const hostname = require('os').hostname()
 const guard = require('../startup-guard')
-const SpanProcessor = require('../../../packages/dd-trace/src/js_span_processor')
+// CI runs candidate benchmark sources against the baseline tracer source.
+let SpanProcessor
+try {
+  SpanProcessor = require('../../../packages/dd-trace/src/js_span_processor')
+} catch (e) {
+  if (e.code !== 'MODULE_NOT_FOUND' || !e.message.includes('js_span_processor')) throw e
+  SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
+}
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
 
