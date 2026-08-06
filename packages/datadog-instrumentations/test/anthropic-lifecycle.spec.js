@@ -202,6 +202,30 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
+  it('records the request snapshot on the tracing context, not a later caller mutation', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    let asyncEndCtx
+    const apmHandlers = { start () {}, asyncEnd (ctx) { asyncEndCtx = ctx } }
+    apmChannel.subscribe(apmHandlers)
+    const { unsubscribe } = subscribeAutoResolve([messagesBeforeChannel, messagesAfterChannel])
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const options = { messages: [{ role: 'user', content: 'original' }] }
+
+    try {
+      const apiPromise = messages.create(options)
+      options.messages[0].content = 'mutated'
+      await apiPromise.parse()
+
+      // LLMObs/APM tag ctx.options; it must hold the create-time snapshot, matching what was sent.
+      assert.strictEqual(asyncEndCtx.options.messages[0].content, 'original')
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+    }
+  })
+
   it('skips lifecycle channels for streaming messages', () => {
     const { calls, unsubscribe } = subscribeAutoResolve([
       messagesBeforeChannel,
@@ -707,15 +731,13 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       }
     })
 
-    it('does not evaluate mutable request state when the lifecycle snapshot fails', async () => {
-      const fetchStarted = createDeferred()
+    it('keeps AI Guard active via a JSON snapshot when structuredClone fails', async () => {
       const { calls, unsubscribe } = subscribeAutoResolve([messagesBeforeChannel, messagesAfterChannel])
       let sentBody
       const client = new Anthropic({
         apiKey: 'test',
         fetch: (url, init) => {
           sentBody = JSON.parse(init.body)
-          fetchStarted.resolve()
           return Promise.resolve(jsonResponse({
             id: 'msg_1',
             role: 'assistant',
@@ -725,17 +747,19 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       })
       const options = createAnthropicRequest()
       options.messages[0].content = 'original'
-      options.messages[0].nonCloneable = () => {}
+      options.messages[0].nonCloneable = () => {} // structuredClone throws; the SDK's JSON drops it
       const apiPromise = client.messages.create(options)
+      options.messages[0].content = 'mutated'
 
       try {
-        await fetchStarted.promise
-        options.messages[0].content = 'mutated'
         await apiPromise.parse()
 
+        // structuredClone failed, but the JSON fallback keeps the guard active on the sent prompt.
+        assert.strictEqual(calls.length, 2)
+        assert.strictEqual(calls[0].args[0].messages[0].content, 'original')
+        assert.strictEqual(calls[1].args[0].messages[0].content, 'original')
         assert.strictEqual(sentBody.messages[0].content, 'original')
         assert.strictEqual(Object.hasOwn(sentBody.messages[0], 'nonCloneable'), false)
-        assert.strictEqual(calls.length, 0)
       } finally {
         unsubscribe()
       }

@@ -41,9 +41,7 @@ function publishLifecycle (channel, payload) {
 function waitForVerdict (promise, verdict) {
   if (!verdict) return promise
 
-  // Enforce the input verdict first: a denial must surface as AIGuardAbortError even when the SDK
-  // request rejects first. Promise.all would report whichever settles first, so a provider/network
-  // failure could mask the block. Observe the SDK rejection here so a denial leaves no unhandled one.
+  // The lifecycle verdict takes precedence over an earlier SDK rejection.
   promise.catch(() => {})
   return verdict.then(() => promise)
 }
@@ -59,18 +57,21 @@ function snapshotLifecycleArgs (args) {
   const input = { messages: options.messages }
   if (options.system !== undefined) input.system = options.system
 
+  // Snapshot via JSON so AI Guard evaluates exactly what the SDK serializes and sends, immune to
+  // later caller mutation. If it can't serialize (e.g. circular), the SDK's own serialization would
+  // fail too, so skipping evaluation is safe — nothing reaches the model.
   try {
     const snapshot = [...args]
-    snapshot[0] = { ...options, ...structuredClone(input) }
+    // eslint-disable-next-line unicorn/prefer-structured-clone
+    snapshot[0] = { ...options, ...JSON.parse(JSON.stringify(input)) }
     return snapshot
   } catch {
-    // Evaluating mutable input could inspect a different prompt than the provider received.
+    // Unserializable input — leave AI Guard inactive for this call (the SDK send would fail too).
   }
 }
 
 /**
- * Runs the output verdict for a parsed response and finishes the span with it. Finishing after the
- * verdict lets a block propagate to anthropic.request and keeps the span wrapping its child.
+ * Finishes after output evaluation so a block propagates to the caller and span.
  *
  * @param {object} ctx
  * @param {object} result
@@ -81,14 +82,24 @@ function snapshotLifecycleArgs (args) {
 function finishResult (ctx, result, getVerdict, returnedResult = result) {
   const verdict = getVerdict(result)
   if (!verdict) {
-    finish(ctx, result, null)
+    finish(ctx, result)
     return returnedResult
   }
 
   return verdict.then(() => {
-    finish(ctx, result, null)
+    finish(ctx, result)
     return returnedResult
   })
+}
+
+/**
+ * @param {object} ctx
+ * @param {Error} error
+ * @throws {Error} Always rethrows the supplied error.
+ */
+function finishAndThrow (ctx, error) {
+  finish(ctx, null, error)
+  throw error
 }
 
 /**
@@ -112,10 +123,7 @@ function wrapResponseReader (response, method, ctx, getVerdict) {
           return body
         }
       })
-      .catch(error => {
-        if (!ctx.finished) finish(ctx, null, error)
-        throw error
-      })
+      .catch(error => finishAndThrow(ctx, error))
   })
 }
 
@@ -167,20 +175,20 @@ function wrapCreate (create) {
     const options = args[0]
     const stream = options?.stream
 
-    // Streaming is  out of scope for lifecycle evaluation
-    const lifecycleRequested = !stream &&
+    // Streaming is out of scope for lifecycle evaluation.
+    const lifecycleArgs = !stream &&
       (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
-    const lifecycleArgs = lifecycleRequested ? snapshotLifecycleArgs(args) : undefined
-    const hasLifecycle = lifecycleArgs !== undefined
+      ? snapshotLifecycleArgs(args)
+      : undefined
 
-    if (!anthropicTracingChannel.start.hasSubscribers && !hasLifecycle) {
+    if (!anthropicTracingChannel.start.hasSubscribers && !lifecycleArgs) {
       return create.apply(this, args)
     }
 
-    const ctx = { options, resource: 'create', baseUrl: this._client?.baseURL }
+    const ctx = { options: lifecycleArgs?.[0] ?? options, resource: 'create', baseUrl: this._client?.baseURL }
 
     return anthropicTracingChannel.start.runStores(ctx, () => {
-      const parentSpan = hasLifecycle ? ctx.currentStore?.span : undefined
+      const parentSpan = lifecycleArgs ? ctx.currentStore?.span : undefined
 
       let apiPromise
       try {
@@ -191,13 +199,13 @@ function wrapCreate (create) {
         throw error
       }
 
+      let beforeVerdict
       let afterVerdict
       let parseResult
       let wrappedResponse
 
-      let beforeVerdict
       function getBeforeVerdict () {
-        if (!hasLifecycle || beforeVerdict) return beforeVerdict
+        if (!lifecycleArgs || beforeVerdict) return beforeVerdict
         if (!messagesBeforeChannel.hasSubscribers) return
 
         beforeVerdict = publishLifecycle(messagesBeforeChannel, { args: lifecycleArgs, parentSpan })
@@ -208,7 +216,7 @@ function wrapCreate (create) {
        * @param {object|string} body
        */
       function getAfterVerdict (body) {
-        if (!hasLifecycle || afterVerdict) return afterVerdict
+        if (!lifecycleArgs || afterVerdict) return afterVerdict
         if (!messagesAfterChannel.hasSubscribers) return
 
         afterVerdict = publishLifecycle(messagesAfterChannel, { args: lifecycleArgs, body, parentSpan })
@@ -226,10 +234,8 @@ function wrapCreate (create) {
               return response
             }
             return finishResult(ctx, response, getAfterVerdict)
-          }).catch(error => {
-            if (!ctx.finished) finish(ctx, null, error)
-            throw error
           })
+          .catch(error => finishAndThrow(ctx, error))
 
         return parseResult
       })
@@ -238,12 +244,11 @@ function wrapCreate (create) {
         shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
           return waitForVerdict(origAsResponse.apply(this, asResponseArgs), getBeforeVerdict())
             .then(response => {
-              // Raw output evaluation supports the common json() and text() readers only.
-              if (!stream &&
-                (anthropicTracingChannel.start.hasSubscribers ||
-                  afterVerdict ||
-                  messagesAfterChannel.hasSubscribers) &&
-                wrappedResponse !== response) {
+              // Wrap the raw response's json()/text()/clone() readers to evaluate output on read,
+              // but only while someone still consumes the result and not twice for the same response.
+              const outputObserved = anthropicTracingChannel.start.hasSubscribers ||
+                afterVerdict || messagesAfterChannel.hasSubscribers
+              if (!stream && outputObserved && wrappedResponse !== response) {
                 wrappedResponse = response
                 wrapRawResponse(response, ctx, getAfterVerdict)
               }
@@ -251,10 +256,7 @@ function wrapCreate (create) {
               if (afterVerdict) return afterVerdict.then(() => response)
               return response
             })
-            .catch(error => {
-              if (!ctx.finished) finish(ctx, null, error)
-              throw error
-            })
+            .catch(error => finishAndThrow(ctx, error))
         })
       }
 
