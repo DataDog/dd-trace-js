@@ -1,7 +1,5 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
-
 const { context } = require('@opentelemetry/api')
 const {
   millisToHrTime,
@@ -13,6 +11,8 @@ const log = require('../../log')
 
 const MAX_DATE_MILLISECONDS = 8.64e15
 const NANOSECONDS_PER_SECOND = 1e9
+const MAX_UINT64_SECONDS = 18_446_744_073
+const MAX_UINT64_NANOSECONDS = 709_551_615
 let invalidTimestampWarningLogged = false
 
 function isValidHrTime (hrTime) {
@@ -20,34 +20,31 @@ function isValidHrTime (hrTime) {
     hrTime.length === 2 &&
     Number.isInteger(hrTime[0]) &&
     Number.isInteger(hrTime[1]) &&
+    hrTime[0] >= 0 &&
     hrTime[1] >= 0 &&
-    hrTime[1] < NANOSECONDS_PER_SECOND
+    hrTime[1] < NANOSECONDS_PER_SECOND &&
+    (hrTime[0] < MAX_UINT64_SECONDS ||
+      (hrTime[0] === MAX_UINT64_SECONDS && hrTime[1] <= MAX_UINT64_NANOSECONDS))
 }
 
 function toHrTime (timestamp) {
-  if (Number.isFinite(timestamp)) {
+  if (typeof timestamp === 'number') {
+    if (!Number.isFinite(timestamp)) return
+
     // Older versions documented numeric timestamps as Unix nanoseconds.
     if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
       const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
       const hrTime = [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
       return isValidHrTime(hrTime) ? hrTime : undefined
     }
-
-    if (timestamp >= 0 && timestamp <= performance.now()) {
-      // A number within this process's elapsed time is a performance timestamp.
-      return timeInputToHrTime(timestamp)
-    }
-
-    // All other numbers are Unix milliseconds, including historical dates.
-    return millisToHrTime(timestamp)
   }
 
-  if (timestamp instanceof Date) {
-    const hrTime = millisToHrTime(timestamp.getTime())
+  try {
+    const hrTime = timeInputToHrTime(timestamp)
     return isValidHrTime(hrTime) ? hrTime : undefined
+  } catch {
+    // Invalid timestamps fall back to the current time in normalizeTimestamp.
   }
-
-  return isValidHrTime(timestamp) ? timestamp : undefined
 }
 
 function normalizeTimestamp (timestamp) {
