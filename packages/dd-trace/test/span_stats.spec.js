@@ -123,7 +123,8 @@ describe('SpanAggKey', () => {
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
     assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
-    assert.strictEqual(key.isTraceRoot, true)
+    assert.strictEqual(key.parentId, undefined)
+    assert.strictEqual(key.isTraceRoot, undefined)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -204,10 +205,11 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
   })
 
-  it('should mark isTraceRoot false when parent_id is a non-zero Identifier', () => {
+  it('should defer trace-root detection until bucketing requests it', () => {
     const span = { ...basicSpan, parent_id: { toString: (radix) => (123).toString(radix) } }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.isTraceRoot, false)
+    assert.strictEqual(key.parentId, span.parent_id)
+    assert.strictEqual(key.isTraceRoot, undefined)
     assert.strictEqual(
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
   })
@@ -348,17 +350,23 @@ describe('SpanBuckets', () => {
   })
 
   it('should split trace roots only when requested by the OTLP exporter', () => {
-    const childSpan = { ...basicSpan, parent_id: { toString: () => '1' } }
+    const parentIdToString = sinon.stub().returns('1')
+    const childSpan = { ...basicSpan, parent_id: { toString: parentIdToString } }
     const legacyBuckets = new SpanBuckets()
     const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
 
     legacyBuckets.forSpan(basicSpan)
     legacyBuckets.forSpan(childSpan)
+    sinon.assert.notCalled(parentIdToString)
+
     otlpBuckets.forSpan(basicSpan)
     otlpBuckets.forSpan(childSpan)
 
     assert.strictEqual(legacyBuckets.size, 1)
+    assert.strictEqual(legacyBuckets.values().next().value.aggKey.isTraceRoot, undefined)
     assert.strictEqual(otlpBuckets.size, 2)
+    assert.deepStrictEqual([...otlpBuckets.values()].map(({ aggKey }) => aggKey.isTraceRoot), [true, false])
+    sinon.assert.calledOnceWithExactly(parentIdToString, 10)
   })
 })
 

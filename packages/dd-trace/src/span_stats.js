@@ -131,7 +131,7 @@ class SpanAggKey {
       this.rpcStatusCode = ''
     }
 
-    this.isTraceRoot = !span.parent_id || span.parent_id.toString(10) === '0'
+    this.parentId = span.parent_id
     // peer_tags isn't aggregated in the legacy v0.6/stats export here either; mirror it in both once added.
   }
 
@@ -167,6 +167,9 @@ class SpanBuckets extends Map {
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
     const baseKey = aggKey.toString()
+    if (this.#includeTraceRoot) {
+      aggKey.isTraceRoot = !aggKey.parentId || aggKey.parentId.toString(10) === '0'
+    }
     const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {

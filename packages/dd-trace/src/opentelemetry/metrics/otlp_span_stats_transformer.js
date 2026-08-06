@@ -231,7 +231,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     raw['datadog.operation.name'] = aggKey.name
     if (aggKey.type) raw['datadog.span.type'] = aggKey.type
     if (aggKey.synthetics) raw['datadog.origin'] = 'synthetics'
-    raw['datadog.is_trace_root'] = aggKey.isTraceRoot
+    if (typeof aggKey.isTraceRoot === 'boolean') raw['datadog.is_trace_root'] = aggKey.isTraceRoot
 
     return raw
   }

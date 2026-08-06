@@ -105,9 +105,13 @@ describe('OtlpStatsTransformer', () => {
           [ORIGIN_KEY]: 'synthetics',
         },
       })
-      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
+      const payload = JSON.parse(transformer.transform(
+        makeDrained(12340000000000, [span], { includeTraceRoot: true }),
+        BUCKET_SIZE_NS
+      ))
+      const dataPoint = dataPointsOf(payload)[0]
 
-      assert.deepStrictEqual(attrMapOf(dataPointsOf(payload)[0]), {
+      assert.deepStrictEqual(attrMapOf(dataPoint), {
         'span.name': 'GET /foo',
         'service.name': 'svc',
         'span.kind': 'SPAN_KIND_SERVER',
@@ -122,6 +126,13 @@ describe('OtlpStatsTransformer', () => {
         'datadog.span.top_level': false,
         'datadog.is_trace_root': true,
       })
+      assert.deepStrictEqual(
+        dataPoint.attributes.filter(({ key }) => key === 'datadog.span.top_level' || key === 'datadog.is_trace_root'),
+        [
+          { key: 'datadog.is_trace_root', value: { boolValue: true } },
+          { key: 'datadog.span.top_level', value: { boolValue: false } },
+        ]
+      )
     })
 
     it('coalesces span.kind aliases that map to the same exported attribute', () => {
@@ -168,7 +179,17 @@ describe('OtlpStatsTransformer', () => {
       const points = dataPointsOf(payload)
 
       assert.strictEqual(points.length, 2)
-      assert.deepStrictEqual(points.map(point => attrMapOf(point)['datadog.is_trace_root']), [true, false])
+      assert.deepStrictEqual(points.map(point =>
+        point.attributes.find(({ key }) => key === 'datadog.is_trace_root').value
+      ), [{ boolValue: true }, { boolValue: false }])
+    })
+
+    it('omits datadog.is_trace_root when its value is unknown', () => {
+      const drained = makeDrained(12340000000000, [makeSpan()])
+
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+
+      assert.ok(!dataPointsOf(payload)[0].attributes.some(({ key }) => key === 'datadog.is_trace_root'))
     })
 
     it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
