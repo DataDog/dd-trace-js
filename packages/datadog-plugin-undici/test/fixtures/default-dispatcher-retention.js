@@ -1,0 +1,221 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const http = require('node:http')
+const { promisify } = require('node:util')
+
+const { channel } = require('dc-polyfill')
+const semver = require('semver')
+
+const gc = global.gc
+if (typeof gc !== 'function') {
+  throw new Error('default-dispatcher-retention.js requires --expose-gc')
+}
+
+const REQUEST_COUNT = 32
+const RETAINED_SPAN_LIMIT = 10
+const finishedParentSpans = []
+const finishedSpans = []
+const requestSpanIds = new Set()
+const tcpParentIds = []
+let fetchSpanCount = 0
+let undiciSpanCount = 0
+let lastUndiciSpan
+
+channel('dd-trace:span:finish').subscribe(span => {
+  const component = span.context().getTag('component')
+  if (component === 'fetch') {
+    fetchSpanCount++
+  } else if (component === 'undici') {
+    undiciSpanCount++
+    lastUndiciSpan = span
+    finishedSpans.push(new WeakRef(span))
+    requestSpanIds.add(span.context()._spanId.toString(10))
+  } else if (span._name === 'tcp.connect') {
+    const parentId = span.context()._parentId
+    if (parentId) {
+      tcpParentIds.push(parentId.toString(10))
+    }
+  }
+})
+
+const tracer = require('../../../..').init({
+  flushInterval: 0,
+  plugins: false,
+  startupLogs: false,
+})
+tracer.use('fetch', true)
+tracer.use('net', true)
+if (process.env.UNDICI_PLUGIN_DISABLED !== 'true') {
+  tracer.use('undici', true)
+}
+
+const dispatcherSymbol = globalThis[Symbol.for('undici.globalDispatcher.2')]
+  ? Symbol.for('undici.globalDispatcher.2')
+  : Symbol.for('undici.globalDispatcher.1')
+assert.ok(globalThis[dispatcherSymbol])
+const originalGlobalDispatcher = globalThis[dispatcherSymbol]
+let throwingDispatchReads = 0
+
+if (process.env.FROZEN_GLOBAL_DISPATCHER === 'true') {
+  globalThis[dispatcherSymbol] = Object.freeze({
+    close: originalGlobalDispatcher.close.bind(originalGlobalDispatcher),
+    dispatch: originalGlobalDispatcher.dispatch.bind(originalGlobalDispatcher),
+  })
+} else if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') {
+  globalThis[dispatcherSymbol] = new Proxy({}, {
+    get (_target, property) {
+      if (property === 'dispatch') {
+        throwingDispatchReads++
+        throw new Error('dispatch is not readable')
+      }
+      return originalGlobalDispatcher[property]
+    },
+  })
+}
+
+const undici = loadCompatibleUndici()
+if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') {
+  assert.strictEqual(throwingDispatchReads, 1)
+  globalThis[dispatcherSymbol] = originalGlobalDispatcher
+}
+if (process.env.FOREIGN_GLOBAL_DISPATCHER === 'true') {
+  const dispatcher = undici.getGlobalDispatcher()
+  const foreignDispatcher = {
+    close: dispatcher.close.bind(dispatcher),
+    dispatch (options, handler) {
+      return dispatcher.dispatch({ ...options }, handler)
+    },
+  }
+  undici.setGlobalDispatcher(foreignDispatcher)
+}
+const server = http.createServer((_request, response) => response.end('ok'))
+
+/**
+ * @param {string} url
+ */
+async function requestAndConsume (url) {
+  const { body } = await undici.request(url)
+  await body.text()
+}
+
+/**
+ * @param {string} url
+ */
+async function requestUnderParent (url) {
+  const parent = tracer.startSpan('parent')
+  finishedParentSpans.push(new WeakRef(parent))
+  await tracer.scope().activate(parent, () => requestAndConsume(url))
+  parent.finish()
+}
+
+/**
+ * @returns {import('undici')}
+ */
+function loadCompatibleUndici () {
+  if (semver.satisfies(process.versions.node, '>=22.19.0')) {
+    return require('../../../../versions/undici@8').get()
+  }
+  if (semver.satisfies(process.versions.node, '>=20.18.1')) {
+    return require('../../../../versions/undici@7').get()
+  }
+  if (semver.satisfies(process.versions.node, '>=18.17.0')) {
+    return require('../../../../versions/undici@6').get()
+  }
+  return require('../../../../versions/undici@5').get()
+}
+
+/**
+ * @param {WeakRef<object>[]} spanReferences
+ * @param {string} spanType
+ */
+function assertReferenceLimit (spanReferences, spanType) {
+  let retainedSpanCount = 0
+  for (const spanReference of spanReferences) {
+    if (spanReference.deref()) retainedSpanCount++
+  }
+  assert.ok(
+    retainedSpanCount <= RETAINED_SPAN_LIMIT,
+    `${retainedSpanCount} of ${spanReferences.length} finished ${spanType} spans remain reachable`
+  )
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function assertRetainedSpanLimit () {
+  for (let cycle = 0; cycle < 10; cycle++) {
+    gc?.()
+    await new Promise(resolve => setImmediate(resolve))
+  }
+
+  assertReferenceLimit(finishedSpans, 'Undici')
+  assertReferenceLimit(finishedParentSpans, 'parent')
+}
+
+async function main () {
+  if (process.env.THROWING_GLOBAL_DISPATCHER === 'true') return
+
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const port = (/** @type {import('node:net').AddressInfo} */ (server.address())).port
+  const url = `http://127.0.0.1:${port}/`
+
+  if (process.env.CONNECT_GLOBAL_DISPATCHER === 'true') {
+    const connectStatusCode = Number.parseInt(process.env.CONNECT_STATUS_CODE ?? '200', 10)
+    const statusMessage = connectStatusCode === 200 ? 'Connection Established' : 'Proxy Authentication Required'
+    const responsePromise = (async () => {
+      const [, socket] = await once(server, 'connect')
+      socket.write(`HTTP/1.1 ${connectStatusCode} ${statusMessage}\r\nContent-Length: 0\r\n\r\n`)
+    })()
+    const [result] = await Promise.all([
+      undici.connect(url, { path: '/example.com:443' }),
+      responsePromise,
+    ])
+    const spanStatusCode = lastUndiciSpan?.context().getTag('http.status_code')
+    result.socket.destroy()
+    await undici.getGlobalDispatcher().close()
+    await promisify(server.close.bind(server))()
+
+    assert.strictEqual(result.statusCode, connectStatusCode)
+    assert.strictEqual(undiciSpanCount, 1)
+    assert.strictEqual(spanStatusCode, connectStatusCode)
+    return
+  }
+
+  if (process.env.FROZEN_GLOBAL_DISPATCHER === 'true') {
+    await requestUnderParent(url)
+  } else {
+    await requestAndConsume(url)
+  }
+
+  const globalResponse = await globalThis.fetch(url)
+  await globalResponse.arrayBuffer()
+
+  for (let requestIndex = 0; requestIndex < REQUEST_COUNT; requestIndex++) {
+    await requestUnderParent(url)
+    assert.strictEqual(tracer.scope().active(), null)
+  }
+
+  await assertRetainedSpanLimit()
+
+  await Promise.all([
+    undici.getGlobalDispatcher().close(),
+    promisify(server.close.bind(server))(),
+  ])
+
+  assert.strictEqual(fetchSpanCount, 1)
+  const expectedUndiciSpanCount = process.env.UNDICI_PLUGIN_DISABLED === 'true' ? 0 : REQUEST_COUNT + 1
+  assert.strictEqual(undiciSpanCount, expectedUndiciSpanCount)
+  if (process.env.FROZEN_GLOBAL_DISPATCHER !== 'true' && process.env.UNDICI_PLUGIN_DISABLED !== 'true') {
+    assert.ok(tcpParentIds.some(parentId => requestSpanIds.has(parentId)))
+  }
+
+  await assertRetainedSpanLimit()
+}
+
+main().catch(error => {
+  process.exitCode = 1
+  process.stderr.write(`${error.stack || error}\n`)
+})
