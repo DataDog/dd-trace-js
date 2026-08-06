@@ -167,8 +167,8 @@ class SpanBuckets extends Map {
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
     const baseKey = aggKey.toString()
-    if (this.#includeTraceRoot) {
-      aggKey.isTraceRoot = !aggKey.parentId || aggKey.parentId.toString(10) === '0'
+    if (this.#includeTraceRoot && aggKey.parentId !== undefined && aggKey.parentId !== null) {
+      aggKey.isTraceRoot = aggKey.parentId.toString(10) === '0'
     }
     const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 

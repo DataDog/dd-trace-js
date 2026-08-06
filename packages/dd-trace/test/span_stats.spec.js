@@ -350,16 +350,17 @@ describe('SpanBuckets', () => {
   })
 
   it('should split trace roots only when requested by the OTLP exporter', () => {
+    const rootSpan = { ...basicSpan, parent_id: { toString: () => '0' } }
     const parentIdToString = sinon.stub().returns('1')
     const childSpan = { ...basicSpan, parent_id: { toString: parentIdToString } }
     const legacyBuckets = new SpanBuckets()
     const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
 
-    legacyBuckets.forSpan(basicSpan)
+    legacyBuckets.forSpan(rootSpan)
     legacyBuckets.forSpan(childSpan)
     sinon.assert.notCalled(parentIdToString)
 
-    otlpBuckets.forSpan(basicSpan)
+    otlpBuckets.forSpan(rootSpan)
     otlpBuckets.forSpan(childSpan)
 
     assert.strictEqual(legacyBuckets.size, 1)
@@ -367,6 +368,16 @@ describe('SpanBuckets', () => {
     assert.strictEqual(otlpBuckets.size, 2)
     assert.deepStrictEqual([...otlpBuckets.values()].map(({ aggKey }) => aggKey.isTraceRoot), [true, false])
     sinon.assert.calledOnceWithExactly(parentIdToString, 10)
+  })
+
+  it('should leave trace-root unknown when parent_id is missing or null', () => {
+    for (const parentId of [undefined, null]) {
+      const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+
+      otlpBuckets.forSpan({ ...basicSpan, parent_id: parentId })
+
+      assert.strictEqual(otlpBuckets.values().next().value.aggKey.isTraceRoot, undefined)
+    }
   })
 })
 
