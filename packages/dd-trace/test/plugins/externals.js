@@ -106,6 +106,7 @@ module.exports = {
     {
       name: 'ioredis',
       versions: ['>=5'],
+      dep: true,
     },
   ],
   'body-parser': [
