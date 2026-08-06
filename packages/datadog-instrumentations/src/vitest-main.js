@@ -18,10 +18,10 @@ const {
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
+  isMarkedAsUnskippable,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 const noWorkerInit = require('./vitest-main-no-worker-init')
