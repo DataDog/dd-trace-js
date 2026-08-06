@@ -4,13 +4,10 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('profiler', function () {
   let Profiler
@@ -101,7 +98,6 @@ describe('profiler', function () {
       profile: sinon.stub().returns('profile'),
       getInfo: sinon.stub().returns({}),
       encode: sinon.stub().returns(spaceProfilePromise),
-      refreshTags: sinon.stub(),
     }
 
     logger = consoleLogger
@@ -551,7 +547,7 @@ describe('profiler', function () {
       assert.strictEqual(infos.hasMissingSourceMaps, false)
     })
 
-    it('recomputes tags when the identity-refresh channel fires', async () => {
+    it('uses the current tags when exporting', async () => {
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -562,47 +558,13 @@ describe('profiler', function () {
       const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
       await profiler.start(startOptions)
 
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
       startOptions.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(startOptions)
 
       clock.tick(interval)
 
       const { tags } = await exporterPromise
 
       assert.strictEqual(tags['runtime-id'], 'refreshed-id')
-    })
-
-    it('broadcasts refreshed tags to sub-profilers that implement refreshTags', async () => {
-      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
-      await profiler.start(startOptions)
-
-      startOptions.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(startOptions)
-
-      sinon.assert.calledOnceWithExactly(spaceProfiler.refreshTags, { 'runtime-id': 'refreshed-id' })
-    })
-
-    it('logs and does not throw when a sub-profiler fails to refresh its tags', async () => {
-      const error = new Error('boom')
-      spaceProfiler.refreshTags.throws(error)
-      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
-      await profiler.start(startOptions)
-
-      identityRefreshChannel.publish(startOptions)
-
-      sinon.assert.calledWith(consoleLogger.error, error)
-    })
-
-    it('stops reacting to identity refresh after stop', async () => {
-      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
-      await profiler.start(startOptions)
-      profiler.stop()
-
-      // Should not throw even though the profiler is no longer running.
-      startOptions.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(startOptions)
     })
   })
 

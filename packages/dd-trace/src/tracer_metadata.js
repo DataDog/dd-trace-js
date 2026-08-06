@@ -2,6 +2,12 @@
 
 const tracerVersion = require('../../../version').VERSION
 
+// Keep the memfd alive for service discovery for the process lifetime.
+let metadataHandle
+
+/**
+ * @param {import('./config/config-base')} config
+ */
 function storeConfig (config) {
   try {
     // Load binding first to not import other modules if it throws
@@ -42,7 +48,8 @@ function storeConfig (config) {
       threadlocalMetadata
     )
 
-    return processDiscovery.storeMetadata(metadata)
+    metadataHandle = processDiscovery.storeMetadata(metadata)
+    return metadataHandle
   } catch {
     // Either libdatadog or process-discovery is unavailable.
   }

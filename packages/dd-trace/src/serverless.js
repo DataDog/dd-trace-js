@@ -101,5 +101,6 @@ module.exports = {
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
   initializeServerlessTelemetry,
+  IS_AWS_LAMBDA_MICROVM: getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }
