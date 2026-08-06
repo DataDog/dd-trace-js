@@ -134,6 +134,21 @@ function isPlainObject (value) {
 }
 
 /**
+ * Emptiness probe that does not allocate a keys array. Returns true iff `obj` has at
+ * least one own enumerable key. AGENTS.md: don't use `Object.keys(obj).length` as a
+ * presence probe — it materializes the whole key array.
+ *
+ * @param {Record<string, unknown>} obj
+ * @returns {boolean}
+ */
+function hasOwnKey (obj) {
+  for (const k in obj) {
+    if (Object.hasOwn(obj, k)) return true
+  }
+  return false
+}
+
+/**
  * Iteratively flattens nested context attributes into dot-notation keys and removes
  * the top-level targetingKey (emitted separately as targeting_key). Uses an explicit
  * work stack plus an ancestor-container set with add-on-descent / delete-on-post-visit,
@@ -405,9 +420,22 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  * using two-tier (full → degraded → drop-counted) aggregation with a comparable
  * canonical-context key (no hash digest).
  *
- * The eval hot path (enqueue) captures scalars, makes a bounded context snapshot, and
- * pushes to a bounded queue. Aggregation cost — canonical key and two-tier map updates —
- * runs off the eval call stack on a microtask-scheduled drain (and on flush).
+ * Cost split between the eval hot path and the deferred drain:
+ *   - Hot path (`enqueue`, called synchronously from the OpenFeature `finally` hook):
+ *       scalar extraction, `pruneContext` (flatten + sort + rebuild), queue push, and
+ *       `setImmediate` scheduling. `pruneContext` dominates once the context carries
+ *       nested attributes; the `contextFitsWithoutFlattening` fast path skips flatten
+ *       entirely when every top-level value is a supported scalar under the field cap
+ *       (the common case), reducing hot-path work to keys-sort + object rebuild.
+ *   - Deferred (`_drainQueue` on `setImmediate`, or synchronously from `flush`):
+ *       canonical-context key computation, two-tier map aggregation, payload encoding,
+ *       size-based batching, and HTTP send.
+ *
+ * The pruning is required inline because the OpenFeature JS SDK's `hookContext.context`
+ * is a shallow-merged object whose nested values share references with caller state.
+ * Deferring the flatten would let the walk observe post-hook mutations to those nested
+ * values, emitting data that does not match the evaluation-time context. Matches the
+ * dd-trace-java semantics (`DDEvaluator.snapshotValues` inline, `flattenValues` deferred).
  *
  * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
  * Context bounds: 256 fields / 256 chars (pruned before keying).
@@ -423,8 +451,17 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {boolean} whether a drain is already scheduled (microtask coalescing) */
   _drainScheduled
 
-  /** @type {(() => void) | undefined} cached drain callback to avoid per-enqueue closure allocation */
+  /** @type {() => void} cached drain callback to avoid per-enqueue closure allocation */
   _boundDrain
+
+  /** @type {string} precomputed JSON payload prefix ("{context:...,flagEvaluations:[") */
+  _payloadPrefix
+
+  /** @type {string} precomputed JSON payload suffix ("]}") */
+  _payloadSuffix
+
+  /** @type {number} precomputed UTF-8 byte size of prefix + suffix */
+  _basePayloadSizeBytes
 
   /** @type {number} count of event snapshots dropped because the hand-off queue was full */
   _droppedQueueOverflow
@@ -478,6 +515,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     this._rawQueue = []
     this._drainScheduled = false
+    this._boundDrain = () => this._drainQueue()
     this._droppedQueueOverflow = 0
 
     this._full = new Map()
@@ -485,12 +523,21 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     this._perFlagFullCount = new Map()
     this._globalCount = 0
     this._droppedDegradedOverflow = 0
+
+    // Payload wrapper is immutable after construction — precompute once.
+    this._payloadPrefix = `{"context":${this._encode(this._context)},"flagEvaluations":[`
+    this._payloadSuffix = ']}'
+    this._basePayloadSizeBytes = Buffer.byteLength(this._payloadPrefix) + Buffer.byteLength(this._payloadSuffix)
   }
 
   /**
-   * Hot-path capture. Called synchronously from the OpenFeature Finally hook on the
-   * caller's evaluation. Makes a bounded context snapshot before buffering, then
-   * schedules the aggregate drain — NO canonical-key or map aggregation runs here.
+   * Hot-path capture. Called synchronously from the OpenFeature `finally` hook on the
+   * caller's evaluation thread. Prunes the caller's evaluation context (flatten + sort
+   * + rebuild — required inline; see class-level comment for why), pushes the bounded
+   * snapshot onto the queue, and schedules the aggregate drain via `setImmediate`.
+   * Canonical-key computation and two-tier map aggregation do NOT run here — those
+   * run off the hot path on the scheduled drain.
+   *
    * On overflow, drop-and-count (observable) rather than block the user's evaluation.
    *
    * @param {FlagEvalRawEvent} event
@@ -514,9 +561,6 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     if (!this._drainScheduled) {
       this._drainScheduled = true
-      if (this._boundDrain === undefined) {
-        this._boundDrain = () => this._drainQueue()
-      }
       setImmediate(this._boundDrain)
     }
     return true
@@ -593,7 +637,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       first: evalTimeMs,
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
-      contextAttrs: Object.keys(attrs).length > 0 ? attrs : null,
+      contextAttrs: hasOwnKey(attrs) ? attrs : null,
     })
     this._globalCount++
   }
@@ -694,7 +738,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
       if (entry.errorMessage) ev.error = { message: entry.errorMessage }
-      if (entry.contextAttrs && Object.keys(entry.contextAttrs).length > 0) {
+      // `contextAttrs` is null when the pruned context was empty (see _aggregate);
+      // when non-null it is guaranteed non-empty, so no re-probe is needed here.
+      if (entry.contextAttrs !== null) {
         ev.context = { evaluation: entry.contextAttrs }
       }
 
@@ -728,9 +774,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @returns {void}
    */
   _flushPayloadBatches (flagEvaluations) {
-    const payloadPrefix = `{"context":${this._encode(this._context)},"flagEvaluations":[`
-    const payloadSuffix = ']}'
-    const basePayloadSizeBytes = Buffer.byteLength(payloadPrefix) + Buffer.byteLength(payloadSuffix)
+    const payloadPrefix = this._payloadPrefix
+    const payloadSuffix = this._payloadSuffix
+    const basePayloadSizeBytes = this._basePayloadSizeBytes
 
     const stats = {
       sentPayloads: 0,

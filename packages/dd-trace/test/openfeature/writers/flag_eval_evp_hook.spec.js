@@ -20,7 +20,7 @@ describe('FlagEvalEVPHook', () => {
 
   const lastEnqueued = () => writer.enqueue.firstCall.args[0]
 
-  describe('cheap capture only (async boundary)', () => {
+  describe('hook boundary — extract and enqueue only', () => {
     it('finally() does a single enqueue and nothing else — no aggregation API touched', () => {
       hook.finally(
         { flagKey: 'f', context: { targetingKey: 'u' } },

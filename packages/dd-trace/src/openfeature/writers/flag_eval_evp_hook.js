@@ -1,13 +1,15 @@
 'use strict'
 
 /**
- * FlagEvalEVPHook is a Finally-stage OpenFeature hook that does only a cheap
- * scalar extraction and a non-blocking enqueue to the FlagEvaluationsWriter.
+ * FlagEvalEVPHook is a Finally-stage OpenFeature hook that extracts evaluation
+ * scalars and hands the event to the FlagEvaluationsWriter for enqueue.
  *
- * It MUST NOT perform inline aggregation, JSON.stringify, map lookups, or any
- * other work beyond the cheap capture described below — the eval hot path runs
- * synchronously for the caller, so every nanosecond here is charged directly
- * to the user's flag evaluation.
+ * The extraction work in this file is genuinely cheap (a handful of scalar reads).
+ * The dominant inline cost lives in `FlagEvaluationsWriter.enqueue`, which prunes
+ * the caller's evaluation context (flatten + sort + rebuild) synchronously on the
+ * evaluation thread — see the class-level comment on that file for why the prune
+ * must run inline. Aggregation, canonical keying, and payload encoding are all
+ * deferred off this call stack.
  *
  * The existing FlagEvalMetricsHook (OTel feature_flag.evaluations) is untouched —
  * this hook is registered IN ADDITION to it, not as a replacement.
@@ -27,10 +29,13 @@ class FlagEvalEVPHook {
    * Called by the OpenFeature SDK after every flag evaluation (success, error, or default).
    * Using the `finally` stage (not `after`) ensures error and default paths are covered.
    *
-   * Cheap capture only — no aggregation, no stringify, no blocking:
+   * Inline work performed here:
    *   - Scalar field extraction from hookContext + evaluationDetails
    *   - Read evaluationDetails.flagMetadata for allocationKey and eval-time stamp
-   *   - Non-blocking enqueue to the writer's aggregation loop
+   *   - Non-blocking enqueue to the writer (which prunes the context inline; see
+   *     FlagEvaluationsWriter for the cost/rationale)
+   *
+   * No canonical keying, no map aggregation, no JSON encoding, no HTTP: all deferred.
    *
    * Field sources mirror flag-eval-metrics-hook.js (the OTel hook) exactly:
    * variant and flagMetadata both come from evaluationDetails, not hookContext.
@@ -45,7 +50,6 @@ class FlagEvalEVPHook {
     const writer = this._writer
     if (!writer) return
 
-    // Cheap scalar extraction — no JSON.stringify, no map lookup, no aggregation
     const flagKey = hookContext.flagKey
 
     // Variant = the OpenFeature variant (NOT the evaluated value). Absent variant
@@ -65,7 +69,10 @@ class FlagEvalEVPHook {
     const evalTimeMs = flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
     const errorMessage = evaluationDetails.errorMessage ?? evaluationDetails.errorCode ?? ''
 
-    // Shallow reference to the context attrs — owned by the SDK; safe to read off hot path
+    // Passed to the writer for inline pruning (see FlagEvaluationsWriter.enqueue).
+    // The SDK produces a fresh shallow-merged object per evaluation, so the top-level
+    // identity is stable, but nested values share references with caller state — which
+    // is exactly why the writer prunes inline rather than deferring the flatten.
     const attrs = hookContext.context ?? {}
 
     writer.enqueue({ flagKey, variant, allocationKey, targetingKey, errorMessage, evalTimeMs, attrs })
