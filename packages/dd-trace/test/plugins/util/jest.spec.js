@@ -9,7 +9,7 @@ const {
   getFormattedJestTestParameters,
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
-} = require('../src/util')
+} = require('../../../src/plugins/util/jest')
 
 describe('removeSeedSuffixFromTestName', () => {
   it('removes seed suffixes', () => {
@@ -204,36 +204,39 @@ describe('getJestSuitesToRun', () => {
 
   it('takes unskippable into account', () => {
     const skippableSuites = [
-      'fixtures/test-to-skip.js',
-      'fixtures/test-unskippable.js',
+      'fixtures/jest/test-to-skip.js',
+      'fixtures/jest/test-unskippable.js',
     ]
     const tests = [
-      { path: path.join(__dirname, './fixtures/test-to-run.js') },
-      { path: path.join(__dirname, './fixtures/test-to-skip.js') },
-      { path: path.join(__dirname, './fixtures/test-unskippable.js') },
+      { path: path.join(__dirname, './fixtures/jest/test-to-run.js') },
+      { path: path.join(__dirname, './fixtures/jest/test-to-skip.js') },
+      { path: path.join(__dirname, './fixtures/jest/test-unskippable.js') },
     ]
     const rootDir = __dirname
 
     const { suitesToRun, skippedSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
     assert.deepStrictEqual(suitesToRun, [
       {
-        path: path.join(__dirname, './fixtures/test-to-run.js'),
+        path: path.join(__dirname, './fixtures/jest/test-to-run.js'),
       },
       {
-        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        path: path.join(__dirname, './fixtures/jest/test-unskippable.js'),
       },
     ])
     assert.deepStrictEqual(skippedSuites, [
-      'fixtures/test-to-skip.js',
+      'fixtures/jest/test-to-skip.js',
     ])
   })
 
   it('returns hasUnskippableSuites if there is a unskippable suite', () => {
     const skippableSuites = []
     const tests = [
-      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
       {
-        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        path: path.join(__dirname, './fixtures/jest/test-to-run.js'),
+        context: { config: { testEnvironmentOptions: {} } },
+      },
+      {
+        path: path.join(__dirname, './fixtures/jest/test-unskippable.js'),
         context: { config: { testEnvironmentOptions: {} } },
       },
     ]
@@ -245,11 +248,14 @@ describe('getJestSuitesToRun', () => {
   })
 
   it('returns hasForcedToRunSuites if there is a forced to run suite', () => {
-    const skippableSuites = ['fixtures/test-unskippable.js']
+    const skippableSuites = ['fixtures/jest/test-unskippable.js']
     const tests = [
-      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
       {
-        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        path: path.join(__dirname, './fixtures/jest/test-to-run.js'),
+        context: { config: { testEnvironmentOptions: {} } },
+      },
+      {
+        path: path.join(__dirname, './fixtures/jest/test-unskippable.js'),
         context: { config: { testEnvironmentOptions: {} } },
       },
     ]
@@ -261,16 +267,16 @@ describe('getJestSuitesToRun', () => {
   })
 
   it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
-    const skippableSuites = ['fixtures/test-unskippable.js']
+    const skippableSuites = ['fixtures/jest/test-unskippable.js']
     // tests share a config object
     const globalConfig = { testEnvironmentOptions: {} }
     const tests = [
       {
-        path: path.join(__dirname, './fixtures/test-to-run.js'),
+        path: path.join(__dirname, './fixtures/jest/test-to-run.js'),
         context: { config: globalConfig },
       },
       {
-        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        path: path.join(__dirname, './fixtures/jest/test-unskippable.js'),
         context: { config: globalConfig },
       },
     ]
@@ -279,19 +285,19 @@ describe('getJestSuitesToRun', () => {
     getJestSuitesToRun(skippableSuites, tests, rootDir)
     assert.deepStrictEqual(
       globalConfig.testEnvironmentOptions._ddUnskippable,
-      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+      JSON.stringify({ 'fixtures/jest/test-unskippable.js': true })
     )
     assert.deepStrictEqual(
       globalConfig.testEnvironmentOptions._ddForcedToRun,
-      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+      JSON.stringify({ 'fixtures/jest/test-unskippable.js': true })
     )
   })
 
   it('adds repository and project relative metadata for fallback matches', () => {
-    const skippableSuites = ['fixtures/test-unskippable.js']
+    const skippableSuites = ['fixtures/jest/test-unskippable.js']
     const config = { testEnvironmentOptions: {} }
     const test = {
-      path: path.join(__dirname, './fixtures/test-unskippable.js'),
+      path: path.join(__dirname, './fixtures/jest/test-unskippable.js'),
       context: { config },
     }
     const repositoryRoot = path.dirname(__dirname)
@@ -299,8 +305,8 @@ describe('getJestSuitesToRun', () => {
     getJestSuitesToRun(skippableSuites, [test], repositoryRoot, __dirname)
 
     const expectedMetadata = JSON.stringify({
-      'test/fixtures/test-unskippable.js': true,
-      'fixtures/test-unskippable.js': true,
+      'util/fixtures/jest/test-unskippable.js': true,
+      'fixtures/jest/test-unskippable.js': true,
     })
     assert.strictEqual(config.testEnvironmentOptions._ddUnskippable, expectedMetadata)
     assert.strictEqual(config.testEnvironmentOptions._ddForcedToRun, expectedMetadata)
