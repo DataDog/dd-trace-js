@@ -14,7 +14,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { IS_SERVERLESS } = require('./serverless')
+const { IS_AWS_LAMBDA_MICROVM, IS_SERVERLESS } = require('./serverless')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -281,7 +281,7 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
 
-      if (getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN')) {
+      if (IS_AWS_LAMBDA_MICROVM) {
         this.#registerMicroVmRunHook(config)
       }
     } catch (e) {
@@ -305,6 +305,10 @@ class Tracer extends NoopProxy {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
         channel('datadog:identity:update').publish(config)
+        const metadata = require('./tracer_metadata')(config)
+        if (metadata === undefined) {
+          log.warn('Could not store tracer configuration for service discovery')
+        }
         channel('datadog:identity:refresh').publish(config)
       }
     }
