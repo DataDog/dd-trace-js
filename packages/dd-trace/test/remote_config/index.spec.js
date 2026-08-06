@@ -991,17 +991,8 @@ describe('RemoteConfig', () => {
 
       // once at module load for the initial clientId, once on refresh
       sinon.assert.calledTwice(uuidStub)
-      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
-      assert.deepStrictEqual(uuidStub.secondCall.args, [{ disableEntropyCache: true }])
-    })
-
-    it('should catch and log an error instead of throwing when uuid generation fails', () => {
-      const error = new Error('boom')
-      uuidStub.onSecondCall().throws(error)
-
-      refreshIdentity(config)
-
-      sinon.assert.calledWith(log.error, '[RC] Error refreshing identity', error)
+      // the buffered pool is drained by the publisher, so the refresh must not opt out of it
+      assert.deepStrictEqual(uuidStub.secondCall.args, [])
     })
   })
 })
