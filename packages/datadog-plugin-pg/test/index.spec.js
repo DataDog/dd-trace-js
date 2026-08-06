@@ -789,17 +789,25 @@ describe('Plugin', () => {
           })
         })
 
-        it('does not throw when the pool fails to acquire a connection', async () => {
+        it('records an acquire error when a pooled query cannot connect', async () => {
           await withUnreachablePort(async port => {
             const failingPool = new pg.Pool(poolOptions({ port, connectionTimeoutMillis: 500 }))
             failingPool.on('error', () => {})
 
             await withPool(failingPool, async () => {
-              const error = await new Promise(resolve => {
-                failingPool.query('SELECT 1', resolve)
-              })
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = findAcquireSpan(traces[0])
 
-              assert.ok(error, 'expected the pool connection to fail')
+                  assert.strictEqual(acquireSpan.error, 1)
+                  assert.strictEqual(typeof acquireSpan.metrics['db.pool.wait_time_ms'], 'number')
+                }),
+                new Promise((resolve, reject) => {
+                  failingPool.query('SELECT 1', error => {
+                    return error ? resolve() : reject(new Error('expected acquire error'))
+                  })
+                }),
+              ])
             })
           })
         })
@@ -1651,11 +1659,13 @@ describe('Plugin', () => {
 
     describe('without pg plugin subscribers', () => {
       const queryPoolStartChannel = dc.channel('datadog:pg:pool:query:start')
+      const connectionStartChannel = dc.channel('apm:pg:pool:connect:start')
+      let Pool
       let pool
 
       before(async () => {
         await agent.load([])
-        const { Pool } = require('../../../versions/pg').get()
+        Pool = require('../../../versions/pg').get().Pool
 
         pool = new Pool({
           host: '127.0.0.1',
@@ -1688,6 +1698,21 @@ describe('Plugin', () => {
         } finally {
           queryPoolStartChannel.unsubscribe(observeQuery)
         }
+      })
+
+      it('forwards pooled-query acquire errors without acquire subscribers', async () => {
+        await withUnreachablePort(async port => {
+          const failingPool = new Pool(poolOptions({ port, connectionTimeoutMillis: 500 }))
+          const observeAcquire = () => {}
+          connectionStartChannel.subscribe(observeAcquire)
+
+          try {
+            await assert.rejects(failingPool.query('SELECT 1'), Error)
+          } finally {
+            connectionStartChannel.unsubscribe(observeAcquire)
+            await failingPool.end()
+          }
+        })
       })
     })
 
