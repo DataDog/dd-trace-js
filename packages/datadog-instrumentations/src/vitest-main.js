@@ -247,6 +247,16 @@ function resetEfdSuiteTracker () {
 }
 
 /**
+ * Returns whether a Vitest pool has a transport for runtime EFD suite admission.
+ *
+ * @param {string|undefined} pool
+ * @returns {boolean}
+ */
+function isEfdSuiteAdmissionPool (pool) {
+  return pool === undefined || pool === 'forks' || pool === 'threads' || pool === 'browser'
+}
+
+/**
  * Returns whether Vitest exposes the worker transports used for runtime EFD suite admission.
  *
  * @param {string} frameworkVersion
@@ -257,13 +267,13 @@ function resetEfdSuiteTracker () {
 function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
   if (!satisfies(frameworkVersion, '>=4.0.0')) return false
   const defaultPool = ctx?.config?.pool
-  if (!Array.isArray(testSpecifications)) {
-    return defaultPool !== 'typescript' && defaultPool !== 'vmForks' && defaultPool !== 'vmThreads'
+  if (!Array.isArray(testSpecifications) || testSpecifications.length === 0) {
+    return isEfdSuiteAdmissionPool(defaultPool)
   }
 
   for (const testSpecification of testSpecifications) {
     const pool = getTestSpecificationPool(testSpecification) || defaultPool
-    if (pool === 'typescript' || pool === 'vmForks' || pool === 'vmThreads') return false
+    if (!isEfdSuiteAdmissionPool(pool)) return false
   }
   return true
 }

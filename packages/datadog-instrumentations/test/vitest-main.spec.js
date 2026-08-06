@@ -152,6 +152,18 @@ describe('vitest main instrumentation', () => {
     typechecker.ctx = ctx
     await typechecker.prepareResults()
 
+    const customPoolTypechecker = new Typechecker()
+    customPoolTypechecker.ctx = {
+      ...ctx,
+      config: { pool: './custom-pool.mjs' },
+    }
+    await customPoolTypechecker.prepareResults()
+    const customPoolAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.strictEqual(
+      customPoolAdmissionContexts[customPoolAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled,
+      false
+    )
+
     await sequencer.sort([[
       { config: { pool: 'forks' } },
       { filepath: '/repo/vm.mjs', pool: 'vmThreads' },
@@ -164,9 +176,14 @@ describe('vitest main instrumentation', () => {
       { filepath: '/repo/typecheck.ts', pool: 'typescript' },
     ]])
 
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/custom.mjs', pool: './custom-pool.mjs' },
+    ]])
+
     assert.deepStrictEqual(
       libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),
-      [true, true, true, true]
+      [true, true, true, true, true, true]
     )
     const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
     assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
