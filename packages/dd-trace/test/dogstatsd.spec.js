@@ -352,43 +352,6 @@ describe('dogstatsd', () => {
     assert.strictEqual(udp6.send.firstCall.args[4], '::1')
   })
 
-  it('should recompute its cached tags via updateTags', () => {
-    client = createDogStatsDClient({ tags: ['foo:bar'] })
-
-    client.updateTags(['baz:qux'])
-    client.gauge('test.avg', 1)
-    client.flush()
-
-    sinon.assert.called(udp4.send)
-    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g|#baz:qux\n')
-  })
-
-  it('should drop lines already buffered under the previous tags when updateTags is called', () => {
-    client = createDogStatsDClient({ tags: ['foo:bar'] })
-
-    // Buffered synchronously (bypasses aggregation), e.g. before a MicroVM clone resume.
-    client.distribution('test.stale', 1)
-    client.updateTags(['baz:qux'])
-    client.gauge('test.fresh', 2)
-    client.flush()
-
-    sinon.assert.called(udp4.send)
-    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.fresh:2|g|#baz:qux\n')
-  })
-
-  it('should preserve already buffered lines when updateTags is called with an unchanged tag prefix', () => {
-    client = createDogStatsDClient({ tags: ['foo:bar'] })
-
-    // Buffered synchronously (bypasses aggregation), e.g. before a MicroVM clone resume.
-    client.distribution('test.buffered', 1)
-    client.updateTags(['foo:bar'])
-    client.gauge('test.fresh', 2)
-    client.flush()
-
-    sinon.assert.called(udp4.send)
-    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#foo:bar\ntest.fresh:2|g|#foo:bar\n')
-  })
-
   const udsIt = os.platform() === 'win32' ? it.skip : it
   udsIt('should support HTTP via unix domain socket', (done) => {
     assertData = () => {
@@ -777,17 +740,44 @@ describe('dogstatsd', () => {
       }
 
       client = new CustomMetrics(config)
+      client.distribution('test.stale', 1)
 
-      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
-      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
 
       client.gauge('test.avg', 10)
       client.flush()
 
-      sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
+
+      udp4.send.resetHistory()
+      config.tags = {}
+      identityRefreshChannel.publish(config)
+
+      client.gauge('test.avg', 20)
+      client.flush()
+
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:20|g\n')
+    })
+
+    it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+      client.distribution('test.buffered', 1)
+
+      identityRefreshChannel.publish(config)
+      client.flush()
+
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
     })
   })
 
@@ -795,26 +785,18 @@ describe('dogstatsd', () => {
     let aggregator
     let gaugeCalls
     let incrementCalls
-    let inner
 
     beforeEach(() => {
       gaugeCalls = []
       incrementCalls = []
-      inner = {
+      const inner = {
         gauge: (name, value, tags) => gaugeCalls.push([name, value, tags?.slice()]),
         increment: (name, value, tags) => incrementCalls.push([name, value, tags?.slice()]),
         distribution: () => {},
         histogram: () => {},
         flush: () => {},
-        updateTags: sinon.spy(),
       }
       aggregator = new MetricsAggregationClient(inner)
-    })
-
-    it('forwards updateTags to the wrapped client', () => {
-      aggregator.updateTags(['foo:bar'])
-
-      sinon.assert.calledOnceWithExactly(inner.updateTags, ['foo:bar'])
     })
 
     it('emits a gauge once and then stays silent until it is set again', () => {

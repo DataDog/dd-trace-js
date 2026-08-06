@@ -11,7 +11,6 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./we
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
-const identityRefreshChannel = dc.channel('datadog:identity:refresh')
 
 function findWebSpan (startedSpans, spanId) {
   for (let i = startedSpans.length; --i >= 0;) {
@@ -55,18 +54,17 @@ class Profiler extends EventEmitter {
   #compressionFn
   #compressionFnInitialized = false
   #compressionOptions
+  #config
   #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
   #exporters
   #flushInterval
-  #identityRefreshListener
   #lastStart
   #profileSeq = 0
   #profilers
   #spanFinishListener
   #systemInfoReport
-  #tags
   #timer
   #uploadCompression
 
@@ -174,33 +172,14 @@ class Profiler extends EventEmitter {
     if (this.enabled) return true
     this.#enabled = true
 
-    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+    const { exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
       buildProfilingRuntime(config)
-    this.#tags = tags
+    this.#config = config
     this.#exporters = exporters
     this.#flushInterval = flushInterval
     this.#profilers = profilers
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
-
-    // Recompute tags after a MicroVM clone resume, so profiles upload under the clone's
-    // identity instead of the snapshot's. Also push the refreshed tags to sub-profilers that
-    // bake them into state of their own, e.g. NativeSpaceProfiler's OOM export command.
-    this.#identityRefreshListener = () => {
-      this.#tags = getProfilingTags(config)
-      for (const profiler of this.#profilers) {
-        // A refresh failure (e.g. NativeSpaceProfiler re-registering its native OOM handler) must not
-        // propagate: this runs synchronously off the diagnostic channel publish, which the MicroVM
-        // /run HTTP hook fires from inside request handling, and channel.publish() does not catch
-        // subscriber errors.
-        try {
-          profiler.refreshTags?.(this.#tags)
-        } catch (error) {
-          log.error(error)
-        }
-      }
-    }
-    identityRefreshChannel.subscribe(this.#identityRefreshListener)
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
@@ -286,11 +265,6 @@ class Profiler extends EventEmitter {
     if (this.#spanFinishListener !== undefined) {
       spanFinishedChannel.unsubscribe(this.#spanFinishListener)
       this.#spanFinishListener = undefined
-    }
-
-    if (this.#identityRefreshListener !== undefined) {
-      identityRefreshChannel.unsubscribe(this.#identityRefreshListener)
-      this.#identityRefreshListener = undefined
     }
 
     for (const profiler of this.#profilers) {
@@ -415,7 +389,7 @@ class Profiler extends EventEmitter {
   }
 
   #submit (profiles, infos, start, end, snapshotKind) {
-    const tags = this.#tags
+    const tags = getProfilingTags(this.#config)
 
     // Flatten endpoint counts
     const endpointCounts = {}
