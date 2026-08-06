@@ -5,12 +5,13 @@ const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('vitest main instrumentation', () => {
-  it('keeps no-worker capabilities active and uses legacy EFD faultiness detection for VM pools', async () => {
+  it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
     const hooks = []
     const libraryConfigurationRequests = []
     const libraryConfigurationCh = {}
     const knownTestsCh = {}
     const providedContexts = []
+    let reserveEarlyFlakeDetectionSuite
     const testSuiteFinishCh = {
       hasSubscribers: true,
     }
@@ -38,7 +39,7 @@ describe('vitest main instrumentation', () => {
             libraryConfigurationRequests.push(data)
             return Promise.resolve({
               libraryConfig: {
-                earlyFlakeDetectionFaultyThreshold: 100,
+                earlyFlakeDetectionFaultyThreshold: 1,
                 earlyFlakeDetectionRetryPolicy: {
                   durationRetryCounts: [
                     { durationLimitMs: 5000, retryCount: 2 },
@@ -63,7 +64,9 @@ describe('vitest main instrumentation', () => {
         },
       },
       './vitest-main-no-worker-init': {
-        configure () {},
+        configure (_ctx, _frameworkVersion, _testSpecifications, _setupData, options) {
+          reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
+        },
         deactivate () {},
         isSupportedVersion () {
           return true
@@ -121,6 +124,10 @@ describe('vitest main instrumentation', () => {
     sequencer.ctx = ctx
     await sequencer.sort([{ filepath: '/repo/browser.mjs', pool: 'browser' }])
 
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/shared.mjs', false), true)
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/shared.mjs', true), true)
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/second.mjs', true), false)
+
     class Typechecker {
       async prepareResults () {
         return { files: [] }
@@ -137,10 +144,17 @@ describe('vitest main instrumentation', () => {
       { config: { pool: 'forks' } },
       { filepath: '/repo/vm.mjs', pool: 'vmThreads' },
     ]])
+    const vmAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.strictEqual(vmAdmissionContexts[vmAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
+
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/typecheck.ts', pool: 'typescript' },
+    ]])
 
     assert.deepStrictEqual(
       libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),
-      [true, true, true]
+      [true, true, true, true]
     )
     const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
     assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))

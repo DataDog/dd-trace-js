@@ -25,11 +25,17 @@ export async function requestEfdSuiteAdmission ({
 }) {
   const browserCommands = globalThis.__vitest_browser_runner__?.commands
   if (browserCommands) {
-    return browserCommands.triggerCommand(
-      browserCommand,
-      [testSuite, hasNewTest],
-      new Error('Could not determine whether Vitest EFD retries should run')
-    )
+    try {
+      return await browserCommands.triggerCommand(
+        browserCommand,
+        [testSuite, hasNewTest],
+        new Error('Could not determine whether Vitest EFD retries should run')
+      )
+    } catch (error) {
+      // Browser Mode setup runs without dd-trace, so the tracer logger is unavailable.
+      globalThis.console?.error('Datadog Test Optimization could not request Vitest EFD suite admission.', error)
+      return false
+    }
   }
 
   nodeTransportPromise ||= getNodeTransport(responseCode)

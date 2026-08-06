@@ -258,12 +258,12 @@ function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
   if (!satisfies(frameworkVersion, '>=4.0.0')) return false
   const defaultPool = ctx?.config?.pool
   if (!Array.isArray(testSpecifications)) {
-    return defaultPool !== 'vmForks' && defaultPool !== 'vmThreads'
+    return defaultPool !== 'typescript' && defaultPool !== 'vmForks' && defaultPool !== 'vmThreads'
   }
 
   for (const testSpecification of testSpecifications) {
     const pool = getTestSpecificationPool(testSpecification) || defaultPool
-    if (pool === 'vmForks' || pool === 'vmThreads') return false
+    if (pool === 'typescript' || pool === 'vmForks' || pool === 'vmThreads') return false
   }
   return true
 }
@@ -297,8 +297,8 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
   if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  if (admittedEfdSuites.has(testSuite)) return true
-  if (isEarlyFlakeDetectionFaulty) return false
+  const isAdmitted = admittedEfdSuites.has(testSuite)
+  if (isEarlyFlakeDetectionFaulty) return isAdmitted
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -316,6 +316,7 @@ function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
     }
   }
 
+  if (isAdmitted) return true
   admittedEfdSuites.add(testSuite)
   return true
 }
