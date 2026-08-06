@@ -71,6 +71,28 @@ describe('retainVercelRequest', () => {
     assert.strictEqual(completed, true)
   })
 
+  it('retains exports started by completion callbacks', async () => {
+    process.env.VERCEL = '1'
+    let retained
+    const finishInitialExport = trackExport()
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    assert.strictEqual(onRequestEnd(), true)
+    finishInitialExport()
+
+    const finishFallbackExport = trackExport()
+    let completed = false
+    retained.then(() => { completed = true })
+    await Promise.resolve()
+    assert.strictEqual(completed, false)
+
+    finishFallbackExport()
+    await retained
+    assert.strictEqual(completed, true)
+  })
+
   it('does nothing outside Vercel', () => {
     delete process.env.VERCEL
     assert.strictEqual(retainVercelRequest(Promise.resolve()), false)
