@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 // path-to-regexp is a transitive (vendored) dependency; require it directly to exercise the
-// normalizer against the real Express 5 (v8) parser/matcher.
+// normalizer against the real Express 5 parser/matcher (path-to-regexp 8).
 // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
 const { parse: rawParse, match: rawMatch } = require('path-to-regexp')
 const {
@@ -12,7 +12,7 @@ const {
   normalizeRoute,
 } = require('../../../src/appsec/api_security/normalized-route')
 
-// Mirror the getParse instrumentation adapter: v8 TokenData ({ tokens }) or undefined.
+// Mirror the getParse instrumentation adapter: TokenData ({ tokens }) or undefined.
 function parse (pattern) {
   let result
   try {
@@ -27,7 +27,7 @@ function parse (pattern) {
 function makeMatcher (route) {
   let matcher
   try {
-    matcher = rawMatch(route)
+    matcher = rawMatch(route, { decode: false })
   } catch {
     return undefined
   }

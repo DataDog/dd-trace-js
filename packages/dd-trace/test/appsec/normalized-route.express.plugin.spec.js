@@ -89,7 +89,7 @@ withVersions('express', 'express', version => {
       }))
     }
 
-    // Normalized-route support is Express 5 only (it reuses path-to-regexp v8's parser, which
+    // Normalized-route support is Express 5 only (it reuses path-to-regexp 8's parser, which
     // Express 4 does not ship). On Express 4 the tag must be absent; on Express 5 it must equal
     // the expected normalized route.
     function assertNormalizedRoute (span, expected) {
