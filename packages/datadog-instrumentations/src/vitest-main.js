@@ -105,7 +105,6 @@ let tiaRepositoryRoot = process.cwd()
 let activeNoWorkerInitState
 let isEfdSuiteAdmissionEnabled = false
 let maximumSuitesWithNewTests = 0
-const admittedEfdSuites = new Set()
 const suitesWithNewTests = new Set()
 const tinyPoolClassWrappers = new WeakMap()
 const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
@@ -242,7 +241,6 @@ function resetEfdSuiteTracker () {
   activeNoWorkerInitState = undefined
   isEfdSuiteAdmissionEnabled = false
   maximumSuitesWithNewTests = 0
-  admittedEfdSuites.clear()
   suitesWithNewTests.clear()
 }
 
@@ -307,8 +305,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
   if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  const isAdmitted = admittedEfdSuites.has(testSuite)
-  if (isEarlyFlakeDetectionFaulty) return isAdmitted
+  if (isEarlyFlakeDetectionFaulty) return false
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -326,8 +323,6 @@ function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
     }
   }
 
-  if (isAdmitted) return true
-  admittedEfdSuites.add(testSuite)
   return true
 }
 
@@ -844,7 +839,7 @@ async function runMainProcessSetup (
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
-        if (supportsEfdSuiteAdmission(frameworkVersion, testSpecifications, ctx)) {
+        if (!shouldInstallNoWorkerInit && supportsEfdSuiteAdmission(frameworkVersion, testSpecifications, ctx)) {
           configureEfdSuiteTracker(currentTestFilepaths, repositoryRoot)
         } else {
           const projectSuites = currentTestFilepaths.map(testFilepath => getTestSuitePath(testFilepath, repositoryRoot))

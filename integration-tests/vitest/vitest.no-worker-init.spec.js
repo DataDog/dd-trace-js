@@ -419,9 +419,8 @@ describe('vitest no-worker init instrumentation selection', () => {
       accessPlugin.configResolved(resolvedConfig)
 
       assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
-      assert.strictEqual(resolvedConfig.server.fs.allow.length, 3)
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 2)
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
-      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[2]), 'vitest-efd-suite-admission.mjs')
     })
 
     it('does not install the Vite access plugin for Node test projects', () => {
@@ -839,7 +838,7 @@ describe('vitest no-worker init instrumentation selection', () => {
 
 SUPPORTED_VERSIONS.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
-    const runtimeEfdSuiteAdmissionIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
+    const latestVitestIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     let cwd, receiver, childProcess, testOutput
 
     useSandbox([
@@ -1760,14 +1759,14 @@ describe('impacted test', () => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    runtimeEfdSuiteAdmissionIt('stops no-worker EFD retries when the new-suite threshold is exceeded', async () => {
+    latestVitestIt('uses legacy EFD faultiness detection in no-worker mode', async () => {
       receiver.setSettings({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 2,
           },
-          faulty_session_threshold: 0,
+          faulty_session_threshold: 1,
         },
         known_tests_enabled: true,
       })
@@ -1779,14 +1778,17 @@ describe('impacted test', () => {
         assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
         const tests = getEventContents(events, 'test')
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
-        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.meta[TEST_SUITE])).size, 2)
+        for (const test of tests) {
+          assert.ok(!(TEST_IS_NEW in test.meta))
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        }
       })
 
       const exitCode = await Promise.all([
         runVitest({
-          TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-first.mjs',
+          TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-*',
           POOL_CONFIG: 'threads',
         }),
         payloadsPromise,

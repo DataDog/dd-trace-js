@@ -2,7 +2,8 @@
 
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
-const { fileURLToPath, pathToFileURL } = require('node:url')
+const { fileURLToPath } = require('node:url')
+const { isMainThread, parentPort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -38,6 +39,7 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
+const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -45,6 +47,7 @@ const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
 const fileToHasConcurrentTests = new WeakMap()
 const fileToEfdSuiteAdmission = new WeakMap()
+const pendingEfdSuiteAdmissionRequests = new Map()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
 const dynamicNameTasks = new WeakSet()
@@ -65,19 +68,13 @@ let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
 let preciseCoverageSession
-let requestEfdSuiteAdmission
+let didInitializeEfdSuiteAdmissionTransport = false
+let nextEfdSuiteAdmissionRequestId = 0
+let sendEfdSuiteAdmissionMessage
 let isPreciseCoverageUnavailable = false
 let vitestCoverageSnapshot
 const wrappedCoverageWorkerStates = new WeakSet()
 const nonIsolatedCoverageFiles = new Set()
-const VITEST_EFD_SUITE_ADMISSION_URL = pathToFileURL(path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'ci',
-  'vitest-efd-suite-admission.mjs'
-)).href
 
 /**
  * Sends a command to a Node.js inspector session.
@@ -380,6 +377,84 @@ function hasRunnableNewTest (file, providedContext) {
 }
 
 /**
+ * Resolves and removes one pending EFD suite admission request.
+ *
+ * @param {number} requestId
+ * @param {boolean} allowed
+ * @returns {void}
+ */
+function finishEfdSuiteAdmissionRequest (requestId, allowed) {
+  const request = pendingEfdSuiteAdmissionRequests.get(requestId)
+  if (!request) return
+
+  clearTimeout(request.timeout)
+  pendingEfdSuiteAdmissionRequests.delete(requestId)
+  request.resolve(allowed)
+}
+
+/**
+ * Handles an EFD suite admission response from the Vitest main process.
+ *
+ * @param {unknown} message
+ * @returns {void}
+ */
+function handleEfdSuiteAdmissionResponse (message) {
+  if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
+
+  const { allowed, requestId } = message[1] || {}
+  if (Number.isSafeInteger(requestId)) {
+    finishEfdSuiteAdmissionRequest(requestId, allowed === true)
+  }
+}
+
+/**
+ * Returns the child-process or worker-thread sender used by the current Vitest worker.
+ *
+ * @returns {((message: unknown) => void)|undefined}
+ */
+function getEfdSuiteAdmissionSender () {
+  if (didInitializeEfdSuiteAdmissionTransport) return sendEfdSuiteAdmissionMessage
+  didInitializeEfdSuiteAdmissionTransport = true
+
+  if (typeof process.send === 'function') {
+    process.on('message', handleEfdSuiteAdmissionResponse)
+    sendEfdSuiteAdmissionMessage = process.send.bind(process)
+  } else if (!isMainThread && parentPort) {
+    parentPort.on('message', handleEfdSuiteAdmissionResponse)
+    sendEfdSuiteAdmissionMessage = parentPort.postMessage.bind(parentPort)
+  }
+  return sendEfdSuiteAdmissionMessage
+}
+
+/**
+ * Requests permission from the Vitest main process to schedule EFD retries for one suite.
+ *
+ * @param {string} testSuite
+ * @param {boolean} hasNewTest
+ * @returns {Promise<boolean>}
+ */
+function requestEfdSuiteAdmission (testSuite, hasNewTest) {
+  const sendMessage = getEfdSuiteAdmissionSender()
+  if (!sendMessage) return Promise.resolve(false)
+
+  const requestId = ++nextEfdSuiteAdmissionRequestId
+  return new Promise(resolve => {
+    const timeout = setTimeout(
+      () => finishEfdSuiteAdmissionRequest(requestId, false),
+      EFD_SUITE_ADMISSION_TIMEOUT_MS
+    )
+    timeout.unref?.()
+    pendingEfdSuiteAdmissionRequests.set(requestId, { resolve, timeout })
+
+    try {
+      sendMessage([VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE, { hasNewTest, requestId, testSuite }])
+    } catch {
+      finishEfdSuiteAdmissionRequest(requestId, false)
+    }
+  })
+}
+
+/**
  * Requests a single EFD admission decision for all tests collected in a Vitest file.
  *
  * @param {{ file: { filepath: string, tasks?: object[] } }} task
@@ -391,14 +466,10 @@ function isEfdSuiteAdmissionAllowed (task, providedContext, testSuite) {
   let admission = fileToEfdSuiteAdmission.get(task.file)
   if (admission) return admission
 
-  requestEfdSuiteAdmission ||= import(VITEST_EFD_SUITE_ADMISSION_URL)
-    .then(module => module.requestEfdSuiteAdmission)
-  admission = requestEfdSuiteAdmission.then(request => request({
-    hasNewTest: hasRunnableNewTest(task.file, providedContext),
-    requestCode: VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
-    responseCode: VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
-    testSuite: testSuite || task.file.filepath,
-  }))
+  admission = requestEfdSuiteAdmission(
+    testSuite || task.file.filepath,
+    hasRunnableNewTest(task.file, providedContext)
+  )
   fileToEfdSuiteAdmission.set(task.file, admission)
   return admission
 }

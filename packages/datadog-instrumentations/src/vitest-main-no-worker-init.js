@@ -14,8 +14,6 @@ const {
   logAttemptToFixTestExecution,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
-  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
-  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getTestName,
@@ -57,10 +55,6 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   '..',
   'ci',
   'vitest-no-worker-init-setup.mjs'
-)
-const VITEST_EFD_SUITE_ADMISSION_FILE = path.join(
-  path.dirname(VITEST_NO_WORKER_INIT_SETUP_FILE),
-  'vitest-efd-suite-admission.mjs'
 )
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
@@ -351,8 +345,6 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
       earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
       efdSuiteAdmissionBrowserCommand: VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND,
-      efdSuiteAdmissionRequestCode: VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
-      efdSuiteAdmissionResponseCode: VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
       isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
@@ -480,9 +472,6 @@ function allowVitestBrowserSetupFile (viteConfig) {
 
   if (!allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
     allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
-  }
-  if (!allow.includes(VITEST_EFD_SUITE_ADMISSION_FILE)) {
-    allow.push(VITEST_EFD_SUITE_ADMISSION_FILE)
   }
 }
 

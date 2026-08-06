@@ -1,7 +1,5 @@
 import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 
-import { requestEfdSuiteAdmission } from './vitest-efd-suite-admission.mjs'
-
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
@@ -11,8 +9,6 @@ const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
 const efdSuiteAdmissionBrowserCommand = providedContext.efdSuiteAdmissionBrowserCommand
-const efdSuiteAdmissionRequestCode = providedContext.efdSuiteAdmissionRequestCode
-const efdSuiteAdmissionResponseCode = providedContext.efdSuiteAdmissionResponseCode
 const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || {
   durationRetryCounts: [],
   schedulingRetryCount: 0,
@@ -40,6 +36,7 @@ const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
+let browserCommands
 let now
 let timeOrigin
 // Use an unfaked monotonic clock in Node and Vitest's parent frame in Browser Mode.
@@ -54,19 +51,34 @@ if (typeof globalThis.process?.uptime === 'function') {
   timeOrigin = Number.isFinite(clock?.timeOrigin) ? clock.timeOrigin : Date.now() - now()
 }
 
+/**
+ * Requests permission from the Vitest main process to schedule Browser Mode EFD retries for one suite.
+ *
+ * @param {string} testSuite
+ * @param {boolean} hasNewTest
+ * @returns {Promise<boolean>}
+ */
+async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
+  try {
+    if (!browserCommands) {
+      const vitestBrowser = await import('vitest/browser')
+      browserCommands = vitestBrowser.commands
+    }
+    return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
+  } catch (error) {
+    // Browser Mode setup runs without dd-trace, so the tracer logger is unavailable.
+    globalThis.console?.error('Datadog Test Optimization could not request Vitest EFD suite admission.', error)
+    return false
+  }
+}
+
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
   beforeAll(async function ({}, suite) {
     suite ||= arguments[0]
     const efdSuiteCandidate = getEarlyFlakeDetectionSuiteCandidate(suite)
     const isEfdSuiteAdmissionAllowed = !efdSuiteCandidate || !isEfdSuiteAdmissionEnabled ||
-      await requestEfdSuiteAdmission({
-        browserCommand: efdSuiteAdmissionBrowserCommand,
-        hasNewTest: efdSuiteCandidate.hasNewTest,
-        requestCode: efdSuiteAdmissionRequestCode,
-        responseCode: efdSuiteAdmissionResponseCode,
-        testSuite: efdSuiteCandidate.testSuite,
-      })
+      await requestBrowserEfdSuiteAdmission(efdSuiteCandidate.testSuite, efdSuiteCandidate.hasNewTest)
     applyExecutionChanges(suite, isEfdSuiteAdmissionAllowed)
   })
 
