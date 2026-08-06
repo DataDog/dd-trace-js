@@ -214,8 +214,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       'span.kind': SPAN_KIND_METRIC_MAP[aggKey.spanKind] ?? 'SPAN_KIND_INTERNAL',
     }
 
-    if (this.#otelSemanticsEnabled) return raw
-
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
@@ -227,6 +225,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }
 
     // TODO: additional_metric_tags support is still evolving/TBD across most SDKs; not implemented here yet.
+
+    if (this.#otelSemanticsEnabled) return raw
 
     raw['datadog.operation.name'] = aggKey.name
     if (aggKey.type) raw['datadog.span.type'] = aggKey.type

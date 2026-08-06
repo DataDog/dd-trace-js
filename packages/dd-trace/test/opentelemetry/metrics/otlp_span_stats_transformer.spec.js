@@ -315,7 +315,7 @@ describe('OtlpStatsTransformer', () => {
       transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true)
     })
 
-    it('emits only the SMC default attributes', () => {
+    it('retains OTel attributes and suppresses only Datadog attributes', () => {
       const span = makeTopLevelSpan({
         error: 1,
         meta: {
@@ -333,8 +333,13 @@ describe('OtlpStatsTransformer', () => {
         'span.name': 'GET /foo',
         'service.name': 'svc',
         'span.kind': 'SPAN_KIND_INTERNAL',
+        'http.response.status_code': 500,
+        'http.request.method': 'GET',
+        'http.route': '/users/:id',
+        'rpc.response.status_code': 'INTERNAL',
         'status.code': 'STATUS_CODE_ERROR',
       })
+      assert.ok(!Object.keys(attrs).some(key => key.startsWith('datadog.') || key.startsWith('_datadog.')))
     })
 
     it('coalesces dimensions hidden by OTel-semantics mode', () => {
