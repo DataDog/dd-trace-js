@@ -51,19 +51,14 @@ describe('buildResourceAttributes', () => {
     assert.strictEqual(attrs['service.version'], '1.0.0')
   })
 
-  it('includes datadog.runtime_id from tags when otelSemanticsEnabled is false', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: false })
+  it('includes datadog.runtime_id from tags', () => {
+    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' })
     assert.strictEqual(attrs['datadog.runtime_id'], 'abc-123')
   })
 
-  it('omits dd.* attributes when otelSemanticsEnabled is true', () => {
-    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: true })
-    assert.ok(!Object.keys(attrs).some(k => k.startsWith('datadog.')))
-  })
-
-  it('includes datadog.process_tags as a single array attribute when otelSemanticsEnabled is false', () => {
+  it('includes datadog.process_tags as a single array attribute', () => {
     processTags.initialize()
-    const attrs = buildResourceAttributes({}, { otelSemanticsEnabled: false })
+    const attrs = buildResourceAttributes({})
     assert.ok(Array.isArray(attrs['datadog.process_tags']))
     assert.ok(!('datadog.entrypoint.type' in attrs))
   })

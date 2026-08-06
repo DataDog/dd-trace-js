@@ -78,7 +78,7 @@ function initializeOpenTelemetryMetrics (config) {
   metrics.setGlobalMeterProvider(meterProvider)
 }
 
-function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
+function buildResourceAttributes (tags, { reportHostname, service, env, serviceVersion } = {}) {
   const attrs = {
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.language': 'nodejs',
@@ -89,13 +89,11 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
   if (env) attrs['deployment.environment.name'] = env
   if (reportHostname) attrs['host.name'] = os.hostname()
 
-  if (!otelSemanticsEnabled) {
-    if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-    // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
-    const processTagsArray = processTags.tagsArray
-    if (processTagsArray?.length) {
-      attrs['datadog.process_tags'] = processTagsArray
-    }
+  if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+  // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
+  const processTagsArray = processTags.tagsArray
+  if (processTagsArray?.length) {
+    attrs['datadog.process_tags'] = processTagsArray
   }
   return attrs
 }
@@ -105,7 +103,6 @@ function createOtlpSpanStatsExporter (config) {
   const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
   const resourceAttributes = buildResourceAttributes(config.tags, {
     reportHostname: config.reportHostname,
-    otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     service: config.service,
     env: config.env,
     serviceVersion: config.version,
@@ -114,7 +111,6 @@ function createOtlpSpanStatsExporter (config) {
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     protocol,
     resourceAttributes,
-    config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )

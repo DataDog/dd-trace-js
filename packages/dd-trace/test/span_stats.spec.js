@@ -592,20 +592,15 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
   })
 
-  it('should split OTLP trace roots only when their attribute is exported', () => {
+  it('should split OTLP trace roots when their attribute is exported', () => {
     const childSpan = { ...topLevelSpan, parent_id: { toString: () => '1' } }
-    const defaultProcessor = new SpanStatsProcessor(config, otlpExporter)
-    const semanticsProcessor = new SpanStatsProcessor(config, otlpExporter, true)
-    clearTimeout(defaultProcessor.timer)
-    clearTimeout(semanticsProcessor.timer)
+    const processor = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(processor.timer)
 
-    defaultProcessor.onSpanFinished(topLevelSpan)
-    defaultProcessor.onSpanFinished(childSpan)
-    semanticsProcessor.onSpanFinished(topLevelSpan)
-    semanticsProcessor.onSpanFinished(childSpan)
+    processor.onSpanFinished(topLevelSpan)
+    processor.onSpanFinished(childSpan)
 
-    assert.strictEqual(defaultProcessor.buckets.values().next().value.size, 2)
-    assert.strictEqual(semanticsProcessor.buckets.values().next().value.size, 1)
+    assert.strictEqual(processor.buckets.values().next().value.size, 2)
   })
 
   it('should not call OTLP exporter on interval when drained is empty', () => {

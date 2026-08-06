@@ -20,7 +20,7 @@ class SpanProcessor {
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config, otlpStatsExporter, config.DD_TRACE_OTEL_SEMANTICS_ENABLED)
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)

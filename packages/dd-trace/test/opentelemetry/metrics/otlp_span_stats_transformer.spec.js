@@ -76,11 +76,11 @@ describe('OtlpStatsTransformer', () => {
     ({ protoMetricsService, protoAggregationTemporality } = getProtobufTypes())
   })
 
-  describe('JSON format (default mode)', () => {
+  describe('JSON format', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json')
     })
 
     it('emits a single histogram metric with the correct name, unit and temporality', () => {
@@ -104,6 +104,7 @@ describe('OtlpStatsTransformer', () => {
           [SPAN_KIND]: 'server',
           [GRPC_STATUS_CODE]: 'OK',
           [ORIGIN_KEY]: 'synthetics',
+          [SVC_SRC_KEY]: 'integration',
         },
       })
       const payload = JSON.parse(transformer.transform(
@@ -124,6 +125,7 @@ describe('OtlpStatsTransformer', () => {
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
         'datadog.origin': 'synthetics',
+        'datadog.svc_src': 'integration',
         'datadog.span.top_level': false,
         'datadog.is_trace_root': true,
       })
@@ -191,6 +193,12 @@ describe('OtlpStatsTransformer', () => {
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
 
       assert.ok(!dataPointsOf(payload)[0].attributes.some(({ key }) => key === 'datadog.is_trace_root'))
+    })
+
+    it('omits datadog.svc_src when service source is empty', () => {
+      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS))
+
+      assert.ok(!dataPointsOf(payload)[0].attributes.some(({ key }) => key === 'datadog.svc_src'))
     })
 
     it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
@@ -330,70 +338,11 @@ describe('OtlpStatsTransformer', () => {
     })
   })
 
-  describe('JSON format (OTel-semantics mode)', () => {
-    let transformer
-
-    before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true)
-    })
-
-    it('retains OTel attributes and suppresses only Datadog attributes', () => {
-      const span = makeTopLevelSpan({
-        error: 1,
-        meta: {
-          [HTTP_STATUS_CODE]: 500,
-          [HTTP_METHOD]: 'GET',
-          [HTTP_ROUTE]: '/users/:id',
-          [GRPC_STATUS_CODE]: 'INTERNAL',
-          [ORIGIN_KEY]: 'synthetics',
-        },
-      })
-      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
-      const attrs = attrMapOf(dataPointsOf(payload)[0])
-
-      assert.deepStrictEqual(attrs, {
-        'span.name': 'GET /foo',
-        'service.name': 'svc',
-        'span.kind': 'SPAN_KIND_INTERNAL',
-        'http.response.status_code': 500,
-        'http.request.method': 'GET',
-        'http.route': '/users/:id',
-        'rpc.response.status_code': 'INTERNAL',
-        'status.code': 'STATUS_CODE_ERROR',
-      })
-      assert.ok(!Object.keys(attrs).some(key => key.startsWith('datadog.')))
-    })
-
-    it('coalesces dimensions hidden by OTel-semantics mode', () => {
-      const spans = [
-        makeSpan({
-          name: 'first.operation',
-          type: 'web',
-          meta: { [ORIGIN_KEY]: 'synthetics', [SVC_SRC_KEY]: 'integration' },
-        }),
-        makeSpan({
-          name: 'second.operation',
-          type: 'custom',
-          meta: {},
-          parent_id: { toString: () => '1' },
-        }),
-      ]
-      const drained = makeDrained(12340000000000, spans, { includeTraceRoot: true })
-      assert.strictEqual(drained[0].bucket.size, 2)
-
-      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
-      const points = dataPointsOf(payload)
-
-      assert.strictEqual(points.length, 1)
-      assert.strictEqual(points[0].count, 2)
-    })
-  })
-
   describe('protobuf format', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf', false)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf')
     })
 
     it('emits a valid ExportMetricsServiceRequest with a single duration metric', () => {
@@ -407,7 +356,10 @@ describe('OtlpStatsTransformer', () => {
 
     it('uses delta temporality and native typed attribute values', () => {
       const delta = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-      const spans = [makeSpan({ resource: 'GET /a' }), makeTopLevelSpan({ error: 1, resource: 'GET /b' })]
+      const spans = [
+        makeSpan({ resource: 'GET /a' }),
+        makeTopLevelSpan({ error: 1, resource: 'GET /b', meta: { [SVC_SRC_KEY]: 'integration' } }),
+      ]
       const buf = transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS)
       const decoded = protoMetricsService.decode(buf)
       const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
@@ -423,6 +375,9 @@ describe('OtlpStatsTransformer', () => {
       )
       assert.ok(okNotTopLevel, 'should have ok not-top-level data point')
       assert.ok(errTopLevel, 'should have error top-level data point')
+      assert.ok(errTopLevel.attributes.some(a =>
+        a.key === 'datadog.svc_src' && a.value.stringValue === 'integration'
+      ), 'service source should be an OTLP string')
     })
   })
 })

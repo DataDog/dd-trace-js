@@ -1,6 +1,5 @@
 'use strict'
 
-const { LogCollapsingLowestDenseDDSketch } = require('../../../../../vendor/dist/@datadog/sketches-js')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { GRPC_STATUS_NAMES } = require('../../constants')
@@ -60,16 +59,12 @@ const STATUS_CODE_OK = 'STATUS_CODE_OK'
 const STATUS_CODE_ERROR = 'STATUS_CODE_ERROR'
 
 class OtlpStatsTransformer extends OtlpTransformerBase {
-  #otelSemanticsEnabled
-
   /**
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes
    * @param {string} protocol
-   * @param {boolean} [otelSemanticsEnabled]
    */
-  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false) {
+  constructor (resourceAttributes, protocol) {
     super(resourceAttributes, protocol, 'span-stats')
-    this.#otelSemanticsEnabled = otelSemanticsEnabled
   }
 
   /**
@@ -103,43 +98,26 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       for (const aggStats of bucket.values()) {
         const baseAttributes = this.#buildAttributes(aggStats.aggKey)
 
-        if (this.#otelSemanticsEnabled) {
-          const okDist = new LogCollapsingLowestDenseDDSketch()
-          okDist.merge(aggStats.topLevelOkDistribution)
-          okDist.merge(aggStats.nonTopLevelOkDistribution)
-          const errDist = new LogCollapsingLowestDenseDDSketch()
-          errDist.merge(aggStats.topLevelErrorDistribution)
-          errDist.merge(aggStats.nonTopLevelErrorDistribution)
-          this.#addDistribution(distributions, okDist, startNano, endNano, {
-            ...baseAttributes,
-            'status.code': STATUS_CODE_OK,
-          })
-          this.#addDistribution(distributions, errDist, startNano, endNano, {
-            ...baseAttributes,
-            'status.code': STATUS_CODE_ERROR,
-          })
-        } else {
-          this.#addDistribution(distributions, aggStats.topLevelOkDistribution, startNano, endNano, {
-            ...baseAttributes,
-            'datadog.span.top_level': true,
-            'status.code': STATUS_CODE_OK,
-          })
-          this.#addDistribution(distributions, aggStats.topLevelErrorDistribution, startNano, endNano, {
-            ...baseAttributes,
-            'datadog.span.top_level': true,
-            'status.code': STATUS_CODE_ERROR,
-          })
-          this.#addDistribution(distributions, aggStats.nonTopLevelOkDistribution, startNano, endNano, {
-            ...baseAttributes,
-            'datadog.span.top_level': false,
-            'status.code': STATUS_CODE_OK,
-          })
-          this.#addDistribution(distributions, aggStats.nonTopLevelErrorDistribution, startNano, endNano, {
-            ...baseAttributes,
-            'datadog.span.top_level': false,
-            'status.code': STATUS_CODE_ERROR,
-          })
-        }
+        this.#addDistribution(distributions, aggStats.topLevelOkDistribution, startNano, endNano, {
+          ...baseAttributes,
+          'datadog.span.top_level': true,
+          'status.code': STATUS_CODE_OK,
+        })
+        this.#addDistribution(distributions, aggStats.topLevelErrorDistribution, startNano, endNano, {
+          ...baseAttributes,
+          'datadog.span.top_level': true,
+          'status.code': STATUS_CODE_ERROR,
+        })
+        this.#addDistribution(distributions, aggStats.nonTopLevelOkDistribution, startNano, endNano, {
+          ...baseAttributes,
+          'datadog.span.top_level': false,
+          'status.code': STATUS_CODE_OK,
+        })
+        this.#addDistribution(distributions, aggStats.nonTopLevelErrorDistribution, startNano, endNano, {
+          ...baseAttributes,
+          'datadog.span.top_level': false,
+          'status.code': STATUS_CODE_ERROR,
+        })
       }
 
       for (const { sketch, startNano, endNano, attributes } of distributions.values()) {
@@ -226,11 +204,10 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
     // TODO: additional_metric_tags support is still evolving/TBD across most SDKs; not implemented here yet.
 
-    if (this.#otelSemanticsEnabled) return raw
-
     raw['datadog.operation.name'] = aggKey.name
     if (aggKey.type) raw['datadog.span.type'] = aggKey.type
     if (aggKey.synthetics) raw['datadog.origin'] = 'synthetics'
+    if (aggKey.srvSrc) raw['datadog.svc_src'] = aggKey.srvSrc
     if (typeof aggKey.isTraceRoot === 'boolean') raw['datadog.is_trace_root'] = aggKey.isTraceRoot
 
     return raw

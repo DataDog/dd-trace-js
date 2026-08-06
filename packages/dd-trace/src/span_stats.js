@@ -214,16 +214,14 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-  } = {}, otlpExporter, otelSemanticsEnabled = false) {
+  } = {}, otlpExporter) {
     if (!otlpExporter) {
       this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets({
-      includeTraceRoot: Boolean(otlpExporter) && !otelSemanticsEnabled,
-    })
+    this.buckets = new TimeBuckets({ includeTraceRoot: Boolean(otlpExporter) })
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
