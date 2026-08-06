@@ -5,8 +5,15 @@ const path = require('path')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
-const { assertObjectContains } = require('../helpers')
+const {
+  assertClientComputedStats,
+  assertObjectContains,
+  FakeAgent,
+  sandboxCwd,
+  spawnProc,
+  stopProc,
+  useSandbox,
+} = require('../helpers')
 const { USER_KEEP } = require('../../ext/priority')
 const {
   APM_TRACING_ENABLED_KEY,
@@ -112,7 +119,7 @@ describe('AIGuard SDK integration tests', () => {
   })
 
   function assertStandaloneAiGuardTrace (headers, payload) {
-    assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+    assertClientComputedStats(headers)
 
     const requestSpan = payload[0].find(span => span.name === 'express.request')
     const guardSpan = payload[0].find(span => span.name === 'ai_guard')
