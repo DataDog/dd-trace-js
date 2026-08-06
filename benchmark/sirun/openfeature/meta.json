@@ -19,7 +19,7 @@
     "flag-eval-logging-hook-stress": {
       "env": {
         "VARIANT": "flag-eval-logging-hook",
-        "OPERATIONS": "10000000",
+        "OPERATIONS": "1000000",
         "NUM_FLAGS": "10",
         "NUM_USERS": "1000",
         "NUM_FIELDS": "250"
@@ -46,7 +46,7 @@
     "aggregate-stress": {
       "env": {
         "VARIANT": "aggregate",
-        "OPERATIONS": "500000",
+        "OPERATIONS": "100000",
         "NUM_FLAGS": "10",
         "NUM_USERS": "1000",
         "NUM_FIELDS": "250"
