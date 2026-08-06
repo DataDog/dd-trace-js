@@ -9,16 +9,26 @@ const { createNativeSpanDrain } = require('../native-span-drain')
 nock.disableNetConnect()
 nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).reply(200, '{}')
 
-const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
-const nativeSpanDrain = createNativeSpanDrain(tracer)
+const { FINISH, SHAPE = 'plain' } = process.env
 
+const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
+const nativeSpans = tracer._tracer._nativeSpans
+const nativeSpanDrain = SHAPE === 'tags-and-otel' ? createNativeSpanDrain(tracer) : undefined
+
+let queuedSpans = 0
+
+/** @param {import('../../../packages/dd-trace/src/opentracing/span')} span */
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
-  nativeSpanDrain.add(span)
+  if (nativeSpanDrain) {
+    nativeSpanDrain.add(span)
+  } else if (nativeSpans && ++queuedSpans === BATCH) {
+    // This benchmark excludes processing and export; discard queued native mutations before the buffer fills.
+    nativeSpans.resetChangeQueue()
+    queuedSpans = 0
+  }
   this._erase(trace, [])
 }
-
-const { FINISH, SHAPE = 'plain' } = process.env
 
 // Total spans created per process. The count stays env-driven so CI can keep
 // each native-mode variant under the job timeout while still making tracer load
@@ -104,13 +114,17 @@ function startOne () {
 }
 
 async function main () {
-  await nativeSpanDrain.drain()
+  await nativeSpanDrain?.drain()
 
   guard.loopStart()
-  if (FINISH === 'now') {
+  if (FINISH === 'now' && nativeSpanDrain) {
     for (let iteration = 0; iteration < OPERATIONS; iteration++) {
       startOne().finish()
       if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
+    }
+  } else if (FINISH === 'now') {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      startOne().finish()
     }
   } else {
     // Deferred finish in batches: start BATCH spans, finish them after the batch is
@@ -126,10 +140,11 @@ async function main () {
       }
       spans.length = 0
       remaining -= size
-      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
+      if (nativeSpanDrain?.needsDrain()) await nativeSpanDrain.drain()
     }
   }
-  await nativeSpanDrain.drain()
+  await nativeSpanDrain?.drain()
+  nativeSpans?.resetChangeQueue()
   // Native-mode CI counts are intentionally lower than the old JS-only counts so
   // the candidate shard finishes before the job timeout. The older baseline source
   // can run those counts in under a second, so allow a higher startup share there

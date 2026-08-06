@@ -10,6 +10,9 @@ const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+// The JS encoder flushes at 8 MiB; libdatadog exposes no pre-serialization byte
+// count. Bound the full span objects retained during the batching window instead.
+const MAX_PENDING_SPANS = 2000
 
 // Native sends mirror legacy exporter request/response/error health metrics.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
@@ -44,6 +47,7 @@ class NativeExporter {
   #firstFlushSent = false
   #flushCallbacks = []
   #activeSpans = 0
+  #pendingSpanCount = 0
   #urlUpdateCallbacks = []
   // Fatal native exporter construction errors cannot recover.
   #disabled = false
@@ -257,11 +261,14 @@ class NativeExporter {
     // Preserve each SpanProcessor export call as a trace chunk. A delayed child
     // that finishes later must remain a second chunk rather than being merged
     // back into its parent's earlier export call.
-    if (spans.length > 0) this._pendingSpanChunks.push(spans)
+    if (spans.length > 0) {
+      this._pendingSpanChunks.push(spans)
+      this.#pendingSpanCount += spans.length
+    }
 
     const { flushInterval } = this._config
 
-    if (flushInterval === 0) {
+    if (flushInterval === 0 || this.#pendingSpanCount >= MAX_PENDING_SPANS) {
       this.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
@@ -318,12 +325,15 @@ class NativeExporter {
   }
 
   #finishSend () {
-    if (this._pendingSpanChunks.length > 0) {
-      this.flush()
-    } else {
+    if (this._pendingSpanChunks.length === 0) {
       this.#finishFlushCallbacks()
       this.#finishUrlUpdateCallbacks()
+      return
     }
+
+    // Explicit and elapsed flushes clear the timer. Ordinary traffic keeps its
+    // existing timer so a send completion does not bypass the batching window.
+    if (this.#timer === undefined) this.flush()
   }
 
   #handleSendError (err) {
@@ -338,6 +348,7 @@ class NativeExporter {
     if (err?.name === 'NativeExporterBuildError') {
       this.#disabled = true
       this._pendingSpanChunks = []
+      this.#pendingSpanCount = 0
       clearTimeout(this.#timer)
       this.#timer = undefined
       log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
@@ -375,6 +386,7 @@ class NativeExporter {
 
     const spanChunks = this._pendingSpanChunks
     this._pendingSpanChunks = []
+    this.#pendingSpanCount = 0
 
     // Preserve processor export-call boundaries while splitting mixed traces.
     const groups = this.#groupsFromSpanChunks(spanChunks, true)
@@ -412,7 +424,8 @@ class NativeExporter {
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        // Explicit flush callbacks wait for newly queued sends too.
+        // Flush callbacks wait until the exporter is idle so explicit flush
+        // endpoints only acknowledge once all queued sends have reached the agent.
         this.#finishSend()
       }, (err) => {
         this.#handleSendError(err)

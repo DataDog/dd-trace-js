@@ -141,9 +141,6 @@ function encodeSpanEventAttrs (attributes) {
 // module-local handoff is safe because construction is synchronous.
 let pendingNativeSpans = null
 
-// Suppress the parent constructor's redundant SetName operation.
-const noopSyncName = () => {}
-
 /**
  * DatadogSpan backed by native storage.
  */
@@ -174,10 +171,9 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore name synchronization, then copy initial tags that the parent
-    // constructor wrote directly into the JS cache.
-    delete this._spanContext._syncNameToNative
-
+    // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
+    // which bypasses NativeSpanContext.setTag's native-sync path. Push
+    // them to WASM now (no JS-cache write — the parent already did it).
     if (fields.tags) {
       this._spanContext.syncToNativeOnly(fields.tags)
     }
@@ -186,7 +182,10 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Construct the native span context and initial combined create operation.
+   * Allocate a native slot, build a NativeSpanContext, queue the
+   * combined CreateSpan op (Create + SetName + SetStart in one WASM
+   * call). The inherited constructor stores the initial name locally after
+   * this returns; final synchronization owns subsequent name changes.
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -204,7 +203,6 @@ class NativeDatadogSpan extends DatadogSpan {
 
     let spanContext
     let startTime
-    let traceId
     let parentId
 
     let baggage = {}
@@ -229,12 +227,10 @@ class NativeDatadogSpan extends DatadogSpan {
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
-        tracerService,
         tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = buildNativeTraceId(existingContext._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = existingContext._parentId
     } else if (parent) {
       const spanId = id()
@@ -246,12 +242,10 @@ class NativeDatadogSpan extends DatadogSpan {
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate,
-        tracerService,
         tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = buildNativeTraceId(parent._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = parent._spanId
     } else {
       // Root span - generate new trace ID and span ID.
@@ -261,7 +255,6 @@ class NativeDatadogSpan extends DatadogSpan {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: spanId,
         spanId,
-        tracerService,
         tracerServiceLower,
       })
       spanContext._trace.startTime = startTime
@@ -271,9 +264,6 @@ class NativeDatadogSpan extends DatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
         spanContext._trace.tags['_dd.p.tid'] = tidHex
-        traceId = buildNativeTraceId(spanId, tidHex)
-      } else {
-        traceId = spanId
       }
       parentId = null
 
@@ -292,11 +282,12 @@ class NativeDatadogSpan extends DatadogSpan {
       : fields.startTime
     fields.startTime = createStartTime
 
-    // Seed immutable/default fields so final sync can skip unchanged values.
-    spanContext._setNameLocal(operationName)
-    spanContext._syncNameToNative = noopSyncName
-
-    // Share one native segment id across the local trace.
+    // CreateSpanFull carries the common immutable/default core fields natively
+    // (name, service, resource, type, start), so final sync can skip no-op
+    // overwrites unless user tags changed them.
+    // One segment id per local trace, shared by all its spans via the
+    // shared `_trace` object (the local root allocates; children reuse).
+    // Required by the native chunk flush, which keys a chunk by segment.
     const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
     const nativeService = typeof fields.tags?.['service.name'] === 'string'
       ? fields.tags['service.name']
@@ -307,6 +298,13 @@ class NativeDatadogSpan extends DatadogSpan {
     const nativeType = typeof fields.tags?.['span.type'] === 'string'
       ? fields.tags['span.type']
       : ''
+    // A trace ID is immutable and the trace object is shared by every local
+    // span. Reuse the full 128-bit byte representation instead of rebuilding
+    // its high half and allocating a 16-entry array for every child.
+    const traceId = (spanContext._trace._nativeTraceId ??= buildNativeTraceId(
+      spanContext._traceId,
+      spanContext._trace.tags['_dd.p.tid']
+    ))
 
     nativeSpans.queueCreateSpanFull(
       spanContext._nativeSpanId,

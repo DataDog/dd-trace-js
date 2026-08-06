@@ -22,7 +22,6 @@ const {
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_TYPE_LENGTH,
-  MAX_RESOURCE_NAME_LENGTH,
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('../encode/tags-processors')
@@ -34,7 +33,7 @@ const PROCESS_TAGS_META_KEY = '_dd.tags.process'
  * Span context with an authoritative JS tag cache and final native sync.
  * Final formatting handles deletion and type replacement that WASM cannot.
  */
-const { MEASURED } = tags
+const { BASE_SERVICE, MEASURED } = tags
 const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
 
 function truncateWithEllipsis (value, max) {
@@ -56,8 +55,7 @@ function normalizeService (service) {
 }
 
 function normalizeResource (resource, name) {
-  resource ||= name
-  return resource.length > MAX_RESOURCE_NAME_LENGTH ? resource.slice(0, MAX_RESOURCE_NAME_LENGTH) : resource
+  return resource || name
 }
 
 function normalizeType (type) {
@@ -90,8 +88,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {object} [props.baggageItems] - Baggage items
    * @param {object} [props.trace] - Shared trace object
    * @param {object} [props.tracestate] - W3C tracestate
-   * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
-   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for extra-service registration
+   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for base-service inference
    */
   constructor (nativeSpans, props) {
     // Native sync begins after parent construction.
@@ -111,7 +108,6 @@ class NativeSpanContext extends DatadogSpanContext {
     leId[6] = beBuf[1]
     leId[7] = beBuf[0]
     this._nativeSpanId = leId
-    this._tracerService = props.tracerService // Store for BASE_SERVICE check
     this._tracerServiceLower = props.tracerServiceLower || ''
   }
 
@@ -197,6 +193,7 @@ class NativeSpanContext extends DatadogSpanContext {
     let service
     let type = ''
     let extraService
+    let baseService
 
     for (const key of Object.keys(tags)) {
       const value = tags[key]
@@ -215,6 +212,9 @@ class NativeSpanContext extends DatadogSpanContext {
         case 'resource.name':
           if (typeof value !== 'string') return false
           resource = truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+          break
+        case BASE_SERVICE:
+          baseService = value
           break
         case 'span.type':
           if (typeof value !== 'string') return false
@@ -263,7 +263,15 @@ class NativeSpanContext extends DatadogSpanContext {
     service = normalizeService(service)
     type = normalizeType(type)
 
-    if (extraService !== undefined) registerExtraService(extraService)
+    if (extraService !== undefined) {
+      baseService = this._tracerServiceLower
+      this.setTag(BASE_SERVICE, baseService)
+      registerExtraService(extraService)
+    }
+    if (baseService !== undefined) {
+      if (typeof baseService !== 'string') return false
+      metaBatch.push(BASE_SERVICE, truncateWithEllipsis(baseService, MAX_META_VALUE_LENGTH))
+    }
     this.#syncCoreFields(name, resource, service, type, 0)
     const spanId = this._nativeSpanId
     if (metaBatch.length > 0) this.#nativeSpans.queueBatchMetaFlat(spanId, metaBatch)
@@ -408,30 +416,20 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Set a construction-time name without a native operation.
-   * @param {string} name Span name
-   */
-  _setNameLocal (name) {
-    this[NAME_VALUE] = name
-  }
-
-  /**
-   * Sync a changed span name.
-   * @param {string} name Span name
-   */
-  _syncNameToNative (name) {
-    const stringName = String(name)
-    this.#nativeSpans.queueOp(
-      OpCode.SetName,
-      this._nativeSpanId,
-      stringName
-    )
-    this.#nativeName = stringName
-  }
-
-  /**
-   * Apply shared OTel HTTP remapping to the final native representation.
-   * Native stats consequently observe the remapped keys under this opt-in.
+   * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
+   * native output at finish. Datadog HTTP tags are skipped by
+   * syncFinalTagsToNative(), so build a formatted view from the JS tag cache,
+   * run the shared `applyHttpOtelSemantics`, and sync the resulting OTel
+   * meta/metrics (plus any error/resource change) into WASM. No-op for
+   * non-HTTP spans. Only invoked when the tracer runs with
+   * DD_TRACE_OTEL_SEMANTICS_ENABLED.
+   *
+   * Divergence from master: because the DD HTTP tags are held out of WASM
+   * entirely (not just renamed at serialization), the native trace-stats
+   * concentrator (which runs in WASM at flush) sees the OTel names rather than
+   * the DD `http.status_code`/etc. Master kept the DD tags on the span so stats
+   * were unaffected. This only matters for the OTEL-semantics + native-stats
+   * intersection and is an accepted limitation of the opt-in flag.
    */
   applyOtelHttpSemantics () {
     const tags = this.getTags()
