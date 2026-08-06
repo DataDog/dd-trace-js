@@ -21,6 +21,38 @@ class MySQLPlugin extends DatabasePlugin {
     })
 
     this.addBind(`apm:${this.component}:connection:finish`, ctx => ctx.currentStore)
+
+    // Explicit getConnection calls get an acquire span. Pool queries report their internal acquire
+    // on the query span instead, so each acquire is counted once.
+    this.addSub(`apm:${this.component}:pool:acquire:start`, ctx => {
+      const operation = `${this.component}.pool.acquire`
+
+      this.startSpan(operation, {
+        service: this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system }),
+        resource: operation,
+        startTime: ctx.startTime,
+        type: 'sql',
+        kind: 'client',
+        meta: {
+          'db.type': this.system,
+          'db.user': ctx.conf.user,
+          'db.name': ctx.conf.database,
+          'out.host': ctx.conf.host,
+          [CLIENT_PORT_KEY]: ctx.conf.port,
+        },
+      }, ctx)
+    })
+
+    this.addSub(`apm:${this.component}:pool:acquire:finish`, ctx => {
+      const span = ctx.currentStore?.span
+      if (span === undefined) return
+
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
+      span.setTag(`${this.component}.pool.wait_time`, ctx.poolWaitTime)
+      this.finish(ctx)
+    })
   }
 
   bindStart (ctx) {
@@ -38,6 +70,11 @@ class MySQLPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: ctx.conf.port,
       },
     }, ctx)
+
+    if (ctx.poolWaitTime !== undefined) {
+      span.setTag(`${this.component}.pool.wait_time`, ctx.poolWaitTime)
+    }
+
     ctx.sql = this.injectDbmQuery(span, ctx.sql, service.name)
 
     return ctx.currentStore
