@@ -35,7 +35,7 @@ if (!isSyncLoaderRegistered) {
 }
 
 function shouldRegisterSyncLoaderHooks () {
-  if (!isSyncLoaderHookVersionSupported()) {
+  if (!isSyncLoaderHookVersionSupported() || !require('./packages/dd-trace/src/supports-register-hooks')()) {
     return false
   }
 

@@ -385,6 +385,38 @@ describe('rewriter loader', () => {
     assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
   })
 
+  it('rewrites CommonJS imported from ESM from the entrypoint hook', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-entrypoint-import-cjs-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    writeFileSync(join(root, 'main.mjs'), `
+      import { createRequire } from 'node:module'
+      import ai from 'ai'
+
+      const require = createRequire(import.meta.url)
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = ai.getTracer()
+      console.log(JSON.stringify({ starts, value }))
+    `)
+
+    const result = runFixture(root, 'main.mjs', {
+      NODE_OPTIONS: `--require ${rewriterLoaderPath}`,
+    })
+
+    assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
+  })
+
   it('leaves imported ESM to the loader when only the entrypoint hook is installed', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
@@ -452,6 +484,54 @@ describe('rewriter loader', () => {
     const result = runFixture(root, 'main.js', {
       NODE_OPTIONS: [
         `--require ${join(root, 'spoof-runtime.cjs')}`,
+        `--require ${rewriterLoaderPath}`,
+      ].join(' '),
+    })
+
+    assert.deepStrictEqual(result, {
+      compileChanged: true,
+      starts: 1,
+      value: 'tracer',
+    })
+  })
+
+  it('falls back to the compile hook on Electron', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-electron-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    // Electron's `electron:electron` modules make Node's load hook validation
+    // throw on the default step, so the hook must not be installed there.
+    writeFileSync(join(root, 'spoof-electron.cjs'), `
+      const Module = require('node:module')
+      Object.defineProperty(process.versions, 'electron', { value: '41.10.4' })
+      globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})] = Module.prototype._compile
+    `)
+    writeFileSync(join(root, 'main.js'), `
+      const Module = require('node:module')
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = require('ai').getTracer()
+      console.log(JSON.stringify({
+        compileChanged: Module.prototype._compile !== originalCompile,
+        starts,
+        value,
+      }))
+    `)
+
+    const result = runFixture(root, 'main.js', {
+      NODE_OPTIONS: [
+        `--require ${join(root, 'spoof-electron.cjs')}`,
         `--require ${rewriterLoaderPath}`,
       ].join(' '),
     })

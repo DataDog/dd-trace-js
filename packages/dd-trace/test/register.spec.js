@@ -66,6 +66,28 @@ describe('register.js', () => {
     assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
   })
 
+  it('falls back to the async loader on Electron', () => {
+    const register = sinon.stub()
+    const registerSyncLoaderHooks = sinon.stub().returns(true)
+    const supportsSyncHooks = sinon.stub().throws(new Error('should not be called'))
+
+    // Electron's `electron:electron` modules make Node reject the default load
+    // step as soon as any load hook is registered.
+    Object.defineProperty(process.versions, 'electron', { configurable: true, value: '41.10.4' })
+
+    try {
+      loadRegister({ register, registerSyncLoaderHooks, supportsSyncHooks })
+    } finally {
+      delete process.versions.electron
+    }
+
+    sinon.assert.notCalled(registerSyncLoaderHooks)
+    sinon.assert.notCalled(supportsSyncHooks)
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.notCalled(emitWarning)
+    assertSyncSourceRewritingInactive()
+  })
+
   it('warns and falls back if sync loader registration returns false', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(false)

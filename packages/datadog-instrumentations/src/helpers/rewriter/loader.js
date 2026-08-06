@@ -22,6 +22,7 @@ if (!globalThis[syncSourceRewritingSymbol] && !registerRequireLoadHook()) {
  */
 function registerRequireLoadHook () {
   if (typeof Module.registerHooks !== 'function') return false
+  if (!require('../../../../dd-trace/src/supports-register-hooks')()) return false
 
   try {
     // `module.registerHooks` exists since Node 22.15, but until nodejs/node#59929
@@ -37,13 +38,16 @@ function registerRequireLoadHook () {
       load (url, context, nextLoad) {
         const result = nextLoad(url, context)
 
-        // Match what the compile fallback used to see: every require() load,
-        // CommonJS and require(esm) alike, and nothing reached through `import`.
-        // Imported ESM belongs to the loader `register.js` installs, which is the
-        // only path that ever rewrote it.
-        if (globalThis[syncSourceRewritingSymbol] || !hasRequireCondition(context.conditions)) return result
+        if (globalThis[syncSourceRewritingSymbol]) return result
 
-        return rewriteResult(result, url, getFormat(result, context))
+        // Match every load the compile fallback used to see: all CommonJS, however
+        // it was reached, plus ESM pulled in through require(esm). Only imported
+        // ESM never reaches Module._compile, and it belongs to the loader
+        // `register.js` installs, which would otherwise rewrite it a second time.
+        const format = getFormat(result, context)
+        if (format !== 'commonjs' && !hasRequireCondition(context.conditions)) return result
+
+        return rewriteResult(result, url, format)
       },
     })
   } catch (error) {
