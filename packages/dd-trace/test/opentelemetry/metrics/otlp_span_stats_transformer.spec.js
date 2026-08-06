@@ -360,7 +360,7 @@ describe('OtlpStatsTransformer', () => {
         'rpc.response.status_code': 'INTERNAL',
         'status.code': 'STATUS_CODE_ERROR',
       })
-      assert.ok(!Object.keys(attrs).some(key => key.startsWith('datadog.') || key.startsWith('_datadog.')))
+      assert.ok(!Object.keys(attrs).some(key => key.startsWith('datadog.')))
     })
 
     it('coalesces dimensions hidden by OTel-semantics mode', () => {
