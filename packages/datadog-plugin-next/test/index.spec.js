@@ -85,7 +85,14 @@ describe('Plugin', function () {
       after(done => downstreamServer.close(done))
 
       const startServer = (
-        { withConfig, standalone, withHttp = true, httpResourceRenamingEnabled = false, serverFile = 'server' },
+        {
+          withConfig,
+          standalone,
+          withHttp = true,
+          httpResourceRenamingEnabled = false,
+          serverFile = 'server',
+          httpServerErrorStatuses,
+        },
         schemaVersion = 'v0',
         defaultToGlobalService = false
       ) => {
@@ -117,6 +124,9 @@ describe('Plugin', function () {
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0,
+              ...(httpServerErrorStatuses === undefined
+                ? undefined
+                : { DD_TRACE_HTTP_SERVER_ERROR_STATUSES: httpServerErrorStatuses }),
             },
           })
 
@@ -807,6 +817,29 @@ describe('Plugin', function () {
           }
         })
       }
+
+      describe('with configured HTTP server error statuses', () => {
+        startServer({
+          withConfig: false,
+          standalone: false,
+          httpServerErrorStatuses: '200',
+        })
+
+        it('should mark a configured status code as an error', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assertObjectContains(traces[0][1], {
+                name: 'next.request',
+                error: 1,
+                meta: {
+                  'http.status_code': '200',
+                },
+              })
+            }),
+            axios.get(`http://127.0.0.1:${port}/api/hello/world`),
+          ])
+        })
+      })
 
       describe('with configuration', () => {
         startServer({ withConfig: true, standalone: false })

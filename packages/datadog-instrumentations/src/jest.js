@@ -585,6 +585,15 @@ function isJestTestSkipped (test, hasFocusedTests, testNamePattern) {
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   const hasConcurrentTestsStartEvent = satisfies(jestVersion, '>=30.0.0')
+  const hasTestsInChildren = satisfies(jestVersion, '>=26.0.0')
+
+  /**
+   * @param {object} describeBlock
+   * @returns {object[]|undefined}
+   */
+  function getTestEntries (describeBlock) {
+    return hasTestsInChildren ? describeBlock?.children : describeBlock?.tests
+  }
 
   return class DatadogEnvironment extends BaseEnvironment {
     #activeDetachedEfdRetries
@@ -1467,7 +1476,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestState = registeredConcurrentTestState || this.concurrentTestStates.get(fn)
       let originalTest
       if (isEfdRetry && !efdRetryGates) {
-        originalTest = state.currentDescribeBlock?.children?.at(-1)
+        originalTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
         if (originalTest?.fn !== fn) {
           log.error('%s could not retain its original Jest test', retryType)
           return 0
@@ -1475,8 +1484,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       let registeredRetryCount = 0
       for (let retryIndex = 1; retryIndex <= retryCount; retryIndex++) {
-        const children = state.currentDescribeBlock?.children
-        const initialChildCount = children?.length
+        const testEntries = getTestEntries(state.currentDescribeBlock)
+        const initialTestCount = testEntries?.length
         let retryFn
         if (concurrentTestState) {
           const test = concurrentTestState.concurrentTest ??
@@ -1515,7 +1524,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (isEfdRetry) {
-          const retryTest = children?.length === initialChildCount + 1 ? children.at(-1) : undefined
+          const retryTest = testEntries?.length === initialTestCount + 1 ? testEntries.at(-1) : undefined
           if (retryTest?.fn !== retryFn) {
             log.error('%s could not retain its pre-registered Jest retry', retryType)
             continue
@@ -1545,8 +1554,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         return false
       }
 
-      const children = retryOptions.state.currentDescribeBlock?.children
-      const initialChildCount = children?.length
+      const testEntries = getTestEntries(retryOptions.state.currentDescribeBlock)
+      const initialTestCount = testEntries?.length
       try {
         const registeredRetryCount = this.retryTest(retryOptions)
         if (registeredRetryCount === retryOptions.retryCount) return true
@@ -1554,8 +1563,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         log.error('%s could not register retries', retryOptions.retryType, error)
       }
 
-      if (children && initialChildCount !== undefined) {
-        const retryTests = children.splice(initialChildCount)
+      if (testEntries && initialTestCount !== undefined) {
+        const retryTests = testEntries.splice(initialTestCount)
         for (const retryTest of retryTests) {
           removedRetryTests.add(retryTest)
           const retryCtx = this.concurrentTestStates.get(retryTest.fn)?.ctx
@@ -1588,7 +1597,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {number} Retries left to run.
      */
     discardEfdRetries (testName, executedTest, retryCount = 0) {
-      const siblings = executedTest.parent?.children
+      const siblings = getTestEntries(executedTest.parent)
       const executedTestIndex = siblings ? siblings.indexOf(executedTest) : -1
       if (executedTestIndex === -1) return 0
 
@@ -1732,7 +1741,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (!this.#discardedEfdRetryTests) return
 
       for (const retryTest of this.#discardedEfdRetryTests) {
-        const siblings = retryTest.parent?.children
+        const siblings = getTestEntries(retryTest.parent)
         const retryTestIndex = siblings?.indexOf(retryTest) ?? -1
         if (retryTestIndex !== -1) {
           siblings.splice(retryTestIndex, 1)
@@ -1767,7 +1776,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
       const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
         concurrentTestContexts?.at(-1)?.concurrentTestState
-      const registeredTest = state.currentDescribeBlock?.children?.at(-1)
+      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
       if (concurrentTestState && registeredTest?.fn === event.fn) {
         testContexts.set(registeredTest, concurrentTestState.ctx)
       }

@@ -12,13 +12,13 @@ const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../carrier')
 const id = require('../../id')
 const {
   incrementCountMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../ci-visibility/telemetry')
-
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
@@ -195,6 +195,8 @@ const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_COVERAGE_PAYLOAD_CODE = 101
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 const VITEST_WORKER_TELEMETRY_PAYLOAD_CODE = 103
+const VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE = 104
+const VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE = 105
 
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
@@ -489,6 +491,8 @@ module.exports = {
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
@@ -901,10 +905,10 @@ function setRumTestCorrelation (context, activeSpan) {
  * @returns {import('../../opentracing/span_context')}
  */
 function getTestParentSpan (tracer, testExecutionId) {
-  return tracer.extract('text_map', {
-    'x-datadog-trace-id': testExecutionId || id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-  })
+  const carrier = /** @type {Record<string, unknown>} */ ({})
+  writeDatadogTraceId(carrier, testExecutionId || id().toString(10))
+  writeDatadogParentId(carrier, '0000000000000000')
+  return tracer.extract('text_map', carrier)
 }
 
 function getTestCommonTags (name, suite, version, testFramework) {

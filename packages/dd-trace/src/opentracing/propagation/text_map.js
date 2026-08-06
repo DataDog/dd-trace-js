@@ -1,7 +1,39 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const pick = require('../../../../datadog-core/src/utils/src/pick')
+const {
+  pickTextMap,
+  readBaggage,
+  readB3,
+  readB3Flags,
+  readB3Sampled,
+  readB3SpanId,
+  readB3TraceId,
+  readDatadogOrigin,
+  readDatadogParentId,
+  readDatadogSamplingPriority,
+  readDatadogTags,
+  readDatadogTraceId,
+  readLegacyBaggage,
+  readSqsd,
+  readTraceparent,
+  readTracestate,
+  writeBaggage,
+  writeB3,
+  writeB3Flags,
+  writeB3ParentId,
+  writeB3Sampled,
+  writeB3SpanId,
+  writeB3TraceId,
+  writeDatadogOrigin,
+  writeDatadogParentId,
+  writeDatadogSamplingPriority,
+  writeDatadogTags,
+  writeDatadogTraceId,
+  writeLegacyBaggage,
+  writeTraceparent,
+  writeTracestate,
+} = require('../../carrier')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
@@ -20,21 +52,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
-const traceKey = 'x-datadog-trace-id'
-const spanKey = 'x-datadog-parent-id'
-const originKey = 'x-datadog-origin'
-const samplingKey = 'x-datadog-sampling-priority'
-const tagsKey = 'x-datadog-tags'
-const baggagePrefix = 'ot-baggage-'
-const b3TraceKey = 'x-b3-traceid'
 const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
-const b3SpanKey = 'x-b3-spanid'
 const b3SpanExpr = /^[0-9a-f]{16}$/i
-const b3ParentKey = 'x-b3-parentspanid'
-const b3SampledKey = 'x-b3-sampled'
-const b3FlagsKey = 'x-b3-flags'
-const b3HeaderKey = 'b3'
-const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 // W3C Baggage key grammar: key = token (RFC 7230).
 // Spec (up-to-date): "Propagation format for distributed context: Baggage" §3.3.1
@@ -43,19 +62,10 @@ const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)
 const baggageTokenExpr = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2B\x2D-\x7E]+$/ // ASCII minus spaces and commas
 const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
-// RFC7230 token (used by HTTP header field-name) and compatible with Node's header name validation.
-// See https://www.rfc-editor.org/rfc/rfc7230#section-3.2.6
-const httpHeaderNameExpr = /^[0-9A-Za-z!#$%&'*+\-.^_`|~]+$/
 // Compatible with Node's internal header value validation (allows HTAB, SP-~, and \x80-\xFF only)
 // https://github.com/nodejs/node/blob/main/lib/_http_common.js
 const invalidHeaderValueCharExpr = /[^\t\x20-\x7E\x80-\xFF]/
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
-const traceparentKey = 'traceparent'
-const tracestateKey = 'tracestate'
-const ddKeys = [traceKey, spanKey, samplingKey, originKey]
-const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
-const w3cKeys = [traceparentKey, tracestateKey]
-const logKeys = [...ddKeys, ...b3Keys, ...w3cKeys]
 // Dispatch table for `_extractSpanContext`. `'b3'` resolves to the matching
 // single/multi extractor per instance — see `#b3MethodName` — so it is not in
 // this table. `'baggage'` is consumed by `_extractBaggageItems`, not the loop.
@@ -146,7 +156,7 @@ class TextMapPropagator {
     if (injectCh.hasSubscribers) injectCh.publish({ spanContext, carrier })
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+    log.debug(() => `Inject into carrier: ${JSON.stringify(pickTextMap(carrier))}.`)
 
     return carrier
   }
@@ -161,7 +171,7 @@ class TextMapPropagator {
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
-      const keys = JSON.stringify(pick(carrier, logKeys))
+      const keys = JSON.stringify(pickTextMap(carrier))
       const styles = this._config.tracePropagationStyle.extract.join(', ')
 
       return `Extract from carrier (${styles}): ${keys}.`
@@ -179,8 +189,8 @@ class TextMapPropagator {
     if (!this._hasPropagationStyle('inject', 'datadog')) return
 
     carrier ??= {}
-    carrier[traceKey] = spanContext.toTraceId()
-    carrier[spanKey] = spanContext.toSpanId()
+    writeDatadogTraceId(carrier, spanContext.toTraceId())
+    writeDatadogParentId(carrier, spanContext.toSpanId())
 
     this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
@@ -193,7 +203,7 @@ class TextMapPropagator {
     const origin = spanContext._trace.origin
 
     if (origin) {
-      carrier[originKey] = origin
+      writeDatadogOrigin(carrier, origin)
     }
   }
 
@@ -201,7 +211,7 @@ class TextMapPropagator {
     const priority = spanContext._sampling.priority
 
     if (Number.isInteger(priority)) {
-      carrier[samplingKey] = priority.toString()
+      writeDatadogSamplingPriority(carrier, priority.toString())
     }
   }
 
@@ -216,22 +226,17 @@ class TextMapPropagator {
       const baggageItems = spanContext?._baggageItems
       if (baggageItems) {
         for (const key of Object.keys(baggageItems)) {
-          const headerName = baggagePrefix + key
-
-          // Legacy OpenTracing baggage is propagated as individual headers (ot-baggage-*),
-          // so it must always be representable as a valid HTTP header name.
-          if (!httpHeaderNameExpr.test(headerName)) {
-            tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
-            continue
-          }
-
           let headerValue = String(baggageItems[key])
           // Avoid Node throwing ERR_INVALID_CHAR when setting header values (e.g. newline from decoded OTEL baggage).
           if (invalidHeaderValueCharExpr.test(headerValue)) {
             headerValue = encodeURIComponent(headerValue)
           }
-          injectedCarrier ??= carrier ?? {}
-          injectedCarrier[headerName] = headerValue
+          const nextCarrier = writeLegacyBaggage(injectedCarrier ?? carrier, key, headerValue)
+          if (nextCarrier === undefined) {
+            tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
+            continue
+          }
+          injectedCarrier = nextCarrier
         }
       }
     }
@@ -271,7 +276,7 @@ class TextMapPropagator {
       baggage = baggage.slice(0, -1)
       if (baggage) {
         injectedCarrier ??= carrier ?? {}
-        injectedCarrier.baggage = baggage
+        writeBaggage(injectedCarrier, baggage)
         tracerMetrics.count('context_header_style.injected', ['header_style:baggage']).inc()
       }
     }
@@ -305,7 +310,7 @@ class TextMapPropagator {
     if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
-      carrier[tagsKey] = header
+      writeDatadogTags(carrier, header)
     }
   }
 
@@ -321,16 +326,16 @@ class TextMapPropagator {
     if (!hasB3multi) return
 
     carrier ??= {}
-    carrier[b3TraceKey] = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
-    carrier[b3SpanKey] = spanContext._spanId.toString(16)
-    carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
+    writeB3TraceId(carrier, spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid']))
+    writeB3SpanId(carrier, spanContext._spanId.toString(16))
+    writeB3Sampled(carrier, spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0')
 
     if (spanContext._sampling.priority > AUTO_KEEP) {
-      carrier[b3FlagsKey] = '1'
+      writeB3Flags(carrier, '1')
     }
 
     if (spanContext._parentId) {
-      carrier[b3ParentKey] = spanContext._parentId.toString(16)
+      writeB3ParentId(carrier, spanContext._parentId.toString(16))
     }
 
     return carrier
@@ -352,10 +357,11 @@ class TextMapPropagator {
     const spanId = spanContext._spanId.toString(16)
     const sampled = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
-    carrier[b3HeaderKey] = `${traceId}-${spanId}-${sampled}`
+    let header = `${traceId}-${spanId}-${sampled}`
     if (spanContext._parentId) {
-      carrier[b3HeaderKey] += '-' + spanContext._parentId.toString(16)
+      header += '-' + spanContext._parentId.toString(16)
     }
+    writeB3(carrier, header)
 
     return carrier
   }
@@ -375,7 +381,7 @@ class TextMapPropagator {
       const header = tracestate.toString()
       if (!header) return
       carrier ??= {}
-      carrier.tracestate = header
+      writeTracestate(carrier, header)
       return carrier
     }
 
@@ -386,7 +392,7 @@ class TextMapPropagator {
       _trace: { origin, tags: traceTags },
     } = spanContext
 
-    carrier[traceparentKey] = spanContext.toTraceparent()
+    writeTraceparent(carrier, spanContext.toTraceparent())
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
@@ -426,7 +432,7 @@ class TextMapPropagator {
       }
     })
 
-    carrier.tracestate = ts.toString()
+    writeTracestate(carrier, ts.toString())
 
     return carrier
   }
@@ -525,7 +531,12 @@ class TextMapPropagator {
   }
 
   _extractDatadogContext (carrier) {
-    const spanContext = this._extractGenericContext(carrier, traceKey, spanKey, 10)
+    if (!carrier) return
+    const spanContext = this._extractGenericContext(
+      readDatadogTraceId(carrier),
+      readDatadogParentId(carrier),
+      10
+    )
 
     if (!spanContext) return spanContext
 
@@ -553,19 +564,16 @@ class TextMapPropagator {
   }
 
   _extractB3SingleContext (carrier) {
-    // `typeof === 'string'` first; otherwise the regex coerces `undefined` to
-    // `'undefined'` and runs on every header-less request.
-    const header = carrier[b3HeaderKey]
-    if (typeof header !== 'string' || !b3HeaderExpr.test(header)) return
-    const b3 = this._extractB3SingleHeader(carrier)
-    if (b3 === undefined) return
-    return this._extractB3Context(b3)
+    // Check the resolved value first so the regex does not run on header-less requests.
+    const header = readB3(carrier)
+    if (!header || !b3HeaderExpr.test(header)) return
+    return this._extractB3Context(this._extractB3SingleHeader(header))
   }
 
   _extractB3Context (b3) {
-    const debug = b3[b3FlagsKey] === '1'
-    const priority = this._getPriority(b3[b3SampledKey], debug)
-    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey, 16)
+    const debug = b3.flags === '1'
+    const priority = this._getPriority(b3.sampled, debug)
+    const spanContext = this._extractGenericContext(b3.traceId, b3.spanId, 16)
 
     if (priority !== undefined) {
       if (!spanContext) {
@@ -581,13 +589,13 @@ class TextMapPropagator {
       spanContext._sampling.priority = priority
     }
 
-    this._extract128BitTraceId(b3[b3TraceKey], spanContext)
+    this._extract128BitTraceId(b3.traceId, spanContext)
 
     return spanContext
   }
 
   _extractSqsdContext (carrier) {
-    const headerValue = carrier[sqsdHeaderHey]
+    const headerValue = readSqsd(carrier)
     if (!headerValue) return
     let parsed
     try {
@@ -599,18 +607,14 @@ class TextMapPropagator {
   }
 
   _extractTraceparentContext (carrier) {
-    const headerValue = carrier[traceparentKey]
-    if (typeof headerValue !== 'string') return
+    const headerValue = readTraceparent(carrier)
+    if (!headerValue) return
     const matches = headerValue.trim().match(traceparentExpr)
     if (matches !== null) {
       const [, version, traceId, spanId, flags, tail] = matches
       const traceparent = { version }
       // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
-      // `filter` drops non-string members (Symbol, throwing-toString) that would crash `join`.
-      const rawTracestate = Array.isArray(carrier.tracestate)
-        ? carrier.tracestate.filter(item => typeof item === 'string').join(',')
-        : carrier.tracestate
-      const tracestate = TraceState.fromString(rawTracestate)
+      const tracestate = TraceState.fromString(readTracestate(carrier))
       if (invalidSegment.test(traceId)) return
       if (invalidSegment.test(spanId)) return
 
@@ -683,75 +687,81 @@ class TextMapPropagator {
     }
   }
 
-  _extractGenericContext (carrier, traceKey, spanKey, radix) {
-    if (carrier && carrier[traceKey] && carrier[spanKey]) {
-      if (invalidSegment.test(carrier[traceKey])) return
+  /**
+   * @param {string | undefined} traceId
+   * @param {string | undefined} spanId
+   * @param {number} radix
+   * @returns {DatadogSpanContext | undefined}
+   */
+  _extractGenericContext (traceId, spanId, radix) {
+    if (!traceId || invalidSegment.test(traceId)) return
+    if (!spanId) return
 
-      return new DatadogSpanContext({
-        traceId: id(carrier[traceKey], radix),
-        spanId: id(carrier[spanKey], radix),
-        isRemote: true,
-      })
-    }
+    return new DatadogSpanContext({
+      traceId: id(traceId, radix),
+      spanId: id(spanId, radix),
+      isRemote: true,
+    })
   }
 
   _extractB3MultipleHeaders (carrier) {
-    // `b3ParentKey` is intentionally absent: this method never consults it,
+    // The parent-id field is intentionally absent: this method never consults it,
     // so a parent-id-only carrier should bail with the rest.
-    if (carrier[b3TraceKey] === undefined &&
-      carrier[b3SampledKey] === undefined &&
-      carrier[b3FlagsKey] === undefined) {
+    const traceId = readB3TraceId(carrier)
+    const sampled = readB3Sampled(carrier)
+    const flags = readB3Flags(carrier)
+
+    if (traceId === undefined && sampled === undefined && flags === undefined) {
       return
     }
 
     let empty = true
     const b3 = {}
+    const spanId = readB3SpanId(carrier)
 
-    if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
-      b3[b3TraceKey] = carrier[b3TraceKey]
-      b3[b3SpanKey] = carrier[b3SpanKey]
+    if (traceId && spanId && b3TraceExpr.test(traceId) && b3SpanExpr.test(spanId)) {
+      b3.traceId = traceId
+      b3.spanId = spanId
       empty = false
     }
 
-    if (carrier[b3SampledKey]) {
-      b3[b3SampledKey] = carrier[b3SampledKey]
+    if (sampled) {
+      b3.sampled = sampled
       empty = false
     }
 
-    if (carrier[b3FlagsKey]) {
-      b3[b3FlagsKey] = carrier[b3FlagsKey]
+    if (flags) {
+      b3.flags = flags
       empty = false
     }
 
     return empty ? undefined : b3
   }
 
-  _extractB3SingleHeader (carrier) {
-    const header = carrier[b3HeaderKey]
-    if (!header) return
-
+  /** @param {string} header */
+  _extractB3SingleHeader (header) {
     const parts = header.split('-')
 
     if (parts[0] === 'd') {
       return {
-        [b3SampledKey]: '1',
-        [b3FlagsKey]: '1',
+        sampled: '1',
+        flags: '1',
       }
     } else if (parts.length === 1) {
       return {
-        [b3SampledKey]: parts[0],
+        sampled: parts[0],
       }
     }
     const b3 = {
-      [b3TraceKey]: parts[0],
-      [b3SpanKey]: parts[1],
+      traceId: parts[0],
+      spanId: parts[1],
     }
 
     if (parts[2]) {
-      b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
+      b3.sampled = parts[2] === '0' ? '0' : '1'
 
       if (parts[2] === 'd') {
-        b3[b3FlagsKey] = '1'
+        b3.flags = '1'
       }
     }
 
@@ -759,29 +769,22 @@ class TextMapPropagator {
   }
 
   _extractOrigin (carrier, spanContext) {
-    const origin = carrier[originKey]
+    const origin = readDatadogOrigin(carrier)
 
-    if (typeof carrier[originKey] === 'string') {
+    if (typeof origin === 'string') {
       spanContext._trace.origin = origin
     }
   }
 
   _extractLegacyBaggageItems (carrier, spanContext) {
     if (!this._config.legacyBaggageEnabled) return
-    for (const key of Object.keys(carrier)) {
-      if (!key.startsWith(baggagePrefix)) continue
-      const baggageKey = key.slice(baggagePrefix.length)
-      if (baggageKey) {
-        spanContext._baggageItems[baggageKey] = carrier[key]
-      }
-    }
+    readLegacyBaggage(carrier, spanContext._baggageItems)
   }
 
   _extractBaggageItems (carrier, spanContext) {
     removeAllBaggageItems()
-    if (!this._hasPropagationStyle('extract', 'baggage')) return
-    const baggageHeader = carrier?.baggage
-    const header = Array.isArray(baggageHeader) ? baggageHeader.join(',') : baggageHeader
+    if (!carrier || !this._hasPropagationStyle('extract', 'baggage')) return
+    const header = readBaggage(carrier)
     if (!header) return
 
     const baggages = header.split(',')
@@ -853,7 +856,9 @@ class TextMapPropagator {
   }
 
   _extractSamplingPriority (carrier, spanContext) {
-    const priority = Number.parseInt(carrier[samplingKey], 10)
+    const header = readDatadogSamplingPriority(carrier)
+    if (header === undefined) return
+    const priority = Number.parseInt(header, 10)
 
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = priority
@@ -861,16 +866,17 @@ class TextMapPropagator {
   }
 
   _extractTags (carrier, spanContext) {
-    if (!carrier[tagsKey]) return
+    const header = readDatadogTags(carrier)
+    if (!header) return
 
     const trace = spanContext._trace
 
     if (this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
-    } else if (carrier[tagsKey].length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
+    } else if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
-      const pairs = carrier[tagsKey].split(',')
+      const pairs = header.split(',')
       const tags = {}
 
       for (const pair of pairs) {
