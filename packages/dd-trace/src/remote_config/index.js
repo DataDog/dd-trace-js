@@ -15,7 +15,8 @@ const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 let clientId = uuid()
-let tagsString
+/** @type {{ tags: string[] } | undefined} */
+let clientTracer
 
 channel('datadog:identity:update').subscribe(refreshIdentity)
 
@@ -47,7 +48,6 @@ class RemoteConfig {
     const appliedConfigs = this.appliedConfigs = new Map()
 
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
-    tagsString = getTagsString(config, repositoryUrl, commitSHA)
 
     this.state = {
       client: {
@@ -83,15 +83,15 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          get tags () {
-            return tagsString
-          },
+          tags: getTagsString(config, repositoryUrl, commitSHA),
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
       },
       cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]), // updated by `parseConfig()`
     }
+
+    clientTracer = this.state.client.client_tracer
   }
 
   /**
@@ -594,22 +594,19 @@ function getTagsString (config, repositoryUrl, commitSHA) {
 }
 
 /**
- * Regenerates the RC client ID and refreshes the cached RC tags string.
- * `state.client.id` and `client_tracer.tags` are live getters, so subsequent RC polls pick up
- * the new values.
+ * Regenerates the RC client ID and rebuilds the RC tag list, so subsequent RC polls report the
+ * clone's identity. No-ops on the tags before the first `RemoteConfig` is constructed.
  *
  * @param {import('../config/config-base')} config
  */
 function refreshIdentity (config) {
-  try {
-    clientId = uuid({ disableEntropyCache: true })
-    if (config.tags['_dd.rc.client_id']) {
-      config.tags['_dd.rc.client_id'] = clientId
-    }
+  clientId = uuid()
+  if (config.tags['_dd.rc.client_id']) {
+    config.tags['_dd.rc.client_id'] = clientId
+  }
+  if (clientTracer !== undefined) {
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    tagsString = getTagsString(config, repositoryUrl, commitSHA)
-  } catch (e) {
-    log.error('[RC] Error refreshing identity', e)
+    clientTracer.tags = getTagsString(config, repositoryUrl, commitSHA)
   }
 }
 

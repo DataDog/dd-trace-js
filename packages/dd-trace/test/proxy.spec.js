@@ -1127,11 +1127,14 @@ describe('TracerProxy', () => {
   describe('MicroVM identity reset', () => {
     let channelMock
     let diagnosticsChannelMock
-    let MicroVmProxy
     let microProxy
     let storeConfig
+    let uuidStub
+    let buildProxy
 
     beforeEach(() => {
+      uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
+
       channelMock = {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
@@ -1143,7 +1146,7 @@ describe('TracerProxy', () => {
       }
       storeConfig = sinon.stub().returns({})
 
-      MicroVmProxy = proxyquire('../src/proxy', {
+      buildProxy = (nodeBundlesOpenssl = false) => new (proxyquire('../src/proxy', {
         './tracer': DatadogTracer,
         './noop/proxy': NoopProxy,
         './config': Config,
@@ -1155,6 +1158,7 @@ describe('TracerProxy', () => {
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
           IS_SERVERLESS: false,
+          NODE_BUNDLES_OPENSSL: nodeBundlesOpenssl,
         },
         './appsec': appsec,
         './appsec/iast': iast,
@@ -1168,9 +1172,10 @@ describe('TracerProxy', () => {
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
         'dc-polyfill': diagnosticsChannelMock,
-      })
+        '../../../vendor/dist/crypto-randomuuid': uuidStub,
+      }))()
 
-      microProxy = new MicroVmProxy()
+      microProxy = buildProxy()
     })
 
     it('should register the MicroVM hook when env var is set', () => {
@@ -1235,6 +1240,47 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/other' } })
 
       sinon.assert.notCalled(channelMock.publish)
+    })
+
+    it('should warn at registration when Node bundles its own OpenSSL', () => {
+      buildProxy(true).init()
+
+      sinon.assert.calledOnce(log.warn)
+      assert.match(log.warn.firstCall.args[0], /bundles its own OpenSSL/)
+    })
+
+    it('should not warn when Node links a shared OpenSSL', () => {
+      microProxy.init()
+
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should drain a full UUID batch before publishing datadog:identity:update', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      sinon.assert.notCalled(uuidStub)
+
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      // a full batch, so the pool's cursor wraps and refills wherever the snapshot froze it
+      sinon.assert.callCount(uuidStub, 128)
+
+      const updateIndex = diagnosticsChannelMock.channel.getCalls()
+        .findIndex(call => call.args[0] === 'datadog:identity:update')
+      const updateCall = diagnosticsChannelMock.channel.getCall(updateIndex)
+
+      assert.ok(uuidStub.lastCall.callId < updateCall.callId)
+    })
+
+    it('should not drain the UUID pool when the request is not the run hook', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'GET', url: '/aws/lambda-microvms/runtime/v1/run' } })
+      subscriber({ request: { method: 'POST', url: '/other' } })
+
+      sinon.assert.notCalled(uuidStub)
     })
 
     it('should unsubscribe HTTP channel after first fire', () => {

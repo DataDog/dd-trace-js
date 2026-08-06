@@ -5431,8 +5431,8 @@ rules:
 
       // once at module load for the initial runtimeId, once on refresh
       sinon.assert.calledTwice(uuid)
-      // must bypass the entropy cache, or every clone reads the same pre-generated UUID
-      assert.deepStrictEqual(uuid.secondCall.args, [{ disableEntropyCache: true }])
+      // the buffered pool is drained by the publisher, so the refresh must not opt out of it
+      assert.deepStrictEqual(uuid.secondCall.args, [])
     })
 
     it('should store new value that differs from original runtimeId', () => {
@@ -5449,19 +5449,6 @@ rules:
       const secondRefresh = config.tags['runtime-id']
 
       assert.notStrictEqual(firstRefresh, secondRefresh)
-    })
-
-    it('should catch and log an error instead of throwing when uuid generation fails', () => {
-      const error = new Error('boom')
-      const uuid = sinon.stub()
-      uuid.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
-      uuid.onSecondCall().throws(error)
-      const configModule = loadConfigModule({ uuid })
-      const config = configModule()
-
-      channel('datadog:identity:update').publish(config)
-
-      sinon.assert.calledWith(log.error, 'Error refreshing runtime ID', error)
     })
   })
 })
