@@ -28,7 +28,7 @@ withVersions('express', 'express', version => {
 
     before(() => {
       // Load 'router' alongside 'express' so Express 5 populates context.paths via apm:router:middleware:enter
-      return agent.load(['express', 'http', 'router'], [{ client: false }, {}, {}])
+      return agent.load(['express', 'http', 'router'], [{}, { client: false }, {}])
     })
 
     before((done) => {
