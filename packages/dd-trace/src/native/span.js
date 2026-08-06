@@ -3,36 +3,146 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
+const { channel } = require('dc-polyfill')
 
 const DatadogSpan = require('../opentracing/span')
 const id = require('../id')
 const tagger = require('../tagger')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
+const { DD_MAJOR } = require('../../../../version')
 const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
+const { encode: encodeMsgpack } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
 
-// `_createContext` is invoked by the parent constructor via `super(...)`
-// BEFORE the subclass can touch `this`, so we cannot thread
-// `nativeSpans` through the instance. Stash it module-locally; JS's
-// single-threaded execution model makes the read-back in
-// `_createContext` race-free. The try/finally in the constructor
-// clears this even if super throws (e.g. the wrap-existing-context
-// guard below).
+// Republished from the `addTags` override so subscribers (e.g. the wall
+// profiler's web-tag refresh) still receive tag updates on the native path.
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
+
+// Combine shared high trace-id bits with the low 64-bit identifier.
+function buildNativeTraceId (lowId, tidHex) {
+  if (!tidHex) return lowId
+  // A 16-byte propagated id stores its low bits in the final eight bytes.
+  const buf = lowId.toBuffer()
+  const low = buf.length > 8 ? buf.slice(-8) : buf
+  return [
+    Number.parseInt(tidHex.slice(0, 2), 16),
+    Number.parseInt(tidHex.slice(2, 4), 16),
+    Number.parseInt(tidHex.slice(4, 6), 16),
+    Number.parseInt(tidHex.slice(6, 8), 16),
+    Number.parseInt(tidHex.slice(8, 10), 16),
+    Number.parseInt(tidHex.slice(10, 12), 16),
+    Number.parseInt(tidHex.slice(12, 14), 16),
+    Number.parseInt(tidHex.slice(14, 16), 16),
+    low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
+  ]
+}
+
+// Empty span-event attribute buffer (shared; the decoder treats an empty
+// buffer as "no attributes").
+const EMPTY_ATTRS = Buffer.alloc(0)
+
+// Match the legacy v0.4 meta_struct filter before generic msgpack encoding.
+function cleanMetaStructValue (value, seen = new Set()) {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return
+    seen.add(value)
+    const out = []
+    for (const item of value) {
+      if (typeof item === 'string' || typeof item === 'number') {
+        out.push(item)
+      } else if (item !== null && typeof item === 'object' && !seen.has(item)) {
+        out.push(cleanMetaStructValue(item, seen))
+      }
+    }
+    return out
+  }
+  if (value !== null && typeof value === 'object') {
+    if (seen.has(value)) return
+    seen.add(value)
+    const out = {}
+    for (const key of Object.keys(value)) {
+      const v = value[key]
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        out[key] = v
+      } else if (v !== null && typeof v === 'object' && !seen.has(v)) {
+        out[key] = cleanMetaStructValue(v, seen)
+      }
+    }
+    return out
+  }
+  return value
+}
+
+// `[len:u32 LE][utf8]`.
+function encodeLenPrefixedStr (s) {
+  const body = Buffer.from(s, 'utf8')
+  const out = Buffer.allocUnsafe(4 + body.length)
+  out.writeUInt32LE(body.length >>> 0, 0)
+  body.copy(out, 4)
+  return out
+}
+
+// Span-event scalar tags: String=0, Boolean=1, Integer=2, Double=3.
+function encodeAttrScalar (value) {
+  if (typeof value === 'string') {
+    const body = encodeLenPrefixedStr(value)
+    const out = Buffer.allocUnsafe(1 + body.length)
+    out.writeUInt8(0, 0)
+    body.copy(out, 1)
+    return out
+  }
+  if (typeof value === 'boolean') {
+    return Buffer.from([1, value ? 1 : 0])
+  }
+  // Only safe integers can round-trip through the i64 representation.
+  const out = Buffer.allocUnsafe(9)
+  if (Number.isSafeInteger(value)) {
+    out.writeUInt8(2, 0)
+    out.writeBigInt64LE(BigInt(value), 1)
+  } else {
+    out.writeUInt8(3, 0)
+    out.writeDoubleLE(value, 1)
+  }
+  return out
+}
+
+// Encode repeated `[key_len][key][tag][value]` entries for the native event
+// decoder. Arrays use tag 4 and contain scalar entries only.
+function appendSpanEventAttr (chunks, key, value) {
+  if (Array.isArray(value)) {
+    const header = Buffer.allocUnsafe(5)
+    header.writeUInt8(4, 0)
+    header.writeUInt32LE(value.length >>> 0, 1)
+    chunks.push(encodeLenPrefixedStr(key), header)
+    for (const item of value) {
+      chunks.push(encodeAttrScalar(item))
+    }
+    return
+  }
+  chunks.push(encodeLenPrefixedStr(key), encodeAttrScalar(value))
+}
+
+// Encode sanitized span-event attributes (`_sanitizeEventAttributes` leaves
+// scalars or arrays of scalars) for `addSpanEvent`.
+function encodeSpanEventAttrs (attributes) {
+  if (!attributes) return EMPTY_ATTRS
+  const keys = Object.keys(attributes)
+  if (keys.length === 0) return EMPTY_ATTRS
+  const chunks = []
+  for (const key of keys) {
+    appendSpanEventAttr(chunks, key, attributes[key])
+  }
+  if (chunks.length === 0) return EMPTY_ATTRS
+  return Buffer.concat(chunks)
+}
+
+// `super()` invokes `_createContext` before this instance exists. The temporary
+// module-local handoff is safe because construction is synchronous.
 let pendingNativeSpans = null
 
-// Shadows `NativeSpanContext.prototype._syncNameToNative` on the
-// instance during construction so the parent's
-// `this._spanContext._name = operationName` line (opentracing/span.js)
-// does not emit a redundant SetName WASM op alongside the combined
-// CreateSpan op we queue ourselves. The subclass constructor deletes
-// the shadow once super() returns.
-const noopSyncName = () => {}
-
 /**
- * NativeDatadogSpan stores span data in native Rust storage via
- * NativeSpansInterface, replacing the JS-side trace buffer. It inherits
- * the bulk of DatadogSpan's lifecycle, link/event, and tag handling;
- * only methods with native-sync side effects are overridden here.
+ * DatadogSpan backed by native storage.
  */
 class NativeDatadogSpan extends DatadogSpan {
   /**
@@ -61,25 +171,21 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore the prototype `_syncNameToNative` (shadowed in
-    // `_createContext`) so later `setOperationName` calls reach the
-    // real WASM-syncing method.
-    delete this._spanContext._syncNameToNative
-
     // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
     // which bypasses NativeSpanContext.setTag's native-sync path. Push
     // them to WASM now (no JS-cache write — the parent already did it).
     if (fields.tags) {
       this._spanContext.syncToNativeOnly(fields.tags)
     }
+
+    processor?._exporter?._trackSpanStart?.()
   }
 
   /**
    * Allocate a native slot, build a NativeSpanContext, queue the
    * combined CreateSpan op (Create + SetName + SetStart in one WASM
-   * call), and silently set the initial name. The subclass constructor
-   * (after super) restores the prototype `_syncNameToNative` so future
-   * name changes reach WASM normally.
+   * call). The inherited constructor stores the initial name locally after
+   * this returns; final synchronization owns subsequent name changes.
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -87,16 +193,16 @@ class NativeDatadogSpan extends DatadogSpan {
    */
   _createContext (parent, fields) {
     const nativeSpans = pendingNativeSpans
-    const slotIndex = nativeSpans.allocSlot()
 
-    const operationName = fields.operationName
+    // Match the JS formatter's string coercion at creation.
+    const operationName = String(fields.operationName)
     const tracer = this.tracer()
     const propagationBehavior = tracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     const tracerService = tracer?._service
+    const tracerServiceLower = tracer?.serviceLower
 
     let spanContext
     let startTime
-    let traceId
     let parentId
 
     let baggage = {}
@@ -106,12 +212,9 @@ class NativeDatadogSpan extends DatadogSpan {
     }
 
     if (fields.context) {
-      // Re-wrapping a NativeSpanContext would either leak the freshly
-      // allocated slot (early return) or duplicate the span across two
-      // slots. Free the slot and throw loudly.
+      // Re-wrapping would leak or duplicate native span storage.
       const existingContext = fields.context
       if (existingContext._nativeSpanId !== undefined) {
-        nativeSpans.freeSlots([slotIndex])
         throw new Error('NativeDatadogSpan cannot wrap an existing NativeSpanContext')
       }
 
@@ -124,12 +227,10 @@ class NativeDatadogSpan extends DatadogSpan {
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
-        tracerService,
-        slotIndex,
+        tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = existingContext._traceId
       parentId = existingContext._parentId
     } else if (parent) {
       const spanId = id()
@@ -141,12 +242,10 @@ class NativeDatadogSpan extends DatadogSpan {
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate,
-        tracerService,
-        slotIndex,
+        tracerServiceLower,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = parent._traceId
       parentId = parent._spanId
     } else {
       // Root span - generate new trace ID and span ID.
@@ -156,8 +255,7 @@ class NativeDatadogSpan extends DatadogSpan {
       spanContext = new NativeSpanContext(nativeSpans, {
         traceId: spanId,
         spanId,
-        tracerService,
-        slotIndex,
+        tracerServiceLower,
       })
       spanContext._trace.startTime = startTime
 
@@ -166,22 +264,6 @@ class NativeDatadogSpan extends DatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
         spanContext._trace.tags['_dd.p.tid'] = tidHex
-        // Build 16-byte trace ID: [high 8 bytes from timestamp][low 8 bytes from spanId]
-        const spanIdBuf = spanId.toBuffer()
-        traceId = [
-          Number.parseInt(tidHex.slice(0, 2), 16),
-          Number.parseInt(tidHex.slice(2, 4), 16),
-          Number.parseInt(tidHex.slice(4, 6), 16),
-          Number.parseInt(tidHex.slice(6, 8), 16),
-          Number.parseInt(tidHex.slice(8, 10), 16),
-          Number.parseInt(tidHex.slice(10, 12), 16),
-          Number.parseInt(tidHex.slice(12, 14), 16),
-          Number.parseInt(tidHex.slice(14, 16), 16),
-          spanIdBuf[0], spanIdBuf[1], spanIdBuf[2], spanIdBuf[3],
-          spanIdBuf[4], spanIdBuf[5], spanIdBuf[6], spanIdBuf[7],
-        ]
-      } else {
-        traceId = spanId
       }
       parentId = null
 
@@ -190,42 +272,58 @@ class NativeDatadogSpan extends DatadogSpan {
       }
     }
 
-    spanContext._trace.ticks = spanContext._trace.ticks || now()
+    spanContext._trace.ticks ||= now()
     if (startTime) spanContext._trace.startTime = startTime
     spanContext._isRemote = false
 
-    // Same formula as the parent's later
-    // `this._startTime = fields.startTime || this._getTime()`.
-    // Sub-microsecond `performance.now()` drift between the two
-    // computations is below export resolution.
+    // Pin one start time for both native state and the parent constructor.
     const createStartTime = fields.startTime === undefined
       ? spanContext._trace.startTime + now() - spanContext._trace.ticks
       : fields.startTime
+    fields.startTime = createStartTime
 
-    // CreateSpan carries the name natively, so we set it silently on
-    // the JS side and shadow `_syncNameToNative` with a no-op for the
-    // duration of super(). See the constructor for the delete-restore.
-    spanContext._setNameLocal(operationName)
-    spanContext._syncNameToNative = noopSyncName
+    // CreateSpanFull carries the common immutable/default core fields natively
+    // (name, service, resource, type, start), so final sync can skip no-op
+    // overwrites unless user tags changed them.
+    // One segment id per local trace, shared by all its spans via the
+    // shared `_trace` object (the local root allocates; children reuse).
+    // Required by the native chunk flush, which keys a chunk by segment.
+    const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
+    const nativeService = typeof fields.tags?.['service.name'] === 'string'
+      ? fields.tags['service.name']
+      : String(tracerService || '')
+    const nativeResource = typeof fields.tags?.['resource.name'] === 'string'
+      ? fields.tags['resource.name']
+      : operationName
+    const nativeType = typeof fields.tags?.['span.type'] === 'string'
+      ? fields.tags['span.type']
+      : ''
+    // A trace ID is immutable and the trace object is shared by every local
+    // span. Reuse the full 128-bit byte representation instead of rebuilding
+    // its high half and allocating a 16-entry array for every child.
+    const traceId = (spanContext._trace._nativeTraceId ??= buildNativeTraceId(
+      spanContext._traceId,
+      spanContext._trace.tags['_dd.p.tid']
+    ))
 
-    nativeSpans.queueCreateSpan(
-      slotIndex,
+    nativeSpans.queueCreateSpanFull(
       spanContext._nativeSpanId,
       traceId,
+      segmentId,
       parentId,
       operationName,
+      nativeService,
+      nativeResource,
+      nativeType,
       createStartTime
     )
+    spanContext._recordNativeCoreFields?.(operationName, nativeResource, nativeService, nativeType)
 
     return spanContext
   }
 
   /**
-   * Override `setTag` for a single-tag fast path that avoids the
-   * `{ [key]: value }` literal + parsedTags round-trip the parent
-   * does via `_addTags`, and short-circuits prioritySampler.sample
-   * once a priority is decided (sample() early-returns but still
-   * pays `_getContext()` + arg setup).
+   * Set one tag without allocating the batched `addTags` intermediates.
    *
    * @param {string} key
    * @param {unknown} value
@@ -239,62 +337,58 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._spanContext.syncOneTagToNative(key, value)
 
-    if (this._spanContext._sampling.priority === undefined) {
+    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
+    }
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
     }
     return this
   }
 
   /**
-   * Override `_addTags` (called by the inherited `addTags`) to route
-   * batched tag writes through the native span context. Accepts a
-   * plain `{k: v}` object (fast path), a `'k1:v1,k2:v2'` string, or
-   * an array of such strings.
+   * Add tags while preserving the base span's accepted input shapes.
    *
    * @param {Record<string, unknown> | string | string[]} keyValuePairs
-   * @returns {void}
+   * @returns {this}
    */
-  _addTags (keyValuePairs) {
-    const tags = this._spanContext.getTags()
+  addTags (keyValuePairs) {
+    let mayChangeSamplingPriority
 
-    // Fast path: plain object (the hot path from instrumentations).
-    // `tagger.add` for object input is just `Object.assign(parsedTags, kv)`,
-    // so we skip the parsedTags allocation and walk kv directly.
-    if (keyValuePairs && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
-      for (const key in keyValuePairs) {
-        tags[key] = keyValuePairs[key]
-      }
+    // Plain-object hot path; Object.assign preserves internal symbol keys.
+    if (keyValuePairs !== null && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
+      const tags = this._spanContext.getTags()
+      Object.assign(tags, keyValuePairs)
       this._spanContext.syncToNativeOnly(keyValuePairs)
-      if (this._spanContext._sampling.priority === undefined) {
-        this._prioritySampler.sample(this, false)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValuePairs ||
+        MANUAL_DROP in keyValuePairs ||
+        SAMPLING_PRIORITY in keyValuePairs
+    } else {
+      // String/array forms remain a v5-only fallback.
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValuePairs === 'string' || Array.isArray(keyValuePairs))) {
+        const tags = this._spanContext.getTags()
+        const parsedTags = {}
+        tagger.add(parsedTags, keyValuePairs)
+        Object.assign(tags, parsedTags)
+        this._spanContext.syncToNativeOnly(parsedTags)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
       }
-      return
     }
 
-    // Slow path: string or array input.
-    const parsedTags = {}
-    tagger.add(parsedTags, keyValuePairs)
-    for (const key in parsedTags) {
-      tags[key] = parsedTags[key]
-    }
-    this._spanContext.syncToNativeOnly(parsedTags)
-
-    if (this._spanContext._sampling.priority === undefined) {
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
+    if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
+    return this
   }
 
   /**
-   * Override `finish` to serialize span links/events into meta tags
-   * (so the native exporter ships them) and queue SetDuration BEFORE
-   * delegating the rest of the bookkeeping — counters, runtime
-   * metrics, trace.finished push, finishCh.publish, processor.process
-   * — to `super.finish`. SetDuration must be queued before
-   * processor.process triggers the native exporter to read state.
-   *
-   * Passing the precomputed `finishTime` to super avoids
-   * `performance.now()` drift between our duration computation and
-   * the one inside super.finish.
+   * Finalize native-only fields before the parent processor exports the span.
+   * Reuse the resolved finish time in both implementations.
    *
    * @param {number} [finishTime]
    * @returns {void}
@@ -302,27 +396,43 @@ class NativeDatadogSpan extends DatadogSpan {
   finish (finishTime) {
     if (this._duration !== undefined) return
 
-    this.#serializeSpanLinks()
-    this.#serializeSpanEvents()
+    const exported = typeof this._spanContext.isExported === 'function' && this._spanContext.isExported()
+
+    if (!exported) {
+      this.#serializeSpanLinks()
+      this.#serializeSpanEvents()
+      this.#serializeMetaStruct()
+    }
 
     // Mirror the parent's normalization (opentracing/span.js line 292).
     const resolvedFinishTime = finishTime === undefined
       ? this._getTime()
       : (Number.parseFloat(finishTime) || this._getTime())
 
-    this._nativeSpans.queueOp(
-      OpCode.SetDuration,
-      this._spanContext._slotIndex,
-      ['ns', resolvedFinishTime - this._startTime]
-    )
+    if (!exported) {
+      this._nativeSpans.queueOp(
+        OpCode.SetDuration,
+        this._spanContext._nativeSpanId,
+        ['ns', resolvedFinishTime - this._startTime]
+      )
+    }
 
-    super.finish(resolvedFinishTime)
+    try {
+      super.finish(resolvedFinishTime)
+    } finally {
+      this._processor?._exporter?._trackSpanFinish?.()
+    }
+  }
+
+  _tryFastNativeFinalSync () {
+    if (this._links?.length || this._events?.length) return false
+    const metaStruct = this.meta_struct
+    if (metaStruct && typeof metaStruct === 'object' && Object.keys(metaStruct).length > 0) return false
+    return this._spanContext.tryFastFinalTagsToNative?.() === true
   }
 
   /**
-   * Serialize span links to the `_dd.span_links` meta tag with
-   * MAX_META_VALUE_LENGTH truncation — oversized link payloads would be
-   * silently rejected by the agent.
+   * Serialize bounded span-link metadata.
    */
   #serializeSpanLinks () {
     if (!this._links?.length) return
@@ -353,13 +463,28 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Serialize span events to the `_dd.span_events` meta tag as JSON.
-   * The native exporter ships meta tags directly to the agent; the JS
-   * exporter uses a top-level `span_events` field — so this is a
-   * parallel-not-identical encoding. The agent accepts either form.
+   * Send typed native events when supported; otherwise use the legacy JSON
+   * meta fallback. OTLP always uses native events.
    */
   #serializeSpanEvents () {
     if (!this._events?.length) return
+
+    const config = this.tracer()._config
+    if (config.DD_TRACE_NATIVE_SPAN_EVENTS || config.OTEL_TRACES_EXPORTER === 'otlp') {
+      for (const event of this._events) {
+        // Drop malformed events rather than throwing from application finish().
+        if (event === null || typeof event !== 'object' || typeof event.name !== 'string' ||
+          !Number.isFinite(event.startTime)) continue
+        const attributes = encodeSpanEventAttrs(event.attributes)
+        this._nativeSpans.addSpanEvent(
+          this._spanContext._nativeSpanId,
+          event.name,
+          BigInt(Math.round(event.startTime * 1e6)),
+          attributes
+        )
+      }
+      return
+    }
 
     const events = this._events.map(event => {
       const formatted = {
@@ -376,8 +501,30 @@ class NativeDatadogSpan extends DatadogSpan {
     if (serialized.length > MAX_META_VALUE_LENGTH) {
       serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
-    this._spanContext.setTag('_dd.span_events', serialized)
+    this._spanContext.setTag('events', serialized)
+  }
+
+  /**
+   * Msgpack-encode supported meta_struct entries for native storage.
+   */
+  #serializeMetaStruct () {
+    const metaStruct = this.meta_struct
+    if (!metaStruct || typeof metaStruct !== 'object') return
+
+    for (const key of Object.keys(metaStruct)) {
+      const value = metaStruct[key]
+      if (typeof value === 'string' || typeof value === 'number' ||
+        (value !== null && typeof value === 'object')) {
+        // Strip nulls to match the legacy v0.4 encoder (see cleanMetaStructValue).
+        const encoded = encodeMsgpack(cleanMetaStructValue(value))
+        this._nativeSpans.setMetaStruct(this._spanContext._nativeSpanId, key, encoded)
+      }
+    }
   }
 }
 
 module.exports = NativeDatadogSpan
+
+function isSamplingPriorityTag (key) {
+  return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
+}

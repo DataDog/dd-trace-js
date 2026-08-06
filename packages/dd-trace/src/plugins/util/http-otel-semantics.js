@@ -269,8 +269,26 @@ function applyHttpOtelSemantics (formattedSpan) {
   formattedSpan.metrics = newMetrics
 }
 
+const OTEL_OUTPUT_META_KEYS = [
+  HTTP_REQUEST_METHOD,
+  HTTP_REQUEST_METHOD_ORIGINAL,
+  URL_FULL,
+  URL_PATH,
+  URL_SCHEME,
+  URL_QUERY,
+  SERVER_ADDRESS,
+  USER_AGENT_ORIGINAL,
+  CLIENT_ADDRESS,
+  ERROR_TYPE,
+]
+const OTEL_OUTPUT_METRIC_KEYS = [HTTP_RESPONSE_STATUS_CODE, SERVER_PORT]
+
 module.exports = {
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
   applyHttpOtelSemantics,
+  DD_HTTP_META_KEYS,
+  NETWORK_DESTINATION_PORT,
+  OTEL_OUTPUT_META_KEYS,
+  OTEL_OUTPUT_METRIC_KEYS,
 }

@@ -1,37 +1,82 @@
 'use strict'
 
 const DatadogSpanContext = require('../opentracing/span_context')
-const { BASE_SERVICE } = require('../../../../ext/tags')
+const tags = require('../../../../ext/tags')
+const {
+  ANALYTICS_KEY,
+  HOSTNAME_KEY,
+  SAMPLING_PRIORITY_KEY,
+} = require('../constants')
+const { IGNORE_OTEL_ERROR } = require('../constants')
+const {
+  applyHttpOtelSemantics,
+  DD_HTTP_META_KEYS,
+  NETWORK_DESTINATION_PORT,
+  OTEL_OUTPUT_META_KEYS,
+  OTEL_OUTPUT_METRIC_KEYS,
+} = require('../plugins/util/http-otel-semantics')
+const {
+  MAX_META_KEY_LENGTH,
+  MAX_META_VALUE_LENGTH,
+  MAX_METRIC_KEY_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_SERVICE_LENGTH,
+  MAX_TYPE_LENGTH,
+  DEFAULT_SPAN_NAME,
+  DEFAULT_SERVICE_NAME,
+} = require('../encode/tags-processors')
+const { registerExtraService } = require('../service-naming/extra-services')
 const { OpCode } = require('./index')
+const PROCESS_TAGS_META_KEY = '_dd.tags.process'
 
 /**
- * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
- *
- * `setTag()` syncs tag writes immediately to native storage. External callers
- * should prefer `setTag()`/`getTag()`. Internal hot paths (`#addTags` and
- * `#addOneTag` in native/span.js) deliberately mutate `_tags` directly to
- * take a batched-sync fast path; those sites are responsible for calling
- * `syncToNativeOnly()` / `syncOneTagToNative()` afterwards to keep WASM
- * storage in lock-step.
- *
- * Key differences from DatadogSpanContext:
- * - Has a `_nativeSpanId` (byte buffer) for native operations
- * - `setTag()` syncs to native storage immediately
+ * Span context with an authoritative JS tag cache and final native sync.
+ * Final formatting handles deletion and type replacement that WASM cannot.
  */
-// Tags that have dedicated OpCodes or special handling in syncTagToNative.
-// Everything else is a plain meta string or metric number.
-const SPECIAL_KEYS = new Set([
-  'service.name', 'service', 'resource.name', 'span.type',
-  'error', 'http.status_code', 'error.type',
-])
+const { BASE_SERVICE, MEASURED } = tags
+const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
 
-// Symbol keys for internal backing storage — avoids Object.defineProperty deopt
-// while keeping properties non-enumerable to external code.
+function truncateWithEllipsis (value, max) {
+  return value.length > max ? `${value.slice(0, max)}...` : value
+}
+
+function truncateKey (key, max) {
+  return key.length > max ? `${key.slice(0, max)}...` : key
+}
+
+function normalizeName (name) {
+  name ||= DEFAULT_SPAN_NAME
+  return name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name
+}
+
+function normalizeService (service) {
+  service ||= DEFAULT_SERVICE_NAME
+  return service.length > MAX_SERVICE_LENGTH ? service.slice(0, MAX_SERVICE_LENGTH) : service
+}
+
+function normalizeResource (resource, name) {
+  return resource || name
+}
+
+function normalizeType (type) {
+  return type && type.length > MAX_TYPE_LENGTH ? type.slice(0, MAX_TYPE_LENGTH) : type
+}
+
+// Symbol storage preserves a stable hidden class.
 const NAME_VALUE = Symbol('nameValue')
-const NATIVE_READY = Symbol('nativeReady')
 
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
+
+  // Export removes the native span. Ignore later mutations to avoid orphaned
+  // operations; the JS pipeline likewise cannot alter an exported payload.
+  #exported = false
+  #hasErrorTags = false
+  #nativeName
+  #nativeResource
+  #nativeService
+  #nativeType
+  #nativeError = 0
 
   /**
    * @param {import('./native_spans')} nativeSpans - The NativeSpansInterface instance
@@ -43,20 +88,15 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {object} [props.baggageItems] - Baggage items
    * @param {object} [props.trace] - Shared trace object
    * @param {object} [props.tracestate] - W3C tracestate
-   * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
+   * @param {string} [props.tracerServiceLower] - Lowercase tracer service for base-service inference
    */
   constructor (nativeSpans, props) {
-    // The `_name` setter (defined below) fires during `super(props)` when the
-    // parent constructor assigns `this._name`. At that point `this[NATIVE_READY]`
-    // is `undefined` (falsy), so the setter takes the local-only branch and
-    // skips `_syncNameToNative`. We flip NATIVE_READY to `true` only after
-    // super() completes — see line below.
+    // Native sync begins after parent construction.
     super(props)
 
     this.#nativeSpans = nativeSpans
 
-    // Store span ID as little-endian Uint8Array to avoid per-operation byte
-    // reversal when writing to the WASM change buffer (which expects LE).
+    // Store the handle little-endian once for subsequent queue writes.
     const beBuf = props.spanId.toBuffer()
     const leId = new Uint8Array(8)
     leId[0] = beBuf[7]
@@ -68,287 +108,379 @@ class NativeSpanContext extends DatadogSpanContext {
     leId[6] = beBuf[1]
     leId[7] = beBuf[0]
     this._nativeSpanId = leId
-    this._slotIndex = props.slotIndex
-    this._tracerService = props.tracerService // Store for BASE_SERVICE check
-    this[NATIVE_READY] = true
+    this._tracerServiceLower = props.tracerServiceLower || ''
   }
 
-  // Class-level getter/setter for _name — intercepts writes to sync to native.
-  // Uses Symbol-keyed backing store instead of Object.defineProperty to preserve
-  // V8 hidden class optimization (all instances share the same shape).
+  // Intercept name writes without per-instance property definitions.
   get _name () {
     return this[NAME_VALUE]
   }
 
   set _name (value) {
     this[NAME_VALUE] = value
-    if (this[NATIVE_READY]) {
-      this._syncNameToNative(value)
-    }
   }
 
   /**
-   * Set a tag value and sync to native storage.
-   * @param {string | symbol} key - Tag key
-   * @param {unknown} value - Tag value
+   * Record core fields already included in CreateSpanFull.
+   *
+   * @param {string} name span operation name already queued via CreateSpanFull
+   * @param {string|undefined} resource resource name already queued, if any
+   * @param {string|undefined} service service name already queued, if any
+   * @param {string|undefined} type span type already queued, if any
+   */
+  _recordNativeCoreFields (name, resource, service, type) {
+    this.#nativeName = name
+    this.#nativeResource = resource
+    this.#nativeService = service
+    this.#nativeType = type
+  }
+
+  /** Mark the span exported and stop subsequent native writes. */
+  markExported () {
+    this.#exported = true
+  }
+
+  isExported () {
+    return this.#exported
+  }
+
+  /**
+   * Update the authoritative JS tag cache.
+   * @param {string | symbol} key Tag key
+   * @param {unknown} value Tag value
    */
   setTag (key, value) {
-    // Store in JS cache via parent (preserve original type)
     super.setTag(key, value)
-
-    // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
-    if (typeof key === 'symbol') return
-    if (value === undefined || value === null) return
-
-    // Fast path: non-special string tags skip the switch dispatch entirely
-    if (typeof value === 'string' && !SPECIAL_KEYS.has(key)) {
-      this.#nativeSpans.queueOp(
-        OpCode.SetMetaAttr,
-        this._slotIndex,
-        key,
-        value,
-      )
-      return
-    }
-
-    // Fast path: non-special number tags
-    if (typeof value === 'number' && !SPECIAL_KEYS.has(key)) {
-      this.#nativeSpans.queueOp(
-        OpCode.SetMetricAttr,
-        this._slotIndex,
-        key,
-        ['f64', value],
-      )
-      return
-    }
-
-    // Sync to native storage (special tags + booleans)
-    this.#syncTagToNative(key, value)
+    if (key === 'error' || ERROR_META_KEYS.has(key)) this.#hasErrorTags = true
   }
 
   /**
-   * Sync tags to native storage only (JS cache already populated).
-   * Separates special tags from plain meta/metric tags and batches the latter.
-   *
-   * @param {object} tags - Tag object to sync
+   * Observe batched tag writes that bypass setTag.
+   * @param {object} tags Tag object
    */
   syncToNativeOnly (tags) {
-    const metaBatch = []
-    const metricBatch = []
-
-    for (const key in tags) {
-      const value = tags[key]
-      if (value === undefined || value === null) continue
-      if (typeof key === 'symbol') continue
-
-      if (SPECIAL_KEYS.has(key)) {
-        this.#syncTagToNative(key, value)
-      } else if (typeof value === 'number') {
-        metricBatch.push([key, value])
-      } else if (typeof value === 'boolean') {
-        metricBatch.push([key, value ? 1 : 0])
-      } else {
-        metaBatch.push([key, String(value)])
-      }
-    }
-
-    if (metaBatch.length > 0) {
-      this.#nativeSpans.queueBatchMeta(this._slotIndex, metaBatch)
-    }
-    if (metricBatch.length > 0) {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, metricBatch)
+    if (this.#exported) return
+    for (const key of Object.keys(tags)) {
+      if (key === 'error' || ERROR_META_KEYS.has(key)) this.#hasErrorTags = true
     }
   }
 
   /**
-   * Single-tag fast path used by Span#setTag. Avoids the array allocations
-   * (`metaBatch`, `metricBatch`, plus the `[[k,v]]` pair) that syncToNativeOnly
-   * does for the batched case.
-   *
+   * Observe one direct tag write.
    * @param {string} key
    * @param {unknown} value
    */
   syncOneTagToNative (key, value) {
-    if (value === undefined || value === null) return
-    if (typeof key === 'symbol') return
+    if (this.#exported) return
+    if (key === 'error' || ERROR_META_KEYS.has(key)) this.#hasErrorTags = true
+  }
 
-    if (SPECIAL_KEYS.has(key)) {
-      this.#syncTagToNative(key, value)
-    } else if (typeof value === 'number') {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value]])
-    } else if (typeof value === 'boolean') {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value ? 1 : 0]])
-    } else {
-      this.#nativeSpans.queueBatchMeta(this._slotIndex, [[key, String(value)]])
+  /**
+   * Use the allocation-light final sync when every tag maps locally.
+   * @returns {boolean} Whether fast sync completed
+   */
+  tryFastFinalTagsToNative () {
+    if (this.#exported) return true
+    if (this.#hasErrorTags || this._spanSampling !== undefined) return false
+
+    const tags = this.getTags()
+    if (this.#hasOtelDeferredTags(tags)) return false
+
+    const metaBatch = []
+    const metricBatch = []
+    const name = normalizeName(String(this._name))
+    let resource
+    let service
+    let type = ''
+    let extraService
+    let baseService
+
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      if (key === 'error' || ERROR_META_KEYS.has(key)) return false
+
+      if (key === 'span.kind' && value && value !== 'internal') {
+        metricBatch.push(MEASURED, 1)
+      }
+
+      switch (key) {
+        case 'service.name':
+          if (typeof value !== 'string') return false
+          service = normalizeService(truncateWithEllipsis(value, MAX_META_VALUE_LENGTH))
+          if (value.toLowerCase() !== this._tracerServiceLower) extraService = value
+          break
+        case 'resource.name':
+          if (typeof value !== 'string') return false
+          resource = truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+          break
+        case BASE_SERVICE:
+          baseService = value
+          break
+        case 'span.type':
+          if (typeof value !== 'string') return false
+          type = normalizeType(truncateWithEllipsis(value, MAX_META_VALUE_LENGTH))
+          break
+        case 'http.status_code': {
+          const stringValue = value && String(value)
+          if (typeof stringValue === 'string') {
+            metaBatch.push(key, truncateWithEllipsis(stringValue, MAX_META_VALUE_LENGTH))
+          }
+          break
+        }
+        case 'analytics.event':
+          metricBatch.push(ANALYTICS_KEY, value === undefined || value ? 1 : 0)
+          break
+        case HOSTNAME_KEY:
+        case MEASURED:
+          metricBatch.push(key, value === undefined || value ? 1 : 0)
+          break
+        default: {
+          const valueType = typeof value
+          if (valueType === 'string') {
+            metaBatch.push(
+              truncateKey(key, MAX_META_KEY_LENGTH),
+              truncateWithEllipsis(value, MAX_META_VALUE_LENGTH)
+            )
+          } else if (valueType === 'number') {
+            if (!Number.isNaN(value)) metricBatch.push(truncateKey(key, MAX_METRIC_KEY_LENGTH), value)
+          } else if (valueType === 'boolean') {
+            metricBatch.push(truncateKey(key, MAX_METRIC_KEY_LENGTH), value ? 1 : 0)
+          } else if (value != null) {
+            return false
+          }
+        }
+      }
+    }
+
+    if (typeof this._hostname === 'string') {
+      metaBatch.push(HOSTNAME_KEY, truncateWithEllipsis(this._hostname, MAX_META_VALUE_LENGTH))
+    }
+    if (typeof this._sampling.priority === 'number') {
+      metricBatch.push(SAMPLING_PRIORITY_KEY, this._sampling.priority)
+    }
+    resource = normalizeResource(resource, name)
+    if (service === undefined) return false
+    service = normalizeService(service)
+    type = normalizeType(type)
+
+    if (extraService !== undefined) {
+      baseService = this._tracerServiceLower
+      this.setTag(BASE_SERVICE, baseService)
+      registerExtraService(extraService)
+    }
+    if (baseService !== undefined) {
+      if (typeof baseService !== 'string') return false
+      metaBatch.push(BASE_SERVICE, truncateWithEllipsis(baseService, MAX_META_VALUE_LENGTH))
+    }
+    this.#syncCoreFields(name, resource, service, type, 0)
+    const spanId = this._nativeSpanId
+    if (metaBatch.length > 0) this.#nativeSpans.queueBatchMetaFlat(spanId, metaBatch)
+    if (metricBatch.length > 0) this.#nativeSpans.queueBatchMetricsFlat(spanId, metricBatch)
+    return true
+  }
+
+  #syncCoreFields (name, resource, service, type, error) {
+    const spanId = this._nativeSpanId
+    if (name !== this.#nativeName) {
+      this.#nativeSpans.queueOp(OpCode.SetName, spanId, name)
+      this.#nativeName = name
+    }
+    if (resource !== this.#nativeResource) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, resource)
+      this.#nativeResource = resource
+    }
+    if (typeof service === 'string' && service !== this.#nativeService) {
+      this.#nativeSpans.queueOp(OpCode.SetServiceName, spanId, service)
+      this.#nativeService = service
+    }
+    if (typeof type === 'string' && type !== this.#nativeType) {
+      this.#nativeSpans.queueOp(OpCode.SetType, spanId, type)
+      this.#nativeType = type
+    }
+    if (error !== this.#nativeError) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', error])
+      this.#nativeError = error
+    }
+  }
+
+  #hasOtelDeferredTags (tags) {
+    if (!this.#nativeSpans.otelSemanticsEnabled) return false
+    for (const key of Object.keys(tags)) {
+      if (DD_HTTP_META_KEYS.has(key) || key === NETWORK_DESTINATION_PORT) return true
+    }
+    return false
+  }
+
+  /**
+   * Sync a span_format-compatible final representation to native storage.
+   * @param {object} formatted
+   */
+  syncFinalTagsToNative (formatted) {
+    if (this.#exported) return
+
+    const spanId = this._nativeSpanId
+    const name = String(formatted.name)
+    if (name !== this.#nativeName) {
+      this.#nativeSpans.queueOp(OpCode.SetName, spanId, name)
+      this.#nativeName = name
+    }
+    const resource = String(formatted.resource)
+    if (resource !== this.#nativeResource) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, resource)
+      this.#nativeResource = resource
+    }
+    if (typeof formatted.service === 'string' && formatted.service !== this.#nativeService) {
+      this.#nativeSpans.queueOp(OpCode.SetServiceName, spanId, formatted.service)
+      this.#nativeService = formatted.service
+    }
+    if (typeof formatted.type === 'string' && formatted.type !== this.#nativeType) {
+      this.#nativeSpans.queueOp(OpCode.SetType, spanId, formatted.type)
+      this.#nativeType = formatted.type
+    }
+    const error = formatted.error ? 1 : 0
+    if (error !== this.#nativeError) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', error])
+      this.#nativeError = error
+    }
+
+    const metaBatch = []
+    for (const key of Object.keys(formatted.meta)) {
+      if (this.#isOtelDeferredKey(key)) continue
+      if (key === PROCESS_TAGS_META_KEY && !this.hasTag(PROCESS_TAGS_META_KEY)) continue
+      metaBatch.push(key, formatted.meta[key])
+    }
+    if (metaBatch.length > 0) {
+      this.#nativeSpans.queueBatchMetaFlat(spanId, metaBatch)
+    }
+
+    const metricBatch = []
+    for (const key of Object.keys(formatted.metrics)) {
+      if (this.#isOtelDeferredKey(key)) continue
+      const value = formatted.metrics[key]
+      if (typeof value === 'number' && !Number.isNaN(value)) metricBatch.push(key, value)
+    }
+    if (metricBatch.length > 0) {
+      this.#nativeSpans.queueBatchMetricsFlat(spanId, metricBatch)
+    }
+  }
+
+  /** Replay final error metadata using span_format overwrite order. */
+  syncErrorMetaToNative () {
+    if (this.#exported || !this.#hasErrorTags || this._name === 'fs.operation') return
+
+    const tags = this.getTags()
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      switch (key) {
+        case 'error':
+          if (value?.message || value instanceof Error) {
+            if (value.name) {
+              this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
+            }
+            if (value.message || value.code) {
+              this.#nativeSpans.queueOp(
+                OpCode.SetMetaAttr,
+                this._nativeSpanId,
+                'error.message',
+                String(value.message || value.code)
+              )
+            }
+            if (value.stack) {
+              this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.stack', String(value.stack))
+            }
+          }
+          break
+        case 'error.type':
+        case 'error.message':
+        case 'error.stack':
+          if (!this.getTag(IGNORE_OTEL_ERROR)) {
+            this.#nativeSpans.queueOp(OpCode.SetError, this._nativeSpanId, ['i32', 1])
+            this.#nativeError = 1
+          }
+          if (value != null) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, key, String(value))
+          }
+          break
+      }
     }
   }
 
   /**
-   * Sync a tag value to native storage.
-   * @param {string} key - Tag key
-   * @param {unknown} value - Tag value
+   * Hold Datadog HTTP keys out of WASM until OTel remapping is complete.
+   * @param {string} key
+   * @returns {boolean}
    */
-  #syncTagToNative (key, value) {
-    if (value === undefined || value === null) {
-      return
-    }
-
-    // Handle special span properties that have dedicated OpCodes
-    switch (key) {
-      case 'service.name':
-        this.#nativeSpans.queueOp(
-          OpCode.SetServiceName,
-          this._slotIndex,
-          String(value)
-        )
-        // Set _dd.base_service when the span's service differs from the
-        // tracer's configured service so downstream consumers can identify the
-        // owning service.
-        if (this._tracerService && String(value).toLowerCase() !== this._tracerService.toLowerCase()) {
-          super.setTag(BASE_SERVICE, this._tracerService)
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetaAttr,
-            this._slotIndex,
-            BASE_SERVICE,
-            String(this._tracerService)
-          )
-        }
-        return
-
-      case 'service':
-        // Treat the bare `service` key as an alias for `service.name`. We
-        // already routed `service.name` through SetServiceName above; if a
-        // caller writes the alias, fall through to the same opcode rather
-        // than queueing a meta tag.
-        this.#nativeSpans.queueOp(
-          OpCode.SetServiceName,
-          this._slotIndex,
-          String(value)
-        )
-        return
-
-      case 'resource.name':
-        this.#nativeSpans.queueOp(
-          OpCode.SetResourceName,
-          this._slotIndex,
-          String(value)
-        )
-        return
-
-      case 'span.type':
-        this.#nativeSpans.queueOp(
-          OpCode.SetType,
-          this._slotIndex,
-          String(value)
-        )
-        return
-
-      case 'error':
-        // fs.operation spans suppress span.error = 1; the error details are
-        // still carried in meta tags but the span itself isn't marked failed,
-        // since fs ops failing isn't always a tracer-level error.
-        if (this._name === 'fs.operation') {
-          return
-        }
-        this.#nativeSpans.queueOp(
-          OpCode.SetError,
-          this._slotIndex,
-          ['i32', value ? 1 : 0]
-        )
-        // Error objects: also extract error.type/message/stack as meta tags so
-        // consumers don't need to introspect the underlying Error.
-        if (value instanceof Error) {
-          if (value.name) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.type', String(value.name))
-          }
-          if (value.message || value.code) {
-            const errMsg = String(value.message || value.code)
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.message', errMsg)
-          }
-          if (value.stack) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.stack', String(value.stack))
-          }
-        }
-        return
-
-      // http.status_code must be stored as string in meta, not number in
-      // metrics — agent UI / downstream tooling expects the string form.
-      case 'http.status_code':
-        this.#nativeSpans.queueOp(
-          OpCode.SetMetaAttr,
-          this._slotIndex,
-          key,
-          String(value)
-        )
-        return
-
-      // Setting error.type implies span.error = 1, except on fs.operation
-      // spans which deliberately don't propagate fs failures up.
-      case 'error.type':
-        if (this._name !== 'fs.operation') {
-          this.#nativeSpans.queueOp(
-            OpCode.SetError,
-            this._slotIndex,
-            ['i32', 1]
-          )
-        }
-        // Fall through to add the meta tag
-        this.#nativeSpans.queueOp(
-          OpCode.SetMetaAttr,
-          this._slotIndex,
-          key,
-          String(value)
-        )
-        return
-
-      default:
-        // Regular tags go to meta (string) or metrics (number)
-        if (typeof value === 'number') {
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetricAttr,
-            this._slotIndex,
-            key,
-            ['f64', value]
-          )
-        } else if (typeof value === 'boolean') {
-          // Booleans are stored as metrics (0 or 1)
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetricAttr,
-            this._slotIndex,
-            key,
-            ['f64', value ? 1 : 0]
-          )
-        } else {
-          this.#nativeSpans.queueOp(
-            OpCode.SetMetaAttr,
-            this._slotIndex,
-            key,
-            String(value)
-          )
-        }
-    }
+  #isOtelDeferredKey (key) {
+    return this.#nativeSpans.otelSemanticsEnabled &&
+      (DD_HTTP_META_KEYS.has(key) || key === NETWORK_DESTINATION_PORT)
   }
 
   /**
-   * Set the name locally without syncing to native storage.
-   * Used during construction when CreateSpan already set the name natively.
-   * @param {string} name - Span name
+   * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
+   * native output at finish. Datadog HTTP tags are skipped by
+   * syncFinalTagsToNative(), so build a formatted view from the JS tag cache,
+   * run the shared `applyHttpOtelSemantics`, and sync the resulting OTel
+   * meta/metrics (plus any error/resource change) into WASM. No-op for
+   * non-HTTP spans. Only invoked when the tracer runs with
+   * DD_TRACE_OTEL_SEMANTICS_ENABLED.
+   *
+   * Divergence from master: because the DD HTTP tags are held out of WASM
+   * entirely (not just renamed at serialization), the native trace-stats
+   * concentrator (which runs in WASM at flush) sees the OTel names rather than
+   * the DD `http.status_code`/etc. Master kept the DD tags on the span so stats
+   * were unaffected. This only matters for the OTEL-semantics + native-stats
+   * intersection and is an accepted limitation of the opt-in flag.
    */
-  _setNameLocal (name) {
-    this[NAME_VALUE] = name
-  }
+  applyOtelHttpSemantics () {
+    const tags = this.getTags()
+    if (tags['http.method'] === undefined && tags['http.url'] === undefined) return
 
-  /**
-   * Sync the span name to native storage.
-   * Called from NativeDatadogSpan.
-   * @param {string} name - Span name
-   */
-  _syncNameToNative (name) {
-    this.#nativeSpans.queueOp(
-      OpCode.SetName,
-      this._slotIndex,
-      String(name)
-    )
+    // Rebuild the native meta/metric categories from the JS cache.
+    const meta = {}
+    const metrics = {}
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      if (value === null || value === undefined) continue
+      if (key === 'http.status_code') {
+        meta[key] = String(value)
+      } else if (typeof value === 'number') {
+        if (!Number.isNaN(value)) metrics[key] = value
+      } else if (typeof value === 'boolean') {
+        metrics[key] = value ? 1 : 0
+      } else {
+        meta[key] = String(value)
+      }
+    }
+
+    const resourceBefore = typeof tags['resource.name'] === 'string' ? tags['resource.name'] : undefined
+    const errorBefore = tags.error ? 1 : 0
+    const view = { meta, metrics, error: errorBefore, resource: resourceBefore }
+
+    applyHttpOtelSemantics(view)
+
+    const spanId = this._nativeSpanId
+    for (const key of OTEL_OUTPUT_META_KEYS) {
+      const value = view.meta[key]
+      if (value !== undefined) {
+        this.#nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, key, String(value))
+      }
+    }
+    for (const key of OTEL_OUTPUT_METRIC_KEYS) {
+      const value = view.metrics[key]
+      if (value !== undefined) {
+        this.#nativeSpans.queueOp(OpCode.SetMetricAttr, spanId, key, ['f64', value])
+      }
+    }
+    // The remap flips error on for error responses; it never clears it.
+    if (view.error === 1 && errorBefore !== 1) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+      this.#nativeError = 1
+    }
+    // Only the unknown-verb (_OTHER) path rewrites the resource.
+    if (typeof view.resource === 'string' && view.resource !== resourceBefore) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, view.resource)
+      this.#nativeResource = view.resource
+    }
   }
 }
 

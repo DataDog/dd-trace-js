@@ -1,70 +1,66 @@
 'use strict'
 
+const { callbackify } = require('node:util')
+
 const log = require('../log')
 const { WasmSpanState, wasmMemory } = require('./index')
+
+// A queued op (or an extracted chunk) referenced a span id that is absent from
+// native storage. The wasm error may arrive as an Error or a bare string.
+function isSpanNotFoundError (e) {
+  return /span not found/.test(String(e != null && e.message != null ? e.message : e))
+}
+
+function spanNotFoundId (e) {
+  const match = /span not found[^0-9]*(\d+)/.exec(String(e != null && e.message != null ? e.message : e))
+  return match ? BigInt(match[1]) : null
+}
 
 // Default buffer sizes
 const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
+const EMPTY_FLUSH_BUFFER = Buffer.alloc(0)
 
 // OpCode values are small u32 integers, written as u64 LE via two u32 writes.
 
 /**
- * NativeSpansInterface provides the JavaScript bridge to the native span storage.
+ * JS bridge to native span storage.
  *
- * It manages:
- * - Shared buffers for efficient data transfer to/from Rust
- * - The change buffer protocol for queuing span operations
- * - The string table for string deduplication
- * - Span export to the Datadog agent
+ * Cached WASM views must be refreshed after any call that can grow memory.
+ * Queue methods check at entry for growth by earlier async calls; methods that
+ * call WASM refresh again before retaining or using a view.
  *
- * ## Detach-safety invariant
+ * Change queue layout:
+ *   [count: u64 LE]
+ *   [opcode: u16 LE][spanId: u64 LE][payload]...
  *
- * The cached `_cqbView` / `_cqbBytes` views into WASM memory get detached
- * whenever a WASM call grows memory. Rather than re-checking on every
- * queue method entry, every WASM call that can grow memory is followed by
- * `#checkDetach()` at the call site:
- *   - `stringTableInsertOne` (in `getStringId`)
- *   - `flushChangeQueue` (`flush_change_buffer`)
- *   - `prepareChunk` (in `flushSpans`)
- *
- * Inside the queue methods, all `getStringId` resolution runs **before**
- * the local `view`/`buf` snapshots are taken — so any growth during string
- * resolution is handled by the inner `#checkDetach()` and the locals see
- * a fresh view.
- *
- * ## Change-buffer wire format
- *
- * The change buffer is a contiguous WASM-memory region whose layout is:
- *
- *   header   : [count: u64 LE]                    @ offset 0
- *   per op   : [opcode: u64 LE][slotIndex: u32][...payload...]
- *
- * Each `queue*` method appends one op record and increments `count`.
- *
- * ### Generic queueOp args
- *
- * `queueOp(op, slot, ...args)` writes per-arg encodings after the header:
- *       number              → u32 string-id (pre-resolved)
- *       ['id64', value]     → u64 LE (8 bytes; byte-swapped from BE Identifier)
- *       ['id128', value]    → u128 LE (16 bytes; byte-swapped from BE Identifier;
- *                                      8-byte inputs are zero-padded to 16)
- *       ['ns', ms]          → u64 LE nanoseconds (ms * 1e6, rounded)
- *       ['i32', value]      → i32 LE
- *       ['f64', value]      → f64 LE
- *
- * ### Method-specific record layouts
- *
- *   queueCreateSpan (op=13):     [spanId u64 LE][traceId u128 LE]
- *                                [parentId u64 LE][nameId u32][start u64 LE]
- *   queueBatchMeta (op=15):      [count: u32][keyId u32, valId u32] × count
- *   queueBatchMetrics (op=16):   [count: u32][keyId u32, value f64] × count
- *
- * All u64 fields use the LE representation in WASM memory; spanId/traceId/
- * parentId payloads byte-swap from the JS-side BE Identifier buffers.
+ * Generic arguments encode as a string id (`number`), `id64`, `id128`, `ns`,
+ * `i32`, or `f64`. Identifier buffers arrive big-endian and are written
+ * little-endian for WASM.
  */
+
+/**
+ * Convert the legacy `unix://./pipe/...` Windows-pipe form to libdatadog's
+ * `windows:` scheme. Unix sockets and HTTP URLs pass through unchanged.
+ * @param {string} url Agent URL
+ * @returns {string} URL accepted by libdatadog
+ */
+function normalizeAgentUrl (url) {
+  if (typeof url === 'string' && url.startsWith('unix://./')) {
+    return 'windows:' + url.slice('unix:'.length)
+  }
+  return url
+}
+
 class NativeSpansInterface {
+  #sendInFlight = false
+  #sendPreparedChunk
+  #otlpEndpoint
+  #otlpHeaders
+  #otlpProtocol
+  #useV05 = false
+
   /**
    * @param {object} options Configuration options
    * @param {string} options.agentUrl URL of the Datadog agent
@@ -74,18 +70,14 @@ class NativeSpansInterface {
    * @param {string} [options.langInterpreter] Language interpreter (defaults to 'v8')
    * @param {number} [options.pid] Process ID (defaults to process.pid)
    * @param {string} options.tracerService Default service name
-   * @param {boolean} [options.statsEnabled] Enable native stats collection (defaults to false)
-   * @param {string} [options.hostname] Hostname for stats payload (defaults to '')
-   * @param {string} [options.env] Environment for stats payload (defaults to '')
-   * @param {string} [options.appVersion] App version for stats payload (defaults to '')
-   * @param {string} [options.runtimeId] Runtime ID for stats payload (defaults to '')
+   * @param {boolean} [options.clientComputedStats] Whether traces carry client-computed stats
+   * @param {boolean} [options.otelSemanticsEnabled] Whether OTel HTTP remapping is enabled
    */
   constructor (options) {
     if (!WasmSpanState) {
       throw new Error('Native spans module is not available')
     }
 
-    // Store options for potential re-initialization
     this._options = {
       tracerVersion: options.tracerVersion,
       lang: options.lang || 'nodejs',
@@ -93,12 +85,9 @@ class NativeSpansInterface {
       langInterpreter: options.langInterpreter || 'v8',
       pid: options.pid ?? process.pid,
       tracerService: options.tracerService,
-      statsEnabled: options.statsEnabled || false,
-      hostname: options.hostname || '',
-      env: options.env || '',
-      appVersion: options.appVersion || '',
-      runtimeId: options.runtimeId || '',
+      clientComputedStats: options.clientComputedStats || false,
     }
+    this.otelSemanticsEnabled = options.otelSemanticsEnabled || false
 
     // Flush buffer for span export
     this._flushBuffer = Buffer.alloc(FLUSH_BUFFER_SIZE)
@@ -108,83 +97,91 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
-    // Slot allocator state
-    this._nextSlot = 0
-    this._freeSlots = []
+    // One segment id per local trace.
+    this._nextSegment = 0
 
-    // String table state
+    // String ids live only as long as queued/native work.
     this._stringMap = new Map()
     this._stringIdCounter = 0
 
-    // Initialize the WASM state (buffers are allocated in WASM memory)
     this._state = this.#createWasmState(options.agentUrl)
+    this.#sendPreparedChunk = callbackify(this._state.sendPreparedChunk)
 
     // Get the WASM memory views for writing to the change queue buffer
     this._wasmMemory = wasmMemory
     this._cqbPtr = this._state.change_queue_ptr()
     this.#refreshViews()
 
-    // Start stats flush interval if stats are enabled
-    if (this._options.statsEnabled) {
-      this._statsInterval = setInterval(() => {
-        this._state.flushStats(false).catch((err) => {
-          log.error('Error flushing native stats:', err)
-        })
-      }, 10_000)
-      this._statsInterval.unref?.()
-
-      // Force flush stats on process exit. Failure here loses buffered stats —
-      // we cannot retry past beforeExit, but we must surface the cause.
-      const handler = () => {
-        this._state.flushStats(true).catch((err) => {
-          log.warn('Failed final native stats flush on exit:', err)
-        })
-      }
-      const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
-      if (handlers) {
-        handlers.add(handler)
-      } else {
-        // Fallback path covers test/synthetic setups that bypass dd-trace's
-        // entry point. In production the shared registry is always present.
-        process.once('beforeExit', handler)
-      }
-    }
-
     log.debug('Native spans interface initialized')
   }
 
   /**
-   * Update the agent URL by reinitializing the native state.
-   * Warning: This will discard any buffered but unflushed span data.
+   * Select trace intake v0.5 for subsequent sends.
+   * @param {boolean} useV05 Whether to use v0.5
+   */
+  setUseV05 (useV05) {
+    this._state.setUseV05(useV05)
+    this.#useV05 = useV05
+  }
+
+  /**
+   * Select native OTLP export.
+   * @param {string} url OTLP trace endpoint
+   */
+  setOtlpEndpoint (url) {
+    this._state.setOtlpEndpoint(url)
+    this.#otlpEndpoint = url
+  }
+
+  /**
+   * Select the OTLP transport protocol.
+   * @param {string} protocol OTLP transport protocol
+   */
+  setOtlpProtocol (protocol) {
+    this._state.setOtlpProtocol(protocol)
+    this.#otlpProtocol = protocol
+  }
+
+  /**
+   * Set flattened OTLP request headers.
+   * @param {string[]} headers Alternating header names and values
+   */
+  setOtlpHeaders (headers) {
+    this._state.setOtlpHeaders(headers)
+    this.#otlpHeaders = headers
+  }
+
+  /**
+   * Rebuild native state for a new agent URL. The exporter calls this only
+   * after active spans, pending chunks, and the current send have drained.
    * @param {string} url New agent URL
    */
   setAgentUrl (url) {
-    // Flush any pending operations to the OLD state first.
+    if (this.#sendInFlight) {
+      throw new Error('cannot replace native span state while a send is in flight')
+    }
+
     this.flushChangeQueue()
-
-    // Build the new state BEFORE clearing JS-side bookkeeping. If the WASM
-    // constructor throws (OOM, invalid URL, libdatadog init failure), the
-    // existing state remains consistent: `_state`, `_stringMap`, and
-    // `_stringIdCounter` continue to agree, so subsequent `getStringId`
-    // calls don't collide with already-interned ids in the old WASM table.
     const newState = this.#createWasmState(url)
+    if (this.#useV05) newState.setUseV05(true)
+    if (this.#otlpEndpoint !== undefined) {
+      newState.setOtlpEndpoint(this.#otlpEndpoint)
+      if (this.#otlpProtocol !== undefined) newState.setOtlpProtocol(this.#otlpProtocol)
+      if (this.#otlpHeaders !== undefined) newState.setOtlpHeaders(this.#otlpHeaders)
+    }
+    const sendPreparedChunk = callbackify(newState.sendPreparedChunk)
+    const oldState = this._state
 
-    // Atomic swap: only after the new state is fully constructed do we
-    // commit to it and reset JS-side counters.
     this._state = newState
+    this.#sendPreparedChunk = sendPreparedChunk
     this._cqbIndex = 8
     this._cqbCount = 0
     this._stringMap.clear()
     this._stringIdCounter = 0
-
-    // Refresh both WASM memory views — buffer/pointer changed with the new
-    // state. We must refresh `_cqbBytes` alongside `_cqbView`; `#checkDetach()`
-    // only inspects `_cqbView.buffer` and would not detect a `_cqbBytes`-only
-    // mismatch, so a missed refresh would silently corrupt the next u128
-    // byte-copy in `queueCreateSpan*`.
     this._wasmMemory = wasmMemory
-    this._cqbPtr = this._state.change_queue_ptr()
+    this._cqbPtr = newState.change_queue_ptr()
     this.#refreshViews()
+    oldState.free()
 
     log.debug('Native spans interface reinitialized with new URL:', url)
   }
@@ -199,28 +196,18 @@ class NativeSpansInterface {
     // Zero out the count header in WASM memory
     if (this._wasmMemory.buffer !== this._cqbView.buffer) {
       this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+      this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
     }
     this._cqbView.setUint32(0, 0, true)
     this._cqbView.setUint32(4, 0, true)
   }
 
   /**
-   * Allocate a slot index for a new span.
-   * Reuses freed slots when available, otherwise increments the counter.
-   * @returns {number} The allocated slot index
+   * Allocate a fresh segment id for a new local trace.
+   * @returns {number} The allocated segment id
    */
-  allocSlot () {
-    if (this._freeSlots.length > 0) return this._freeSlots.pop()
-    return this._nextSlot++
-  }
-
-  /**
-   * Return slot indices to the free list after spans are flushed.
-   * @param {Array<number>} slots Array of slot indices to free
-   */
-  freeSlots (slots) {
-    for (let i = 0; i < slots.length; i++) this._freeSlots.push(slots[i])
+  allocSegment () {
+    return this._nextSegment++
   }
 
   /**
@@ -235,16 +222,116 @@ class NativeSpansInterface {
       this.#checkDetach()
       this.resetChangeQueue()
     } catch (e) {
-      // The Rust side may have consumed an unknown prefix of queued ops
-      // before throwing, so we cannot tell which ops landed. Reset JS-side
-      // state so subsequent queue writes don't clobber a corrupt buffer,
-      // refresh views in case memory grew during the partial drain, and
-      // surface the failure to the caller.
+      const preserved = this.#copyOpsAfterSpanNotFound(e)
       this.resetChangeQueue()
       this.#checkDetach()
+      if (preserved !== null) {
+        this.#restoreQueuedOps(preserved)
+        if (preserved.count > 0) this.flushChangeQueue()
+        log.warn(
+          'Native spans: dropped one orphaned span operation after "span not found"; preserved %d later operation(s)',
+          preserved.count,
+          e
+        )
+        return
+      }
+      // An unidentifiable orphan drops the batch rather than crashing the app.
+      if (isSpanNotFoundError(e)) {
+        log.warn('Native spans: dropped a change-queue batch after "span not found"; affected spans were lost', e)
+        return
+      }
       log.error('Error flushing change queue to native spans:', e)
       throw e
     }
+  }
+
+  #copyOpsAfterSpanNotFound (error) {
+    const missing = spanNotFoundId(error)
+    if (missing === null) return null
+
+    try {
+      let offset = 8
+      for (let i = 0; i < this._cqbCount; i++) {
+        const start = offset
+        const spanId = this._cqbView.getBigUint64(start + 2, true)
+        offset = this.#nextOpOffset(offset)
+        if (spanId === missing) {
+          const remaining = this._cqbCount - i - 1
+          if (remaining <= 0) return { bytes: null, count: 0 }
+          return {
+            bytes: this._cqbBytes.slice(offset, this._cqbIndex),
+            count: remaining,
+          }
+        }
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
+
+  #nextOpOffset (offset) {
+    const op = this._cqbView.getUint16(offset, true)
+    offset += 10
+    switch (op) {
+      case 1: // SetMetaAttr
+      case 10: // SetTraceMetaAttr
+        return offset + 8
+      case 2: // SetMetricAttr
+      case 11: // SetTraceMetricsAttr
+        return offset + 12
+      case 3: // SetServiceName
+      case 4: // SetResourceName
+      case 8: // SetType
+      case 9: // SetName
+      case 12: // SetTraceOrigin
+        return offset + 4
+      case 5: // SetError
+        return offset + 4
+      case 6: // SetStart
+      case 7: // SetDuration
+        return offset + 8
+      case 13: // CreateSpan
+        return offset + 44
+      case 14: // CreateSpanFull
+        return offset + 56
+      case 15: { // BatchSetMeta
+        const count = this._cqbView.getUint32(offset, true)
+        return offset + 4 + count * 8
+      }
+      case 16: { // BatchSetMetric
+        const count = this._cqbView.getUint32(offset, true)
+        return offset + 4 + count * 12
+      }
+      default:
+        throw new Error(`unknown native span op ${op}`)
+    }
+  }
+
+  #restoreQueuedOps ({ bytes, count }) {
+    if (count === 0 || bytes === null) return
+    this._cqbBytes.set(bytes, 8)
+    this._cqbIndex = 8 + bytes.length
+    this._cqbCount = count
+    this._cqbView.setUint32(0, count, true)
+    this._cqbView.setUint32(4, 0, true)
+  }
+
+  #evictStringTable (resetCounter = false) {
+    if (resetCounter) this._stringIdCounter = 0
+    if (this._stringMap.size === 0) return
+
+    const evict = this._state.stringTableEvict
+    if (typeof evict === 'function') {
+      for (const id of this._stringMap.values()) {
+        evict.call(this._state, id)
+      }
+    }
+    this._stringMap.clear()
+  }
+
+  #evictIdleStringTable () {
+    if (this._cqbCount === 0) this.#evictStringTable(false)
   }
 
   /**
@@ -259,11 +346,7 @@ class NativeSpansInterface {
     if (typeof id === 'number') return id
 
     id = this._stringIdCounter++
-    // Insert into WASM first; only commit to the JS map if the WASM call
-    // succeeds. If `stringTableInsertOne` throws (e.g. OOM during memory
-    // grow), we must NOT leave the JS map claiming `str` is interned at
-    // `id` — a future `queueOp` would emit a dangling string-id reference.
-    // This WASM call may trigger memory growth, detaching the ArrayBuffer.
+    // Commit to the JS map only after the WASM insertion succeeds.
     this._state.stringTableInsertOne(id, str)
     this.#checkDetach()
     this._stringMap.set(str, id)
@@ -281,18 +364,15 @@ class NativeSpansInterface {
   }
 
   /**
-   * Queue an operation to the change buffer.
-   *
-   * Writes the op record directly into the WASM-side change-queue buffer
-   * via cached `_cqbView` / `_cqbBytes` views. See the class doc for the
-   * per-arg encoding table.
-   *
-   * @param {number} op The OpCode value
-   * @param {number} slotIndex The slot index (u32)
+   * Append an operation directly to the WASM change queue.
+   * @param {number} op OpCode value
+   * @param {Uint8Array} spanId 8-byte little-endian span id
    * @param {...(string|Array)} args Operation arguments
    */
-  queueOp (op, slotIndex, ...args) {
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+  queueOp (op, spanId, ...args) {
+    // Catch memory growth from an earlier call before taking local views.
+    this.#checkDetach()
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
 
     if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -300,8 +380,7 @@ class NativeSpansInterface {
       idx = this._cqbIndex
     }
 
-    // Resolve all string IDs first — these may trigger WASM memory growth.
-    // After this loop, views are safe to cache locally.
+    // Resolve strings before taking views because interning can grow memory.
     const resolvedArgs = args
     for (let i = 0; i < resolvedArgs.length; i++) {
       if (typeof resolvedArgs[i] === 'string') {
@@ -309,15 +388,14 @@ class NativeSpansInterface {
       }
     }
 
-    // Grab locals after all WASM calls are done — safe until method returns.
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, op, true)
-    view.setUint32(idx + 4, 0, true)
+    // [opcode u16 LE][span_id u64 LE]
+    view.setUint16(idx, op, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
 
     for (let i = 0; i < resolvedArgs.length; i++) {
       const arg = resolvedArgs[i]
@@ -334,28 +412,27 @@ class NativeSpansInterface {
               view.setUint32(idx, 0, true)
               view.setUint32(idx + 4, 0, true)
             } else {
-              const b = value._buffer ?? value
+              const b = typeof value.toBuffer === 'function' ? value.toBuffer() : (value._buffer ?? value)
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
             }
             idx += 8
             break
           case 'id128': {
-            const b = value._buffer ?? value
+            const b = typeof value.toBuffer === 'function' ? value.toBuffer() : (value._buffer ?? value)
             if (b.length > 8) {
               buf[idx] = b[15]; buf[idx + 1] = b[14]; buf[idx + 2] = b[13]; buf[idx + 3] = b[12]
               buf[idx + 4] = b[11]; buf[idx + 5] = b[10]; buf[idx + 6] = b[9]; buf[idx + 7] = b[8]
               idx += 8
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
-              idx += 8
             } else {
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
               idx += 8
               view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-              idx += 8
             }
+            idx += 8
             break
           }
           case 'ns': {
@@ -388,21 +465,18 @@ class NativeSpansInterface {
    */
   #refreshViews () {
     this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-    this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+    this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
   }
 
   /**
-   * Construct a fresh WasmSpanState bound to the given agent URL. Used by
-   * the constructor and `setAgentUrl()` so the 14-argument signature lives
-   * in exactly one place.
-   *
+   * Construct a state through the binding's positional API.
    * @param {string} url Agent URL
    * @returns {WasmSpanState}
    */
   #createWasmState (url) {
     const opts = this._options
     return new WasmSpanState(
-      url,
+      normalizeAgentUrl(url),
       opts.tracerVersion,
       opts.lang,
       opts.langVersion,
@@ -411,73 +485,86 @@ class NativeSpansInterface {
       STRING_TABLE_INPUT_BUFFER_SIZE,
       opts.pid,
       opts.tracerService,
-      opts.statsEnabled,
-      opts.hostname,
-      opts.env,
-      opts.appVersion,
-      opts.runtimeId,
+      false,
+      '',
+      '',
+      '',
+      '',
+      opts.clientComputedStats,
     )
   }
 
   /**
-   * Queue a CreateSpan operation (combined Create + SetName + SetStart).
+   * Queue a CreateSpanFull operation (Create + name + service + resource + type + start).
    *
-   * @param {number} slotIndex The slot index (u32)
-   * @param {Uint8Array} spanId LE span ID
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
+   * @param {number} segmentId The local-trace segment id (u64)
    * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
    * @param {string} name Span name
+   * @param {string} service Service name
+   * @param {string} resource Resource name
+   * @param {string} type Span type
    * @param {number} startMs Start time in milliseconds
    */
-  queueCreateSpan (slotIndex, spanId, traceId, parentId, name, startMs) {
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+  queueCreateSpanFull (spanId, traceId, segmentId, parentId, name, service, resource, type, startMs) {
+    this.#checkDetach()
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
 
-    if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
 
-    // Resolve string ID first (may trigger memory growth)
     const nameId = this.getStringId(name)
+    const serviceId = this.getStringId(service)
+    const resourceId = this.getStringId(resource)
+    const typeId = this.getStringId(type)
 
-    // Cache locals after all WASM calls are done
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 13, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
+    view.setUint16(idx, 14, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
 
-    const tb = traceId._buffer ?? traceId
+    const tb = typeof traceId?.toBuffer === 'function' ? traceId.toBuffer() : (traceId._buffer ?? traceId)
     if (tb.length > 8) {
       buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
       buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
       idx += 8
       buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
       buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
-      idx += 8
     } else {
       buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
       buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
       idx += 8
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-      idx += 8
     }
+    idx += 8
+
+    view.setUint32(idx, segmentId % 0x1_00_00_00_00, true)
+    view.setUint32(idx + 4, Math.floor(segmentId / 0x1_00_00_00_00), true)
+    idx += 8
 
     if (parentId === null || parentId === undefined) {
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
     } else {
-      const pb = parentId._buffer ?? parentId
+      const pb = typeof parentId.toBuffer === 'function' ? parentId.toBuffer() : (parentId._buffer ?? parentId)
       buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
       buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
     }
     idx += 8
 
     view.setUint32(idx, nameId, true)
+    idx += 4
+    view.setUint32(idx, serviceId, true)
+    idx += 4
+    view.setUint32(idx, resourceId, true)
+    idx += 4
+    view.setUint32(idx, typeId, true)
     idx += 4
 
     const ns = Math.round(startMs * 1e6)
@@ -492,43 +579,46 @@ class NativeSpansInterface {
   }
 
   /**
-   * Queue multiple meta (string) tags using the BatchSetMeta opcode.
-   * Single header, N key/value pairs. Written directly to WASM memory.
+   * Queue multiple meta tags from a flat scratch array: [key, value, ...].
+   * Mutates the scratch array to interned string ids before taking WASM views.
+   * Used by the Span#addTags hot path to avoid per-tag pair arrays.
    *
-   * @param {number} slotIndex The slot index (u32)
-   * @param {Array<[string, string]>} tags Array of [key, value] pairs
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * @param {Array<string|number>} tags Alternating key/value entries
    */
-  queueBatchMeta (slotIndex, tags) {
-    if (tags.length === 0) return
+  queueBatchMetaFlat (spanId, tags) {
+    const count = tags.length >> 1
+    if (count === 0) return
 
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
-    const needed = 16 + tags.length * 8
+    const needed = 16 + count * 8
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
 
-    // Resolve all string IDs first (may trigger memory growth)
-    const ids = new Array(tags.length * 2)
+    // Resolve all string IDs first (may trigger memory growth). This array is a
+    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
     for (let i = 0; i < tags.length; i++) {
-      ids[i * 2] = this.getStringId(tags[i][0])
-      ids[i * 2 + 1] = this.getStringId(tags[i][1])
+      tags[i] = this.getStringId(tags[i])
     }
 
     const view = this._cqbView
+    const buf = this._cqbBytes
 
-    view.setUint32(idx, 15, true); view.setUint32(idx + 4, 0, true)
+    view.setUint16(idx, 15, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
+    view.setUint32(idx, count, true)
     idx += 4
-    view.setUint32(idx, tags.length, true)
-    idx += 4
-    for (let i = 0; i < tags.length; i++) {
-      view.setUint32(idx, ids[i * 2], true)
+    for (let i = 0; i < tags.length; i += 2) {
+      view.setUint32(idx, tags[i], true)
       idx += 4
-      view.setUint32(idx, ids[i * 2 + 1], true)
+      view.setUint32(idx, tags[i + 1], true)
       idx += 4
     }
 
@@ -542,13 +632,14 @@ class NativeSpansInterface {
    * Queue multiple metric tags using the BatchSetMetric opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
-   * @param {number} slotIndex The slot index (u32)
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {Array<[string, number]>} tags Array of [key, value] pairs
    */
-  queueBatchMetrics (slotIndex, tags) {
+  queueBatchMetrics (spanId, tags) {
     if (tags.length === 0) return
 
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 12
 
@@ -564,11 +655,12 @@ class NativeSpansInterface {
     }
 
     const view = this._cqbView
+    const buf = this._cqbBytes
 
-    view.setUint32(idx, 16, true); view.setUint32(idx + 4, 0, true)
+    view.setUint16(idx, 16, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
@@ -585,61 +677,193 @@ class NativeSpansInterface {
   }
 
   /**
-   * Flush spans to the Datadog agent.
+   * Queue multiple metric tags from a flat scratch array: [key, value, ...].
+   * Mutates key slots to interned string ids before taking WASM views. Used by
+   * the Span#addTags hot path to avoid per-tag pair arrays.
    *
-   * @param {Array<number>} slots Array of u32 slot indices
-   * @param {boolean} [firstIsLocalRoot] Whether the first span is the local root (defaults to true)
-   * @returns {Promise<string>} Response from the agent
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * @param {Array<string|number>} tags Alternating key/value entries
    */
-  async flushSpans (slots, firstIsLocalRoot = true) {
-    // Flush any pending change queue operations first
-    this.flushChangeQueue()
+  queueBatchMetricsFlat (spanId, tags) {
+    const count = tags.length >> 1
+    if (count === 0) return
 
-    if (slots.length === 0) {
-      return 'no spans to flush'
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
+    let idx = this._cqbIndex
+    const needed = 16 + count * 12
+
+    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
     }
 
-    // Ensure flush buffer is large enough
-    const requiredSize = slots.length * 4
+    // Resolve all string IDs first (may trigger memory growth). This array is a
+    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
+    for (let i = 0; i < tags.length; i += 2) {
+      tags[i] = this.getStringId(tags[i])
+    }
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint16(idx, 16, true)
+    idx += 2
+    buf.set(spanId, idx)
+    idx += 8
+    view.setUint32(idx, count, true)
+    idx += 4
+    for (let i = 0; i < tags.length; i += 2) {
+      view.setUint32(idx, tags[i], true)
+      idx += 4
+      view.setFloat64(idx, tags[i + 1], true)
+      idx += 8
+    }
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Set a `meta_struct` entry on a span. `meta_struct` carries msgpack-encoded
+   * structured data (AppSec, Code Origin, Dynamic Instrumentation) and has no
+   * change-buffer opcode, so the WASM binding writes it directly onto the span
+   * after draining its own change queue. We must therefore drain the JS-tracked
+   * queue first, otherwise `_cqbIndex`/`_cqbCount` would fall out of sync with
+   * the now-zeroed WASM header and the next `queueOp` would re-apply stale ops.
+   *
+   * @param {Uint8Array} spanId The 8-byte LE span id handle
+   * @param {string} key The meta_struct key
+   * @param {Uint8Array} bytes The msgpack-encoded value
+   */
+  setMetaStruct (spanId, key, bytes) {
+    this.flushChangeQueue()
+    // WasmSpanState addresses spans by their numeric u64 id (a BigInt across
+    // the wasm boundary). `_nativeSpanId` is stored little-endian and the change
+    // buffer keys spans by that same LE interpretation (queueOp/queueCreateSpan
+    // copy the LE bytes into `[span_id u64 LE]`), so decode little-endian here
+    // too — otherwise meta_struct attaches to the wrong/nonexistent span.
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, true)
+    this._state.setMetaStruct(id, key, bytes)
+    // setMetaStruct inserts into a Vec, which can grow WASM memory and detach
+    // our cached views — refresh before the next queueOp.
+    this.#checkDetach()
+  }
+
+  /**
+   * Append a typed event directly after draining queued operations.
+   * @param {Uint8Array} spanId 8-byte span handle
+   * @param {string} name Event name
+   * @param {bigint} timeUnixNano Event timestamp
+   * @param {Uint8Array} attrsBuf Encoded typed attributes
+   */
+  addSpanEvent (spanId, name, timeUnixNano, attrsBuf) {
+    this.flushChangeQueue()
+    // Little-endian to match how the change buffer keys spans (see setMetaStruct).
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, true)
+    this._state.addSpanEvent(id, name, timeUnixNano, attrsBuf)
+    // addSpanEvent appends to a Vec, which can grow WASM memory and detach
+    // our cached views — refresh before the next queueOp.
+    this.#checkDetach()
+  }
+
+  /**
+   * Remove finished spans without sending the prepared chunks.
+   * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
+   * @returns {number} Number of non-empty groups discarded
+   */
+  discardSpansGrouped (groups) {
+    this.flushChangeQueue()
+
+    let discarded = 0
+    try {
+      for (const group of groups) {
+        const spanIds = group.spanIds
+        if (!spanIds || spanIds.length === 0) continue
+        this.#prepareGroup(group)
+        discarded++
+      }
+
+      if (discarded > 0) {
+        this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
+        this.#checkDetach()
+      }
+      this.#evictStringTable(true)
+      return discarded
+    } catch (e) {
+      this.resetChangeQueue()
+      this.#checkDetach()
+      if (discarded > 0) {
+        try {
+          this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
+          this.#checkDetach()
+        } catch {
+          // Best-effort cleanup: the caller will still fall back to the idle
+          // whole-state reset path when possible.
+        }
+      }
+      log.warn('Native spans: failed to discard dropped spans from native storage:', e)
+      return discarded
+    }
+  }
+
+  #prepareGroup (group) {
+    const spanIds = group.spanIds
+    const requiredSize = spanIds.length * 8
     if (requiredSize > this._flushBuffer.length) {
       this._flushBuffer = Buffer.alloc(requiredSize)
     }
 
-    // Write slot indices to flush buffer as u32 LE
     let index = 0
-    for (const slot of slots) {
-      this._flushBuffer.writeUInt32LE(slot, index)
-      index += 4
+    for (const spanId of spanIds) {
+      this._flushBuffer.set(spanId, index)
+      index += 8
     }
 
-    try {
-      this._state.prepareChunk(slots.length, firstIsLocalRoot, this._flushBuffer)
-      // prepareChunk calls flush_change_buffer + flush_chunk in Rust which
-      // can allocate (deferred_meta/metrics Vecs, spans Vec). Any of those
-      // can trigger memory.grow which detaches our cached ArrayBuffer views.
-      // Refresh now so the next queueOp doesn't write through a stale view.
-      this.#checkDetach()
-      return await this._state.sendPreparedChunk()
-    } catch (e) {
-      // prepareChunk may throw partway through, after consuming some of the
-      // change queue or growing WASM memory. Reset both pieces of state so
-      // the next caller starts from a known-good baseline:
-      //   - resetChangeQueue() restores _cqbIndex/_cqbCount and zeroes the
-      //     WASM-side header (any half-consumed entries become unreachable).
-      //   - #checkDetach() refreshes _cqbView/_cqbBytes if memory grew before
-      //     the throw, so subsequent writes don't go through detached views.
-      // Note: chunk slot indices may still be referenced by Rust state but
-      // are returned to the free pool by the caller — this is the original
-      // semantics on rejection and a known footgun.
-      this.resetChangeQueue()
-      this.#checkDetach()
-      log.error('Error flushing spans to agent:', e)
-      throw e
-    }
+    const has = this._state.prepareChunk(spanIds.length, group.firstIsLocalRoot, this._flushBuffer)
+    this.#checkDetach()
+    return has
   }
 
-  // Note: sample() is not available in the WASM pipeline module.
-  // Sampling is handled by the JS-side priority sampler.
+  /**
+   * Prepare one chunk per trace and send them in one request.
+   * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
+   * @param {(error?: Error, response?: string) => void} done
+   */
+  flushSpansGrouped (groups, done) {
+    try {
+      this.flushChangeQueue()
+
+      let prepared = 0
+      for (const group of groups) {
+        const spanIds = group.spanIds
+        if (!spanIds || spanIds.length === 0) continue
+        if (this.#prepareGroup(group)) prepared++
+      }
+      this.#evictStringTable(true)
+
+      if (prepared === 0) {
+        done(undefined, 'no spans to flush')
+        return
+      }
+
+      this.#sendInFlight = true
+      this.#sendPreparedChunk.call(this._state, (error, response) => {
+        this.#sendInFlight = false
+        this.#checkDetach()
+        if (error) log.error('Error flushing spans to agent:', error)
+        done(error, response)
+      })
+    } catch (error) {
+      this.resetChangeQueue()
+      this.#checkDetach()
+      this.#evictStringTable(true)
+      log.error('Error preparing spans to flush:', error)
+      done(error)
+    }
+  }
 }
 
 module.exports = NativeSpansInterface

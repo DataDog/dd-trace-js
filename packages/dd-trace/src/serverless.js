@@ -2,6 +2,10 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+function getIsAWSLambda () {
+  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+}
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -35,7 +39,7 @@ function getIsFlexConsumptionAzureFunction () {
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const inAWSLambda = getIsAWSLambda()
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
@@ -43,6 +47,7 @@ function isInServerlessEnvironment () {
 }
 
 module.exports = {
+  getIsAWSLambda,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,

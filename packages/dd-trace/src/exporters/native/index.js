@@ -1,218 +1,432 @@
 'use strict'
 
-const { URL, format } = require('url')
-const log = require('../../log')
-const defaults = require('../../config/defaults')
+const { URL, format } = require('node:url')
 
-/**
- * NativeExporter sends spans to the Datadog agent via the native
- * `NativeSpansInterface`, which handles serialization and HTTP transport
- * in Rust. JS receives raw span objects (no pre-formatting), batches them
- * by span ID, and hands the batch to the native TraceExporter.
- */
+const { channel } = require('dc-polyfill')
+
+const { fetchAgentInfo } = require('../../agent/info')
+const defaults = require('../../config/defaults')
+const log = require('../../log')
+const runtimeMetrics = require('../../runtime_metrics')
+const { logAgentError, logIntegrations } = require('../../startup-log')
+
+const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+const MAX_PENDING_SPANS = 2000
+const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
+
+function formatSpansForDebug (spans) {
+  try {
+    const formatted = new Array(spans.length)
+    for (let i = 0; i < spans.length; i++) {
+      const context = spans[i].context()
+      formatted[i] = {
+        name: context._name,
+        resource: context.getTag('resource.name'),
+        service: context.getTag('service.name'),
+        meta: { ...context._trace?.tags, ...context.getTags() },
+      }
+    }
+    return JSON.stringify(formatted, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
+  } catch {
+    return '[unserializable]'
+  }
+}
+
+/** Batches native trace groups and delegates transport to libdatadog. */
 class NativeExporter {
+  #activeSpans = 0
+  #disabled = false
+  #firstFlushSent = false
+  #flushCallbacks = []
+  #pendingSpanChunks = []
+  #pendingSpanCount = 0
+  #sendGroups = []
+  #sendGroupIndex = 0
+  #sendInFlight = false
   #timer
-  #flushInFlight = false
+  #urlUpdateCallbacks = []
 
   /**
-   * @param {object} config - Tracer configuration
-   * @param {object} prioritySampler - Priority sampler instance
-   * @param {import('../../native/native_spans')} nativeSpans - NativeSpansInterface instance
+   * @param {object} config Tracer configuration
+   * @param {object} prioritySampler Priority sampler
+   * @param {import('../../native/native_spans')} nativeSpans Native span storage
    */
   constructor (config, prioritySampler, nativeSpans) {
     this._config = config
     this._prioritySampler = prioritySampler
     this._nativeSpans = nativeSpans
-    this._pendingSpans = []
 
     const { url, hostname = defaults.hostname, port } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port,
-    }))
+    this._url = url || new URL(format({ protocol: 'http:', hostname, port }))
+    this._writer = { flush: done => this.flush(done) }
 
-    // Register on the dd-trace shared beforeExit handler list rather than
-    // attaching directly to `process` — repeated tracer instantiation (tests,
-    // hot reload, lambda re-init) would otherwise leak listeners and trip
-    // the MaxListenersExceededWarning.
+    if (config.OTEL_TRACES_EXPORTER === 'otlp') {
+      this.#configureOtlp()
+    } else if (config.protocolVersion === '0.5') {
+      this.#negotiateV05()
+    }
+
+    const finalFlush = () => this.flush()
     const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
     if (handlers) {
-      handlers.add(() => this.flush())
+      handlers.add(finalFlush)
     } else {
-      process.once('beforeExit', () => this.flush())
+      process.once('beforeExit', finalFlush)
     }
   }
 
+  /** Apply resolved OTLP configuration before the first send. */
+  #configureOtlp () {
+    const endpoint = this._config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    if (!endpoint) {
+      log.warn('Native exporter: OTEL_TRACES_EXPORTER=otlp but no OTLP traces endpoint is configured')
+      return
+    }
+    this._nativeSpans.setOtlpEndpoint(endpoint)
+
+    const protocol = this._config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    if (protocol) {
+      try {
+        this._nativeSpans.setOtlpProtocol(protocol)
+      } catch (error) {
+        log.warn('Native exporter: unsupported OTLP protocol %s, using default: %s', protocol, error.message)
+      }
+    }
+
+    const headers = this._config.OTEL_EXPORTER_OTLP_TRACES_HEADERS
+    if (!headers || typeof headers !== 'object') return
+    const flat = []
+    for (const key of Object.keys(headers)) flat.push(key, String(headers[key]))
+    if (flat.length > 0) this._nativeSpans.setOtlpHeaders(flat)
+  }
+
+  /** Enable v0.5 only after the agent advertises support. */
+  #negotiateV05 () {
+    fetchAgentInfo(this._url, (error, info) => {
+      if (error) {
+        log.debug('Native exporter: /info fetch failed, staying on v0.4: %s', error.message)
+        return
+      }
+      if (Array.isArray(info?.endpoints) && info.endpoints.includes('/v0.5/traces')) {
+        this._nativeSpans.setUseV05(true)
+      }
+    })
+  }
+
+  /** Record a native span whose state must survive URL changes. */
+  _trackSpanStart () {
+    this.#activeSpans++
+  }
+
+  /** Release one active-span reference and apply deferred URL changes when idle. */
+  _trackSpanFinish () {
+    if (this.#activeSpans > 0) this.#activeSpans--
+    this.#finishUrlUpdates()
+  }
+
   /**
-   * Update the agent URL.
-   * @param {string|URL} url - New agent URL
+   * Remove spans that the processor filtered after native allocation.
+   * @param {object[]} spans Native spans to discard
+   * @returns {boolean} Whether native state removed at least one group
+   */
+  _discardNativeSpans (spans) {
+    if (!spans?.length) return false
+    const groups = this.#groupsFromSpans(spans, false)
+    if (groups.length === 0) return false
+    return this._nativeSpans.discardSpansGrouped(groups) > 0
+  }
+
+  /** Rebuild native storage only after every live reference has drained. */
+  _resetNativeStateWhenIdle () {
+    if (this.#disabled) return
+    this.#urlUpdateCallbacks.push(() => {
+      try {
+        this._nativeSpans.setAgentUrl(this._url.toString())
+      } catch (error) {
+        log.warn('Failed to reset idle native span state: %s', error.message)
+      }
+    })
+    this.#finishUrlUpdates()
+  }
+
+  /**
+   * Apply a new agent URL after active spans and queued sends have drained.
+   * @param {string|URL} url New agent URL
    */
   setUrl (url) {
     let parsed
     try {
       parsed = new URL(url)
-    } catch (e) {
-      log.warn('Failed to parse new agent URL %s: %s', url, e.message)
+    } catch (error) {
+      log.warn('Failed to parse new agent URL %s: %s', url, error.message)
       return
     }
-    try {
-      // Reinitialize native state with new URL. Only commit `_url` after
-      // setAgentUrl succeeds — otherwise a thrown setAgentUrl would leave
-      // `_url` reflecting the new URL while the WASM state still points at
-      // the old one (silent JS/WASM divergence).
-      this._nativeSpans.setAgentUrl(parsed.toString())
-      this._url = parsed
-    } catch (e) {
-      log.warn('Failed to apply new agent URL to native state %s: %s', url, e.message)
-    }
+
+    this.#urlUpdateCallbacks.push(() => {
+      try {
+        this._nativeSpans.setAgentUrl(parsed.toString())
+        this._url = parsed
+      } catch (error) {
+        log.warn('Failed to apply new agent URL to native state %s: %s', url, error.message)
+      }
+    })
+    this.#finishUrlUpdates()
   }
 
   /**
-   * Export spans to the agent.
-   *
-   * In native mode, we receive raw span objects (not formatted) and collect
-   * them for batch export. The native side handles serialization.
-   *
-   * @param {Array<object>} spans - Array of span objects to export
+   * Buffer one processor export call as one trace chunk.
+   * @param {object[]} spans Finished native spans
    */
   export (spans) {
-    // Collect spans for batch export
-    for (const span of spans) {
-      this._pendingSpans.push(span)
+    if (spans.length === 0) return
+    if (this.#disabled) {
+      this._nativeSpans.discardSpansGrouped(this.#groupsFromSpans(spans, false))
+      return
     }
 
-    const { flushInterval } = this._config
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
 
-    if (flushInterval === 0) {
+    this.#pendingSpanChunks.push(spans)
+    this.#pendingSpanCount += spans.length
+
+    const { flushInterval } = this._config
+    if (flushInterval === 0 || this.#pendingSpanCount >= MAX_PENDING_SPANS) {
       this.flush()
     } else if (this.#timer === undefined) {
-      this.#timer = setTimeout(() => {
-        this.flush()
-        this.#timer = undefined
-      }, flushInterval)
+      this.#timer = setTimeout(() => this.flush(), flushInterval)
       this.#timer.unref?.()
     }
   }
 
   /**
-   * Flush pending spans to the agent.
-   *
-   * @param {Function} [done] - Callback when flush completes
+   * Flush all groups currently buffered by the exporter.
+   * @param {Function} [done] Called after the exporter becomes idle
    */
-  flush (done = () => {}) {
+  flush (done) {
+    if (done) this.#flushCallbacks.push(done)
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    if (this._pendingSpans.length === 0) {
-      done()
+    if (this.#disabled) {
+      this.#finishFlushCallbacks()
       return
     }
 
-    // Don't prepare a new chunk while a send is in flight — the prepared
-    // spans would accumulate in native memory. Buffer them in JS instead
-    // and flush when the in-flight send completes.
-    if (this.#flushInFlight) {
-      done()
+    this.#queuePendingGroups()
+    if (!this.#sendInFlight) this.#sendNextBatch()
+  }
+
+  /** Move pending trace chunks into the serialized send queue. */
+  #queuePendingGroups () {
+    if (this.#pendingSpanChunks.length === 0) return
+    if (this.#sendGroupIndex === this.#sendGroups.length) {
+      this.#sendGroups = []
+      this.#sendGroupIndex = 0
+    }
+    const pendingSpanChunks = this.#pendingSpanChunks
+    this.#pendingSpanChunks = []
+    for (const spans of pendingSpanChunks) {
+      const groups = this.#groupsFromSpans(spans, true)
+      for (const group of groups) this.#sendGroups.push(group)
+    }
+    this.#pendingSpanCount = 0
+  }
+
+  /** Send the next request, or finish the current flush. */
+  #sendNextBatch () {
+    if (this.#sendGroupIndex >= this.#sendGroups.length) {
+      this.#finishSendQueue()
       return
     }
 
-    const spans = this._pendingSpans
-    this._pendingSpans = []
-
-    // Determine if first span is local root (for trace chunk header)
-    const firstIsLocalRoot = this.#isLocalRoot(spans[0])
-
-    // Add trace-level tags to the first span in the chunk so the WASM
-    // pipeline emits them on the local-root span.
-    if (firstIsLocalRoot && spans.length > 0) {
-      this.#syncTraceTags(spans[0])
+    let batch
+    if (this._config.flushInterval === 0) {
+      batch = [this.#sendGroups[this.#sendGroupIndex++]]
+    } else {
+      batch = this.#sendGroups
+      this.#sendGroupIndex = this.#sendGroups.length
     }
 
-    // Collect slot indices for native export
-    // Note: flushChangeQueue is called inside flushSpans, no need to call it here
-    const slots = spans.map(span => span.context()._slotIndex)
+    this.#sendInFlight = true
+    runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
+    if (!this.#firstFlushSent) {
+      this.#firstFlushSent = true
+      if (firstFlushChannel.hasSubscribers) firstFlushChannel.publish()
+    }
 
-    // prepareChunk is synchronous — extract spans from native storage now.
-    // sendPreparedChunk is async (HTTP send). We serialize sends so that
-    // prepared chunks don't accumulate faster than they can be sent, which
-    // would cause unbounded memory growth proportional to total requests.
-    this._nativeSpans.flushSpans(slots, firstIsLocalRoot)
-      .then(() => {
-        this.#flushInFlight = false
-        this._nativeSpans.freeSlots(slots)
-        // Drain any spans that arrived while the send was in flight.
-        if (this._pendingSpans.length > 0) {
-          this.flush()
-        }
-      }, (err) => {
-        this.#flushInFlight = false
-        this._nativeSpans.freeSlots(slots)
-        log.error('Error sending spans to agent via native exporter:', err)
-        // Drain on rejection too — otherwise a single transient failure
-        // would leave spans buffered indefinitely (no signal beyond the
-        // log line, and bursts of low-traffic services may never flush).
-        if (this._pendingSpans.length > 0) {
-          this.flush()
-        }
-      })
-    this.#flushInFlight = true
-    done()
+    this._nativeSpans.flushSpansGrouped(batch, (error, response) => {
+      this.#sendInFlight = false
+      this.#recordResponse(error, response)
+      if (this.#disabled) {
+        this.#discardQueuedGroups()
+        this.#finishSendQueue()
+        return
+      }
+      this.#sendNextBatch()
+    })
   }
 
   /**
-   * Sync trace-level tags to a span.
-   * Trace tags are stored on the trace object and should be added to the
-   * first span in each trace chunk before native export.
-   *
-   * @param {object} span - The first span in the chunk
+   * Mirror legacy exporter health, startup, and sampling side effects.
+   * @param {Error|undefined} error Send failure
+   * @param {string|undefined} response Agent response body
+   */
+  #recordResponse (error, response) {
+    logIntegrations()
+    if (error) {
+      runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${error.name}`, true)
+      if (error.code) runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${error.code}`, true)
+      logAgentError({ status: error.status, message: error.message })
+      log.errorWithoutTelemetry('Error sending spans to agent via native exporter:', error)
+      if (error.name === 'NativeExporterBuildError') {
+        this.#disabled = true
+        log.error('Native exporter disabled after a fatal build error')
+      }
+      return
+    }
+
+    runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
+    if (!response || response === 'unchanged' || response === 'no spans to flush') return
+    try {
+      const { rate_by_service: rateByService } = JSON.parse(response)
+      if (rateByService) this._prioritySampler.update(rateByService)
+    } catch (parseError) {
+      log.error('Error updating priority sampler rates from native response:', parseError)
+    }
+  }
+
+  /** Drop every group that has not yet been extracted from native storage. */
+  #discardQueuedGroups () {
+    if (this.#sendGroupIndex < this.#sendGroups.length) {
+      this._nativeSpans.discardSpansGrouped(this.#sendGroups.slice(this.#sendGroupIndex))
+    }
+    for (const spans of this.#pendingSpanChunks) {
+      this._nativeSpans.discardSpansGrouped(this.#groupsFromSpans(spans, false))
+    }
+    this.#sendGroupIndex = this.#sendGroups.length
+    this.#pendingSpanChunks = []
+    this.#pendingSpanCount = 0
+  }
+
+  /** Finish a drained queue and any explicit flush callbacks. */
+  #finishSendQueue () {
+    this.#sendGroups = []
+    this.#sendGroupIndex = 0
+    if (this.#pendingSpanChunks.length > 0 && this.#timer === undefined && !this.#disabled) {
+      this.#queuePendingGroups()
+      this.#sendNextBatch()
+      return
+    }
+    this.#finishFlushCallbacks()
+    this.#finishUrlUpdates()
+  }
+
+  /** Invoke explicit flush callbacks without letting one callback block another. */
+  #finishFlushCallbacks () {
+    if (this.#sendInFlight || this.#sendGroupIndex < this.#sendGroups.length) return
+    const callbacks = this.#flushCallbacks
+    this.#flushCallbacks = []
+    let firstError
+    for (const done of callbacks) {
+      try {
+        done()
+      } catch (error) {
+        firstError ??= error
+      }
+    }
+    if (firstError) setImmediate(() => { throw firstError })
+  }
+
+  /** Apply deferred URL changes when no span can reference the current state. */
+  #finishUrlUpdates () {
+    if (this.#urlUpdateCallbacks.length === 0 || this.#activeSpans > 0 || this.#sendInFlight) return
+    if (this.#pendingSpanChunks.length > 0 || this.#sendGroupIndex < this.#sendGroups.length) {
+      this.flush()
+      return
+    }
+
+    const callbacks = this.#urlUpdateCallbacks
+    this.#urlUpdateCallbacks = []
+    let firstError
+    for (const callback of callbacks) {
+      try {
+        callback()
+      } catch (error) {
+        firstError ??= error
+      }
+    }
+    if (firstError) setImmediate(() => { throw firstError })
+  }
+
+  /**
+   * Convert spans to trace groups while preserving local-root provenance.
+   * @param {object[]} spans Spans from one processor export
+   * @param {boolean} syncTraceTags Whether to mirror trace tags to the chunk head
+   * @returns {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>}
+   */
+  #groupsFromSpans (spans, syncTraceTags) {
+    const byTrace = new Map()
+    for (const span of spans) {
+      const trace = span.context()._trace
+      let group = byTrace.get(trace)
+      if (group === undefined) {
+        group = []
+        byTrace.set(trace, group)
+      }
+      group.push(span)
+    }
+
+    const groups = []
+    for (const spansInTrace of byTrace.values()) {
+      let rootIndex = -1
+      for (let i = 0; i < spansInTrace.length; i++) {
+        if (this.#isLocalRoot(spansInTrace[i])) {
+          rootIndex = i
+          break
+        }
+      }
+      if (rootIndex > 0) {
+        const root = spansInTrace[rootIndex]
+        spansInTrace[rootIndex] = spansInTrace[0]
+        spansInTrace[0] = root
+      }
+      if (syncTraceTags) this.#syncTraceTags(spansInTrace[0])
+
+      const spanIds = new Array(spansInTrace.length)
+      for (let i = 0; i < spansInTrace.length; i++) {
+        spanIds[i] = spansInTrace[i].context()._nativeSpanId
+      }
+      groups.push({ spanIds, firstIsLocalRoot: rootIndex !== -1 })
+    }
+    return groups
+  }
+
+  /**
+   * Mirror trace tags to the first span of every chunk.
+   * @param {object} span Chunk head
    */
   #syncTraceTags (span) {
     const context = span.context()
     const traceTags = context._trace?.tags
-
     if (!traceTags) return
 
-    // Add each trace tag to the span's tags
-    // This uses the span's tag proxy which syncs to native storage
-    for (const [key, value] of Object.entries(traceTags)) {
-      if (value !== undefined && value !== null && // Don't overwrite existing span tags
-        !context.hasTag(key)) {
-        context.setTag(key, value)
-      }
+    for (const key of Object.keys(traceTags)) {
+      const value = traceTags[key]
+      if (value !== undefined && value !== null && !context.hasTag(key)) context.setTag(key, value)
     }
   }
 
   /**
-   * Check if a span is a local root span.
-   *
-   * A local root span is either:
-   * - A true root span (no parent)
-   * - A span whose parent is from a different service/process
-   *
-   * @param {object} span - Span to check
+   * Identify a local root, including a span whose parent was extracted remotely.
+   * @param {object} span Candidate span
    * @returns {boolean}
    */
   #isLocalRoot (span) {
-    if (!span) return true
-
     const context = span.context()
-
-    // No parent means it's a root span
-    if (!context._parentId) return true
-
-    // Check if parent was remote (from context propagation)
-    // In that case, this span is the local root
-    if (context._isRemote) return true
-
-    // Check if this is the first span in the trace's started array
-    const trace = context._trace
-    if (trace && trace.started.length > 0) {
-      const firstSpan = trace.started[0]
-      if (firstSpan === span) return true
-    }
-
-    return false
+    if (!context._parentId || context._isRemote) return true
+    return context._trace?.started?.[0] === span
   }
 }
 
