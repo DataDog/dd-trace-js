@@ -14,15 +14,24 @@
  * The existing FlagEvalMetricsHook (OTel feature_flag.evaluations) is untouched —
  * this hook is registered IN ADDITION to it, not as a replacement.
  */
+const FAIL_CLOSED_CONSENT = () => false
+
 class FlagEvalEVPHook {
   /** @type {import('./flag_evaluations')} */
   _writer
 
+  /** @type {() => boolean} */
+  _getConsent
+
   /**
    * @param {import('./flag_evaluations')} writer - FlagEvaluationsWriter instance
+   * @param {() => boolean} [getConsent] - Reads the atomic UFC consent snapshot.
+   *   Missing accessor fails closed to `false` (no raw PII leaks in tests that
+   *   construct this hook directly without a provider).
    */
-  constructor (writer) {
+  constructor (writer, getConsent) {
     this._writer = writer
+    this._getConsent = getConsent ?? FAIL_CLOSED_CONSENT
   }
 
   /**
@@ -69,13 +78,36 @@ class FlagEvalEVPHook {
     const evalTimeMs = flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
     const errorMessage = evaluationDetails.errorMessage ?? evaluationDetails.errorCode ?? ''
 
-    // Passed to the writer for inline pruning (see FlagEvaluationsWriter.enqueue).
-    // The SDK produces a fresh shallow-merged object per evaluation, so the top-level
-    // identity is stable, but nested values share references with caller state — which
-    // is exactly why the writer prunes inline rather than deferring the flatten.
-    const attrs = hookContext.context ?? {}
+    // Snapshot consent once, synchronously at hook entry, so a Remote Config
+    // update between this hook firing and the writer's flush cannot retroactively
+    // change the wire shape of this evaluation. Strict boolean by construction —
+    // the provider's snapshot already coerces `=== true`.
+    const observeFullEvaluationData = this._getConsent() === true
 
-    writer.enqueue({ flagKey, variant, allocationKey, targetingKey, errorMessage, evalTimeMs, attrs })
+    // Consent-off: skip capturing the evaluation context entirely. The writer must
+    // not receive attrs it will later discard — that would silently push privacy-
+    // protected traffic through pruneContext for no downstream use. Concretely, a
+    // high-cardinality attribute like `request_id` would then contribute to the
+    // aggregation bucket key while producing wire-identical events, exhausting the
+    // per-flag cap and pushing consent-off traffic to the degraded tier. Java
+    // pilot lesson `concern:consent-off-bucket-keying`.
+    //
+    // When consent IS on, the SDK produces a fresh shallow-merged object per
+    // evaluation, so the top-level identity is stable, but nested values share
+    // references with caller state — which is exactly why the writer prunes
+    // inline rather than deferring the flatten.
+    const attrs = observeFullEvaluationData ? (hookContext.context ?? {}) : {}
+
+    writer.enqueue({
+      flagKey,
+      variant,
+      allocationKey,
+      targetingKey,
+      errorMessage,
+      evalTimeMs,
+      attrs,
+      observeFullEvaluationData,
+    })
   }
 }
 
