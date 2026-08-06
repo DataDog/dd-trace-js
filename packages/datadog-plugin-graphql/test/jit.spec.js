@@ -50,7 +50,6 @@ describe('Plugin', () => {
     /**
      * @param {unknown} _source
      * @param {{ name?: string }} args
-     * @returns {AsyncGenerator<{ greeting: string }>}
      * @yields {{ greeting: string }} Greeting result.
      */
     async function * subscribeGreetings (_source, { name }) {
@@ -1365,13 +1364,18 @@ describe('Plugin', () => {
         }
       })
 
-      it('keeps resolver start events when depth disables resolver spans', async () => {
+      it('keeps AppSec and IAST resolver events when depth disables resolver spans', async () => {
+        const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
+        const resolveStartFields = []
         const resolverStartFields = []
+        /** @param {{ info: { fieldName: string } }} message */
+        const onResolveStart = ({ info }) => resolveStartFields.push(info.fieldName)
         /** @param {{ resolverInfo: Record<string, unknown> }} message */
         const onResolverStart = ({ resolverInfo }) => resolverStartFields.push(...Object.keys(resolverInfo))
 
         agent.reload('graphql', { depth: 0 })
+        resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
         try {
           const { query } = compileQuery(
@@ -1390,10 +1394,12 @@ describe('Plugin', () => {
           )
           assert.deepStrictEqual(result.data, { hello: 'world', defaultHello: 'default' })
         } finally {
+          resolveStartChannel.unsubscribe(onResolveStart)
           resolverStartChannel.unsubscribe(onResolverStart)
           agent.reload('graphql', { variables: ['id', 'name'] })
         }
 
+        assert.deepStrictEqual(resolveStartFields.sort(), ['defaultHello', 'hello'])
         assert.deepStrictEqual(resolverStartFields.sort(), ['defaultHello', 'hello'])
       })
 
@@ -2181,7 +2187,7 @@ describe('Plugin', () => {
       return agent.close()
     })
 
-    it('traces a default resolver without an argument list', async () => {
+    it('traces and publishes a default resolver without an argument list', async () => {
       const User = new graphql.GraphQLObjectType({
         name: 'User',
         fields: {
@@ -2199,51 +2205,27 @@ describe('Plugin', () => {
           },
         }),
       })
-      const { query } = compileQuery(schema, graphql.parse('query GraphQL17Default { user { name } }'))
-      const result = await executeWithTrace(() => query({}, {}, {}), /GraphQL17Default/, traces => {
-        const span = traces[0].find(span => span.resource === 'name:String')
-        assert.ok(span)
-      })
-      assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
-    })
-
-    it('accepts a GraphQL 17 field node without an arguments property', () => {
-      const document = graphql.parse('{ hello }')
-      const fieldNode = document.definitions[0].selectionSet.selections[0]
-      const rootCtx = {
-        config: {
-          collapse: true,
-          countListIndices: false,
-          depth: 0,
-        },
-        hasIastSub: false,
-        hasResolverSub: true,
-        jitFields: [],
-        jitPlan: {
-          fields: [{
-            arguments: [],
-            collapsedPath: 'hello',
-            fieldName: 'hello',
-            fieldNode,
-            pathDepth: 1,
-            selectionDepth: 1,
-          }],
-        },
-      }
-      const { resolveJitDefaultInvocation } = require('../src/execute')
+      const document = graphql.parse('query GraphQL17Default { user { name } }')
+      const fieldNode = document.definitions[0].selectionSet.selections[0].selectionSet.selections[0]
+      const { query } = compileQuery(schema, document)
       const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-      let resolverInfo
-      /** @param {{ resolverInfo: object }} message */
-      const onResolverStart = message => { resolverInfo = message.resolverInfo }
+      const resolverInfos = []
+      /** @param {{ resolverInfo: Record<string, unknown> }} message */
+      const onResolverStart = ({ resolverInfo }) => resolverInfos.push(resolverInfo)
 
       resolverStartChannel.subscribe(onResolverStart)
       try {
         assert.strictEqual(fieldNode.arguments, undefined)
-        assert.strictEqual(resolveJitDefaultInvocation(rootCtx, 0, { hello: 'world' }), 'world')
-        assert.deepStrictEqual(resolverInfo, { hello: {} })
+        const result = await executeWithTrace(() => query({}, {}, {}), /GraphQL17Default/, traces => {
+          const span = traces[0].find(span => span.resource === 'name:String')
+          assert.ok(span)
+        })
+        assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
       } finally {
         resolverStartChannel.unsubscribe(onResolverStart)
       }
+
+      assert.deepStrictEqual(resolverInfos, [{ user: {} }, { name: {} }])
     })
   })
 })

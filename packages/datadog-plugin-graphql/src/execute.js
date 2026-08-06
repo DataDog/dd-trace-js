@@ -18,6 +18,7 @@ const {
 /**
  * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
  * @typedef {import('graphql').GraphQLFieldResolver<unknown, unknown>} GraphQLFieldResolver
+ * @typedef {{ [index: number]: unknown, length: number }} ArgumentsList
  * @typedef {{
  *   schema?: import('graphql').GraphQLSchema,
  *   document?: import('graphql').DocumentNode,
@@ -107,10 +108,11 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
   const hasIastSub = iastResolveCh.hasSubscribers
   const hasResolverSub = resolverStartCh.hasSubscribers
   const hasUpdateFieldSub = updateFieldCh.hasSubscribers
+  const traceResolvers = plugin.config.depth !== 0
 
-  // Read by the gate jit.js splices into every inlined default field.
+  // Read by the generated gate in every inlined default field.
   const traceAll = hasIastSub || hasResolverSub ||
-    (plugin.config.depth !== 0 && (hasUpdateFieldSub || !plugin.config.collapse))
+    (traceResolvers && (hasUpdateFieldSub || !plugin.config.collapse))
 
   const rootCtx = {
     source,
@@ -124,19 +126,21 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
     hasResolverSub,
     hasUpdateFieldSub,
     jitTraceAll: traceAll,
-    jitTraceFirst: !traceAll && plugin.config.depth !== 0 && plugin.config.collapse,
+    jitTraceFirst: !traceAll && traceResolvers && plugin.config.collapse,
     variableValues,
   }
 
   if (jitPlan) {
     rootCtx.jitPlan = jitPlan
-    if (plugin.config.collapse) {
-      rootCtx.jitFields = new Array(jitPlan.fields.length)
-    } else {
-      rootCtx.jitFieldsByPath = new Map()
+    if (traceResolvers) {
+      if (plugin.config.collapse) {
+        rootCtx.jitFields = new Array(jitPlan.fields.length)
+      } else {
+        rootCtx.jitFieldsByPath = new Map()
+      }
     }
   }
-  if (!jitPlan || !plugin.config.collapse) {
+  if (traceResolvers && (!jitPlan || !plugin.config.collapse)) {
     rootCtx.fields = new Map()
     rootCtx.pathCache = new Map()
   }
@@ -544,6 +548,7 @@ function wrapResolve (resolve, isJit = false) {
 
     const infoPath = info?.path
     const config = rootCtx.config
+    const traceResolver = !depthDisabled && shouldInstrumentNode(config, infoPath)
 
     // pathString built incrementally off the parent's cached value
     // (rootCtx.pathCache, keyed by path node) — avoids re-walking the whole
@@ -552,8 +557,9 @@ function wrapResolve (resolve, isJit = false) {
     // record. Collapse-aware: list-index segments become '*'.
     let pathString
     let collapsedKey
-    if (infoPath) {
-      pathString = buildCachedPathString(infoPath, rootCtx.pathCache, config.collapse)
+    if (infoPath && (hasIastSub || traceResolver)) {
+      const pathCache = rootCtx.pathCache ??= new Map()
+      pathString = buildCachedPathString(infoPath, pathCache, config.collapse)
       if (config.collapse) collapsedKey = pathString
     }
 
@@ -569,7 +575,7 @@ function wrapResolve (resolve, isJit = false) {
       })
     }
 
-    if (depthDisabled || !shouldInstrumentNode(config, infoPath)) {
+    if (!traceResolver) {
       if (rootCtx.abortController?.signal.aborted) {
         throw new AbortError('Aborted')
       }
@@ -680,7 +686,7 @@ function wrapResolve (resolve, isJit = false) {
 /**
  * @param {GraphQLFieldResolver} resolve
  * @param {unknown} self
- * @param {IArguments} callArguments
+ * @param {ArgumentsList} callArguments
  * @param {Record<string, unknown>} args
  * @param {import('graphql').GraphQLResolveInfo & { __datadogGraphqlJitField: JitFieldDescriptor }} info
  * @param {object} rootCtx
@@ -907,7 +913,7 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
 
   const depth = rootCtx.config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
   if (depthDisabled || (rootCtx.config.depth >= 0 && rootCtx.config.depth < depth)) {
-    if (rootCtx.config.collapse) rootCtx.jitFields[descriptorId] = false
+    if (!depthDisabled && rootCtx.config.collapse) rootCtx.jitFields[descriptorId] = false
     return source?.[descriptor.fieldName]
   }
 
@@ -943,8 +949,11 @@ function getJitDefaultArguments (rootCtx, descriptor) {
     if (definition.defaultValue !== undefined) args[definition.name] = definition.defaultValue
   }
 
+  const fieldArguments = descriptor.fieldNode.arguments
+  if (!fieldArguments) return args
+
   const { variableValues } = rootCtx
-  for (const argument of descriptor.fieldNode.arguments ?? []) {
+  for (const argument of fieldArguments) {
     const name = argument.name.value
     // A variable the operation never received leaves the argument's own default in place.
     if (argument.value.kind === 'Variable') {
@@ -1064,7 +1073,7 @@ function wrapFieldType (field, schema) {
  *
  * @param {GraphQLFieldResolver} fn
  * @param {unknown} thisArg
- * @param {IArguments} args
+ * @param {ArgumentsList} args
  * @param {AbortController | undefined} abortController
  * @param {object} store
  * @param {(error: unknown, result?: unknown) => void} callback

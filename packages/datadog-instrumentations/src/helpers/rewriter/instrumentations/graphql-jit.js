@@ -1,7 +1,7 @@
 'use strict'
 
 // Match the private closure only while its captured identifiers retain the verified
-// 0.7–0.8 contract. A future rewrite then misses safely instead of injecting stale names.
+// 0.8 contract. A future rewrite then misses safely instead of injecting stale names.
 const CREATE_BOUND_QUERY = 'FunctionDeclaration[id.name="createBoundQuery"]' +
   '[params.0.name="compilationContext"][params.1.name="document"][params.4.name="operationName"]'
 const WRAP_QUERY = `${CREATE_BOUND_QUERY} ` +
