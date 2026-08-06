@@ -291,51 +291,70 @@ describe('span sampler', () => {
   })
 
   describe('native span ingestion tags', () => {
-    it('queues single-span ingestion metrics when rule matches', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 10,
-          },
-        ],
-        nativeSpans,
-      })
+    const defaultRule = {
+      service: 'test',
+      name: 'operation',
+      sampleRate: 1.0,
+      maxPerSecond: 10,
+    }
 
-      const spanContext = {
-        _spanId: id('1234567812345678'),
+    function createNativeSpans () {
+      return { queueBatchMetrics: sinon.stub() }
+    }
+
+    function createSampler (nativeSpans, rule = defaultRule) {
+      return new SpanSampler({ spanSamplingRules: [rule], nativeSpans })
+    }
+
+    function createSpan (started = [], options = {}) {
+      const {
+        idValue = '1234567812345678',
+        includeNativeSpanId = true,
+        name = 'operation',
+        nativeSpanId = 42,
+        service = 'test',
+      } = options
+      const context = {
+        _spanId: id(idValue),
         _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
+        _trace: { started },
+        _name: name,
         _tags: {},
         getTag (key) { return this._tags[key] },
       }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
+      if (includeNativeSpanId) {
+        context._nativeSpanId = new Uint8Array([nativeSpanId, 0, 0, 0, 0, 0, 0, 0])
+      }
+      const tracer = { _service: service }
+      started.push({
+        context: () => context,
+        tracer: () => tracer,
+        _name: name,
       })
+      return context
+    }
 
-      sampler.sample(spanContext)
+    function expectedMetrics (maxPerSecond = 10) {
+      const metrics = [
+        [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
+        [SPAN_SAMPLING_RULE_RATE, 1.0],
+      ]
+      if (Number.isFinite(maxPerSecond)) {
+        metrics.push([SPAN_SAMPLING_MAX_PER_SECOND, maxPerSecond])
+      }
+      return metrics
+    }
+
+    it('queues single-span ingestion metrics when rule matches', () => {
+      const nativeSpans = createNativeSpans()
+      const spanContext = createSpan()
+
+      createSampler(nativeSpans).sample(spanContext)
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
         new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        [
-          [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
-          [SPAN_SAMPLING_RULE_RATE, 1.0],
-          [SPAN_SAMPLING_MAX_PER_SECOND, 10],
-        ],
+        expectedMetrics(),
       ])
       assert.deepStrictEqual(spanContext._spanSampling, {
         sampleRate: 1.0,
@@ -344,39 +363,15 @@ describe('span sampler', () => {
     })
 
     it('does not queue metrics or set _spanSampling when rule matches but sample returns false', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const rule = {
+      const nativeSpans = createNativeSpans()
+      const sampler = new SpanSampler({ nativeSpans })
+      sampler._rules = [{
         match: sinon.stub().returns(true),
         sample: sinon.stub().returns(false),
         sampleRate: 0,
         maxPerSecond: 0,
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [],
-        nativeSpans,
-      })
-      sampler._rules = [rule]
-
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
+      }]
+      const spanContext = createSpan()
 
       sampler.sample(spanContext)
 
@@ -385,88 +380,23 @@ describe('span sampler', () => {
     })
 
     it('omits max_per_second when Infinity', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: Infinity,
-          },
-        ],
-        nativeSpans,
-      })
+      const nativeSpans = createNativeSpans()
+      const spanContext = createSpan([], { nativeSpanId: 1 })
 
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-
-      sampler.sample(spanContext)
+      createSampler(nativeSpans, { ...defaultRule, maxPerSecond: Infinity }).sample(spanContext)
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
         new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
-        [
-          [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
-          [SPAN_SAMPLING_RULE_RATE, 1.0],
-        ],
+        expectedMetrics(Infinity),
       ])
     })
 
     it('skips native ops when _nativeSpanId is undefined', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 5,
-          },
-        ],
-        nativeSpans,
-      })
+      const nativeSpans = createNativeSpans()
+      const spanContext = createSpan([], { includeNativeSpanId: false })
 
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        // No _nativeSpanId — noop span
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-
-      sampler.sample(spanContext)
+      createSampler(nativeSpans, { ...defaultRule, maxPerSecond: 5 }).sample(spanContext)
 
       sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(spanContext._spanSampling, {
@@ -476,37 +406,9 @@ describe('span sampler', () => {
     })
 
     it('skips native ops when nativeSpans is not provided', () => {
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 5,
-          },
-        ],
-      })
+      const spanContext = createSpan([], { nativeSpanId: 7 })
 
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([7, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-
-      sampler.sample(spanContext)
+      createSampler(undefined, { ...defaultRule, maxPerSecond: 5 }).sample(spanContext)
 
       assert.deepStrictEqual(spanContext._spanSampling, {
         sampleRate: 1.0,
@@ -514,195 +416,62 @@ describe('span sampler', () => {
       })
     })
 
-    it('queues metrics for multiple matching spans with different slot indices', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 10,
-          },
-        ],
-        nativeSpans,
-      })
-
+    it('queues metrics for multiple matching spans with different span ids', () => {
+      const nativeSpans = createNativeSpans()
       const started = []
-      const firstSpanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      const secondSpanContext = {
-        _spanId: id('1234567812345679'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-
-      started.push({
-        context: sinon.stub().returns(firstSpanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-      started.push({
-        context: sinon.stub().returns(secondSpanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
+      const firstSpanContext = createSpan(started)
+      const secondSpanContext = createSpan(started, {
+        idValue: '1234567812345679',
+        nativeSpanId: 99,
       })
 
-      sampler.sample(firstSpanContext)
+      createSampler(nativeSpans).sample(firstSpanContext)
 
       sinon.assert.callCount(nativeSpans.queueBatchMetrics, 2)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
         new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        [
-          [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
-          [SPAN_SAMPLING_RULE_RATE, 1.0],
-          [SPAN_SAMPLING_MAX_PER_SECOND, 10],
-        ],
+        expectedMetrics(),
       ])
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[1], [
         new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
-        [
-          [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
-          [SPAN_SAMPLING_RULE_RATE, 1.0],
-          [SPAN_SAMPLING_MAX_PER_SECOND, 10],
-        ],
+        expectedMetrics(),
       ])
+      assert.deepStrictEqual(secondSpanContext._spanSampling, {
+        sampleRate: 1.0,
+        maxPerSecond: 10,
+      })
     })
 
     it('only queues metrics for spans that match the sampling rule', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 10,
-          },
-        ],
-        nativeSpans,
-      })
-
+      const nativeSpans = createNativeSpans()
       const started = []
-      const matchingContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      const nonMatchingContext = {
-        _spanId: id('1234567812345679'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'other_operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-
-      started.push({
-        context: sinon.stub().returns(matchingContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-      started.push({
-        context: sinon.stub().returns(nonMatchingContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'other_operation',
+      const matchingContext = createSpan(started)
+      const nonMatchingContext = createSpan(started, {
+        idValue: '1234567812345679',
+        name: 'other_operation',
+        nativeSpanId: 99,
       })
 
-      sampler.sample(matchingContext)
+      createSampler(nativeSpans).sample(matchingContext)
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
         new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        [
-          [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
-          [SPAN_SAMPLING_RULE_RATE, 1.0],
-          [SPAN_SAMPLING_MAX_PER_SECOND, 10],
-        ],
+        expectedMetrics(),
       ])
       assert.strictEqual(nonMatchingContext._spanSampling, undefined)
     })
 
     it('memoizes metrics array across spans matching the same rule', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 10,
-          },
-        ],
-        nativeSpans,
-      })
-
+      const nativeSpans = createNativeSpans()
       const started = []
-      const firstSpanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      const secondSpanContext = {
-        _spanId: id('1234567812345679'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-
-      started.push({
-        context: sinon.stub().returns(firstSpanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-      started.push({
-        context: sinon.stub().returns(secondSpanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
+      const firstSpanContext = createSpan(started)
+      createSpan(started, {
+        idValue: '1234567812345679',
+        nativeSpanId: 99,
       })
 
-      sampler.sample(firstSpanContext)
+      createSampler(nativeSpans).sample(firstSpanContext)
 
       sinon.assert.callCount(nativeSpans.queueBatchMetrics, 2)
       assert.strictEqual(
@@ -713,97 +482,30 @@ describe('span sampler', () => {
     })
 
     it('skips native ops when no rule matches any span', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'nomatch',
-            name: 'nomatch',
-            sampleRate: 1.0,
-            maxPerSecond: 5,
-          },
-        ],
-        nativeSpans,
-      })
-
+      const nativeSpans = createNativeSpans()
       const started = []
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      const otherSpanContext = {
-        _spanId: id('1234567812345679'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: { started },
-        _name: 'other_operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-
-      started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-      started.push({
-        context: sinon.stub().returns(otherSpanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'other_operation',
+      const spanContext = createSpan(started)
+      createSpan(started, {
+        idValue: '1234567812345679',
+        name: 'other_operation',
+        nativeSpanId: 99,
       })
 
-      sampler.sample(spanContext)
+      createSampler(nativeSpans, {
+        ...defaultRule,
+        service: 'nomatch',
+        name: 'nomatch',
+        maxPerSecond: 5,
+      }).sample(spanContext)
 
       sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
     })
 
-    it('queues native ops for a valid span id', () => {
-      const nativeSpans = {
-        queueBatchMetrics: sinon.stub(),
-      }
-      const sampler = new SpanSampler({
-        spanSamplingRules: [
-          {
-            service: 'test',
-            name: 'operation',
-            sampleRate: 1.0,
-            maxPerSecond: 10,
-          },
-        ],
-        nativeSpans,
-      })
+    it('queues native ops for an all-zero span id', () => {
+      const nativeSpans = createNativeSpans()
+      const spanContext = createSpan([], { nativeSpanId: 0 })
 
-      const spanContext = {
-        _spanId: id('1234567812345678'),
-        _sampling: {},
-        _nativeSpanId: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
-        _trace: {
-          started: [],
-        },
-        _name: 'operation',
-        _tags: {},
-        getTag (key) { return this._tags[key] },
-      }
-      spanContext._trace.started.push({
-        context: sinon.stub().returns(spanContext),
-        tracer: sinon.stub().returns({
-          _service: 'test',
-        }),
-        _name: 'operation',
-      })
-
-      sampler.sample(spanContext)
+      createSampler(nativeSpans).sample(spanContext)
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(
