@@ -106,20 +106,20 @@ function encodeField (key, value) {
 
 /**
  * Builds the canonical, comparable context key for a pruned context map.
- * Keys are sorted for determinism; each field is type-tagged and length-delimited
- * so distinct types and values always produce distinct keys (no collision).
- * Uses exact comparable string, not a hash digest (no collision).
+ * Each field is type-tagged and length-delimited so distinct types and values
+ * always produce distinct keys (no collision). Uses exact comparable string,
+ * not a hash digest (no collision).
  *
- * @param {Record<string, unknown>} attrs - Pruned context attributes
+ * Contract: `attrs` must arrive with keys in ascending order — `pruneContext`
+ * guarantees this. Iterating Object.keys(attrs) here therefore yields sorted
+ * order without an extra sort pass.
+ *
+ * @param {Record<string, unknown>} attrs - Pruned, sort-ordered context attributes
  * @returns {string}
  */
 function canonicalContextKey (attrs) {
-  const keys = Object.keys(attrs)
-  if (keys.length === 0) return ''
-
-  keys.sort()
   let out = ''
-  for (const k of keys) {
+  for (const k of Object.keys(attrs)) {
     out += encodeField(k, attrs[k])
   }
   return out
@@ -212,22 +212,98 @@ function flattenContext (attrs) {
 }
 
 /**
+ * Returns true when `attrs` can skip the full flatten pass entirely: every value is
+ * a supported scalar (no nested object or array to expand, no unsupported types to
+ * drop), no string exceeds MAX_FIELD_LENGTH, and the top-level field count is within
+ * MAX_CONTEXT_FIELDS. Matches Go's contextFitsWithoutFlattening fast path.
+ *
+ * @param {Record<string, unknown>} attrs
+ * @returns {boolean}
+ */
+function contextFitsWithoutFlattening (attrs) {
+  const keys = Object.keys(attrs)
+  // targetingKey is stripped downstream but doesn't itself force a flatten.
+  let effectiveCount = 0
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    if (k === 'targetingKey') continue
+    effectiveCount++
+    if (effectiveCount > MAX_CONTEXT_FIELDS) return false
+
+    const v = attrs[k]
+    const t = typeof v
+    if (t === 'string') {
+      if (v.length > MAX_FIELD_LENGTH) return false
+      continue
+    }
+    if (t === 'number' || t === 'boolean' || v === null) continue
+    // undefined, function, symbol, bigint would be dropped by flatten; object/array
+    // needs expansion. Either way, take the slow path so semantics stay identical.
+    return false
+  }
+  return true
+}
+
+/**
  * Flattens and prunes the evaluation context to at most MAX_CONTEXT_FIELDS fields,
  * sorting keys deterministically and skipping string values longer than MAX_FIELD_LENGTH.
  * Mirrors flageval-worker MAX_EVALUATION_CONTEXT_FIELDS / MAX_FIELD_LENGTH exactly.
+ *
+ * Two allocation shortcuts (see Go PR #4886):
+ *  1. If every top-level value is a supported scalar and the top-level count fits,
+ *     skip the whole flatten allocation and just build the sorted output directly
+ *     from the raw attrs. This is the common case.
+ *  2. If flatten already fits (≤ MAX_CONTEXT_FIELDS, no oversized string), sort the
+ *     flatten output in place and return it without allocating a second map.
  *
  * @param {Record<string, unknown>} attrs - Raw context attributes
  * @returns {Record<string, unknown>}
  */
 function pruneContext (attrs) {
+  if (!attrs) return {}
+
+  // Fast path: no flatten needed. Just sort + strip targetingKey.
+  if (contextFitsWithoutFlattening(attrs)) {
+    const keys = Object.keys(attrs)
+    if (keys.length === 0) return {}
+    keys.sort()
+    const out = {}
+    for (const k of keys) {
+      if (k === 'targetingKey') continue
+      out[k] = attrs[k]
+    }
+    return out
+  }
+
   const flat = flattenContext(attrs)
-  if (Object.keys(flat).length === 0) return {}
+  const flatKeys = Object.keys(flat)
+  if (flatKeys.length === 0) return {}
 
-  const keys = Object.keys(flat).sort()
+  flatKeys.sort()
+
+  // Shortcut: if flatten already fits and no oversized strings, reuse flat by
+  // rebuilding it in sorted order without allocating a separate pruned map layer
+  // beyond what the sort demands. (JS objects preserve insertion order, so we
+  // must build a new object to guarantee canonical iteration order for the caller.)
+  let needsFieldSkip = flatKeys.length > MAX_CONTEXT_FIELDS
+  if (!needsFieldSkip) {
+    for (let i = 0; i < flatKeys.length; i++) {
+      const v = flat[flatKeys[i]]
+      if (typeof v === 'string' && v.length > MAX_FIELD_LENGTH) {
+        needsFieldSkip = true
+        break
+      }
+    }
+  }
+
   const out = {}
-  let count = 0
+  if (!needsFieldSkip) {
+    for (const k of flatKeys) out[k] = flat[k]
+    return out
+  }
 
-  for (const k of keys) {
+  let count = 0
+  for (const k of flatKeys) {
     if (count >= MAX_CONTEXT_FIELDS) break
     const v = flat[k]
     if (typeof v === 'string' && v.length > MAX_FIELD_LENGTH) continue

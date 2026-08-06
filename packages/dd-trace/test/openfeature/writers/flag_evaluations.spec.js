@@ -335,6 +335,16 @@ describe('FlagEvaluationsWriter', () => {
       })
     })
 
+    it('sorts pruned context keys deterministically regardless of input insertion order', () => {
+      writer.enqueue(makeEvent({ attrs: { zeta: 1, alpha: 2, mu: 3 } }))
+      assert.deepStrictEqual(Object.keys(writer._rawQueue[0].attrs), ['alpha', 'mu', 'zeta'])
+    })
+
+    it('sorts pruned context keys after flattening on the slow path', () => {
+      writer.enqueue(makeEvent({ attrs: { zeta: { z2: 1 }, alpha: 2 } }))
+      assert.deepStrictEqual(Object.keys(writer._rawQueue[0].attrs), ['alpha', 'zeta.z2'])
+    })
+
     it('flattens arrays and skips unsupported context values before queueing', () => {
       writer.enqueue(makeEvent({
         attrs: {
