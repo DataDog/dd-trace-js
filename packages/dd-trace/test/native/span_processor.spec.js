@@ -7,11 +7,11 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
-require('./setup/core')
+require('../setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY } = require('../../src/constants')
 
-describe('SpanProcessor', () => {
+describe('NativeSpanProcessor', () => {
   let prioritySampler
   let processor
   let SpanProcessor
@@ -30,7 +30,7 @@ describe('SpanProcessor', () => {
   let registerExtraService
 
   before(() => {
-    require('../src/process-tags').initialize()
+    require('../../src/process-tags').initialize()
   })
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe('SpanProcessor', () => {
     }
     registerExtraService = extraServicesStub.registerExtraService
 
-    SpanProcessor = proxyquire('../src/span_processor', {
+    SpanProcessor = proxyquire('../../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
       './native': { OpCode: fakeOpCode },
@@ -187,7 +187,7 @@ describe('SpanProcessor', () => {
     const spanFormat = sinon.stub().returns(formattedSpan)
     const onSpanFinished = sinon.stub()
     const SpanStatsProcessor = sinon.stub().returns({ onSpanFinished })
-    const SpanProcessorWithStats = proxyquire('../src/span_processor', {
+    const SpanProcessorWithStats = proxyquire('../../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
       './native': { OpCode: fakeOpCode },
@@ -217,7 +217,7 @@ describe('SpanProcessor', () => {
 
   it('stamps process tags as span meta on the native chunk root before export', () => {
     const processTagsSerialized = 'entrypoint.workdir:test,svc.user:true'
-    const SpanProcessorWithProcessTags = proxyquire('../src/span_processor', {
+    const SpanProcessorWithProcessTags = proxyquire('../../src/span_processor', {
       './span_sampler': SpanSampler,
       './native': { OpCode: fakeOpCode },
       './process-tags': {

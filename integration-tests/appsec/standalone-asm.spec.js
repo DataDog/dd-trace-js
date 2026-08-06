@@ -5,6 +5,7 @@ const path = require('path')
 const { inspect } = require('node:util')
 
 const {
+  assertClientComputedStats,
   sandboxCwd,
   useSandbox,
   FakeAgent,
@@ -14,17 +15,6 @@ const {
   curl,
 } = require('../helpers')
 const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../../ext/priority')
-
-// The agent treats Datadog-Client-Computed-Stats as a boolean flag and accepts any
-// truthy value (system-tests TRUTHY_VALUES = yes|true|t|1). The native/libdatadog
-// pipeline renders it as 'true'; the legacy JS writer sent 'yes'. Both are valid.
-function assertClientComputedStats (headers) {
-  const value = headers['datadog-client-computed-stats']
-  assert.ok(
-    ['yes', 'true', 't', '1'].includes(value),
-    `datadog-client-computed-stats should be truthy, got '${value}'`
-  )
-}
 
 describe('Standalone ASM', () => {
   let cwd, startupTestFile, agent, proc, env

@@ -17,6 +17,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
+const EXPORT_SERVICE_NAME = 'service'
 const BASE_SERVICE = tags.BASE_SERVICE
 
 describe('Tracer', () => {
@@ -24,7 +25,7 @@ describe('Tracer', () => {
   let config
 
   beforeEach(() => {
-    config = getConfig({ service: 'service' })
+    config = getConfig({ service: 'service', experimental: { exporter: 'log' } })
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()
@@ -79,29 +80,25 @@ describe('Tracer', () => {
     })
 
     describe('_dd.base_service', () => {
-      // Native mode hands the exporter raw spans (the wire shape is built in
-      // WASM), so assert the span's tags rather than a formatted `.service`/
-      // `.meta`. The exported wire content is covered by the agent-based
-      // plugins/tracing.spec.js.
       it('should be set when tracer.trace service mismatches configured service', () => {
         tracer.trace('name', { service: 'custom' }, () => {})
-        const span = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(span.context().getTag(SERVICE_NAME), 'custom')
-        assert.strictEqual(span.context().getTag(BASE_SERVICE), 'service')
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'custom')
+        assert.strictEqual(trace.meta[BASE_SERVICE], 'service')
       })
 
       it('should not be set when tracer.trace service is not supplied', () => {
         tracer.trace('name', {}, () => {})
-        const span = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(span.context().getTag(SERVICE_NAME), 'service')
-        assert.strictEqual(span.context().getTag(BASE_SERVICE), undefined)
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
-        const span = tracer._exporter.export.getCall(0).args[0][0]
-        assert.strictEqual(span.context().getTag(SERVICE_NAME), 'service')
-        assert.strictEqual(span.context().getTag(BASE_SERVICE), undefined)
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
     })
 

@@ -100,112 +100,14 @@ describe('NativeDatadogSpan', () => {
       OpCode,
     }
 
-    // Create a mock NativeSpanContext that tracks tags. The real
-    // class adds syncToNativeOnly / syncOneTagToNative — provide stubs so the
-    // production span code can call them without TypeErrors.
-    NativeSpanContext = function (ns, props) {
-      this._nativeSpans = ns
-      this._nativeSpanId = props.spanId.toBuffer()
-      this._traceId = props.traceId
-      this._spanId = props.spanId
-      this._parentId = props.parentId || null
-      this._sampling = props.sampling || {}
-      this._baggageItems = props.baggageItems || {}
-      this._trace = props.trace || {
-        started: [],
-        finished: [],
-        tags: {},
-      }
-      // Backing store renamed away from `_tags` so the
-      // `eslint-no-private-tags-access` rule does not flag mock-internal access.
-      this.tagStore = { ...(props.tags || {}) }
-      // Production keeps `_name` local until the final snapshot is synchronized.
-      this._name = undefined
-      this._hostname = undefined
-      this._isFinished = false
-      // Initial tags are seeded into `_tags` by the parent
-      // DatadogSpanContext via Object.assign in `getTags()`; the native
-      // span constructor then calls `syncToNativeOnly(fields.tags)` to
-      // push them to WASM. The stub here just needs to exist so that
-      // production call does not blow up.
-      this.syncToNativeOnly = sinon.stub()
-      this.syncOneTagToNative = sinon.stub()
-      this.markExported = () => { this.exported = true }
-      this.isExported = () => this.exported === true
+    NativeSpanContext = proxyquire('../../src/native/span_context', {
+      './index': { OpCode },
+      '../service-naming/extra-services': { registerExtraService: sinon.stub() },
+    })
+    sinon.spy(NativeSpanContext.prototype, 'syncToNativeOnly')
+    sinon.spy(NativeSpanContext.prototype, 'syncOneTagToNative')
 
-      // Tag accessor methods (matching real NativeSpanContext)
-      this.setTag = (key, value) => {
-        this.tagStore[key] = value
-      }
-      this.getTag = (key) => {
-        return this.tagStore[key]
-      }
-      this.hasTag = (key) => {
-        return key in this.tagStore
-      }
-      this.deleteTag = (key) => {
-        delete this.tagStore[key]
-      }
-      this.getTags = () => {
-        return this.tagStore
-      }
-    }
-    // Mock DatadogSpan parent — exercises the relevant constructor
-    // surface (calls `_createContext`, sets `_spanContext`, `_name`,
-    // tags, hostname, trace.started.push, `_startTime`, `_links`),
-    // plus `setOperationName`, `addTags`, and `finish` — so that the
-    // NativeDatadogSpan extends/super path is observable in tests
-    // without dragging in the real parent class's deps.
-    const MockDatadogSpan = class MockDatadogSpan {
-      constructor (tracer, processor, prioritySampler, fields, debug) {
-        this._mockTracer = tracer
-        this._processor = processor
-        this._prioritySampler = prioritySampler
-        this._debug = debug
-        this._duration = undefined
-        this._events = []
-        this._name = fields.operationName
-        this._integrationName = fields.integrationName || 'opentracing'
-        this._spanContext = this._createContext(fields.parent || null, fields)
-        this._spanContext._name = fields.operationName
-        Object.assign(this._spanContext.getTags(), { ...fields.tags })
-        this._spanContext._hostname = fields.hostname
-        this._spanContext._trace.started.push(this)
-        this._startTime = fields.startTime || this._getTime()
-        this._links = fields.links?.map(link => ({
-          context: link.context,
-          attributes: link.attributes ?? {},
-        })) ?? []
-      }
-
-      tracer () { return this._mockTracer }
-      context () { return this._spanContext }
-      setOperationName (name) {
-        this._spanContext._name = name
-        return this
-      }
-
-      setTag (key, value) { this._addTags({ [key]: value }); return this }
-      addTags (keyValueMap) { this._addTags(keyValueMap); return this }
-      _addTags (kv) {
-        for (const k of Object.keys(kv)) this._spanContext.tagStore[k] = kv[k]
-        this._prioritySampler.sample(this, false)
-      }
-
-      _getTime () { return Date.now() }
-      finish (finishTime) {
-        if (this._duration !== undefined) return
-        const t = finishTime === undefined
-          ? this._getTime()
-          : (Number.parseFloat(finishTime) || this._getTime())
-        this._duration = t - this._startTime
-        this._spanContext._trace.finished.push(this)
-        this._spanContext._isFinished = true
-        this._processor.process(this)
-      }
-    }
-
-    // Mock all dependencies with noCallThru to avoid resolving real modules
+    // Exercise the native subclass through the production DatadogSpan parent.
     NativeDatadogSpan = proxyquire('../../src/native/span', {
       perf_hooks: {
         performance: { now },
@@ -213,8 +115,6 @@ describe('NativeDatadogSpan', () => {
       '../id': id,
       './index': { OpCode },
       './span_context': NativeSpanContext,
-      '../opentracing/span': MockDatadogSpan,
-      '../opentracing/span_context': class MockDatadogSpanContext {},
       '../tagger': {
         add: (tags, keyValuePairs) => {
           for (const [key, value] of Object.entries(keyValuePairs)) {

@@ -39,6 +39,18 @@ const ANY_VALUE = Symbol('test.ANY_VALUE')
 const defaultStopProcTimeoutMs = 2_000
 
 /**
+ * Assert that the agent's client-computed-stats header has a truthy value.
+ * @param {Record<string, string>} headers
+ */
+function assertClientComputedStats (headers) {
+  const value = headers['datadog-client-computed-stats']
+  assert.ok(
+    ['yes', 'true', 't', '1'].includes(value),
+    `datadog-client-computed-stats should be truthy, got '${value}'`
+  )
+}
+
+/**
  * @param {string} filename
  * @param {string} cwd
  * @param {string|((out: Promise<string>) => void)} expectedOut
@@ -1347,6 +1359,8 @@ module.exports = {
   FakeAgent,
   hookFile,
   assertObjectContains,
+  assertClientComputedStats,
+
   assertUUID,
   deepFreeze,
   stopProc,

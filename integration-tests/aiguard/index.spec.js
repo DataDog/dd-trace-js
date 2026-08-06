@@ -5,8 +5,15 @@ const path = require('path')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
-const { assertObjectContains } = require('../helpers')
+const {
+  assertClientComputedStats,
+  assertObjectContains,
+  FakeAgent,
+  sandboxCwd,
+  spawnProc,
+  stopProc,
+  useSandbox,
+} = require('../helpers')
 const { USER_KEEP } = require('../../ext/priority')
 const {
   APM_TRACING_ENABLED_KEY,
@@ -17,17 +24,6 @@ const {
 const startApiMock = require('./api-mock')
 const startOpenAIMock = require('./openai-mock')
 const { executeRequest } = require('./util')
-
-// The agent treats Datadog-Client-Computed-Stats as a boolean flag and accepts any
-// truthy value (system-tests TRUTHY_VALUES = yes|true|t|1). The native/libdatadog
-// pipeline renders it as 'true'; the legacy JS writer sent 'yes'. Both are valid.
-function assertClientComputedStats (headers) {
-  const value = headers['datadog-client-computed-stats']
-  assert.ok(
-    ['yes', 'true', 't', '1'].includes(value),
-    `datadog-client-computed-stats should be truthy, got '${value}'`
-  )
-}
 
 function assertHasGuardSpan (payload, predicate) {
   const spans = payload[0].filter(span => span.name === 'ai_guard')
