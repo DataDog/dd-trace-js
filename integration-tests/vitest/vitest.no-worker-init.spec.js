@@ -419,8 +419,9 @@ describe('vitest no-worker init instrumentation selection', () => {
       accessPlugin.configResolved(resolvedConfig)
 
       assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
-      assert.strictEqual(resolvedConfig.server.fs.allow.length, 2)
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 3)
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[2]), 'vitest-efd-suite-admission.mjs')
     })
 
     it('does not install the Vite access plugin for Node test projects', () => {

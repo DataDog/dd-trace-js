@@ -58,6 +58,10 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_EFD_SUITE_ADMISSION_FILE = path.join(
+  path.dirname(VITEST_NO_WORKER_INIT_SETUP_FILE),
+  'vitest-efd-suite-admission.mjs'
+)
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
@@ -472,8 +476,13 @@ function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
  */
 function allowVitestBrowserSetupFile (viteConfig) {
   const allow = viteConfig.server?.fs?.allow
-  if (allow && !allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
+  if (!allow) return
+
+  if (!allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
     allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
+  }
+  if (!allow.includes(VITEST_EFD_SUITE_ADMISSION_FILE)) {
+    allow.push(VITEST_EFD_SUITE_ADMISSION_FILE)
   }
 }
 
