@@ -191,7 +191,6 @@ describe('NativeExporter', () => {
       assert.strictEqual(exporter._config, config)
       assert.strictEqual(exporter._prioritySampler, prioritySampler)
       assert.strictEqual(exporter._nativeSpans, nativeSpans)
-      assert.deepStrictEqual(exporter._pendingSpans, [])
       assert.deepStrictEqual(exporter._pendingSpanChunks, [])
       // Constructor should add to the shared registry rather than attaching
       // a fresh listener to `process` (which would leak under test reinit).
@@ -249,7 +248,7 @@ describe('NativeExporter', () => {
 
       exporter.export([span1, span2])
 
-      assert.strictEqual(exporter._pendingSpans.length, 2)
+      assert.strictEqual(exporter._pendingSpanChunks[0].length, 2)
       assert.strictEqual(exporter._pendingSpanChunks.length, 1)
     })
 
@@ -449,11 +448,7 @@ describe('NativeExporter', () => {
       sinon.assert.called(logError)
     })
 
-    // The success path is one observable sequence — splitting it across 5
-    // it() blocks paid for 5x mocha-overhead while testing the same flow.
-    // This single test pins all five aspects: flushSpansGrouped is called with the
-    // extracted slot indices, _pendingSpans drains, the done callback fires after
-    // the async send settles, and pending spans drain once the in-flight send settles.
+    // This pins the complete successful flush sequence.
     it('end-to-end successful flush: calls flushSpansGrouped with span ids, drains pending, fires done',
       async () => {
         const span1 = createMockSpan(123n)
@@ -477,7 +472,7 @@ describe('NativeExporter', () => {
           span2.context()._nativeSpanId,
         ])
         // Pending spans drain synchronously when the flush is dispatched.
-        assert.strictEqual(exporter._pendingSpans.length, 0)
+        assert.strictEqual(exporter._pendingSpanChunks.length, 0)
 
         // Drain microtasks so the resolved-flush handler runs.
         await clock.tickAsync(0)
@@ -552,14 +547,14 @@ describe('NativeExporter', () => {
       exporter.flush()
       exporter.export([createMockSpan(2n)])
       exporter.flush()
-      assert.strictEqual(exporter._pendingSpans.length, 1)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
 
       rejectSend(new Error('Network error'))
       await clock.tickAsync(0)
       await clock.tickAsync(0)
 
       sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpans.length, 0)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
     })
 
     it('disables the exporter on a fatal NativeExporterBuildError (no retry loop)', async () => {
@@ -575,20 +570,17 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
 
       // Buffered spans dropped, and the exporter is now disabled.
-      assert.strictEqual(exporter._pendingSpans.length, 0)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
 
       // Subsequent export()/flush() are no-ops — no further send attempts.
       exporter.export([createMockSpan(2n)])
       exporter.flush()
-      assert.strictEqual(exporter._pendingSpans.length, 0)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
     })
 
     it('should not start a new flush while one is in flight', () => {
-      // While the first flush()'s send is unresolved, a second flush()
-      // call must not call into native again — the spans should accumulate
-      // in `_pendingSpans` and drain after the in-flight settles.
       let resolveSend
       nativeSpans.flushSpansGrouped.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
 
@@ -600,7 +592,7 @@ describe('NativeExporter', () => {
       exporter.export([createMockSpan(2n)])
       exporter.flush()
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpans.length, 1)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
 
       // Settle the in-flight send so afterEach's clock.restore() doesn't
       // leak an unhandled-rejection warning across tests.
@@ -618,7 +610,7 @@ describe('NativeExporter', () => {
       exporter.flush()
       exporter.export([createMockSpan(2n)])
       exporter.flush()
-      assert.strictEqual(exporter._pendingSpans.length, 1)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
 
       resolveSend('unchanged')
       // Drain the .then chain on the first send and the chained re-flush.
@@ -626,7 +618,7 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
 
       sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpans.length, 0)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
     })
 
     it('should swallow flushSpansGrouped rejections (logged, not propagated to done)', async () => {

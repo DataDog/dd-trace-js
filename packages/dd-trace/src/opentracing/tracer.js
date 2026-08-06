@@ -70,22 +70,17 @@ class DatadogTracer {
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
 
-    // Test Optimization / CI Visibility has its own event model and intake and
-    // cannot ride the native (WASM) pipeline, so it runs on the JS span path:
-    // plain JS spans, the JS span processor (span_format), and a CI-vis
-    // exporter (agentless / agent-proxy / test-worker) selected by getExporter.
-    // The electron APM exporter also rides the JS pipeline: it consumes
-    // JS-formatted spans and publishes them over the electron diagnostic
-    // channel instead of shipping to the agent, so it can't use native spans.
-    // AWS Lambda layers intentionally omit optional dependencies such as
-    // @datadog/libdatadog, so they keep using the legacy JS agent pipeline
-    // unless the user explicitly requested native-only OTLP trace export.
+    // Exporters that consume JS-formatted spans stay on the JS pipeline. Lambda
+    // also uses it unless native-only OTLP trace export was requested.
     const configuredExporter = config.experimental?.exporter
     const useOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
     const useElectronExporter = configuredExporter === exporters.ELECTRON
+    const useLogExporter = configuredExporter === exporters.LOG
+    const useAgentlessExporter = configuredExporter === exporters.AGENTLESS
+    const useConfiguredJsExporter = useElectronExporter || useLogExporter || useAgentlessExporter
     const useLambdaJsPipeline = getIsAWSLambda() &&
       !config.isCiVisibility &&
-      !useElectronExporter &&
+      !useConfiguredJsExporter &&
       !useOtlpExporter
     // A Lambda with neither the Datadog extension layer nor the mini agent has no
     // local agent to receive traces: the Datadog Forwarder ships them from stdout
@@ -119,8 +114,7 @@ class DatadogTracer {
     // is active. A config without `getOrigin` (plain object in tests) is treated
     // as the default, which keeps the native pipeline.
     //
-    // CI Visibility and electron pick their own exporters below and neither goes
-    // through the native transport, so they are unaffected by this.
+    // Configured JS exporters do not use the native transport.
     //
     // OTLP is excluded for a harder reason: OTLP export lives in libdatadog, so
     // the JS pipeline cannot do it at all. Routing there would quietly ship every
@@ -135,11 +129,11 @@ class DatadogTracer {
     }
     const useCustomLookup = hasCustomLookup &&
       !config.isCiVisibility &&
-      !useElectronExporter &&
+      !useConfiguredJsExporter &&
       !useOtlpExporter
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
-      !useElectronExporter &&
+      !useConfiguredJsExporter &&
       !useLambdaJsPipeline &&
       !config.isCiVisibility
 
@@ -152,29 +146,34 @@ class DatadogTracer {
       otlpStatsExporter = createOtlpSpanStatsExporter(config)
     }
 
-    if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline || useCustomLookup) {
+    if (config.isCiVisibility || useConfiguredJsExporter || useLambdaJsPipeline || useCustomLookup) {
       this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
-        : useLambdaLogExporter
+        : useLogExporter
           ? require('../exporters/log')
-          : useLambdaJsPipeline || useCustomLookup
-            ? require('../exporters/agent')
-            : getExporter(configuredExporter)
+          : useAgentlessExporter
+            ? require('../exporters/agentless')
+            : useLambdaLogExporter
+              ? require('../exporters/log')
+              : useLambdaJsPipeline || useCustomLookup
+                ? require('../exporters/agent')
+                : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
       this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
       this._url = this._exporter._url
 
-      log.debug(useElectronExporter
-        ? 'Electron exporter enabled (JS span pipeline)'
+      log.debug(useConfiguredJsExporter
+        ? 'Configured "%s" exporter enabled (JS span pipeline)'
         : useLambdaLogExporter
           ? 'AWS Lambda environment detected without a local agent (JS span pipeline, stdout export)'
           : useLambdaJsPipeline
             ? 'AWS Lambda environment detected (JS span pipeline)'
             : config.isCiVisibility
               ? 'CI Visibility mode enabled (JS span pipeline)'
-              : 'Custom DNS lookup configured (JS span pipeline)')
+              : 'Custom DNS lookup configured (JS span pipeline)',
+      configuredExporter)
     } else {
       if (unsupportedApmExporter) {
         log.warn(
@@ -191,26 +190,18 @@ class DatadogTracer {
           const reason = typeof WebAssembly === 'undefined'
             ? 'this runtime has no WebAssembly support'
             : 'optional dependency @datadog/libdatadog is not installed'
-          if (config.OTEL_TRACES_EXPORTER === 'otlp') {
-            // OTLP export lives in libdatadog, so it cannot be honoured here.
-            // Degrade rather than aborting tracer construction: proxy.js swallows
-            // a throw and leaves a NoopTracer, which means zero telemetry — and
-            // AWS Lambda layers deliberately omit this optional dependency, so
-            // OTLP + Lambda would otherwise always be untraced.
-            log.error(
-              'OTLP trace export is unavailable because %s; %s instead',
-              reason,
-              lambdaWithoutLocalAgent ? 'writing traces to stdout' : 'using agent export'
-            )
-          }
+          const useJsOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
           this._useJsSpans = true
           this._isCiVisibility = false
-          // Same probe as the JS-pipeline branch: a Lambda with no local agent
-          // must not be handed an HTTP exporter pointed at a dead loopback port.
-          const Exporter = lambdaWithoutLocalAgent
-            ? require('../exporters/log')
-            : require('../exporters/agent')
-          this._exporter = new Exporter(config, this._prioritySampler)
+          if (useJsOtlpExporter) {
+            const { createOtlpTraceExporter } = require('../opentelemetry/trace')
+            this._exporter = createOtlpTraceExporter(config)
+          } else {
+            const Exporter = lambdaWithoutLocalAgent
+              ? require('../exporters/log')
+              : require('../exporters/agent')
+            this._exporter = new Exporter(config, this._prioritySampler)
+          }
           this._processor = new JsSpanProcessor(
             this._exporter,
             this._prioritySampler,

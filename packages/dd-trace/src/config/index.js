@@ -10,6 +10,7 @@ const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
+const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
@@ -591,6 +592,19 @@ class Config extends ConfigBase {
     if (getEnvironmentVariable('JEST_WORKER_ID') &&
         !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
+    }
+
+    // Experimental agentless APM span intake
+    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessEnabled) {
+      setAndTrack(this, 'experimental.exporter', 'agentless')
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
+      setAndTrack(this, 'reportHostname', true)
+      setAndTrack(this, 'sampler.rateLimit', -1)
+      setAndTrack(this, 'sampler.rules', [])
+      if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
+        setAndTrack(this, 'traceId128BitGenerationEnabled', false)
+      }
     }
 
     // Apply all fallbacks to the calculated config.

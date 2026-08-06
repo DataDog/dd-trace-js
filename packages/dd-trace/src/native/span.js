@@ -19,19 +19,10 @@ const { OpCode } = require('./index')
 // profiler's web-tag refresh) still receive tag updates on the native path.
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
-// Build the native trace id passed to queueCreateSpan. When 128-bit ids are in
-// play, all spans in the trace must share the SAME id: a 16-byte
-// [high 8 from the trace's `_dd.p.tid` hex][low 8 from the 64-bit id]. Children
-// and continuations must derive the high bits from the shared `_dd.p.tid`
-// rather than letting queueCreateSpan zero-pad them (which would record the
-// child under a different trace id than the root). Without a tid, the 64-bit
-// id is used as-is.
+// Combine shared high trace-id bits with the low 64-bit identifier.
 function buildNativeTraceId (lowId, tidHex) {
   if (!tidHex) return lowId
-  // toBuffer() is big-endian. A propagated 128-bit id has a 16-byte buffer
-  // ([high 8][low 8]); a locally generated id is 8 bytes. The low 64 bits are
-  // always the trailing 8 bytes — use slice(-8), not [0..7] (which would grab
-  // the HIGH bytes of a 16-byte id and record the child under a bogus id).
+  // A 16-byte propagated id stores its low bits in the final eight bytes.
   const buf = lowId.toBuffer()
   const low = buf.length > 8 ? buf.slice(-8) : buf
   return [
@@ -51,14 +42,7 @@ function buildNativeTraceId (lowId, tidHex) {
 // buffer as "no attributes").
 const EMPTY_ATTRS = Buffer.alloc(0)
 
-// Recursively drop `null`/`undefined` (and other unencodable values) from a
-// meta_struct value before msgpack-encoding it, so the wire shape matches the
-// legacy v0.4 encoder. That encoder's `#encodeObjectAsMap` keeps only
-// string/number/boolean/non-null-object entries and `#encodeObjectAsArray`
-// keeps only string/number/non-null-object items; a generic msgpack encoder
-// instead writes `null` as nil, which changes what the agent decodes (e.g. a
-// stack frame's `class_name: null` would round-trip as `null` rather than being
-// absent, breaking IAST location matching). Mirror the legacy filter exactly.
+// Match the legacy v0.4 meta_struct filter before generic msgpack encoding.
 function cleanMetaStructValue (value, seen = new Set()) {
   if (Array.isArray(value)) {
     if (seen.has(value)) return
@@ -99,9 +83,7 @@ function encodeLenPrefixedStr (s) {
   return out
 }
 
-// `[tag:u8] + value` for a scalar span-event attribute. Tags match
-// libdatadog's AttributeArrayValue discriminants: String=0, Boolean=1,
-// Integer=2, Double=3.
+// Span-event scalar tags: String=0, Boolean=1, Integer=2, Double=3.
 function encodeAttrScalar (value) {
   if (typeof value === 'string') {
     const body = encodeLenPrefixedStr(value)
@@ -113,11 +95,7 @@ function encodeAttrScalar (value) {
   if (typeof value === 'boolean') {
     return Buffer.from([1, value ? 1 : 0])
   }
-  // number: a *safe* integer -> i64 (tag 2), otherwise f64 (tag 3). Only
-  // `Number.isSafeInteger` values are guaranteed to be exact and within i64
-  // range; a larger integer-valued float (e.g. 1e21) would overflow
-  // `writeBigInt64LE` (RangeError) and isn't exactly representable anyway, so
-  // it goes to double — which is also what its JS value already is.
+  // Only safe integers can round-trip through the i64 representation.
   const out = Buffer.allocUnsafe(9)
   if (Number.isSafeInteger(value)) {
     out.writeUInt8(2, 0)
@@ -129,16 +107,8 @@ function encodeAttrScalar (value) {
   return out
 }
 
-// Encode one attribute into the flat little-endian buffer the native
-// `addSpanEvent` decodes (`decode_span_event_attributes` in the pipeline
-// crate): repeated `[key_len:u32][key][tag:u8] + value`. A scalar uses its
-// scalar tag (see encodeAttrScalar); an array uses tag 4 followed by
-// `[count:u32]` and each item as a scalar `[item_tag:u8] + value`. The native
-// decoder rebuilds an `AttributeAnyValue::Array`, which libdatadog serializes as
-// a real v0.4 span_events `array_value: {values:[...]}` (matching the JS
-// formatter), so array attributes such as a GraphQL error's `path` stay arrays
-// rather than being flattened into indexed keys. Arrays of scalars only — the
-// decoder rejects nested arrays.
+// Encode repeated `[key_len][key][tag][value]` entries for the native event
+// decoder. Arrays use tag 4 and contain scalar entries only.
 function appendSpanEventAttr (chunks, key, value) {
   if (Array.isArray(value)) {
     const header = Buffer.allocUnsafe(5)
@@ -167,28 +137,15 @@ function encodeSpanEventAttrs (attributes) {
   return Buffer.concat(chunks)
 }
 
-// `_createContext` is invoked by the parent constructor via `super(...)`
-// BEFORE the subclass can touch `this`, so we cannot thread
-// `nativeSpans` through the instance. Stash it module-locally; JS's
-// single-threaded execution model makes the read-back in
-// `_createContext` race-free. The try/finally in the constructor
-// clears this even if super throws (e.g. the wrap-existing-context
-// guard below).
+// `super()` invokes `_createContext` before this instance exists. The temporary
+// module-local handoff is safe because construction is synchronous.
 let pendingNativeSpans = null
 
-// Shadows `NativeSpanContext.prototype._syncNameToNative` on the
-// instance during construction so the parent's
-// `this._spanContext._name = operationName` line (opentracing/span.js)
-// does not emit a redundant SetName WASM op alongside the combined
-// CreateSpan op we queue ourselves. The subclass constructor deletes
-// the shadow once super() returns.
+// Suppress the parent constructor's redundant SetName operation.
 const noopSyncName = () => {}
 
 /**
- * NativeDatadogSpan stores span data in native Rust storage via
- * NativeSpansInterface, replacing the JS-side trace buffer. It inherits
- * the bulk of DatadogSpan's lifecycle, link/event, and tag handling;
- * only methods with native-sync side effects are overridden here.
+ * DatadogSpan backed by native storage.
  */
 class NativeDatadogSpan extends DatadogSpan {
   /**
@@ -217,14 +174,10 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans = nativeSpans
 
-    // Restore the prototype `_syncNameToNative` (shadowed in
-    // `_createContext`) so later `setOperationName` calls reach the
-    // real WASM-syncing method.
+    // Restore name synchronization, then copy initial tags that the parent
+    // constructor wrote directly into the JS cache.
     delete this._spanContext._syncNameToNative
 
-    // Parent wrote initial tags via `Object.assign(getTags(), tags)`,
-    // which bypasses NativeSpanContext.setTag's native-sync path. Push
-    // them to WASM now (no JS-cache write — the parent already did it).
     if (fields.tags) {
       this._spanContext.syncToNativeOnly(fields.tags)
     }
@@ -233,11 +186,7 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Allocate a native slot, build a NativeSpanContext, queue the
-   * combined CreateSpan op (Create + SetName + SetStart in one WASM
-   * call), and silently set the initial name. The subclass constructor
-   * (after super) restores the prototype `_syncNameToNative` so future
-   * name changes reach WASM normally.
+   * Construct the native span context and initial combined create operation.
    *
    * @param {object|null} parent
    * @param {object} fields
@@ -246,10 +195,7 @@ class NativeDatadogSpan extends DatadogSpan {
   _createContext (parent, fields) {
     const nativeSpans = pendingNativeSpans
 
-    // Coerce like the JS formatter (`name: String(spanContext._name)`): a span
-    // created with a non-string operation name (e.g. the dd-trace-api shim can
-    // pass `undefined`) must not reach the WASM string table as `undefined`,
-    // which would throw on `.length`. Master exported `String(name)` here.
+    // Match the JS formatter's string coercion at creation.
     const operationName = String(fields.operationName)
     const tracer = this.tracer()
     const propagationBehavior = tracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
@@ -268,9 +214,7 @@ class NativeDatadogSpan extends DatadogSpan {
     }
 
     if (fields.context) {
-      // Re-wrapping a NativeSpanContext would either leak the freshly
-      // allocated slot (early return) or duplicate the span across two
-      // slots. Free the slot and throw loudly.
+      // Re-wrapping would leak or duplicate native span storage.
       const existingContext = fields.context
       if (existingContext._nativeSpanId !== undefined) {
         throw new Error('NativeDatadogSpan cannot wrap an existing NativeSpanContext')
@@ -342,27 +286,17 @@ class NativeDatadogSpan extends DatadogSpan {
     if (startTime) spanContext._trace.startTime = startTime
     spanContext._isRemote = false
 
-    // Compute the start time once and pin it onto `fields.startTime` so the
-    // parent constructor's `this._startTime = fields.startTime || this._getTime()`
-    // reuses this exact value instead of calling `performance.now()` again after
-    // this method returns. Otherwise the WASM span's `start` (sent below) and the
-    // JS `_startTime` (read by consumers like LLMObs) would drift by the
-    // intervening constructor work, and the exported span's start+duration would
-    // not add up to its finish time.
+    // Pin one start time for both native state and the parent constructor.
     const createStartTime = fields.startTime === undefined
       ? spanContext._trace.startTime + now() - spanContext._trace.ticks
       : fields.startTime
     fields.startTime = createStartTime
 
-    // CreateSpanFull carries the common immutable/default core fields natively
-    // (name, service, resource, type, start), so final sync can skip no-op
-    // overwrites unless user tags changed them.
+    // Seed immutable/default fields so final sync can skip unchanged values.
     spanContext._setNameLocal(operationName)
     spanContext._syncNameToNative = noopSyncName
 
-    // One segment id per local trace, shared by all its spans via the
-    // shared `_trace` object (the local root allocates; children reuse).
-    // Required by the native chunk flush, which keys a chunk by segment.
+    // Share one native segment id across the local trace.
     const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
     const nativeService = typeof fields.tags?.['service.name'] === 'string'
       ? fields.tags['service.name']
@@ -391,11 +325,7 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Override `setTag` for a single-tag fast path that avoids the
-   * `{ [key]: value }` literal + parsedTags round-trip the batched
-   * `addTags` path does. Match the base span sampling guard: only manual
-   * priority tags need eager sampling; ordinary tags are sampled later by the
-   * processor.
+   * Set one tag without allocating the batched `addTags` intermediates.
    *
    * @param {string} key
    * @param {unknown} value
@@ -419,13 +349,7 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Override `addTags` to route batched tag writes through the native span
-   * context. The base v6 `addTags` merges tags straight into the JS tag cache
-   * and no longer dispatches to a `_addTags` hook, so without this override
-   * every tag applied via `addTags` (config.tags, options.tags, `span.type`,
-   * `_dd.base_service`, the inferred-proxy meta bag, etc.) would land only in
-   * the JS cache and never reach the WASM span. Accepts a plain `{k: v}`
-   * object (fast path), a `'k1:v1,k2:v2'` string, or an array of such strings.
+   * Add tags while preserving the base span's accepted input shapes.
    *
    * @param {Record<string, unknown> | string | string[]} keyValuePairs
    * @returns {this}
@@ -433,12 +357,7 @@ class NativeDatadogSpan extends DatadogSpan {
   addTags (keyValuePairs) {
     let mayChangeSamplingPriority
 
-    // Fast path: plain object (the hot path from instrumentations).
-    // `tagger.add` for object input is just `Object.assign(parsedTags, kv)`,
-    // so we skip the parsedTags allocation and copy kv straight in.
-    // Use `Object.assign` (not `for-in`) so Symbol-keyed entries like
-    // `IGNORE_OTEL_ERROR` reach the JS cache; `syncToNativeOnly` filters
-    // symbol keys back out before they hit WASM.
+    // Plain-object hot path; Object.assign preserves internal symbol keys.
     if (keyValuePairs !== null && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
       const tags = this._spanContext.getTags()
       Object.assign(tags, keyValuePairs)
@@ -448,9 +367,7 @@ class NativeDatadogSpan extends DatadogSpan {
         MANUAL_DROP in keyValuePairs ||
         SAMPLING_PRIORITY in keyValuePairs
     } else {
-      // Slow path: string or array input. v6 does not support these shapes;
-      // match the base span fast return so addTags(undefined) from startSpan
-      // does not allocate an empty parsedTags object on every native span.
+      // String/array forms remain a v5-only fallback.
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValuePairs === 'string' || Array.isArray(keyValuePairs))) {
         const tags = this._spanContext.getTags()
@@ -472,16 +389,8 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Override `finish` to serialize span links/events into meta tags
-   * (so the native exporter ships them) and queue SetDuration BEFORE
-   * delegating the rest of the bookkeeping — counters, runtime
-   * metrics, trace.finished push, finishCh.publish, processor.process
-   * — to `super.finish`. SetDuration must be queued before
-   * processor.process triggers the native exporter to read state.
-   *
-   * Passing the precomputed `finishTime` to super avoids
-   * `performance.now()` drift between our duration computation and
-   * the one inside super.finish.
+   * Finalize native-only fields before the parent processor exports the span.
+   * Reuse the resolved finish time in both implementations.
    *
    * @param {number} [finishTime]
    * @returns {void}
@@ -525,9 +434,7 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Serialize span links to the `_dd.span_links` meta tag with
-   * MAX_META_VALUE_LENGTH truncation — oversized link payloads would be
-   * silently rejected by the agent.
+   * Serialize bounded span-link metadata.
    */
   #serializeSpanLinks () {
     if (!this._links?.length) return
@@ -558,18 +465,8 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Serialize span events. With `DD_TRACE_NATIVE_SPAN_EVENTS` enabled they go to
-   * the top-level v0.4 `span_events` field (native setter, typed attributes);
-   * otherwise they fall back to the `events` meta tag as JSON — the same key and
-   * shape the legacy JS encoder writes (`meta.events` via stringifySpanEvents),
-   * which is what the agent expects when it doesn't support native span events
-   * (system-tests Test_SpanEvents_WithoutAgentSupport).
-   *
-   * The meta fallback exists purely for agents that cannot read the native slot,
-   * so it must not apply to OTLP: libdatadog maps the native `span_events` into
-   * real OTLP events, whereas the meta tag would reach the collector as a JSON
-   * string attribute. The deleted OTLP transformer converted events regardless of
-   * this agent-protocol flag, so OTLP always takes the native path.
+   * Send typed native events when supported; otherwise use the legacy JSON
+   * meta fallback. OTLP always uses native events.
    */
   #serializeSpanEvents () {
     if (!this._events?.length) return
@@ -577,10 +474,7 @@ class NativeDatadogSpan extends DatadogSpan {
     const config = this.tracer()._config
     if (config.DD_TRACE_NATIVE_SPAN_EVENTS || config.OTEL_TRACES_EXPORTER === 'otlp') {
       for (const event of this._events) {
-        // `addEvent` and the OTel bridge do not type-check `name`. A non-string
-        // reaches the WASM string parameter and throws out of `finish()` into
-        // application code, so drop the bad event and keep the rest of the span -
-        // exactly what the legacy v0.4 span_events encoder does (encode/0.4.js).
+        // Drop malformed names rather than throwing from application finish().
         if (event === null || typeof event !== 'object' || typeof event.name !== 'string') continue
         this._nativeSpans.addSpanEvent(
           this._spanContext._nativeSpanId,
@@ -611,11 +505,7 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Forward `meta_struct` entries (set ad-hoc on the span by products such as
-   * AppSec, Code Origin and Dynamic Instrumentation) to native storage. Each
-   * value is msgpack-encoded to bytes, matching how the legacy encoder writes
-   * the v0.4 `meta_struct` map<string, bin> field. The value filter mirrors the
-   * legacy `#encodeMetaStruct` (strings, numbers and non-null objects only).
+   * Msgpack-encode supported meta_struct entries for native storage.
    */
   #serializeMetaStruct () {
     const metaStruct = this.meta_struct

@@ -27,82 +27,26 @@ const COLLAPSED_SPANS_WHOLE_KEY_TAG = 'collapsed_spans:whole_key'
 // OpCode values are small u32 integers, written as u64 LE via two u32 writes.
 
 /**
- * NativeSpansInterface provides the JavaScript bridge to the native span storage.
+ * JS bridge to native span storage.
  *
- * It manages:
- * - Shared buffers for efficient data transfer to/from Rust
- * - The change buffer protocol for queuing span operations
- * - The string table for string deduplication
- * - Span export to the Datadog agent
+ * Cached WASM views must be refreshed after any call that can grow memory.
+ * Queue methods check at entry for growth by earlier async calls; methods that
+ * call WASM refresh again before retaining or using a view.
  *
- * ## Detach-safety invariant
+ * Change queue layout:
+ *   [count: u64 LE]
+ *   [opcode: u16 LE][spanId: u64 LE][payload]...
  *
- * The cached `_cqbView` / `_cqbBytes` views into WASM memory get detached
- * whenever a WASM call grows memory. Two things keep them fresh:
- *
- * 1. Every change-buffer write method (`queueOp`, `queueCreateSpan`,
- *    `queueBatchMeta`, `queueBatchMetrics`) calls `#checkDetach()` at entry.
- *    This catches growth from a *prior* call that did not itself refresh —
- *    notably the async `flushStats` interval, which runs between spans. It is
- *    also necessary because a queue method may make no growing wasm call of
- *    its own (e.g. a `queueCreateSpan` whose name is already interned, so
- *    `getStringId` is a cache hit) and would otherwise never refresh a view
- *    detached earlier.
- *
- * 2. Growth *during* a method is handled at the call site: `stringTableInsertOne`
- *    (in `getStringId`), `flushChangeQueue`, and `prepareChunk` (in `flushSpans`)
- *    are each followed by `#checkDetach()`. Since all `getStringId` resolution
- *    runs **before** the local `view`/`buf` snapshots are taken, those locals
- *    always see a fresh view.
- *
- * ## Change-buffer wire format
- *
- * The change buffer is a contiguous WASM-memory region whose layout is:
- *
- *   header   : [count: u64 LE]                    @ offset 0
- *   per op   : [opcode: u16 LE][spanId: u64 LE][...payload...]
- *
- * Spans are addressed by their span_id (the 8-byte LE handle), not a slot.
- * Each `queue*` method appends one op record and increments `count`.
- *
- * ### Generic queueOp args
- *
- * `queueOp(op, spanId, ...args)` writes per-arg encodings after the header:
- *       number              → u32 string-id (pre-resolved)
- *       ['id64', value]     → u64 LE (8 bytes; byte-swapped from BE Identifier)
- *       ['id128', value]    → u128 LE (16 bytes; byte-swapped from BE Identifier;
- *                                      8-byte inputs are zero-padded to 16)
- *       ['ns', ms]          → u64 LE nanoseconds (ms * 1e6, rounded)
- *       ['i32', value]      → i32 LE
- *       ['f64', value]      → f64 LE
- *
- * ### Method-specific record layouts
- *
- *   queueCreateSpan (op=13):     [traceId u128 LE][segmentId u64 LE]
- *                                [parentId u64 LE][nameId u32][start i64 LE]
- *   queueBatchMeta (op=15):      [count: u32][keyId u32, valId u32] × count
- *   queueBatchMetrics (op=16):   [count: u32][keyId u32, value f64] × count
- *
- * (spanId is in the op header above; segmentId groups one local trace.)
- *
- * All u64 fields use the LE representation in WASM memory; spanId/traceId/
- * parentId payloads byte-swap from the JS-side BE Identifier buffers.
+ * Generic arguments encode as a string id (`number`), `id64`, `id128`, `ns`,
+ * `i32`, or `f64`. Identifier buffers arrive big-endian and are written
+ * little-endian for WASM.
  */
 
 /**
- * Normalize an agent URL for the native (libdatadog) layer.
- *
- * dd-trace-js represents a Windows named pipe as `unix://./pipe/...` (protocol
- * `unix:`, hostname `.`), matching the legacy agent exporter. libdatadog's
- * ddcommon `parse_uri` instead expects the `windows:` scheme for pipes, where
- * everything after `windows:` is the path. Rewriting the scheme makes the
- * socket path decode to the same `//./pipe/...` value the legacy exporter
- * hands to Node's `socketPath`. Plain Unix domain sockets (`unix:///path`)
- * and http(s) URLs are already understood by `parse_uri` and pass through
- * unchanged.
- *
+ * Convert the legacy `unix://./pipe/...` Windows-pipe form to libdatadog's
+ * `windows:` scheme. Unix sockets and HTTP URLs pass through unchanged.
  * @param {string} url Agent URL
- * @returns {string} URL in the form libdatadog's `parse_uri` expects
+ * @returns {string} URL accepted by libdatadog
  */
 function normalizeAgentUrl (url) {
   if (typeof url === 'string' && url.startsWith('unix://./')) {
@@ -128,19 +72,9 @@ class NativeSpansInterface {
   #sendInFlight = null
 
   /**
-   * Free a `WasmSpanState` that `setAgentUrl` has replaced.
-   *
-   * Each state owns an 8 MB change queue inside the single shared
-   * `WebAssembly.Memory`, and WASM linear memory never shrinks - so dropping the
-   * old state on the JS side without freeing it leaks 8 MB per rebuild and walks
-   * into the wasm32 4 GB ceiling, which aborts the process. Measured over 300
-   * rebuilds: 2428 MB without this call, a flat 18 MB with it.
-   *
-   * `sendPreparedChunk` holds a Rust borrow of the state across its await, so
-   * freeing while one is pending would be a use-after-free. Defer until it
-   * settles rather than trusting callers to be idle.
-   *
-   * @param {object} state The superseded state
+   * Free a replaced state after its send completes. Each state owns an 8 MiB
+   * queue, while `sendPreparedChunk` borrows the state across its promise.
+   * @param {object} state Superseded state
    */
   #releaseState (state) {
     if (this.#sendInFlight === null) {
@@ -189,10 +123,8 @@ class NativeSpansInterface {
       clientComputedStats: options.clientComputedStats || false,
     }
 
-    // When DD_TRACE_OTEL_SEMANTICS_ENABLED is set, the span context holds the
-    // Datadog HTTP tags out of the WASM store and syncs the OTel-named ones at
-    // finish (WASM has no remove-meta op, so eagerly-synced DD keys couldn't be
-    // dropped). Read on the hot tag-sync path, so keep it a plain field.
+    // Deferred HTTP-tag remapping needs the JS cache because WASM cannot remove
+    // eagerly written Datadog keys.
     this.otelSemanticsEnabled = options.otelSemanticsEnabled || false
 
     // Flush buffer for span export
@@ -203,26 +135,16 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
-    // Segment allocator state. Spans are addressed by their span_id; a
-    // `segment_id` groups spans of one local trace so trace-level state and
-    // chunk flushing stay isolated. One id per local trace, shared by all its
-    // spans (stored on the shared `_trace` object by span.js).
+    // One segment id per local trace.
     this._nextSegment = 0
 
-    // String table state. `_stringMap` only represents strings still needed by
-    // queued/native state; completed chunks evict the WASM entries and reset the
-    // JS cache so cardinality follows live work instead of process lifetime.
+    // String ids live only as long as queued/native work.
     this._stringMap = new Map()
     this._stringIdCounter = 0
 
-    // Initialize the WASM state (buffers are allocated in WASM memory)
-    // Tracks whether v0.5 output has been negotiated, so it survives a
-    // setAgentUrl() that rebuilds the WASM state (which would otherwise reset
-    // to the v0.4 default).
+    // Persist output selection across state rebuilds.
     this._useV05 = false
-    // OTLP export config (set when OTEL_TRACES_EXPORTER=otlp). Persisted so it
-    // survives a setAgentUrl() rebuild, like _useV05. When _otlpEndpoint is
-    // set, libdatadog exports traces via OTLP instead of to the agent.
+    // OTLP routing also survives state rebuilds.
     this._otlpEndpoint = null
     this._otlpProtocol = null
     this._otlpHeaders = null
@@ -247,10 +169,7 @@ class NativeSpansInterface {
   }
 
   /**
-   * Select v0.5 output on the native exporter. Must be called before the first
-   * flush (the WASM exporter fixes its output format at first send). v0.5
-   * silently drops meta_struct/top-level span_events — callers must only enable
-   * it after confirming the agent advertises /v0.5/traces.
+   * Select v0.5 before the first send after agent capability negotiation.
    * @param {boolean} useV05
    */
   setUseV05 (useV05) {
@@ -259,9 +178,8 @@ class NativeSpansInterface {
   }
 
   /**
-   * Route trace export through libdatadog's OTLP HTTP exporter instead of the
-   * Datadog agent. Must be set before the first flush.
-   * @param {string} url OTLP HTTP traces endpoint (e.g. http://host:4318/v1/traces)
+   * Select OTLP trace export before the first send.
+   * @param {string} url OTLP HTTP traces endpoint
    */
   setOtlpEndpoint (url) {
     // Forward first, persist only on success (matching setOtlpProtocol), so a
@@ -271,8 +189,7 @@ class NativeSpansInterface {
   }
 
   /**
-   * Select the OTLP wire protocol ('http/json' or 'http/protobuf'). Throws on
-   * unsupported values (e.g. 'grpc'); callers should guard.
+   * Select the native OTLP wire protocol.
    * @param {string} protocol
    */
   setOtlpProtocol (protocol) {
@@ -293,38 +210,25 @@ class NativeSpansInterface {
   }
 
   /**
-   * Update the agent URL by reinitializing the native state.
-   * Warning: This will discard any buffered but unflushed span data.
+   * Rebuild native state for a new agent URL, dropping buffered spans.
    * @param {string} url New agent URL
    */
   setAgentUrl (url) {
     // Flush any pending operations to the OLD state first.
     this.flushChangeQueue()
 
-    // Build the new state BEFORE clearing JS-side bookkeeping. If the WASM
-    // constructor throws (OOM, invalid URL, libdatadog init failure), the
-    // existing state remains consistent: `_state`, `_stringMap`, and
-    // `_stringIdCounter` continue to agree, so subsequent `getStringId`
-    // calls don't collide with already-interned ids in the old WASM table.
+    // Construct fully before touching the current state's bookkeeping.
     const newState = this.#createWasmState(url)
-    // Preserve a previously-negotiated v0.5 selection across the rebuild
-    // (the format must be set before the new state's first send). NOTE: this
-    // assumes the new agent also supports v0.5 — we do not re-run /info
-    // negotiation here. setAgentUrl is rare and v0.5 is an explicit opt-in, so
-    // we keep the user's selection rather than silently downgrading; if the
-    // new agent lacks v0.5 the sends will fail loudly (404) rather than lose
-    // data silently.
+    // Preserve explicit output selection across the rebuild.
     if (this._useV05) newState.setUseV05(true)
-    // Re-apply OTLP routing across the rebuild (these were validated when first
-    // set, so re-applying won't throw).
+    // OTLP values were validated when first applied.
     if (this._otlpEndpoint !== null) {
       newState.setOtlpEndpoint(this._otlpEndpoint)
       if (this._otlpProtocol !== null) newState.setOtlpProtocol(this._otlpProtocol)
       if (this._otlpHeaders !== null) newState.setOtlpHeaders(this._otlpHeaders)
     }
 
-    // Atomic swap: only after the new state is fully constructed do we
-    // commit to it and reset JS-side counters.
+    // Commit only after construction and configuration succeed.
     const oldState = this._state
     this._state = newState
     this.#releaseState(oldState)
@@ -333,11 +237,7 @@ class NativeSpansInterface {
     this._stringMap.clear()
     this._stringIdCounter = 0
 
-    // Refresh both WASM memory views — buffer/pointer changed with the new
-    // state. We must refresh `_cqbBytes` alongside `_cqbView`; `#checkDetach()`
-    // only inspects `_cqbView.buffer` and would not detect a `_cqbBytes`-only
-    // mismatch, so a missed refresh would silently corrupt the next u128
-    // byte-copy in `queueCreateSpan*`.
+    // The new state owns a different queue pointer and views.
     this._wasmMemory = wasmMemory
     this._cqbPtr = this._state.change_queue_ptr()
     this.#refreshViews()
@@ -370,14 +270,8 @@ class NativeSpansInterface {
   }
 
   /**
-   * Force-flush the native stats concentrator to the agent's /v0.6/stats. Sends
-   * the current (possibly partial) buckets, unlike the 10s interval which only
-   * flushes completed ones. Intended for explicit flush points (process exit,
-   * the parametric test client's stats-flush) rather than the hot path. Resolves
-   * to a boolean: current boolean-returning native packages pass through, while
-   * object-returning packages (`{ sent, collapsedSpans }`) report collapsed span
-   * health metrics and return `sent`.
-   *
+   * Force-flush native stats, including partial buckets. Object-returning
+   * bindings also report collapsed-span health metrics.
    * @returns {Promise<boolean>}
    */
   flushStats () {
@@ -410,9 +304,7 @@ class NativeSpansInterface {
         )
         return
       }
-      // "span not found" means a queued op referenced a span missing from native
-      // storage. If we cannot identify the offending op, fall back to dropping
-      // the batch so the host application still does not crash.
+      // An unidentifiable orphan drops the batch rather than crashing the app.
       if (isSpanNotFoundError(e)) {
         log.warn('Native spans: dropped a change-queue batch after "span not found"; affected spans were lost', e)
         return
@@ -523,11 +415,7 @@ class NativeSpansInterface {
     if (typeof id === 'number') return id
 
     id = this._stringIdCounter++
-    // Insert into WASM first; only commit to the JS map if the WASM call
-    // succeeds. If `stringTableInsertOne` throws (e.g. OOM during memory
-    // grow), we must NOT leave the JS map claiming `str` is interned at
-    // `id` — a future queue write would emit a dangling string-id reference.
-    // This WASM call may trigger memory growth, detaching the ArrayBuffer.
+    // Commit to the JS map only after the WASM insertion succeeds.
     this._state.stringTableInsertOne(id, str)
     this.#checkDetach()
     this._stringMap.set(str, id)
@@ -545,19 +433,13 @@ class NativeSpansInterface {
   }
 
   /**
-   * Queue an operation to the change buffer.
-   *
-   * Writes the op record directly into the WASM-side change-queue buffer
-   * via cached `_cqbView` / `_cqbBytes` views. See the class doc for the
-   * per-arg encoding table.
-   *
-   * @param {number} op The OpCode value
-   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * Append an operation directly to the WASM change queue.
+   * @param {number} op OpCode value
+   * @param {Uint8Array} spanId 8-byte little-endian span id
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, spanId, ...args) {
-    // Refresh if a prior call grew memory (e.g. the async stats flush); growth
-    // *during* this method is handled by getStringId before the view snapshot.
+    // Catch memory growth from an earlier call before taking local views.
     this.#checkDetach()
     this.#evictIdleStringTable()
     let idx = this._cqbIndex
@@ -567,8 +449,7 @@ class NativeSpansInterface {
       idx = this._cqbIndex
     }
 
-    // Resolve all string IDs first — these may trigger WASM memory growth.
-    // After this loop, views are safe to cache locally.
+    // Resolve strings before taking views because interning can grow memory.
     const resolvedArgs = args
     for (let i = 0; i < resolvedArgs.length; i++) {
       if (typeof resolvedArgs[i] === 'string') {
@@ -576,12 +457,10 @@ class NativeSpansInterface {
       }
     }
 
-    // Grab locals after all WASM calls are done — safe until method returns.
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    // Op header: [opcode u16 LE][span_id u64 LE]. The span_id is the 8-byte
-    // LE handle; it replaces the old u32 slot index.
+    // [opcode u16 LE][span_id u64 LE]
     view.setUint16(idx, op, true)
     idx += 2
     buf.set(spanId, idx)
@@ -659,10 +538,7 @@ class NativeSpansInterface {
   }
 
   /**
-   * Construct a fresh WasmSpanState bound to the given agent URL. Used by
-   * the constructor and `setAgentUrl()` so the 15-argument signature lives
-   * in exactly one place.
-   *
+   * Construct a state through the binding's positional API.
    * @param {string} url Agent URL
    * @returns {WasmSpanState}
    */
@@ -685,91 +561,6 @@ class NativeSpansInterface {
       opts.runtimeId,
       opts.clientComputedStats,
     )
-  }
-
-  /**
-   * Queue a CreateSpan operation (combined Create + SetName + SetStart).
-   *
-   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
-   * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
-   * @param {number} segmentId The local-trace segment id (u64)
-   * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
-   * @param {string} name Span name
-   * @param {number} startMs Start time in milliseconds
-   */
-  queueCreateSpan (spanId, traceId, segmentId, parentId, name, startMs) {
-    // Refresh if a prior call grew memory. Essential here: when the span name
-    // is already interned, getStringId is a cache hit and makes no wasm call,
-    // so this is the only refresh point (see the detach-safety invariant).
-    this.#checkDetach()
-    this.#evictIdleStringTable()
-    let idx = this._cqbIndex
-
-    if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
-      this.flushChangeQueue()
-      idx = this._cqbIndex
-    }
-
-    // Resolve string ID first (may trigger memory growth)
-    const nameId = this.getStringId(name)
-
-    // Cache locals after all WASM calls are done
-    const view = this._cqbView
-    const buf = this._cqbBytes
-
-    // Header: [opcode u16 = CreateSpan(13)][span_id u64 LE]
-    view.setUint16(idx, 13, true)
-    idx += 2
-    buf.set(spanId, idx)
-    idx += 8
-
-    // Args: [trace_id u128][segment_id u64][parent_id u64][name_id u32][start i64]
-    // `Identifier` keeps its bytes in a private field (v6 refactor); read via
-    // toBuffer(). Fall back to a raw buffer/Uint8Array for callers that pass one.
-    const tb = typeof traceId?.toBuffer === 'function' ? traceId.toBuffer() : (traceId._buffer ?? traceId)
-    if (tb.length > 8) {
-      buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
-      buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
-      idx += 8
-      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
-      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
-    } else {
-      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
-      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
-      idx += 8
-      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-    }
-    idx += 8
-
-    // segment_id u64 LE
-    view.setUint32(idx, segmentId % 0x1_00_00_00_00, true)
-    view.setUint32(idx + 4, Math.floor(segmentId / 0x1_00_00_00_00), true)
-    idx += 8
-
-    if (parentId === null || parentId === undefined) {
-      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
-    } else {
-      // `Identifier` keeps its bytes in a private field (v6 refactor); read via
-      // toBuffer() — `._buffer` is undefined, which previously zeroed parent_id
-      // and exported every child span as a root.
-      const pb = typeof parentId.toBuffer === 'function' ? parentId.toBuffer() : (parentId._buffer ?? parentId)
-      buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
-      buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
-    }
-    idx += 8
-
-    view.setUint32(idx, nameId, true)
-    idx += 4
-
-    const ns = Math.round(startMs * 1e6)
-    view.setUint32(idx, ns % 0x1_00_00_00_00, true)
-    view.setUint32(idx + 4, Math.floor(ns / 0x1_00_00_00_00), true)
-    idx += 8
-
-    this._cqbIndex = idx
-    this._cqbCount++
-    view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
@@ -849,55 +640,6 @@ class NativeSpansInterface {
     view.setUint32(idx, ns % 0x1_00_00_00_00, true)
     view.setUint32(idx + 4, Math.floor(ns / 0x1_00_00_00_00), true)
     idx += 8
-
-    this._cqbIndex = idx
-    this._cqbCount++
-    view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
-  }
-
-  /**
-   * Queue multiple meta (string) tags using the BatchSetMeta opcode.
-   * Single header, N key/value pairs. Written directly to WASM memory.
-   *
-   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
-   * @param {Array<[string, string]>} tags Array of [key, value] pairs
-   */
-  queueBatchMeta (spanId, tags) {
-    if (tags.length === 0) return
-
-    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
-    this.#evictIdleStringTable()
-    let idx = this._cqbIndex
-    const needed = 16 + tags.length * 8
-
-    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
-      this.flushChangeQueue()
-      idx = this._cqbIndex
-    }
-
-    // Resolve all string IDs first (may trigger memory growth)
-    const ids = new Array(tags.length * 2)
-    for (let i = 0; i < tags.length; i++) {
-      ids[i * 2] = this.getStringId(tags[i][0])
-      ids[i * 2 + 1] = this.getStringId(tags[i][1])
-    }
-
-    const view = this._cqbView
-    const buf = this._cqbBytes
-
-    view.setUint16(idx, 15, true)
-    idx += 2
-    buf.set(spanId, idx)
-    idx += 8
-    view.setUint32(idx, tags.length, true)
-    idx += 4
-    for (let i = 0; i < tags.length; i++) {
-      view.setUint32(idx, ids[i * 2], true)
-      idx += 4
-      view.setUint32(idx, ids[i * 2 + 1], true)
-      idx += 4
-    }
 
     this._cqbIndex = idx
     this._cqbCount++
@@ -1080,15 +822,11 @@ class NativeSpansInterface {
   }
 
   /**
-   * Append an OpenTelemetry-style span event to a span's top-level v0.4
-   * `span_events` field. Like meta_struct there is no change-buffer opcode, so
-   * the queue is drained first and the event appended directly (ordering-safe).
-   *
-   * @param {Uint8Array} spanId - the 8-byte span handle (`_nativeSpanId`).
-   * @param {string} name - event name.
-   * @param {bigint} timeUnixNano - event timestamp in nanoseconds (u64).
-   * @param {Uint8Array} attrsBuf - flat typed attribute buffer (see
-   *   `decode_span_event_attributes` in the pipeline crate).
+   * Append a typed event directly after draining queued operations.
+   * @param {Uint8Array} spanId 8-byte span handle
+   * @param {string} name Event name
+   * @param {bigint} timeUnixNano Event timestamp
+   * @param {Uint8Array} attrsBuf Encoded typed attributes
    */
   addSpanEvent (spanId, name, timeUnixNano, attrsBuf) {
     this.flushChangeQueue()
@@ -1101,30 +839,9 @@ class NativeSpansInterface {
   }
 
   /**
-   * Flush spans to the Datadog agent.
-   *
-   * @param {Array<Uint8Array>} spanIds Array of 8-byte LE span ids
-   * @param {boolean} [firstIsLocalRoot] Whether the first span is the local root (defaults to true)
-   * @returns {Promise<string>} Response from the agent
-   */
-  /**
-   * Flush one trace's spans. Thin wrapper over {@link flushSpansGrouped} for a
-   * single chunk; the exporter uses the grouped form so each request carries one
-   * chunk per trace.
-   */
-  flushSpans (spanIds, firstIsLocalRoot = true) {
-    return this.flushSpansGrouped([{ spanIds, firstIsLocalRoot }])
-  }
-
-  /**
-   * Remove finished spans from native storage without sending them. This is the
-   * closest protocol available in the current WASM API: `prepareChunk` drains
-   * the change queue, materializes deferred tags, removes the span slots, and
-   * feeds native stats; we then replace the staged discarded chunk with an empty
-   * prepared chunk so a later real send cannot transmit discarded spans.
-   *
+   * Remove finished spans without sending the prepared chunks.
    * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
-   * @returns {number} number of non-empty groups discarded
+   * @returns {number} Number of non-empty groups discarded
    */
   discardSpansGrouped (groups) {
     this.flushChangeQueue()
@@ -1180,20 +897,12 @@ class NativeSpansInterface {
   }
 
   /**
-   * Prepare one chunk per trace and send them as a single multi-trace request.
-   *
-   * Each group is `{ spanIds, firstIsLocalRoot }` for exactly one trace
-   * (segment), with the local-root span first. Grouping by trace is essential:
-   * `flush_chunk` treats a chunk as a single segment and copies that segment's
-   * trace-level tags (sampling priority, `_dd.p.dm`, origin, top_level) onto its
-   * local root. Passing many traces as one chunk would lump distinct trace_ids
-   * together and stamp only the first — corrupting sampling/grouping under load.
-   *
+   * Prepare one chunk per trace and send them in one request. Separate groups
+   * preserve trace-level tags and sampling on each local root.
    * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
    */
   flushSpansGrouped (groups) {
-    // Drain all pending ops (creates, tags, per-trace sampling/trace tags) once
-    // up front so every chunk prepared below sees a fully-applied span map.
+    // Apply all queued state before extracting any chunk.
     this.flushChangeQueue()
 
     let prepared = 0
@@ -1202,15 +911,10 @@ class NativeSpansInterface {
       if (!spanIds || spanIds.length === 0) continue
 
       try {
-        // prepareChunk extracts this trace's spans and stages a chunk; multiple
-        // calls accumulate in native storage until sendPreparedChunk.
+        // Prepared chunks accumulate until sendPreparedChunk.
         if (this.#prepareGroup(group)) prepared++
       } catch (e) {
-        // prepareChunk may throw partway through, after consuming some of the
-        // change queue or growing WASM memory. Reset JS-side queue state and
-        // refresh views so the next caller starts from a known-good baseline.
-        // Already-staged chunks from earlier groups are dropped with the
-        // rejection (they were extracted out of native storage).
+        // Recover queue bookkeeping and views after a partial preparation.
         this.resetChangeQueue()
         this.#checkDetach()
         log.error('Error preparing spans to flush:', e)
@@ -1232,27 +936,13 @@ class NativeSpansInterface {
 
     return send
       .catch(e => {
-        // A send failure is a *network* fault for the already-serialized chunks;
-        // those are lost, which is expected on a transient agent outage.
-        //
-        // Crucially, do NOT resetChangeQueue() here. sendPreparedChunk is async,
-        // so by the time this rejection lands, ops for *other* spans (including
-        // their Create) have typically been queued into the shared change buffer
-        // while the send was in flight. Resetting would discard those pending
-        // ops, orphaning spans whose Create never lands in native storage -> a
-        // "span not found" at their next flush (and, before the change-buffer
-        // became tolerant, a cascade that crashed the host). The change buffer
-        // was already drained before prepareChunk, so it holds only that valid
-        // pending work; leave it intact for the next flush. Only refresh views
-        // (memory may have grown during the send) and propagate the error.
+        // Do not reset here: operations for other spans may have accumulated
+        // while the asynchronous send was in flight.
         this.#checkDetach()
         log.error('Error flushing spans to agent:', e)
         throw e
       })
   }
-
-  // Note: sample() is not available in the WASM pipeline module.
-  // Sampling is handled by the JS-side priority sampler.
 }
 
 module.exports = NativeSpansInterface

@@ -31,16 +31,8 @@ const { OpCode } = require('./index')
 const PROCESS_TAGS_META_KEY = '_dd.tags.process'
 
 /**
- * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
- *
- * `setTag()` keeps the JS tag cache authoritative. Native mode syncs one final
- * formatted snapshot immediately before export, because the current WASM
- * change-buffer API can add/overwrite fields but cannot remove stale meta or
- * metric entries after delete/type changes.
- *
- * Key differences from DatadogSpanContext:
- * - Has a `_nativeSpanId` (byte buffer) for native operations
- * - `syncFinalTagsToNative()` materializes the final JS wire state into WASM
+ * Span context with an authoritative JS tag cache and final native sync.
+ * Final formatting handles deletion and type replacement that WASM cannot.
  */
 const { MEASURED } = tags
 const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
@@ -72,21 +64,14 @@ function normalizeType (type) {
   return type && type.length > MAX_TYPE_LENGTH ? type.slice(0, MAX_TYPE_LENGTH) : type
 }
 
-// Symbol keys for internal backing storage — avoids Object.defineProperty deopt
-// while keeping properties non-enumerable to external code.
+// Symbol storage preserves a stable hidden class.
 const NAME_VALUE = Symbol('nameValue')
 
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
 
-  // Once this span has been exported, its Create has been removed from the WASM
-  // change-buffer span map. Any further op we queue for it would reference a
-  // missing span, making `flush_change_buffer` throw `span not found` and drop
-  // the *entire* pending batch (orphaning other spans' Creates -> their trace is
-  // lost). Late tags are meaningless anyway: the JS-only pipeline also serializes
-  // spans at export time, so a `setTag` after export never reaches the wire.
-  // Skipping native sync once exported keeps both pipelines consistent and
-  // prevents the batch-drop cascade (see the elasticsearch product-check ping).
+  // Export removes the native span. Ignore later mutations to avoid orphaned
+  // operations; the JS pipeline likewise cannot alter an exported payload.
   #exported = false
   #hasErrorTags = false
   #nativeName
@@ -109,14 +94,12 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {string} [props.tracerServiceLower] - Lowercase tracer service for extra-service registration
    */
   constructor (nativeSpans, props) {
-    // During super(props), the `_name` setter stores the value locally. Native
-    // sync happens later from the final formatted span snapshot.
+    // Native sync begins after parent construction.
     super(props)
 
     this.#nativeSpans = nativeSpans
 
-    // Store span ID as little-endian Uint8Array to avoid per-operation byte
-    // reversal when writing to the WASM change buffer (which expects LE).
+    // Store the handle little-endian once for subsequent queue writes.
     const beBuf = props.spanId.toBuffer()
     const leId = new Uint8Array(8)
     leId[0] = beBuf[7]
@@ -132,9 +115,7 @@ class NativeSpanContext extends DatadogSpanContext {
     this._tracerServiceLower = props.tracerServiceLower || ''
   }
 
-  // Class-level getter/setter for _name — intercepts writes to sync to native.
-  // Uses Symbol-keyed backing store instead of Object.defineProperty to preserve
-  // V8 hidden class optimization (all instances share the same shape).
+  // Intercept name writes without per-instance property definitions.
   get _name () {
     return this[NAME_VALUE]
   }
@@ -144,8 +125,7 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Remember core fields already queued to native storage during span creation.
-   * Final sync can then skip no-op overwrites for the common unchanged case.
+   * Record core fields already included in CreateSpanFull.
    *
    * @param {string} name span operation name already queued via CreateSpanFull
    * @param {string|undefined} resource resource name already queued, if any
@@ -159,11 +139,7 @@ class NativeSpanContext extends DatadogSpanContext {
     this.#nativeType = type
   }
 
-  /**
-   * Mark this span as exported. After export its native Create has been removed
-   * from the change-buffer span map, so all subsequent tag/name syncs are
-   * skipped (see `#exported`).
-   */
+  /** Mark the span exported and stop subsequent native writes. */
   markExported () {
     this.#exported = true
   }
@@ -173,11 +149,9 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Set a tag value. Native storage is updated from one final formatted
-   * snapshot before export; eager writes would leave stale meta/metrics behind
-   * when tags are deleted, cleared, or change type.
-   * @param {string | symbol} key - Tag key
-   * @param {unknown} value - Tag value
+   * Update the authoritative JS tag cache.
+   * @param {string | symbol} key Tag key
+   * @param {unknown} value Tag value
    */
   setTag (key, value) {
     super.setTag(key, value)
@@ -185,12 +159,8 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Native storage is synced at finish from the final formatted span. This
-   * method remains for the Span#addTags hot path: callers mutate the JS cache
-   * directly and invoke this hook, so we only record whether error tags need the
-   * final error-meta pass.
-   *
-   * @param {object} tags - Tag object to observe
+   * Observe batched tag writes that bypass setTag.
+   * @param {object} tags Tag object
    */
   syncToNativeOnly (tags) {
     if (this.#exported) return
@@ -200,9 +170,7 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Single-tag hook used by Span#setTag. See syncToNativeOnly: final snapshot
-   * sync owns native writes.
-   *
+   * Observe one direct tag write.
    * @param {string} key
    * @param {unknown} value
    */
@@ -212,11 +180,8 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Try to sync the final span state without building the full formatted span.
-   * Safe only for primitive tags whose formatter mapping is local and reversible;
-   * unsupported values return false so the caller uses syncFinalTagsToNative().
-   *
-   * @returns {boolean} true when the fast sync completed, false for fallback
+   * Use the allocation-light final sync when every tag maps locally.
+   * @returns {boolean} Whether fast sync completed
    */
   tryFastFinalTagsToNative () {
     if (this.#exported) return true
@@ -339,11 +304,7 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Sync the final formatted span representation to native storage. `formatted`
-   * comes from span_format.js, so deletion, clear, string↔number replacement,
-   * object flattening, truncation, error extraction, and OTel OK-overrides-ERROR
-   * precedence all match the JS encoder.
-   *
+   * Sync a span_format-compatible final representation to native storage.
    * @param {object} formatted
    */
   syncFinalTagsToNative (formatted) {
@@ -395,10 +356,7 @@ class NativeSpanContext extends DatadogSpanContext {
     }
   }
 
-  /**
-   * Replay error.type/message/stack from the final JS tag map, matching
-   * span_format.js serialization-time extraction and overwrite order.
-   */
+  /** Replay final error metadata using span_format overwrite order. */
   syncErrorMetaToNative () {
     if (this.#exported || !this.#hasErrorTags || this._name === 'fs.operation') return
 
@@ -440,12 +398,7 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Under DD_TRACE_OTEL_SEMANTICS_ENABLED the Datadog HTTP tags are remapped to
-   * OpenTelemetry names at finish (see `applyOtelHttpSemantics`). WASM has no
-   * remove-meta op, so these keys are held out of the store during the span's
-   * life (they stay in the JS tag cache for runtime consumers and for the remap
-   * to read) rather than syncing DD names we could never drop.
-   *
+   * Hold Datadog HTTP keys out of WASM until OTel remapping is complete.
    * @param {string} key
    * @returns {boolean}
    */
@@ -455,18 +408,16 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Set the name locally without syncing to native storage.
-   * Used during construction when CreateSpan already set the name natively.
-   * @param {string} name - Span name
+   * Set a construction-time name without a native operation.
+   * @param {string} name Span name
    */
   _setNameLocal (name) {
     this[NAME_VALUE] = name
   }
 
   /**
-   * Sync the span name to native storage.
-   * Called from NativeDatadogSpan.
-   * @param {string} name - Span name
+   * Sync a changed span name.
+   * @param {string} name Span name
    */
   _syncNameToNative (name) {
     const stringName = String(name)
@@ -479,28 +430,14 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
-   * native output at finish. Datadog HTTP tags are skipped by
-   * syncFinalTagsToNative(), so build a formatted view from the JS tag cache,
-   * run the shared `applyHttpOtelSemantics`, and sync the resulting OTel
-   * meta/metrics (plus any error/resource change) into WASM. No-op for
-   * non-HTTP spans. Only invoked when the tracer runs with
-   * DD_TRACE_OTEL_SEMANTICS_ENABLED.
-   *
-   * Divergence from master: because the DD HTTP tags are held out of WASM
-   * entirely (not just renamed at serialization), the native trace-stats
-   * concentrator (which runs in WASM at flush) sees the OTel names rather than
-   * the DD `http.status_code`/etc. Master kept the DD tags on the span so stats
-   * were unaffected. This only matters for the OTEL-semantics + native-stats
-   * intersection and is an accepted limitation of the opt-in flag.
+   * Apply shared OTel HTTP remapping to the final native representation.
+   * Native stats consequently observe the remapped keys under this opt-in.
    */
   applyOtelHttpSemantics () {
     const tags = this.getTags()
     if (tags['http.method'] === undefined && tags['http.url'] === undefined) return
 
-    // Rebuild the {meta, metrics} view the way the native span categorizes tags
-    // (strings -> meta, finite numbers -> metrics), forcing http.status_code to
-    // a meta string (its native special case) so the remap reads it.
+    // Rebuild the native meta/metric categories from the JS cache.
     const meta = {}
     const metrics = {}
     for (const key of Object.keys(tags)) {

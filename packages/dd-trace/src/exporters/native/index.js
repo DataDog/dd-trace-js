@@ -11,18 +11,10 @@ const { fetchAgentInfo } = require('../../agent/info')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
-// Mirrors the legacy AgentWriter so operators see the same tracer-health
-// metrics on the native export path. The native `sendPreparedChunk` does not
-// surface the HTTP status code, so `.responses.by.status` is intentionally
-// omitted (libdatadog handles the transport); requests/responses/errors are
-// emitted around each send attempt.
+// Native sends mirror legacy exporter request/response/error health metrics.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
-// JS-side debug view of the spans being exported. The native pipeline
-// serializes in WASM, so mirror the legacy AgentWriter's `Encoding payload`
-// debug log here for observability: name/resource/service plus meta, merging
-// the trace-level tags (e.g. `_dd.git.repository_url`) that the WASM exporter
-// stamps onto the chunk. Only built when DD_TRACE_DEBUG is on (log.debug lazy).
+// Lazy debug representation matching the legacy payload log.
 function formatSpansForDebug (spans) {
   try {
     return JSON.stringify(
@@ -44,10 +36,7 @@ function formatSpansForDebug (spans) {
 }
 
 /**
- * NativeExporter sends spans to the Datadog agent via the native
- * `NativeSpansInterface`, which handles serialization and HTTP transport
- * in Rust. JS receives raw span objects (no pre-formatting), batches them
- * by span ID, and hands the batch to the native TraceExporter.
+ * Batches raw spans and delegates serialization and transport to libdatadog.
  */
 class NativeExporter {
   #timer
@@ -56,9 +45,7 @@ class NativeExporter {
   #flushCallbacks = []
   #activeSpans = 0
   #urlUpdateCallbacks = []
-  // Set when libdatadog reports a fatal exporter-build failure (bad config):
-  // building is one-shot and won't recover, so we stop exporting rather than
-  // loop on the same error every flush.
+  // Fatal native exporter construction errors cannot recover.
   #disabled = false
   /**
    * @param {object} config - Tracer configuration
@@ -69,7 +56,6 @@ class NativeExporter {
     this._config = config
     this._prioritySampler = prioritySampler
     this._nativeSpans = nativeSpans
-    this._pendingSpans = []
     this._pendingSpanChunks = []
 
     const { url, hostname = defaults.hostname, port } = config
@@ -79,25 +65,15 @@ class NativeExporter {
       port,
     }))
 
-    // v0.5 output is opt-in via DD_TRACE_AGENT_PROTOCOL_VERSION=0.5 AND requires
-    // the agent to advertise /v0.5/traces. The v0.5 wire schema has no slot for
-    // meta_struct (or top-level span_events/span_links), so libdatadog silently
-    // drops them in v0.5 mode — matching the legacy v0.5 encoder. It must never
-    // be enabled implicitly, hence the explicit-opt-in + capability check.
-    // OTLP export (OTEL_TRACES_EXPORTER=otlp) routes traces to an OTLP endpoint
-    // via libdatadog instead of the Datadog agent. It is mutually exclusive with
-    // the agent v0.4/v0.5 path, so it takes precedence and v0.5 is not negotiated.
+    // OTLP takes precedence over explicit, capability-gated v0.5 output.
     if (config.OTEL_TRACES_EXPORTER === 'otlp') {
       this.#configureOtlp()
     } else if (config.protocolVersion === '0.5') {
       this.#negotiateV05()
     }
 
-    // Register on the dd-trace shared beforeExit handler list rather than
-    // attaching directly to `process` — repeated tracer instantiation (tests,
-    // hot reload, lambda re-init) would otherwise leak listeners and trip
-    // the MaxListenersExceededWarning. Final stats must run after final traces:
-    // preparing trace chunks feeds the native concentrator.
+    // Use the shared registry to avoid per-tracer process listeners. Flush
+    // traces before stats because chunk preparation feeds the concentrator.
     const finalFlush = () => {
       this.flush(() => {
         this.flushStats().catch((err) => {
@@ -114,24 +90,17 @@ class NativeExporter {
   }
 
   /**
-   * Configure libdatadog to export traces over OTLP HTTP (instead of the agent)
-   * from the resolved OTEL_EXPORTER_OTLP_TRACES_* config. Synchronous, so it
-   * takes effect before the first flush (the native output format is fixed at
-   * first send).
+   * Apply resolved OTLP configuration before the first native send.
    */
   #configureOtlp () {
     const config = this._config
     const endpoint = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     if (!endpoint) {
-      // OTEL_TRACES_EXPORTER=otlp but no endpoint resolved (normally config
-      // defaults this). Without an endpoint there's nothing to route to, so
-      // leave the exporter on the agent path rather than passing undefined.
+      // No endpoint means the native exporter must remain on the agent path.
       log.warn('Native exporter: OTEL_TRACES_EXPORTER=otlp but no OTLP traces endpoint resolved; skipping OTLP setup')
       return
     }
-    // A malformed endpoint is intentionally NOT caught here (unlike protocol
-    // below): it fails loud at build/first-send rather than silently degrading,
-    // since there is no sensible default endpoint to fall back to.
+    // Invalid endpoints fail loudly during native exporter construction.
     this._nativeSpans.setOtlpEndpoint(endpoint)
 
     const protocol = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
@@ -139,14 +108,12 @@ class NativeExporter {
       try {
         this._nativeSpans.setOtlpProtocol(protocol)
       } catch (e) {
-        // grpc / unknown: libdatadog only supports http/json and http/protobuf.
-        // Fall back to the native default rather than failing tracer startup.
+        // Unsupported protocols fall back to the native default.
         log.warn('Native exporter: unsupported OTLP protocol %s, using default: %s', protocol, e.message)
       }
     }
 
-    // OTEL_EXPORTER_OTLP_TRACES_HEADERS is a parsed { key: value } map; flatten
-    // to the [key, value, ...] array the native binding expects.
+    // Flatten parsed headers for the binding API.
     const headers = config.OTEL_EXPORTER_OTLP_TRACES_HEADERS
     if (headers && typeof headers === 'object') {
       const flat = []
@@ -160,12 +127,7 @@ class NativeExporter {
   }
 
   /**
-   * Confirm the agent supports v0.5 before switching the native exporter to it.
-   * Asynchronous: until /info resolves the exporter stays on v0.4 (the safe
-   * default), so an early first flush may go out as v0.4 — acceptable, since
-   * v0.4 loses no data. The native output format is fixed at the first send,
-   * so this must resolve before then (it normally does: /info is fast and the
-   * first flush is on a timer).
+   * Enable v0.5 only when the agent advertises it before the first send.
    */
   #negotiateV05 () {
     let infoUrl
@@ -283,12 +245,8 @@ class NativeExporter {
   }
 
   /**
-   * Export spans to the agent.
-   *
-   * In native mode, we receive raw span objects (not formatted) and collect
-   * them for batch export. The native side handles serialization.
-   *
-   * @param {Array<object>} spans - Array of span objects to export
+   * Buffer one processor export call as one trace chunk.
+   * @param {Array<object>} spans Spans to export
    */
   export (spans) {
     if (this.#disabled) return
@@ -296,15 +254,9 @@ class NativeExporter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
 
-    // Collect spans for batch export. `_pendingSpans` remains a flat buffer for
-    // observability/tests; `_pendingSpanChunks` preserves each SpanProcessor
-    // export call as a trace chunk. Preserving chunk boundaries matters when a
-    // delayed child span from an already-exported trace finishes before the
-    // HTTP timer fires: the legacy writer sends that child as a second chunk,
-    // not coalesced back into the parent chunk.
-    for (const span of spans) {
-      this._pendingSpans.push(span)
-    }
+    // Preserve each SpanProcessor export call as a trace chunk. A delayed child
+    // that finishes later must remain a second chunk rather than being merged
+    // back into its parent's earlier export call.
     if (spans.length > 0) this._pendingSpanChunks.push(spans)
 
     const { flushInterval } = this._config
@@ -321,21 +273,8 @@ class NativeExporter {
   }
 
   /**
-   * Compatibility shim for external tooling (e.g. the system-tests weblog and
-   * parametric app) that reaches `tracer._exporter._writer.flush(cb)`; the
-   * legacy AgentExporter exposed a `_writer`.
-   *
-   * The legacy AgentWriter.flush() shipped traces; client-computed stats were
-   * flushed separately (the weblog /flush endpoint also calls
-   * `_processor._stats.onInterval()`). In native mode APM stats live in the
-   * WASM concentrator (not `_processor._stats`) and otherwise ship only on a
-   * 10s interval, which a test-harness teardown can beat. So flush traces
-   * first (at the default non-zero flushInterval, prepareChunk feeds the
-   * concentrator synchronously before the send), then force-flush the native
-   * stats concentrator, and signal `done` only after both — callers like the
-   * /flush endpoint await this, so the async stats send completes before the
-   * process is torn down. `flushStats()` is a no-op (resolves immediately) when
-   * native stats are disabled, so this is inert otherwise.
+   * Compatibility surface for tooling that calls `_writer.flush(cb)`. Native
+   * stats must flush after traces so recently prepared chunks are included.
    */
   get _writer () {
     return {
@@ -351,13 +290,7 @@ class NativeExporter {
   }
 
   /**
-   * Force-flush the native stats concentrator to /v0.6/stats. Trace flush runs
-   * on a short interval, so stats are NOT flushed there (that would repeatedly
-   * ship the current partial 10s bucket); stats have their own 10s interval.
-   * This is the explicit force-flush used by the parametric test client's
-   * stats-flush endpoint (call it AFTER a trace flush so the just-exported spans
-   * are already in the concentrator).
-   *
+   * Force-flush native stats after an explicit trace flush.
    * @returns {Promise<boolean>}
    */
   flushStats () {
@@ -401,13 +334,9 @@ class NativeExporter {
       runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
     }
     log.error('Error sending spans to agent via native exporter:', err)
-    // A fatal exporter-build error (bad config) is one-shot and won't recover;
-    // libdatadog tags it as NativeExporterBuildError. Stop exporting instead of
-    // looping on the same error every flush, and drop buffered spans so they
-    // don't accumulate indefinitely.
+    // Stop after a one-shot native exporter build failure.
     if (err?.name === 'NativeExporterBuildError') {
       this.#disabled = true
-      this._pendingSpans = []
       this._pendingSpanChunks = []
       clearTimeout(this.#timer)
       this.#timer = undefined
@@ -415,11 +344,7 @@ class NativeExporter {
       this.#finishFlushCallbacks()
       return
     }
-    // Drain on rejection too — otherwise a single transient failure would leave
-    // spans buffered indefinitely (no signal beyond the log line, and bursts of
-    // low-traffic services may never flush). Flush callbacks are still released
-    // once the exporter is idle; errors are logged, not propagated through the
-    // callback, matching the legacy writer contract.
+    // Transient failures still drain work queued during the failed send.
     this.#finishSend()
   }
 
@@ -438,10 +363,7 @@ class NativeExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    // If a send is already in flight, callbacks must wait for that send and any
-    // pending spans that drain after it. The system-tests /flush endpoint relies
-    // on this to observe spans that finished while a previous payload was still
-    // being sent.
+    // Explicit flush callbacks wait until the exporter is idle.
     if (this.#flushInFlight) {
       return
     }
@@ -452,51 +374,21 @@ class NativeExporter {
     }
 
     const spanChunks = this._pendingSpanChunks
-    this._pendingSpans = []
     this._pendingSpanChunks = []
 
-    // Convert each SpanProcessor export call into one or more native chunks,
-    // splitting only traces that happen to share one export call. Never group
-    // spans from different export calls together: those calls are already the
-    // JS processor's chunk boundaries, and the legacy writer preserves them even
-    // when flushInterval coalesces HTTP sends.
+    // Preserve processor export-call boundaries while splitting mixed traces.
     const groups = this.#groupsFromSpanChunks(spanChunks, true)
 
-    // prepareChunk is synchronous — extract spans from native storage now.
-    // sendPreparedChunk is async (HTTP send). We serialize sends so that
-    // prepared chunks don't accumulate faster than they can be sent, which
-    // would cause unbounded memory growth proportional to total requests.
-    // Note: flushChangeQueue is called inside flushSpansGrouped.
+    // Serialize asynchronous sends so prepared chunks cannot accumulate.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
-    // Announce the first flush when the send is *attempted*, not when it
-    // succeeds — matching the legacy AgentWriter, which publishes before sending.
-    // `logAbortedIntegrations` (register.js) subscribes to this channel to emit
-    // `library_entrypoint.abort.integration`; gating it on send success meant a
-    // refused/unreachable agent (e.g. the guardrails harness with no agent) never
-    // fired it. At this point `_pendingSpans` is non-empty (flush() returned
-    // early otherwise), so a real send is happening.
+    // Publish when a send is attempted, matching the legacy AgentWriter. This
+    // must also fire when the agent is unreachable.
     if (!this.#firstFlushSent && firstFlushChannel.hasSubscribers) {
       this.#firstFlushSent = true
       firstFlushChannel.publish()
     }
-    // At `flushInterval: 0` the legacy AgentWriter sent one trace per request
-    // (each finished trace flushed immediately). The batched single-payload form
-    // — used at flushInterval>0 to cut request overhead — would instead deliver
-    // several coalesced traces in one payload, which any `traces[0]` consumer
-    // (and the test agent, which asserts one trace per payload) sees as trace
-    // reordering. When a deferred flush coalesced multiple traces at
-    // flushInterval:0, send each group as its own payload to preserve that
-    // one-trace-per-request contract. Each call is the same single-group
-    // `flushSpansGrouped` shape `flushSpans` wraps; the first call drains the
-    // whole change queue so every group's spans (and their trace tags) are
-    // materialized before any `prepareChunk`. A send failure rejects the chain
-    // into the handler below and leaves later groups unsent — acceptable since
-    // flushInterval:0 only runs against a local test agent or a short-lived
-    // lambda.
-    // Each request carries its own `rate_by_service`, so feed every response to
-    // the sampler rather than only whatever the chain settles with: an early
-    // request can return fresh rates while a later one returns `unchanged`, and
-    // taking just the last would leave agent-driven sampling stale.
+    // At flushInterval 0, preserve the legacy one-trace-per-request behavior.
+    // Apply sampling rates from every response, not only the last one.
     const applyResponse = (response) => {
       this.#updateSamplingRates(response)
       return response
@@ -520,9 +412,7 @@ class NativeExporter {
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        // Drain any spans that arrived while the send was in flight. Flush
-        // callbacks wait until the exporter is idle so explicit flush endpoints
-        // only acknowledge once all queued sends have reached the agent.
+        // Explicit flush callbacks wait for newly queued sends too.
         this.#finishSend()
       }, (err) => {
         this.#handleSendError(err)
@@ -530,16 +420,9 @@ class NativeExporter {
   }
 
   /**
-   * Feed agent-reported sampling rates back into the priority sampler.
-   *
-   * The native `sendPreparedChunk` resolves with the agent's response body:
-   * `'unchanged'` when the rates have not changed since the last flush (the
-   * agent negotiates this via the rates payload-version header), otherwise the
-   * raw JSON body containing `rate_by_service`. Parse the latter and forward
-   * the rate map to the priority sampler. Errors are swallowed (logged) so a
-   * malformed response never disrupts the flush cycle.
-   *
-   * @param {string} response - Resolved value from `flushSpans`
+   * Apply `rate_by_service` from a native response. `unchanged`, empty, and
+   * malformed responses leave the current sampler state intact.
+   * @param {string} response Native send response body
    */
   #updateSamplingRates (response) {
     // No body to parse: rates unchanged, or nothing was sent this cycle.
