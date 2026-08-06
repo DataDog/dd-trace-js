@@ -102,5 +102,8 @@ module.exports = {
   getIsFlexConsumptionAzureFunction,
   initializeServerlessTelemetry,
   IS_AWS_LAMBDA_MICROVM: getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined,
+  // true only for a Node that bundles its own OpenSSL, whose CSPRNG keeps the snapshot's DRBG
+  // state across a MicroVM clone resume
+  NODE_BUNDLES_OPENSSL: process.config.variables.node_shared_openssl === false,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }
