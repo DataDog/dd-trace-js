@@ -186,10 +186,13 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @returns {import('@opentelemetry/api').Attributes}
    */
   #buildAttributes (aggKey) {
+    const spanKind = Object.hasOwn(SPAN_KIND_METRIC_MAP, aggKey.spanKind)
+      ? SPAN_KIND_METRIC_MAP[aggKey.spanKind]
+      : 'SPAN_KIND_INTERNAL'
     const raw = {
       'span.name': aggKey.resource,
       'service.name': aggKey.service,
-      'span.kind': SPAN_KIND_METRIC_MAP[aggKey.spanKind] ?? 'SPAN_KIND_INTERNAL',
+      'span.kind': spanKind,
     }
 
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
