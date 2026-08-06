@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/bf7a0d2c-2a6e-4a94-9f2b-9c4b2ad2a8f1/records?filter[version]=2&filter[tags]=split:eval",
+    "headers": {
+      "Content-Type": "application/json",
+      "User-Agent": "node",
+      "Content-Length": "0"
+    },
+    "body": ""
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "content-length": "939",
+      "date": "Wed, 05 Aug 2026 20:30:00 GMT"
+    },
+    "body": "{\"data\":[{\"id\":\"tagged-a\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"canonical-tagged-a\",\"created_at\":\"2026-08-05T20:30:01.000000Z\",\"dataset_id\":\"bf7a0d2c-2a6e-4a94-9f2b-9c4b2ad2a8f1\",\"expected_output\":{\"value\":2},\"input\":{\"value\":1},\"metadata\":{\"source\":\"client-record-tags-test\"},\"tags\":[\"split:eval\",\"topic:math\"],\"ttl\":\"2029-08-05T20:30:01.000000Z\",\"updated_at\":\"2026-08-05T20:30:01.000000Z\",\"version\":1}},{\"id\":\"tagged-b\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"canonical-tagged-b\",\"created_at\":\"2026-08-05T20:30:01.000000Z\",\"dataset_id\":\"bf7a0d2c-2a6e-4a94-9f2b-9c4b2ad2a8f1\",\"expected_output\":{\"value\":3},\"input\":{\"value\":2},\"metadata\":{\"source\":\"client-record-tags-test\"},\"tags\":[\"split:eval\"],\"ttl\":\"2029-08-05T20:30:01.000000Z\",\"updated_at\":\"2026-08-05T20:30:02.000000Z\",\"version\":2}}],\"meta\":{\"after\":\"\"}}"
+  }
+}

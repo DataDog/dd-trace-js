@@ -12,6 +12,20 @@ function defaultAppendRecordAttributes (_record, index) {
   return { valid_from_version: 2 }
 }
 
+function versionFromRecordAttributes (attributes) {
+  return attributes.valid_from_version ?? attributes.version ?? null
+}
+
+function versionFromRecordAttributesList (attributes) {
+  const versions = attributes
+    .map(versionFromRecordAttributes)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
 function client () {
   return new ExperimentsClient({
     apiKey: 'k',
@@ -36,16 +50,28 @@ function clientWithMockBackend ({
   }
   c.appendDatasetRecords = async (projectId, datasetId, records) => {
     requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
-    return records.map((record, index) => {
-      const attributes = appendRecordAttributes(record, index)
-      return new DatasetRecord(
+    const recordAttributes = records.map((record, index) => appendRecordAttributes(record, index))
+    return {
+      records: records.map((record, index) => new DatasetRecord(
         record.input,
         record.expected_output,
         record.metadata,
         record.id ?? `rec-${index}`,
-        attributes.valid_from_version ?? attributes.version ?? null
-      )
-    })
+        record.tags ?? []
+      )),
+      version: versionFromRecordAttributesList(recordAttributes),
+    }
+  }
+  c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+    requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+    const records = (attributes.update_records ?? []).map(record => new DatasetRecord(
+      {},
+      null,
+      {},
+      record.id,
+      []
+    ))
+    return { records, version: records.length === 0 ? null : 3 }
   }
   c.createExperiment = async (attributes) => {
     requests.push({ method: 'createExperiment', attributes })
@@ -64,7 +90,7 @@ function clientWithMockBackend ({
 describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
     const { client: c } = clientWithMockBackend()
-    const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
+    const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 }, ['segment:gold'])
     const callsToLlmobs = []
     const llmobs = {
       enabled: true,
@@ -89,6 +115,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, 'rec-0')
+    assert.equal(callsToLlmobs[1][1].tags.segment, 'gold')
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
   })
@@ -102,6 +129,73 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       () => dataset.push(),
       /Failed to create dataset 'demo'.*HTTP 500 boom/
     )
+  })
+
+  it('serializes dataset record tags on append', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('a', 'b', { row: 0 }, ['source:synthetic'])
+
+    await dataset.push()
+
+    const append = requests.find(request => request.method === 'appendDatasetRecords')
+    assert.deepEqual(append.records[0].tags, ['source:synthetic'])
+    assert.deepEqual(dataset.records()[0].tags, ['source:synthetic'])
+    assert.equal(dataset.version(), 2)
+  })
+
+  it('updates tags on existing dataset records with backend tag operations', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      'desc',
+      'ds',
+      'proj',
+      [new DatasetRecord('a', 'b', {}, 'rec-1', ['segment:old'])],
+      ['rec-1'],
+      2,
+      2
+    )
+
+    dataset.addTags(0, ['segment:new', 'team:llmobs'])
+    dataset.removeTags(0, ['segment:old'])
+    dataset.replaceTags(0, ['segment:final'])
+    await dataset.push()
+
+    const update = requests.find(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(update.attributes.update_records, [
+      { id: 'rec-1', tag_operations: { set: ['segment:final'] } },
+    ])
+    assert.deepEqual(dataset.records()[0].tags, ['segment:final'])
+    assert.equal(dataset.version(), 3)
+  })
+
+  it('propagates pulled-dataset filter tags and record tags to experiment events', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      'desc',
+      'ds',
+      'proj',
+      [new DatasetRecord('a', 'b', {}, 'rec-1', ['segment:gold'])],
+      ['rec-1'],
+      2,
+      2,
+      ['split:train']
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+      config: { temperature: 0 },
+    }).run()
+
+    const create = requests.find(request => request.method === 'createExperiment')
+    assert.deepEqual(create.attributes.config, { temperature: 0, filtered_record_tags: ['split:train'] })
+    const events = requests.find(request => request.method === 'postExperimentEvents')
+    assert.ok(events.attributes.spans[0].tags.includes('segment:gold'))
   })
 
   it('clears the pinned dataset version when append responses omit a new version', async () => {
@@ -231,8 +325,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
-      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', 2))
-      .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', ['source:test']))
+      .addRecord({ inputData: 'payload' }, 'expected', { explicit: true }, ['case:explicit'])
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
@@ -240,11 +334,15 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.input, 'in')
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
+    assert.deepEqual(record.tags, ['source:test'])
     assert.equal(record.id, 'rec')
-    assert.equal(record.version(), 2)
-    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
+    assert.deepEqual(
+      { ...record },
+      { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, tags: ['source:test'], id: 'rec' }
+    )
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
+    assert.deepEqual(dataset.records()[1].tags, ['case:explicit'])
   })
 })

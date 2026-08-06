@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/delete",
+    "headers": {
+      "Content-Type": "application/json",
+      "User-Agent": "node",
+      "Content-Length": "112"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"attributes\":{\"type\":\"soft\",\"dataset_ids\":[\"bf7a0d2c-2a6e-4a94-9f2b-9c4b2ad2a8f1\"]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "content-length": "496",
+      "date": "Wed, 05 Aug 2026 20:30:00 GMT"
+    },
+    "body": "{\"data\":[{\"id\":\"bf7a0d2c-2a6e-4a94-9f2b-9c4b2ad2a8f1\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"created_at\":\"2026-08-05T20:30:00.000000Z\",\"current_version\":2,\"dataset_type\":\"user\",\"deleted_at\":\"2026-08-05T20:30:03.000000Z\",\"description\":\"created by a dd-trace-js experiments tagged records VCR test\",\"name\":\"dd-trace-js-experiments-vcr-tagged-dataset\",\"project_id\":\"5645ffb8-c97e-4ce4-89f2-c41931318fd9\",\"updated_at\":\"2026-08-05T20:30:02.000000Z\"}}]}"
+  }
+}
