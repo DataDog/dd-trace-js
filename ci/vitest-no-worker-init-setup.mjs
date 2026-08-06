@@ -61,7 +61,7 @@ if (typeof globalThis.process?.uptime === 'function') {
 async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
   try {
     if (!browserCommands) {
-      const vitestBrowser = await import('vitest/browser')
+      const vitestBrowser = await import('@vitest/browser/context')
       browserCommands = vitestBrowser.commands
     }
     return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
