@@ -1,20 +1,56 @@
 {
   "name": "plugin-graphql-long",
-  "run": "node index.js",
-  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "run": "node --require ../noop-request.js index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../noop-request.js index.js\"",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 7,
   "instructions": true,
   "variants": {
     "with-depth-off": {
-      "iterations": 7,
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "OPERATIONS": "1150" }
+      "iterations": 14,
+      "operations_by_node": {
+        "20": "1825",
+        "24": "3650"
+      },
+      "env": {
+        "DEPTH": "0",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "3650",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "6", "OPERATIONS": "800" }
+      "operations_by_node": {
+        "20": "1200",
+        "24": "2400"
+      },
+      "env": {
+        "COLLAPSE": "1",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "2600",
+        "DEPTH": "6",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
+      "iterations": 26,
+      "operations_by_node": {
+        "20": "360",
+        "24": "520"
+      },
+      "env": {
+        "COLLAPSE": "0",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "400",
+        "DEPTH": "4",
+        "WITH_TRACER": "1"
+      }
     }
   }
 }

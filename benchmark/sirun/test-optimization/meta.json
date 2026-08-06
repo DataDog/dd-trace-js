@@ -10,7 +10,10 @@
       "env": { "VARIANT": "small-suite", "OPERATIONS": "20000" }
     },
     "large-suite": {
-      "env": { "VARIANT": "large-suite", "OPERATIONS": "2400" }
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
+      "iterations": 12,
+      "env": { "VARIANT": "large-suite", "OPERATIONS": "4800" }
     },
     "wide-tags": {
       "env": { "VARIANT": "wide-tags", "OPERATIONS": "6000" }

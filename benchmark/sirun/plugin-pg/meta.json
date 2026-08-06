@@ -7,10 +7,12 @@
   "instructions": true,
   "variants": {
     "service": {
-      "env": { "VARIANT": "service", "OPERATIONS": "6000000" }
+      "iterations": 18,
+      "env": { "VARIANT": "service", "OPERATIONS": "11000000" }
     },
     "full": {
-      "env": { "VARIANT": "full", "OPERATIONS": "6000000" }
+      "iterations": 9,
+      "env": { "VARIANT": "full", "OPERATIONS": "5500000" }
     }
   }
 }

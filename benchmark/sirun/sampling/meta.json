@@ -16,7 +16,8 @@
       "env": { "VARIANT": "rule-miss", "OPERATIONS": "3000000" }
     },
     "rate-limited": {
-      "env": { "VARIANT": "rate-limited", "OPERATIONS": "3000000" }
+      "iterations": 24,
+      "env": { "VARIANT": "rate-limited", "OPERATIONS": "18000000" }
     }
   }
 }
