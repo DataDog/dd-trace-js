@@ -97,13 +97,6 @@ const storage = {
     },
     ioredis: redisConfig,
     iovalkey: valkeyConfig,
-    knex: {
-      opName: () => 'knex.pool.acquire',
-      serviceName: withSuffixFunction('knex'),
-      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
-        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'knex' })
-      },
-    },
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: mysqlServiceName,
@@ -171,13 +164,6 @@ const storage = {
       },
     },
     redis: redisConfig,
-    sequelize: {
-      opName: () => 'sequelize.pool.acquire',
-      serviceName: withSuffixFunction('sequelize'),
-      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
-        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'sequelize' })
-      },
-    },
     tedious: {
       opName: () => 'tedious.request',
       serviceName: ({ tracerService, pluginConfig, system }) =>
