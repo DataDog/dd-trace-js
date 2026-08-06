@@ -3,21 +3,11 @@
 // Dataset record: { input, expectedOutput?, metadata?, id? }.
 // `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
-  #version
-
-  constructor (input, expectedOutput = null, metadata = {}, id = null, version = null) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
     this.id = id ?? null
-    this.#version = version ?? null
-  }
-
-  /**
-   * @returns {number | string | null} The dataset version where this record became valid.
-   */
-  version () {
-    return this.#version
   }
 }
 
@@ -25,22 +15,12 @@ function recordIdFromCreatedRecord (record) {
   return String(record?.id ?? '')
 }
 
-function versionFromCreatedRecords (records) {
-  const versions = records
-    .map(record => record.version())
-    .filter(version => version != null)
-    .map(Number)
-    .filter(Number.isFinite)
-  if (versions.length === 0) return null
-  return Math.max(...versions)
-}
-
 // A local buffer of dataset records, created remotely and pushed on first run
 // (or eagerly via push()). Pushes are incremental.
 class Dataset {
+  name
+  description
   #client
-  #name
-  #description
   #records
   #recordIds
   #id
@@ -50,9 +30,9 @@ class Dataset {
   #latestVersion
 
   constructor (client, name, description = '') {
+    this.name = name
+    this.description = description
     this.#client = client
-    this.#name = name
-    this.#description = description
     this.#records = []
     this.#recordIds = []
     this.#id = null
@@ -82,14 +62,6 @@ class Dataset {
       : new DatasetRecord(recordOrInput, expectedOutput, metadata)
     this.#records.push(record)
     return this
-  }
-
-  name () {
-    return this.#name
-  }
-
-  description () {
-    return this.#description
   }
 
   records () {
@@ -135,13 +107,13 @@ class Dataset {
     if (this.#id === null) {
       let response
       try {
-        response = await this.#client.createDataset(projectId, { name: this.#name, description: this.#description })
+        response = await this.#client.createDataset(projectId, { name: this.name, description: this.description })
       } catch (err) {
-        throw new Error(`Failed to create dataset '${this.#name}': ${err.message}`)
+        throw new Error(`Failed to create dataset '${this.name}': ${err.message}`)
       }
       this.#id = response?.id() ?? null
       if (this.#id === null) {
-        throw new Error(`Failed to create dataset '${this.#name}': backend response is missing dataset id`)
+        throw new Error(`Failed to create dataset '${this.name}': backend response is missing dataset id`)
       }
       this.#projectId = projectId
       this.#version = response.version() ?? this.#version
@@ -169,18 +141,18 @@ class Dataset {
     try {
       response = await this.#client.appendDatasetRecords(projectId, this.#id, records)
     } catch (err) {
-      throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
+      throw new Error(`Failed to push records to dataset '${this.name}': ${err.message}`)
     }
 
     const created = response
-    const pushedVersion = versionFromCreatedRecords(created)
-    if (pushedVersion === null) {
-      // The dataset contents changed, but the backend did not report the new
-      // version. Avoid pinning later experiments to the pre-append create version.
-      this.#version = null
-    } else {
+    const previousVersion = Number(this.#version)
+    if (Number.isFinite(previousVersion)) {
+      const pushedVersion = previousVersion + 1
+      const latestVersion = Number(this.#latestVersion)
       this.#version = pushedVersion
-      this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
+      this.#latestVersion = Number.isFinite(latestVersion) ? Math.max(latestVersion, pushedVersion) : pushedVersion
+    } else {
+      this.#version = null
     }
 
     let pushedCount = 0

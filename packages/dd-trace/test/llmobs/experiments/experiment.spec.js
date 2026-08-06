@@ -8,10 +8,6 @@ const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experi
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
-function defaultAppendRecordAttributes (_record, index) {
-  return { valid_from_version: 2 }
-}
-
 function client () {
   return new ExperimentsClient({
     apiKey: 'k',
@@ -22,7 +18,6 @@ function client () {
 }
 
 function clientWithMockBackend ({
-  appendRecordAttributes = defaultAppendRecordAttributes,
   createDatasetError,
 } = {}) {
   const c = client()
@@ -32,20 +27,16 @@ function clientWithMockBackend ({
   c.createDataset = async (projectId, attributes) => {
     requests.push({ method: 'createDataset', projectId, attributes })
     if (createDatasetError) throw createDatasetError
-    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 1, 1)
+    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 0, 0)
   }
   c.appendDatasetRecords = async (projectId, datasetId, records) => {
     requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
-    return records.map((record, index) => {
-      const attributes = appendRecordAttributes(record, index)
-      return new DatasetRecord(
-        record.input,
-        record.expected_output,
-        record.metadata,
-        record.id ?? `rec-${index}`,
-        attributes.valid_from_version ?? attributes.version ?? null
-      )
-    })
+    return records.map((record, index) => new DatasetRecord(
+      record.input,
+      record.expected_output,
+      record.metadata,
+      record.id ?? `rec-${index}`
+    ))
   }
   c.createExperiment = async (attributes) => {
     requests.push({ method: 'createExperiment', attributes })
@@ -104,13 +95,13 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
-  it('clears the pinned dataset version when append responses omit a new version', async () => {
-    const { client: c } = clientWithMockBackend({ appendRecordAttributes: () => ({}) })
+  it('advances the pinned dataset version after appending records', async () => {
+    const { client: c } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord('a')
 
     await dataset.push()
 
-    assert.equal(dataset.version(), null)
+    assert.equal(dataset.version(), 1)
     assert.equal(dataset.latestVersion(), 1)
   })
 
@@ -229,11 +220,11 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
-  it('exposes dataset getters and accepts a DatasetRecord instance', () => {
+  it('exposes dataset properties and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
-      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec', 2))
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec'))
       .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
-    assert.equal(dataset.name(), 'my-name')
+    assert.equal(dataset.name, 'my-name')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
     const record = dataset.records()[0]
@@ -241,7 +232,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
     assert.equal(record.id, 'rec')
-    assert.equal(record.version(), 2)
     assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')

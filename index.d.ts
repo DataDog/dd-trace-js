@@ -3860,10 +3860,11 @@ declare namespace tracer {
     }
 
     interface Dataset {
+      name: string
+      description: string
       addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
-      name (): string
       id (): string | null
       projectId (): string | null
       version (): number | null

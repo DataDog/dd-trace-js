@@ -151,7 +151,7 @@ class Experiment {
     await this.#dataset.ensureCreatedAndPushed(projectId)
     const datasetId = this.#dataset.id()
     if (datasetId === null) {
-      throw new Error(`Dataset '${this.#dataset.name()}' has no id after push`)
+      throw new Error(`Dataset '${this.#dataset.name}' has no id after push`)
     }
 
     // Create the experiment. ensure_unique makes the backend mint a fresh
@@ -310,7 +310,7 @@ class Experiment {
       project_id: projectId,
       dataset_id: datasetId,
       dataset_record_id: datasetRecordId,
-      dataset_name: this.#dataset.name(),
+      dataset_name: this.#dataset.name,
       experiment_name: this.#name,
     }
     const tags = buildExperimentTagObject(this.#tags, autoTags)

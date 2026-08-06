@@ -17,6 +17,11 @@ function waitForBackend (defaultDelayMs = 2000) {
   return sleep(Number(process.env.DD_LLMOBS_EXPERIMENTS_READ_AFTER_WRITE_DELAY_MS ?? defaultDelayMs))
 }
 
+function nextDatasetVersion (dataset) {
+  const version = Number(dataset.version())
+  return Number.isFinite(version) ? version + 1 : undefined
+}
+
 function recordDataByInputValue (records) {
   return records
     .map(record => ({
@@ -90,8 +95,8 @@ describe('LLMObs Experiments control-plane client', function () {
     })
     trackBackendDataset(client, projectId, dataset.id())
 
-    assert.equal(dataset.name(), backendClientDatasetName)
-    assert.equal(dataset.description(), 'created by a dd-trace-js experiments client VCR test')
+    assert.equal(dataset.name, backendClientDatasetName)
+    assert.equal(dataset.description, 'created by a dd-trace-js experiments client VCR test')
     assert.equal(dataset.projectId(), projectId)
     assert.match(dataset.id(), /\S+/)
     assert.match(dataset.url(), /^https:\/\//)
@@ -108,12 +113,10 @@ describe('LLMObs Experiments control-plane client', function () {
     ])
 
     await waitForBackend(5_000)
-    const listed = await client.listDatasets(projectId, { name: dataset.name() })
+    const listed = await client.listDatasets(projectId, { name: dataset.name })
     assert.equal(listed.some(item => item.id() === dataset.id()), true)
 
-    const records = await client.listDatasetRecords(projectId, dataset.id(), {
-      version: createdRecords.find(record => record.version() !== null)?.version() ?? dataset.version(),
-    })
+    const records = await client.listDatasetRecords(projectId, dataset.id(), { version: nextDatasetVersion(dataset) })
     assert.equal(records.after, '')
     assert.equal(records.records.length, 2)
     assert.deepEqual(recordDataByInputValue(records.records), [
@@ -153,9 +156,7 @@ describe('LLMObs Experiments control-plane client', function () {
     ])
 
     await waitForBackend(5_000)
-    const records = await client.listDatasetRecords(projectId, dataset.id(), {
-      version: customRecords.find(record => record.version() !== null)?.version() ?? dataset.version(),
-    })
+    const records = await client.listDatasetRecords(projectId, dataset.id(), { version: nextDatasetVersion(dataset) })
     assert.equal(records.after, '')
     assert.deepEqual(records.records.map(record => record.id).sort(), ['custom-a', 'custom-b'])
     assert.deepEqual(recordDataByInputValue(records.records), [
@@ -184,7 +185,7 @@ describe('LLMObs Experiments control-plane client', function () {
       ensure_unique: true,
       run_count: 1,
       metadata: { tags: ['source:client-test'] },
-      dataset_version: createdRecords[0].version() ?? dataset.version(),
+      dataset_version: nextDatasetVersion(dataset),
     })
 
     assert.match(experiment.experimentId, /\S+/)
