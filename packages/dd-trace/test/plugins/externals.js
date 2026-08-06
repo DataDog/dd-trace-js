@@ -462,7 +462,15 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0'],
+      versions: [
+        '2.5.6',
+        '3.0.0',
+        '3.4.0',
+        '3.4.5', // last pre-ESM release
+        '3.5.1', // first ESM-only release
+        '3.5.2', // last ESM-only release
+        '3.5.3', // first conditional CJS release
+      ],
     },
   ],
   mercurius: [

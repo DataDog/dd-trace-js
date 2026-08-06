@@ -126,6 +126,8 @@ for (const name of names) {
       }
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
+        // IITM invokes this callback for every module in the package. Unwrapping earlier would mutate an unrelated
+        // namespace export even though its instrumentation hook does not match.
         if (isIitm && patchDefault === !!moduleExports.default) {
           if (patchDefault) {
             moduleExports = moduleExports.default
