@@ -7,7 +7,7 @@ globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const hostname = require('os').hostname()
 const guard = require('../startup-guard')
-const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
+const SpanProcessor = require('../../../packages/dd-trace/src/js_span_processor')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
 
