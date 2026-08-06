@@ -174,7 +174,8 @@ describe('LLMObs Experiments facade', () => {
       const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
-      const dataset = exp.createDataset('d')
+      const dataset = exp.createDataset('d', 'desc')
+      assert.equal(dataset.description(), 'desc')
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
       assert.equal(dataset.url(), null)
 
@@ -192,9 +193,11 @@ describe('LLMObs Experiments facade', () => {
       const exp = new NoopExperiments()
 
       const ignoredDescriptionDataset = exp.createDataset('legacy description', 'ignored')
+      assert.equal(ignoredDescriptionDataset.description(), 'ignored')
       assert.deepEqual(ignoredDescriptionDataset.records(), [])
 
       const dataset = exp.createDataset('d', {
+        description: 'desc',
         records: [{
           id: 'r1',
           inputData: { question: 'q' },
@@ -205,6 +208,7 @@ describe('LLMObs Experiments facade', () => {
       dataset.addRecord('input only')
 
       assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.description(), 'desc')
       assert.equal(dataset.id(), null)
       assert.equal(dataset.projectId(), null)
       assert.equal(dataset.version(), null)
@@ -224,6 +228,7 @@ describe('LLMObs Experiments facade', () => {
 
       const pulled = await exp.pullDataset('pulled')
       assert.equal(pulled.name(), 'pulled')
+      assert.equal(pulled.description(), '')
 
       const experiment = exp.experiment()
       assert.equal(experiment.name(), '')
