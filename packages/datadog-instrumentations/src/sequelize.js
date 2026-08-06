@@ -5,32 +5,27 @@ const {
   channel,
   addHook,
 } = require('./helpers/instrument')
-const { wrapPoolAcquire } = require('./helpers/promise-pool-acquire')
-
-const startPoolAcquireCh = channel('apm:sequelize:pool:acquire:start')
-const finishPoolAcquireCh = channel('apm:sequelize:pool:acquire:finish')
+const {
+  wrapPoolRelease,
+  wrapPromisePoolAcquire,
+  wrapPromisePoolQueryMethod,
+} = require('./helpers/pool-acquire')
 
 addHook({
   name: 'sequelize',
   versions: ['>=4'],
   file: 'lib/dialects/abstract/connection-manager.js',
 }, ConnectionManager => {
-  // `getConnection` pulls a connection from sequelize-pool before every query. Wrap it so a caller
-  // that waits for a busy pool gets a span reporting that wait; an available connection takes the
-  // fast path with no span. See helpers/promise-pool-acquire.js.
-  shimmer.wrap(ConnectionManager.prototype, 'getConnection', getConnection => wrapPoolAcquire(
+  shimmer.wrap(ConnectionManager.prototype, 'getConnection', getConnection => wrapPromisePoolAcquire(
     getConnection,
-    startPoolAcquireCh,
-    finishPoolAcquireCh,
-    manager => {
-      const config = manager.config ?? {}
-      return {
-        conf: { host: config.host, port: config.port, user: config.username, database: config.database },
-        dialect: manager.dialectName,
-      }
-    },
+    resolveSequelizeDriver,
+    resolveSequelizeConfig,
     sequelizeHasIdleConnection
   ))
+  shimmer.wrap(ConnectionManager.prototype, 'releaseConnection', wrapPoolRelease)
+  if (typeof ConnectionManager.prototype.destroyConnection === 'function') {
+    shimmer.wrap(ConnectionManager.prototype, 'destroyConnection', wrapPoolRelease)
+  }
 
   return ConnectionManager
 })
@@ -40,9 +35,15 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequ
   const finishCh = channel('datadog:sequelize:query:finish')
 
   shimmer.wrap(Sequelize.prototype, 'query', query => {
+    const queryWithPool = wrapPromisePoolQueryMethod(
+      query,
+      (sequelize, args) => args[1]?.transaction ? undefined : sequelize.connectionManager,
+      sequelize => resolveSequelizeDriver(sequelize.connectionManager)
+    )
+
     return function (sql, options) {
       if (!startCh.hasSubscribers) {
-        return query.apply(this, arguments)
+        return queryWithPool.apply(this, arguments)
       }
 
       let dialect
@@ -62,7 +63,7 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequ
       }
 
       return startCh.runStores({ sql, dialect }, () => {
-        const promise = query.apply(this, arguments)
+        const promise = queryWithPool.apply(this, arguments)
         promise.then(onFinish, () => { onFinish() })
 
         return promise
@@ -73,22 +74,62 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequ
   return Sequelize
 })
 
+addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/transaction.js' }, Transaction => {
+  shimmer.wrap(Transaction.prototype, 'prepareEnvironment', prepareEnvironment => wrapPromisePoolQueryMethod(
+    prepareEnvironment,
+    transaction => transaction.parent ? undefined : transaction.sequelize.connectionManager,
+    transaction => resolveSequelizeDriver(transaction.sequelize.connectionManager)
+  ))
+
+  return Transaction
+})
+
 /**
- * An available connection in sequelize-pool is handed back without waiting, so no span is opened.
- * Replication uses a `{ read, write }` facade whose sub-pool depends on the query type. A pool that
- * does not expose `available` (older sequelize) also takes the fast path, limiting the span to
- * versions where a real wait can be detected rather than risking one span per query.
- *
- * @param {{ pool?: { available?: number, read?: { available?: number }, write?: { available?: number } } }} manager
+ * @typedef {{
+ *   available: number,
+ *   pending?: number,
+ *   waiting?: number,
+ * }} SequelizePool
+ */
+
+/**
+ * @param {{ pool: SequelizePool & { read?: SequelizePool, write?: SequelizePool } }} manager
  * @param {[{ type?: string, useMaster?: boolean }?]} args
  * @returns {boolean}
  */
 function sequelizeHasIdleConnection (manager, args) {
   const pool = manager.pool
-  if (typeof pool?.available === 'number') {
-    return pool.available > 0
-  }
   const options = args[0]
-  const sub = options?.type === 'SELECT' && !options?.useMaster ? pool?.read : pool?.write
-  return typeof sub?.available === 'number' ? sub.available > 0 : true
+  const selected = pool?.read === undefined
+    ? pool
+    : options?.type === 'SELECT' && !options?.useMaster ? pool.read : pool.write
+  const waiting = selected.waiting ?? selected.pending
+  return selected.available > waiting
+}
+
+/**
+ * @param {{ dialectName?: string }|undefined} manager
+ * @returns {'mysql2'|'pg'|undefined}
+ */
+function resolveSequelizeDriver (manager) {
+  switch (manager?.dialectName) {
+    case 'mysql':
+      return 'mysql2'
+    case 'postgres':
+      return 'pg'
+  }
+}
+
+/**
+ * @param {{ config: Record<string, unknown> & { username?: string } }} manager
+ * @returns {Record<string, unknown>}
+ */
+function resolveSequelizeConfig (manager) {
+  const config = manager.config
+  return {
+    database: config.database,
+    host: config.host,
+    port: config.port,
+    user: config.username,
+  }
 }

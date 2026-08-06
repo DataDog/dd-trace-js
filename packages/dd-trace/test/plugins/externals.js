@@ -363,6 +363,14 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -376,6 +384,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -693,6 +702,10 @@ module.exports = {
     },
     {
       name: 'mysql2',
+      dep: true,
+    },
+    {
+      name: 'pg',
       dep: true,
     },
     {
