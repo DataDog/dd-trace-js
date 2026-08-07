@@ -630,6 +630,10 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v0.5/traces', (req, res) => {
+      res.status(404).end()
+    })
+    agent.post('/v0.4/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
