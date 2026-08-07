@@ -131,6 +131,32 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     }
 
+    it('reports the session when a custom reporter throws', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSession)
+          assert.strictEqual(testSession.content.meta[TEST_STATUS], 'fail')
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {

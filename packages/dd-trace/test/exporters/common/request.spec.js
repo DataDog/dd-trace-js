@@ -166,6 +166,22 @@ describe('request', function () {
     await assert.rejects(completed, { code: 'ABORT_ERR' })
   })
 
+  it('does not start a request when its AbortSignal is already aborted', (done) => {
+    const abortController = new AbortController()
+    const error = new Error('final flush expired')
+    error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+    abortController.abort(error)
+
+    request(Buffer.from(''), {
+      method: 'GET',
+      path: '/path',
+      signal: abortController.signal,
+    }, (requestError) => {
+      assert.strictEqual(requestError, error)
+      done()
+    })
+  })
+
   it('settles once when a response is truncated', async () => {
     /**
      * @param {import('node:http').IncomingMessage} incoming
@@ -382,6 +398,56 @@ describe('request', function () {
       method: 'PUT',
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
+      done()
+    })
+  })
+
+  it('should retry transient HTTP errors when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(500)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
+    })
+  })
+
+  it('should retry HTTP 429 responses when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
+    })
+  })
+
+  it('should not retry permanent HTTP errors when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(499)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err) => {
+      assert.strictEqual(err.status, 499)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
       done()
     })
   })
@@ -793,6 +859,84 @@ describe('request', function () {
           }
         })
     }
+  })
+
+  it('reports when a final request reaches its deadline under backpressure', async () => {
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize)
+    const scope = nock('http://test:123')
+      .put('/path')
+      .times(8)
+      .delay(50)
+      .reply(200, 'OK')
+
+    const activeRequests = []
+    for (let index = 0; index < 8; index++) {
+      activeRequests.push(new Promise((resolve, reject) => {
+        request(buffer, {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {},
+        }, error => error ? reject(error) : resolve())
+      }))
+    }
+
+    const deadlineError = await new Promise(resolve => {
+      request(Buffer.from('final'), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'PUT',
+        deadline: Date.now(),
+        headers: {},
+      }, resolve)
+    })
+
+    assert.strictEqual(deadlineError.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+    await Promise.all(activeRequests)
+    scope.done()
+  })
+
+  it('waits for backpressure to clear before sending a final request', async () => {
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize)
+    const scope = nock('http://test:123')
+      .put('/path')
+      .times(9)
+      .delay(50)
+      .reply(200, 'OK')
+
+    const requests = []
+    for (let index = 0; index < 8; index++) {
+      requests.push(new Promise((resolve, reject) => {
+        request(buffer, {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {},
+        }, error => error ? reject(error) : resolve())
+      }))
+    }
+    requests.push(new Promise((resolve, reject) => {
+      request(Buffer.from('final'), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'PUT',
+        deadline: Date.now() + 1000,
+        headers: {},
+      }, error => error ? reject(error) : resolve())
+    }))
+
+    await Promise.all(requests)
+    scope.done()
   })
 
   describe('stripping the Datadog API key from a non-TLS connection', () => {

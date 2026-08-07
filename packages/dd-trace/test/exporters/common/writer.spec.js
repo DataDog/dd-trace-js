@@ -19,6 +19,7 @@ describe('common Writer', () => {
   beforeEach(() => {
     encoder = {
       count: sinon.stub().returns(2),
+      encode: sinon.stub(),
       makePayload: sinon.stub().returns(Buffer.from('payload')),
       reset: sinon.stub(),
     }
@@ -72,5 +73,52 @@ describe('common Writer', () => {
 
     sinon.assert.notCalled(encoder.reset)
     sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, done)
+  })
+
+  it('passes final flush options to the payload sender', () => {
+    const done = sinon.stub()
+    const options = { deadline: Date.now() + 1000 }
+
+    writer.flush(done, options)
+
+    sinon.assert.calledOnceWithExactly(
+      writer._sendPayload,
+      Buffer.from('payload'),
+      2,
+      done,
+      options
+    )
+  })
+
+  it('drops a non-final payload when the request buffer is full', () => {
+    request.writable = false
+    const done = sinon.stub()
+
+    writer.flush(done)
+
+    sinon.assert.calledOnce(encoder.reset)
+    sinon.assert.calledOnceWithExactly(done)
+  })
+
+  it('can retain a final payload while the request buffer is full', () => {
+    request.writable = false
+    writer._bufferWhenUnavailable = true
+    const payload = [{ type: 'test_session_end' }]
+
+    writer.append(payload)
+
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
+
+  it('retains queued Test Optimization payloads until a later final flush', () => {
+    request.writable = false
+    writer._bufferWhenUnavailable = true
+    const done = sinon.stub()
+
+    writer.flush(done)
+
+    sinon.assert.notCalled(encoder.reset)
+    sinon.assert.calledOnce(done)
+    assert.match(done.firstCall.args[0].message, /payload was retained/)
   })
 })

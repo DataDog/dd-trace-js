@@ -6,12 +6,12 @@ const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
-const BaseWriter = require('../../../exporters/common/writer')
+const TestOptimizationWriter = require('./base-writer')
 
 // Writer used by the integration between Dynamic Instrumentation and Test Visibility
 // It is used to encode and send logs to both the logs intake directly and the
 // `/debugger/v1/input` endpoint in the agent, which is a proxy to the logs intake.
-class DynamicInstrumentationLogsWriter extends BaseWriter {
+class DynamicInstrumentationLogsWriter extends TestOptimizationWriter {
   // TODO: what's a good value for timeout for the logs intake?
   constructor ({ url, timeout = 15_000, isAgentProxy = false }) {
     super(...arguments)
@@ -21,7 +21,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
     this.timeout = timeout
   }
 
-  _sendPayload (data, _, done) {
+  _sendPayload (data, _, done, flushOptions) {
     const options = {
       path: '/api/v2/logs',
       method: 'POST',
@@ -31,6 +31,8 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       },
       timeout: this.timeout,
       url: this._url,
+      deadline: flushOptions?.deadline,
+      retryOnHttpError: flushOptions?.deadline !== undefined,
     }
 
     if (this._isAgentProxy) {
@@ -41,10 +43,10 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the logs intake: ${safeJSONStringify(options)}`)
 
-    request(data, options, (err, res) => {
+    this._sendRequest(request, data, options, (err, res) => {
       if (err) {
         log.error('Error sending DI logs payload', err)
-        done()
+        done(err)
         return
       }
       log.debug('Response from the logs intake:', res)

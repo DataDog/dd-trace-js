@@ -72,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      error,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -115,6 +116,10 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (error) {
+        this.testSessionSpan.setTag('error', error)
+        this.testModuleSpan.setTag('error', error)
+      }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()

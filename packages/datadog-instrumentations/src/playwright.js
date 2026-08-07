@@ -1367,7 +1367,19 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    let runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn
+    try {
+      runAllTestsReturn = await runAllTests.apply(this, arguments)
+    } catch (error) {
+      await getChannelPromise(testSessionFinishCh, {
+        status: 'fail',
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+      })
+      throw error
+    }
 
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`

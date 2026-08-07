@@ -127,6 +127,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      error,
       onDone,
     }) => {
       const finishSession = () => {
@@ -139,14 +140,17 @@ class PlaywrightPlugin extends CiPlugin {
         if (isEarlyFlakeDetectionFaulty) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
-        if (status === 'fail' && this.numFailedSuites > 0) {
+        let sessionError = error
+        if (!sessionError && status === 'fail' && this.numFailedSuites > 0) {
           let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
           if (this.numFailedTests > 0) {
             errorMessage += ` Tests failed: ${this.numFailedTests}`
           }
-          const error = new Error(errorMessage)
-          this.testModuleSpan.setTag('error', error)
-          this.testSessionSpan.setTag('error', error)
+          sessionError = new Error(errorMessage)
+        }
+        if (sessionError) {
+          this.testModuleSpan.setTag('error', sessionError)
+          this.testSessionSpan.setTag('error', sessionError)
         }
 
         if (isTestManagementTestsEnabled) {

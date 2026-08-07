@@ -159,7 +159,11 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        complete(error, null, res.statusCode, res.headers)
+        if (options.retryOnHttpError) {
+          handleError(error)
+        } else {
+          complete(error, null, res.statusCode, res.headers)
+        }
       }
     })
   }
@@ -169,9 +173,22 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
+    if (options.signal?.aborted) {
+      return callback(options.signal.reason || Object.assign(new Error('Request aborted'), { code: 'ABORT_ERR' }))
+    }
+
     if (!request.writable) {
+      if (options.deadline !== undefined && Date.now() < options.deadline) {
+        const delay = Math.min(50, options.deadline - Date.now())
+        setTimeout(attempt, delay, attemptIndex).unref?.()
+        return
+      }
       log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+      if (options.deadline === undefined) return callback(null)
+
+      const error = new Error('Maximum number of active requests reached before the request deadline')
+      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      return callback(error)
     }
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
@@ -204,9 +221,11 @@ function request (data, options, callback) {
       const handleError = (error) => {
         if (settled) return
 
+        const isRetriableHttpError = options.retryOnHttpError === true &&
+          (error.status === 429 || error.status >= 500)
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
-            isRetriableNetworkError(error)) {
+            (isRetriableNetworkError(error) || isRetriableHttpError)) {
           settled = true
           finalize()
           // Unref so a pending retry never keeps the host process alive past

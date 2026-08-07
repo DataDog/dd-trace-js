@@ -426,6 +426,13 @@ function registerDdTraceHooks (
   userAfterScreenshotHandlers,
   manualPlugin
 ) {
+  if (config.isInteractive && config.experimentalInteractiveRunEvents !== true) {
+    config.experimentalInteractiveRunEvents = true
+    log.warn(
+      'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.'
+    )
+  }
+
   const generatedSupportFiles = injectSupportFile(config)
   if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
 

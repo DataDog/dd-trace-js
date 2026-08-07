@@ -865,6 +865,67 @@ describe('CI Visibility Exporter', () => {
         )
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
+
+      it('defers an immediate session flush until the bounded final flush', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy((done) => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+
+        ciVisibilityExporter.export([{ type: 'test_session_end' }])
+
+        sinon.assert.notCalled(writer.flush)
+        ciVisibilityExporter.flush(() => {})
+        sinon.assert.calledOnce(writer.flush)
+        assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
+      })
+    })
+  })
+
+  describe('flush', () => {
+    it('waits for exporter initialization before completing a final flush', async () => {
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy((done) => done()),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      const done = sinon.spy()
+
+      ciVisibilityExporter.flush(done)
+      sinon.assert.notCalled(done)
+
+      ciVisibilityExporter._writer = writer
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      await Promise.resolve()
+
+      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnceWithExactly(done, undefined)
+      assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
+    })
+
+    it('releases a final flush when exporter initialization reaches the deadline', () => {
+      const clock = sinon.useFakeTimers()
+      const logError = sinon.stub(ciVisibilityLog, 'error')
+      try {
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        const done = sinon.spy()
+
+        ciVisibilityExporter.flush(done)
+        clock.tick(10_100)
+
+        sinon.assert.calledOnce(done)
+        assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+        sinon.assert.calledOnce(logError)
+      } finally {
+        clock.restore()
+      }
     })
   })
 

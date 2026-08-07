@@ -57,6 +57,8 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
+const FINAL_FLUSH_TIMEOUT = 10_000
+const FINAL_FLUSH_FALLBACK_DELAY = 100
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
@@ -137,18 +139,7 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    const flush = () => {
-      if (this._writer) {
-        this._writer.flush()
-      }
-      if (this._coverageWriter) {
-        this._coverageWriter.flush()
-      }
-      if (this._logsWriter) {
-        this._logsWriter.flush()
-      }
-    }
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush.bind(this))
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
   }
 
   shouldRequestSkippableSuites () {
@@ -407,7 +398,7 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this.canReportSessionTraces() && getIsTestSessionTrace(trace)) {
       return
     }
-    this._export(trace)
+    this._export(trace, undefined, undefined, getIsTestSessionTrace(trace))
   }
 
   exportCoverage (formattedCoverage) {
@@ -462,32 +453,67 @@ class CiVisibilityExporter extends BufferingExporter {
     )
   }
 
-  flush (done = () => {}) {
-    if (!this._isInitialized) {
-      return done()
+  flush (done) {
+    const isFinalFlush = typeof done === 'function'
+    const onDone = done || (() => {})
+    const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
+    let hasCompleted = false
+
+    const fallbackTimeoutId = isFinalFlush
+      ? setTimeout(() => {
+        const error = new Error('Timed out waiting for Test Optimization to flush')
+        error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+        complete(error)
+      }, FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
+      : undefined
+
+    const complete = (error) => {
+      if (hasCompleted) return
+      hasCompleted = true
+      clearTimeout(fallbackTimeoutId)
+      if (error) log.error('Error flushing Test Optimization data', error)
+      onDone(error)
     }
 
-    // TODO: safe to do them at once? Or do we want to do them one by one?
-    const writers = [
-      this._writer,
-      this._coverageWriter,
-      this._logsWriter,
-    ].filter(Boolean)
+    const flushWriters = () => {
+      const writers = [
+        this._writer,
+        this._coverageWriter,
+        this._logsWriter,
+      ].filter(Boolean)
 
-    let remaining = writers.length
+      let remaining = writers.length
+      let flushError
 
-    if (remaining === 0) {
-      return done()
-    }
-
-    const onFlushComplete = () => {
-      remaining -= 1
       if (remaining === 0) {
-        done()
+        complete()
+        return
       }
+
+      const onFlushComplete = (error) => {
+        flushError ||= error
+        remaining -= 1
+        if (remaining === 0) complete(flushError)
+      }
+
+      const options = deadline === undefined ? undefined : { deadline }
+      for (const writer of writers) writer.flush(onFlushComplete, options)
     }
 
-    for (const writer of writers) writer.flush(onFlushComplete)
+    if (!isFinalFlush) {
+      if (this._isInitialized) flushWriters()
+      else complete()
+      return
+    }
+
+    if (this._isInitialized) {
+      flushWriters()
+      return
+    }
+
+    this._canUseCiVisProtocolPromise.then(() => {
+      if (!hasCompleted) flushWriters()
+    })
   }
 
   exportUncodedCoverages () {
