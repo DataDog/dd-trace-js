@@ -50,6 +50,8 @@ const {
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
+  makeProvidedContextBrowserSafe,
+  parseProvidedContextValue,
   setProvidedContext,
   getVitestTestProperties,
 } = require('./vitest-util')
@@ -812,7 +814,7 @@ async function runMainProcessSetup (
     )
     if (!shouldInstallNoWorkerInit) {
       setProvidedContext(ctx, {
-        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+        _ddTestPropertiesByFilepath: makeProvidedContextBrowserSafe(testPropertiesByFilepath),
       }, 'Could not send test properties to workers so some Test Optimization features will not work.')
     }
   }
@@ -1328,7 +1330,7 @@ function getMainProcessProvidedContext (ctx) {
     const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
 
     return {
-      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+      testPropertiesByFilepath: parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath) || {},
     }
   } catch {
     return {

@@ -20,6 +20,7 @@ const {
   getTypeTasks,
   getWorkspaceProject,
   isFlakyTestRetriesEnabledForTask,
+  makeProvidedContextBrowserSafe,
   setProvidedContext,
   testErrorCh,
   testFinishTimeCh,
@@ -335,7 +336,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
   } = setupData
 
   setProvidedContext(ctx, {
-    _ddVitestWorkerSetup: {
+    _ddVitestWorkerSetup: makeProvidedContextBrowserSafe({
       isActive: true,
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
@@ -349,7 +350,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       repositoryRoot: repositoryRoot || process.cwd(),
       rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
       testPropertiesByFilepath: testPropertiesByFilepath || {},
-    },
+    }),
   }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
 
   installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state, {

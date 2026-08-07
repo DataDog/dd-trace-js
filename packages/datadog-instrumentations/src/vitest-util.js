@@ -33,6 +33,8 @@ const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detectio
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
+const CLOSING_SCRIPT_TAG_RE = /<\/script/i
+
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
@@ -111,12 +113,39 @@ function setProvidedContext (ctx, values, warningMessage) {
   }
 }
 
+/**
+ * Prevent Vitest Browser Mode from terminating its inline bootstrap script with Datadog metadata.
+ *
+ * @param {object} value
+ * @returns {object|string}
+ */
+function makeProvidedContextBrowserSafe (value) {
+  const serializedValue = JSON.stringify(value)
+  return CLOSING_SCRIPT_TAG_RE.test(serializedValue)
+    ? serializedValue.replaceAll('<', String.raw`\u003c`)
+    : value
+}
+
+/**
+ * Restore context serialized by makeProvidedContextBrowserSafe.
+ *
+ * @param {object|string|undefined} value
+ * @returns {object|undefined}
+ */
+function parseProvidedContextValue (value) {
+  if (typeof value !== 'string') return value
+
+  try {
+    return JSON.parse(value)
+  } catch {}
+}
+
 function getProvidedContext () {
   try {
     const {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
-      _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      _ddTestPropertiesByFilepath,
       _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
@@ -137,6 +166,7 @@ function getProvidedContext () {
       _ddForcedToRunSuites: forcedToRunSuites,
     } = globalThis.__vitest_worker__.providedContext
     const retryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+    const testPropertiesByFilepath = parseProvidedContextValue(_ddTestPropertiesByFilepath) || {}
 
     return {
       isDiEnabled: _ddIsDiEnabled,
@@ -273,6 +303,8 @@ module.exports = {
   getTestName,
   getWorkspaceProject,
   setProvidedContext,
+  makeProvidedContextBrowserSafe,
+  parseProvidedContextValue,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
   getVitestTestProperties,

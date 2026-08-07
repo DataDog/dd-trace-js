@@ -712,12 +712,28 @@ function getIsNoWorkerInitActive () {
 
 function getProvidedContext () {
   try {
-    return inject('_ddVitestWorkerSetup') || {}
+    return parseProvidedContextValue(inject('_ddVitestWorkerSetup'))
   } catch {
     try {
-      return globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup || {}
+      return parseProvidedContextValue(globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup)
     } catch {
       return {}
     }
+  }
+}
+
+/**
+ * Restore context serialized to keep Vitest's inline browser bootstrap script valid.
+ *
+ * @param {object|string|undefined} value
+ * @returns {object}
+ */
+function parseProvidedContextValue (value) {
+  if (typeof value !== 'string') return value || {}
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return {}
   }
 }

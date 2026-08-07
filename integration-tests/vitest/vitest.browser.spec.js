@@ -190,6 +190,40 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('handles known test names containing a closing script tag', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'
+    receiver.setSettings({ known_tests_enabled: true })
+    receiver.setKnownTests({
+      vitest: {
+        [testSuite]: [
+          'known test containing </script> in its name',
+        ],
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting runs the test body in the browser'
+      ).meta[TEST_STATUS], 'pass')
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting reports skipped browser tests'
+      ).meta[TEST_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-reporting.mjs', {
+        VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('reports multiple errors from one browser test execution as one attempt', async () => {
     const payloadsPromise = gatherEvents(events => {
       const tests = getEventContents(events, 'test')
