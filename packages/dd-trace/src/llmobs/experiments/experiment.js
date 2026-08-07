@@ -19,8 +19,12 @@ const {
 
 function mergeTags (baseTags, overrideTags) {
   const tags = {}
-  for (const [key, value] of Object.entries(baseTags ?? {})) tags[key] = value
-  for (const [key, value] of Object.entries(overrideTags ?? {})) tags[key] = value
+  if (baseTags != null) {
+    for (const [key, value] of Object.entries(baseTags)) tags[key] = value
+  }
+  if (overrideTags != null) {
+    for (const [key, value] of Object.entries(overrideTags)) tags[key] = value
+  }
   return tags
 }
 
