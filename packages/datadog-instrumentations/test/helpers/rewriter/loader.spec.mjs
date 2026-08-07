@@ -247,11 +247,14 @@ describe('rewriter loader', () => {
     })
   })
 
-  it('does not rewrite twice when the entrypoint hook is installed before the sync loader', function () {
+  it('does not rewrite twice when the compile shim is installed before the sync loader', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
     }
 
+    // `--import` marks a loader this process has not installed yet, so the
+    // entrypoint takes the compile shim. `register.js` then installs the
+    // synchronous loader, and the shim has to stand down at compile time.
     const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-preloaded-'))
     const packageDirectory = join(root, 'node_modules', 'ai')
 
@@ -269,7 +272,7 @@ describe('rewriter loader', () => {
       channel.subscribe({ start () { starts++ } })
       const value = require('ai').getTracer()
       console.log(JSON.stringify({
-        compileUnchanged: Module.prototype._compile === originalCompile,
+        compileChanged: Module.prototype._compile !== originalCompile,
         starts,
         value,
       }))
@@ -284,7 +287,53 @@ describe('rewriter loader', () => {
     })
 
     assert.deepStrictEqual(result, {
-      compileUnchanged: true,
+      compileChanged: true,
+      starts: 1,
+      value: 'tracer',
+    })
+  })
+
+  it('rewrites CommonJS imported from ESM under the asynchronous loader', function () {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-async-import-cjs-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    writeCompileCapture(root)
+    writeFileSync(join(root, 'main.mjs'), `
+      import { createRequire } from 'node:module'
+      import ai from 'ai'
+
+      const require = createRequire(import.meta.url)
+      const Module = require('node:module')
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = ai.getTracer()
+      console.log(JSON.stringify({
+        compileChanged: Module.prototype._compile !== originalCompile,
+        starts,
+        value,
+      }))
+    `)
+
+    // The configuration every ESM plugin integration test runs. The asynchronous
+    // loader owns the ESM graph and reports no source for the CommonJS modules it
+    // pulls into it, so the entrypoint has to stay on the compile shim here.
+    const result = runFixture(root, 'main.mjs', {
+      NODE_OPTIONS: [
+        `--require ${join(root, 'capture-compile.cjs')}`,
+        `--require ${rewriterLoaderPath}`,
+        `--experimental-loader ${join(repositoryRoot, 'loader-hook.mjs')}`,
+      ].join(' '),
+    })
+
+    assert.deepStrictEqual(result, {
+      compileChanged: true,
       starts: 1,
       value: 'tracer',
     })
@@ -669,6 +718,41 @@ describe('rewriter loader', () => {
     `)
 
     assert.deepStrictEqual(runFixture(root), { compileUnchanged: true })
+  })
+
+  it('rewrites CommonJS imported from ESM in the sync loader hook', function () {
+    if (!supportsSynchronousLoader) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-sync-import-cjs-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
+    writeFileSync(join(root, 'main.mjs'), `
+      import { createRequire } from 'node:module'
+      import ai from 'ai'
+
+      const require = createRequire(import.meta.url)
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      const value = ai.getTracer()
+      console.log(JSON.stringify({ starts, value }))
+    `)
+
+    // import-in-the-middle clears the source of a CommonJS module it pulls into its
+    // ESM graph, and the compile shim stands down for this loader, so the module is
+    // rewritten only if the loader reports that source before it is cleared.
+    const result = runFixture(root, 'main.mjs', {
+      NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}`,
+    })
+
+    assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
   })
 
   it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {

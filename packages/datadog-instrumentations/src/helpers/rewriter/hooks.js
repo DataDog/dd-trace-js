@@ -11,30 +11,43 @@ let rewriter
  *
  * @param {string} url
  * @param {{ format?: string, conditions?: string[] }} context
- * @param {(url: string, context: object) => { format?: string, source?: unknown }} nextLoad
+ * @param {(url: string, context: object, onSource?: (source: unknown) => void) =>
+ *   { format?: string, source?: unknown }} nextLoad
  */
 function loadSync (url, context, nextLoad) {
-  const result = nextLoad(url, context)
+  // Only a rewrite target ever needs the discarded source below, so nothing is
+  // allocated for the modules that make up almost every load.
+  if (!getRewriteTarget(url)) return nextLoad(url, context)
 
-  return rewriteResult(result, url, getFormat(result, context))
+  // import-in-the-middle clears the source of a CommonJS module it pulls into its
+  // ESM graph, so that Node loads it through its native CommonJS loader and
+  // require()s of `module-sync` packages inside it keep working. That leaves this
+  // hook nothing to rewrite, so the loader hands back the source it read before
+  // clearing it.
+  let discardedSource
+  const result = nextLoad(url, context, source => { discardedSource = source })
+
+  return rewriteResult(result, url, getFormat(result, context), discardedSource)
 }
 
 /**
  * @param {{ format?: string, source?: unknown }} result
  * @param {string} url
  * @param {string|undefined} format
+ * @param {unknown} [discardedSource] Source a preceding loader read and then dropped.
  */
-function rewriteResult (result, url, format) {
-  if (result.source) {
-    const target = getRewriteTarget(url)
-    if (target) {
-      if (!rewriter) {
-        rewriter = require('./index.js')
-      }
+function rewriteResult (result, url, format, discardedSource) {
+  const target = getRewriteTarget(url)
+  if (!target) return result
 
-      result.source = rewriter.rewrite(result.source, url, format, target)
-    }
+  const source = result.source ?? discardedSource
+  if (!source) return result
+
+  if (!rewriter) {
+    rewriter = require('./index.js')
   }
+
+  result.source = rewriter.rewrite(source, url, format, target)
 
   return result
 }

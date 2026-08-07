@@ -3,8 +3,10 @@
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.registerHooks'] }] */
 
 const Module = require('module')
+const { isMainThread } = require('node:worker_threads')
 
 const syncSourceRewritingSymbol = Symbol.for('dd-trace.loader.sync-source-rewriting')
+const LOADER_FLAG = /(?:^|\s)--(?:(?:experimental-)?loader|import)(?:=|\s|$)/
 
 // `register.js` installs a loader that already rewrites every format, so the
 // tracer entrypoint has nothing left to install. It can also be installed after
@@ -22,6 +24,17 @@ if (!globalThis[syncSourceRewritingSymbol] && !registerRequireLoadHook()) {
  */
 function registerRequireLoadHook () {
   if (typeof Module.registerHooks !== 'function') return false
+
+  // Node runs `--require` preloads inside the ESM loader thread as well, and that
+  // thread's loader customizations expose no synchronous load step, so chaining a
+  // load hook there fails every ESM load it serves with `loadSync is not a
+  // function`. Node 24.11.1 and 25.1.0 made that step optional; Node 22 never did.
+  if (!isMainThread) return false
+
+  // An asynchronous loader owns the ESM graph and answers for CommonJS with a
+  // nullish source, so a load hook chained onto it cannot rewrite CommonJS at all.
+  if (hasAsynchronousLoaderFlag()) return false
+
   if (!require('../../../../dd-trace/src/supports-register-hooks')()) return false
 
   try {
@@ -57,6 +70,27 @@ function registerRequireLoadHook () {
   }
 
   return true
+}
+
+/**
+ * Whether this process was started with a flag that registers an ESM loader. Node
+ * exposes no way to ask whether asynchronous hooks are installed, and both forms
+ * run off-thread, so the flags are the only signal available before the first load.
+ *
+ * `--import` counts even though `register.js` uses it to install the synchronous
+ * loader: that loader sets the symbol moments later and the compile shim stands
+ * down for it, so reading the flag conservatively costs nothing.
+ *
+ * @returns {boolean}
+ */
+function hasAsynchronousLoaderFlag () {
+  const { execArgv } = process
+
+  for (let i = 0; i < execArgv.length; i++) {
+    if (LOADER_FLAG.test(execArgv[i])) return true
+  }
+
+  return LOADER_FLAG.test(process.env.NODE_OPTIONS ?? '')
 }
 
 /**
