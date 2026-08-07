@@ -21,6 +21,8 @@ const {
   TEST_BROWSER_NAME,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_OWNERS,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
@@ -77,6 +79,7 @@ function getTestByName (tests, name) {
 describe(`vitest@${vitestVersion} Browser Mode`, function () {
   this.timeout(180_000)
 
+  const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
   let childProcess
   let cwd
   let receiver
@@ -731,6 +734,38 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
           assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
         }
       }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+        },
+        faulty_session_threshold: 0,
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const [testSession] = getEventContents(events, 'test_session_end')
+      assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+      assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
     })
 
     const [exitCode] = await Promise.all([

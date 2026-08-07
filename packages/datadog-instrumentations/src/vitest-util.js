@@ -29,7 +29,6 @@ const testSessionFinishCh = channel('ci:vitest:session:finish')
 const testSessionConfigurationCh = channel('ci:vitest:session:configuration')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
-const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
@@ -144,6 +143,7 @@ function getProvidedContext () {
   try {
     const {
       _ddIsEarlyFlakeDetectionEnabled,
+      _ddIsEfdSuiteAdmissionEnabled: isEfdSuiteAdmissionEnabled,
       _ddIsDiEnabled,
       _ddTestPropertiesByFilepath,
       _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
@@ -170,6 +170,7 @@ function getProvidedContext () {
 
     return {
       isDiEnabled: _ddIsDiEnabled,
+      isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled && hasEfdRetries(retryPolicy),
       testPropertiesByFilepath,
       earlyFlakeDetectionRetryPolicy: retryPolicy,
@@ -195,6 +196,7 @@ function getProvidedContext () {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
+      isEfdSuiteAdmissionEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       testPropertiesByFilepath: {},
       earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
@@ -288,7 +290,6 @@ module.exports = {
   testSessionConfigurationCh,
   libraryConfigurationCh,
   knownTestsCh,
-  isEarlyFlakeDetectionFaultyCh,
   testManagementTestsCh,
   modifiedFilesCh,
   workerReportTraceCh,

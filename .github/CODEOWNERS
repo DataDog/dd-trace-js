@@ -112,6 +112,8 @@
 /packages/dd-trace/test/git_metadata_tagger.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/jest/ @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/jest.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
@@ -124,6 +126,7 @@
 /packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/env.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/git-cache.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/jest.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/tags.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/test.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/user-provided-git.js @DataDog/ci-app-libraries
@@ -257,6 +260,8 @@
 /packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/carrier.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/carrier.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-capabilities-js

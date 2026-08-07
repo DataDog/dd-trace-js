@@ -6,6 +6,9 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('path')
 const { inspect } = require('node:util')
+
+const satisfies = require('semifies')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -119,6 +122,8 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+// Mocha 8.0 through 8.2 use workerpool 6.0.x, which cannot start process workers on supported Node versions.
+const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
 
 describe('mocha failed test replay helpers', () => {
   describe('finishDeferredHookEnd', () => {
@@ -303,6 +308,38 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           ...getCiVisEvpProxyConfig(receiver.port),
           DD_TRACE_AGENT_PORT: String(receiver.port),
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        },
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      telemetryPromise,
+    ])
+  })
+
+  parallelIt('forwards telemetry from parallel workers', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+        const testFinishedMetric = telemetryMetrics.find(({ metric, tags }) =>
+          metric === 'event_finished' && tags.includes('event_type:test')
+        )
+
+        assert.ok(testFinishedMetric, 'test event telemetry from a worker should be sent')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+          RUN_IN_PARALLEL: '1',
         },
       }
     )
