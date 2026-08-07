@@ -103,9 +103,9 @@ const templateExpressionSetupCode = `
       const $dd_ownKeys = $dd_Reflect.ownKeys(value);
       const $dd_ownKeysRedacted = $dd_hasRedactedKey($dd_ownKeys);
       if (!$dd_hasRenderedRedactedKey && !$dd_ownKeysRedacted) return value;
-      // A full copy keeps the rendered Map(N) size and "... K more items" marker matching the
-      // original; only entries inside the rendered window can be displayed, so entry values are
-      // redacted only within that window (entries beyond it are copied by reference, never shown).
+      // util.inspect prints Map(N) and "... K more items" from the entry count, so the copy must
+      // hold every entry. Only the first maxArrayLength entries render, so redact within that
+      // window and pass the rest through unchanged.
       const redacted = new $dd_Map();
       $dd_index = 0;
       for (const [key, val] of $dd_Map.prototype.entries.call(value)) {
