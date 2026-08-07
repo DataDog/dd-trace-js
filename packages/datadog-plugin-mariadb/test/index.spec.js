@@ -312,6 +312,29 @@ describe('Plugin', () => {
             await assertion
           })
 
+          it('should trace transaction helpers queued behind transaction starts', async () => {
+            const callPair = method => new Promise((resolve, reject) => {
+              let pending = 2
+              const callback = error => {
+                if (error) return reject(error)
+                if (--pending === 0) resolve()
+              }
+
+              connection.beginTransaction(callback)
+              connection[method](callback)
+            })
+            const assertion = assertTransactionSpans()
+            const span = tracer.startSpan('test')
+
+            await tracer.scope().activate(span, async () => {
+              await callPair('commit')
+              await callPair('rollback')
+            })
+
+            span.finish()
+            await assertion
+          })
+
           it('should not trace transaction helpers when no command is sent', async () => {
             const assertion = agent.assertNoTraces(traces => {
               const transactionSpan = traces.flat()
@@ -576,6 +599,23 @@ describe('Plugin', () => {
               await assertion
             })
 
+            it('should trace transaction helpers queued behind transaction starts', async () => {
+              const callPair = method => Promise.all([
+                connection.beginTransaction(),
+                connection[method](),
+              ])
+              const assertion = assertTransactionSpans()
+              const span = tracer.startSpan('test')
+
+              await tracer.scope().activate(span, async () => {
+                await callPair('commit')
+                await callPair('rollback')
+              })
+
+              span.finish()
+              await assertion
+            })
+
             it('should not trace transaction helpers when no command is sent', async () => {
               const assertion = agent.assertNoTraces(traces => {
                 const transactionSpan = traces.flat()
@@ -604,6 +644,15 @@ describe('Plugin', () => {
               } finally {
                 await cluster.end()
               }
+            })
+
+            it('should remove instrumentation listeners when a pool cluster ends', async () => {
+              const cluster = mariadb.createPoolCluster()
+              const removeListenerCount = cluster.listenerCount('remove')
+
+              await cluster.end()
+
+              assert.strictEqual(cluster.listenerCount('remove'), removeListenerCount - 1)
             })
 
             it('should not guess options for ambiguous or removed cluster nodes', async () => {

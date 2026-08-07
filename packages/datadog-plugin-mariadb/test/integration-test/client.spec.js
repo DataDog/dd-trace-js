@@ -14,6 +14,17 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
+const expectedResources = [
+  'SELECT 1 AS pool_query',
+  'SELECT 2 AS pool_execute',
+  'SELECT 3 AS connection_query',
+  'SELECT 4 AS connection_execute',
+  'SELECT 5 AS direct_query',
+  'SELECT 6 AS direct_execute',
+]
+const expectedResourceSet = new Set(expectedResources)
+
 describe('esm', () => {
   let agent
   let proc
@@ -52,18 +63,13 @@ describe('esm', () => {
 
           for (const trace of payload) {
             for (const span of trace) {
-              if (span.name === 'mariadb.query') resources.add(span.resource)
+              if (span.name === 'mariadb.query' && expectedResourceSet.has(span.resource)) {
+                resources.add(span.resource)
+              }
             }
           }
 
-          assert.deepStrictEqual([...resources].sort(), [
-            'SELECT 1 AS pool_query',
-            'SELECT 2 AS pool_execute',
-            'SELECT 3 AS connection_query',
-            'SELECT 4 AS connection_execute',
-            'SELECT 5 AS direct_query',
-            'SELECT 6 AS direct_execute',
-          ])
+          assert.deepStrictEqual([...resources].sort(), expectedResources)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)

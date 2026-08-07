@@ -11,6 +11,8 @@ const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
 
+const emptyOptions = {}
+const pendingTransactionStarts = new WeakMap()
 const wrappedClients = new WeakSet()
 const wrappedConnections = new WeakSet()
 const noop = () => {}
@@ -165,16 +167,14 @@ function wrapPoolGetConnectionMethod (getConnection) {
  *
  * @param {object} client
  * @param {(query: Function) => Function} wrapper
- * @returns {object}
+ * @returns {void}
  */
 function wrapClient (client, wrapper) {
-  if (wrappedClients.has(client)) return client
+  if (wrappedClients.has(client)) return
 
   wrappedClients.add(client)
   shimmer.wrap(client, 'query', wrapper)
   shimmer.wrap(client, 'execute', wrapper)
-
-  return client
 }
 
 /**
@@ -190,7 +190,7 @@ function wrapPromiseConnection (connection, options) {
 
   wrappedConnections.add(connection)
   shimmer.wrap(connection, 'prepare', createWrapPromisePrepare(options))
-  wrapTransactionMethods(connection, options, createWrapQuery)
+  wrapTransactionMethods(connection, options, createWrapQuery, false)
 
   return connection
 }
@@ -208,7 +208,7 @@ function wrapCallbackConnection (connection, options) {
 
   wrappedConnections.add(connection)
   shimmer.wrap(connection, 'prepare', createWrapCallbackPrepare(options))
-  wrapTransactionMethods(connection, options, createWrapQueryCallback)
+  wrapTransactionMethods(connection, options, createWrapQueryCallback, true)
 
   return connection
 }
@@ -279,14 +279,13 @@ function createWrapCallbackPreparedExecute (options, sql) {
  * @param {object} client
  * @param {object} options
  * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
- * @returns {object}
+ * @param {boolean} callbackStyle
+ * @returns {void}
  */
-function wrapTransactionMethods (client, options, createWrapper) {
+function wrapTransactionMethods (client, options, createWrapper, callbackStyle) {
   for (const [method, sql] of transactionMethods) {
-    shimmer.wrap(client, method, createWrapTransaction(options, sql, createWrapper))
+    shimmer.wrap(client, method, createWrapTransaction(options, sql, createWrapper, callbackStyle))
   }
-
-  return client
 }
 
 /**
@@ -295,21 +294,119 @@ function wrapTransactionMethods (client, options, createWrapper) {
  * @param {object} options
  * @param {string} sql
  * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
+ * @param {boolean} callbackStyle
  * @returns {(transaction: Function) => Function}
  */
-function createWrapTransaction (options, sql, createWrapper) {
+function createWrapTransaction (options, sql, createWrapper, callbackStyle) {
   return function wrapTransaction (transaction) {
     const tracedTransaction = createWrapper(options, sql)(function () {
       return skipCh.runStores({}, transaction, this, ...arguments)
     })
 
     return function () {
-      if (sql !== 'START TRANSACTION' && !(this.info?.status & STATUS_IN_TRANSACTION)) {
+      if (!startCh.hasSubscribers) return transaction.apply(this, arguments)
+
+      if (sql === 'START TRANSACTION') {
+        addPendingTransactionStart(this)
+        return callbackStyle
+          ? traceCallbackTransactionStart(
+            this,
+            tracedTransaction,
+            arguments,
+            arguments[arguments.length - 1]
+          )
+          : tracePromiseTransactionStart(this, tracedTransaction, arguments)
+      }
+
+      if (!pendingTransactionStarts.has(this) && !(this.info?.status & STATUS_IN_TRANSACTION)) {
         return transaction.apply(this, arguments)
       }
 
       return tracedTransaction.apply(this, arguments)
     }
+  }
+}
+
+/**
+ * Tracks transaction starts that MariaDB has queued but the server has not acknowledged yet.
+ *
+ * @param {object} connection
+ * @returns {void}
+ */
+function addPendingTransactionStart (connection) {
+  const pending = pendingTransactionStarts.get(connection) ?? 0
+  pendingTransactionStarts.set(connection, pending + 1)
+}
+
+/**
+ * Releases one pending transaction start without clearing another queued start.
+ *
+ * @param {object} connection
+ * @returns {void}
+ */
+function finishPendingTransactionStart (connection) {
+  const pending = pendingTransactionStarts.get(connection)
+  if (pending === 1) {
+    pendingTransactionStarts.delete(connection)
+  } else if (pending !== undefined) {
+    pendingTransactionStarts.set(connection, pending - 1)
+  }
+}
+
+/**
+ * Clears pending transaction state when a promise transaction start settles.
+ *
+ * @param {object} connection
+ * @param {Function} transaction
+ * @param {object} args
+ * @returns {Promise<unknown>}
+ */
+function tracePromiseTransactionStart (connection, transaction, args) {
+  let result
+
+  try {
+    result = transaction.apply(connection, args)
+  } catch (error) {
+    finishPendingTransactionStart(connection)
+    throw error
+  }
+
+  return result.then(value => {
+    finishPendingTransactionStart(connection)
+    return value
+  }, error => {
+    finishPendingTransactionStart(connection)
+    throw error
+  })
+}
+
+/**
+ * Clears pending transaction state when a callback transaction start settles.
+ *
+ * @param {object} connection
+ * @param {Function} transaction
+ * @param {object} args
+ * @param {unknown} callback
+ * @returns {unknown}
+ */
+function traceCallbackTransactionStart (connection, transaction, args, callback) {
+  const wrappedCallback = function () {
+    finishPendingTransactionStart(connection)
+    if (typeof callback === 'function') return callback.apply(this, arguments)
+  }
+
+  if (typeof callback === 'function') {
+    args[args.length - 1] = wrappedCallback
+  } else {
+    args.length = Math.max(args.length + 1, transaction.length)
+    args[args.length - 1] = wrappedCallback
+  }
+
+  try {
+    return transaction.apply(connection, args)
+  } catch (error) {
+    finishPendingTransactionStart(connection)
+    throw error
   }
 }
 
@@ -407,7 +504,20 @@ function createWrapCallbackGetConnection (options) {
  */
 function captureClusterOptions (cluster, defaultOptions) {
   const optionsByIdentifier = new Map()
+  const optionsByPattern = new Map()
   let nodeCounter = 0
+
+  const clearOptions = () => {
+    optionsByIdentifier.clear()
+    optionsByPattern.clear()
+  }
+
+  const removeOptions = identifier => {
+    optionsByIdentifier.delete(identifier)
+    optionsByPattern.clear()
+  }
+
+  const eventEmitter = cluster.on('remove', removeOptions)
 
   shimmer.wrap(cluster, 'add', add => function (identifier, options) {
     const hasIdentifier = typeof identifier === 'string' ||
@@ -416,29 +526,44 @@ function captureClusterOptions (cluster, defaultOptions) {
     const connectionOptions = hasIdentifier ? options : identifier
     const result = add.apply(this, arguments)
     optionsByIdentifier.set(generatedIdentifier, normalizeOptions(defaultOptions, connectionOptions))
+    optionsByPattern.clear()
     return result
   })
 
   shimmer.wrap(cluster, 'remove', remove => function (pattern) {
     const result = remove.apply(this, arguments)
     removeClusterOptions(optionsByIdentifier, pattern)
+    optionsByPattern.clear()
     return result
   })
 
-  cluster.on('remove', identifier => optionsByIdentifier.delete(identifier))
+  shimmer.wrap(cluster, 'end', end => function () {
+    clearOptions()
+    eventEmitter.removeListener('remove', removeOptions)
+    return end.apply(this, arguments)
+  })
 
   return pattern => {
+    const cacheKey = String(pattern ?? /^/)
+    const cachedOptions = optionsByPattern.get(cacheKey)
+    if (cachedOptions !== undefined) return cachedOptions
+
     const regularExpression = new RegExp(pattern ?? /^/)
     let matchedOptions
 
     for (const [identifier, options] of optionsByIdentifier) {
       regularExpression.lastIndex = 0
       if (!regularExpression.test(identifier)) continue
-      if (matchedOptions !== undefined) return {}
+      if (matchedOptions !== undefined) {
+        optionsByPattern.set(cacheKey, emptyOptions)
+        return emptyOptions
+      }
       matchedOptions = options
     }
 
-    return matchedOptions ?? {}
+    matchedOptions ??= emptyOptions
+    optionsByPattern.set(cacheKey, matchedOptions)
+    return matchedOptions
   }
 }
 
