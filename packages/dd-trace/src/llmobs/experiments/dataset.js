@@ -3,36 +3,16 @@
 // Dataset record: { input, expectedOutput?, metadata?, id? }.
 // `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
-  #version
-
-  constructor (input, expectedOutput = null, metadata = {}, id = null, version = null) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
     this.id = id ?? null
-    this.#version = version ?? null
-  }
-
-  /**
-   * @returns {number | string | null} The dataset version where this record became valid.
-   */
-  version () {
-    return this.#version
   }
 }
 
 function recordIdFromCreatedRecord (record) {
   return String(record?.id ?? '')
-}
-
-function versionFromCreatedRecords (records) {
-  const versions = records
-    .map(record => record.version())
-    .filter(version => version != null)
-    .map(Number)
-    .filter(Number.isFinite)
-  if (versions.length === 0) return null
-  return Math.max(...versions)
 }
 
 // A local buffer of dataset records, created remotely and pushed on first run
@@ -173,14 +153,15 @@ class Dataset {
     }
 
     const created = response
-    const pushedVersion = versionFromCreatedRecords(created)
-    if (pushedVersion === null) {
-      // The dataset contents changed, but the backend did not report the new
-      // version. Avoid pinning later experiments to the pre-append create version.
-      this.#version = null
-    } else {
+    const latestVersion = Number(this.#latestVersion)
+    if (Number.isFinite(latestVersion)) {
+      const pushedVersion = latestVersion + 1
       this.#version = pushedVersion
-      this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
+      this.#latestVersion = pushedVersion
+    } else {
+      // The dataset contents changed, but without a known latest version we
+      // cannot safely pin later experiments to a concrete version.
+      this.#version = null
     }
 
     let pushedCount = 0
