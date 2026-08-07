@@ -206,7 +206,7 @@
     "dependency": "@openai/agents",
     "integration": "openai-agents",
     "minimum_tracer_supported": "0.7.0",
-    "max_tracer_supported": "0.13.5",
+    "max_tracer_supported": "0.14.1",
     "auto-instrumented": "True"
   },
   {

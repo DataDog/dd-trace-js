@@ -17,7 +17,7 @@ const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10)
 const SERVICE_NAME = 'test'
 
 describe('Plugin', () => {

@@ -1,5 +1,6 @@
 'use strict'
 
+const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
 const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const { getBasicCommand } = require('./runner-command')
@@ -17,12 +18,81 @@ const { getObservedTestCount } = require('./test-output')
  * @returns {Promise<{ok: boolean, failure?: object, preflight: object}>} preflight outcome
  */
 async function runFrameworkPreflight ({ framework, out, options }) {
-  const command = getBasicCommand(framework)
-  const outDir = frameworkOutDir(out, framework, 'preflight')
+  const candidates = [
+    {
+      localSocketRequired: framework.localSocketRequired,
+      testFile: framework.validation.testFile,
+    },
+    ...(framework.validation.fallbackTests || []),
+  ]
+  const attempts = []
+  let last
+
+  for (const [index, candidate] of candidates.entries()) {
+    // Fallbacks are ordered and later candidates must not run after one succeeds.
+    // eslint-disable-next-line no-await-in-loop
+    const attempt = await runCandidate({ framework, index, options, out, testFile: candidate.testFile })
+    attempts.push(attempt.preflight)
+    last = attempt
+    if (!attempt.ok) {
+      if (isSharedCandidateBlocker(attempt.commandFailure, framework)) break
+      continue
+    }
+
+    framework.validation.testFile = candidate.testFile
+    const preflight = { ...attempt.preflight, attempts, selectedTestFile: candidate.testFile }
+    framework.preflight = preflight
+    return { ok: true, preflight }
+  }
+
+  const { commandFailure, observedTestCount, preflight, result } = last
+  const completePreflight = {
+    ...preflight,
+    attempts,
+    selectedTestFile: undefined,
+  }
+  framework.preflight = completePreflight
+  const blockerCategory = commandFailure?.blockerCategory ||
+    (observedTestCount === 0
+      ? BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+      : BLOCKER_CATEGORIES.CLEAN_TEST_FAILED)
+  const domain = getBlockerDomain(blockerCategory)
+  const diagnosis = getFailureDiagnosis(
+    result,
+    observedTestCount,
+    commandFailure,
+    preflight.diagnosticSummary,
+    framework
+  )
+  return {
+    ok: false,
+    preflight: completePreflight,
+    failure: {
+      frameworkId: framework.id,
+      scenario: 'basic-reporting',
+      status: 'blocked',
+      diagnosis,
+      evidence: {
+        blockerCategory,
+        commandFailure,
+        domain,
+        recommendation: commandFailure?.recommendation ||
+          `Resolve the selected project test failure before retrying validation: ${diagnosis}`,
+        validationIncomplete: true,
+      },
+      artifacts: Object.values(result.artifacts),
+    },
+  }
+}
+
+async function runCandidate ({ framework, index, options, out, testFile }) {
+  const suffix = index === 0 ? '' : `-fallback-${index}`
+  const command = getBasicCommand(framework, testFile)
+  const outDir = frameworkOutDir(out, framework, `preflight${suffix}`)
   const result = await runCommand(command, {
     artifactRoot: out,
     envMode: 'clean',
-    label: `${framework.id}:preflight`,
+    label: `${framework.id}:preflight${suffix}`,
     outDir,
     repositoryRoot: options.repositoryRoot,
     requireExecutableApproval: options.requireExecutableApproval,
@@ -32,12 +102,13 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   const commandFailure = getCommandBlocker(result, {
     browserRequired: framework.browserRequired,
     framework: framework.framework,
+    packageJson: framework.project.packageJson,
     testsRan: Number.isInteger(observedTestCount) && observedTestCount > 0,
   })
   const preflight = {
     command: serializeDisplayCommand(command),
     diagnosticSummary: findInterestingLines(`${result.stdout}\n${result.stderr}`, [
-      /\b(?:Abort trap|Cannot find|Error|ERR_[A-Z_]+|Failed to|Received signal|SIGABRT)\b/i,
+      /\b(?:Abort trap|Cannot find|Error|TypeError|ReferenceError|RangeError|SyntaxError|ERR_[A-Z_]+|FAIL|Failed to|No tests found|Received signal|SIGABRT)\b/i,
     ], 4),
     durationMs: result.durationMs,
     exitCode: result.exitCode,
@@ -49,35 +120,16 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     source: 'validator',
     stderrSummary: summarizeTestOutput('', result.stderr).join('\n'),
     stdoutSummary: summarizeTestOutput(result.stdout).join('\n'),
+    testFile,
     timedOut: result.timedOut,
     ...(commandFailure ? { commandFailure } : {}),
   }
-  framework.preflight = preflight
-
-  if (!result.timedOut && result.exitCode === 0 && observedTestCount !== 0) {
-    return { ok: true, preflight }
-  }
-
-  const domain = commandFailure?.blockedByExecutionEnvironment
-    ? 'execution_environment'
-    : commandFailure?.localRuntimeBlocked
-      ? 'local_runtime'
-      : 'project_setup'
   return {
-    ok: false,
+    commandFailure,
+    observedTestCount,
+    ok: !result.timedOut && result.exitCode === 0 && observedTestCount !== 0,
     preflight,
-    failure: {
-      frameworkId: framework.id,
-      scenario: 'basic-reporting',
-      status: 'blocked',
-      diagnosis: getFailureDiagnosis(result, observedTestCount, commandFailure),
-      evidence: {
-        commandFailure,
-        domain,
-        validationIncomplete: true,
-      },
-      artifacts: Object.values(result.artifacts),
-    },
+    result,
   }
 }
 
@@ -87,11 +139,17 @@ async function runFrameworkPreflight ({ framework, out, options }) {
  * @param {object} result command result
  * @param {number|null} observedTestCount parsed test count
  * @param {object|undefined} commandFailure classified blocker
+ * @param {string[]} diagnosticSummary bounded diagnostic lines
+ * @param {object} framework framework manifest entry
  * @returns {string} customer-facing diagnosis
  */
-function getFailureDiagnosis (result, observedTestCount, commandFailure) {
+function getFailureDiagnosis (result, observedTestCount, commandFailure, diagnosticSummary, framework) {
+  const sharedPrerequisite = !commandFailure && framework.allCandidatesRequireLocalSocket
+    ? ' Every approved candidate appears to require localhost, so retry in the project environment where its ' +
+      'listener-based tests normally pass.'
+    : ''
   if (commandFailure?.summary) {
-    return `${commandFailure.summary} Basic Reporting could not be tested reliably.`
+    return `${commandFailure.summary} Basic Reporting could not be tested reliably.${sharedPrerequisite}`
   }
   if (result.timedOut) {
     return 'The direct representative test exceeded its approved timeout. Basic Reporting could not be tested ' +
@@ -101,8 +159,29 @@ function getFailureDiagnosis (result, observedTestCount, commandFailure) {
     return 'The direct runner completed without reporting a test. The selected file may require project wrapper or ' +
       'configuration semantics, so Basic Reporting remains incomplete.'
   }
+  if (diagnosticSummary.length > 0) {
+    return `The direct representative test exited ${result.exitCode} without Datadog initialization. ` +
+      `The first reported issue was: ${diagnosticSummary[0]}${sharedPrerequisite}`
+  }
   return `The direct representative test exited ${result.exitCode} without Datadog initialization. Fix or prepare ` +
-    'that test normally, then create a fresh validation plan.'
+    `that test normally, then create a fresh validation plan.${sharedPrerequisite}`
+}
+
+// Do not try fallbacks when every disclosed candidate shares the same prerequisite.
+function isSharedCandidateBlocker (commandFailure, framework) {
+  if (!commandFailure) return false
+  if (commandFailure.kind === 'local-test-socket-blocked') {
+    return framework.allCandidatesRequireLocalSocket === true
+  }
+  return commandFailure.kind.endsWith('-browser-launch-blocked') ||
+    [
+      'cucumber-browser-missing',
+      'cypress-runtime-missing',
+      'playwright-browser-missing',
+      'project-command-environment-missing',
+      'test-runner-command-missing',
+      'vitest-browser-provider-missing',
+    ].includes(commandFailure.kind)
 }
 
 module.exports = { runFrameworkPreflight }

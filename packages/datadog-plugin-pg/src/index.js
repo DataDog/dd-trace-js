@@ -29,6 +29,7 @@ class PGPlugin extends DatabasePlugin {
       this.startSpan(operationName, {
         service,
         resource: operationName,
+        startTime: ctx.startTime,
         type: 'sql',
         kind: 'client',
         meta: {

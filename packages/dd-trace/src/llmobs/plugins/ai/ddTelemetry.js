@@ -118,7 +118,7 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * @returns {string | undefined}
    */
   findToolName (toolName, toolDescription) {
-    if (Number.isNaN(Number.parseInt(toolName))) return toolName
+    if (Number.isNaN(Number.parseInt(toolName, 10))) return toolName
 
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description

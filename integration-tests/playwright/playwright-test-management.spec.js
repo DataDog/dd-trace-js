@@ -181,8 +181,19 @@ versions.forEach((version) => {
           }
         )
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -203,18 +214,9 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           })
 
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-            },
-          }
-        )
-
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        // The default fixture includes a known failing test.
+        assert.strictEqual(exitCode, 1)
       })
     })
 
@@ -679,7 +681,52 @@ versions.forEach((version) => {
           ])
 
           assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+          assert.match(testOutput, /Attempt to fix passed: all 4 execution\(s\) passed for 1 test\(s\)\./)
+          assert.doesNotMatch(testOutput, /Disabled:/)
           assert.strictEqual(exitCode, 0, testOutput)
+        })
+
+        it('reports an attempt to fix test skipped by a failed project dependency', async (receiver, run) => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'did-not-run.js': {
+                  tests: {
+                    'did not run because of early bail': {
+                      properties: { attempt_to_fix: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 0 },
+          })
+
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-did-not-run',
+                ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
+              },
+            }
+          )
+          let testOutput = ''
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([
+            once(proc, 'exit'),
+            once(proc.stdout, 'end'),
+            once(proc.stderr, 'end'),
+          ])
+
+          assert.match(testOutput, /Attempt to fix passed: all 1 execution\(s\) passed for 1 test\(s\)\./)
+          assert.strictEqual(exitCode, 1, testOutput)
         })
 
         it('--retries is disabled for an attempt to fix test', async (receiver) => {
@@ -792,7 +839,8 @@ versions.forEach((version) => {
             // the testOutput checks whether the test is actually skipped
             if (isDisabling) {
               assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
-              assert.strictEqual(exitCode, 0)
+              assert.match(testOutput, /Disabled: \d+ tests? skipped\./)
+              assert.strictEqual(exitCode, 0, testOutput)
             } else {
               assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
               assert.strictEqual(exitCode, 1)
@@ -940,6 +988,7 @@ versions.forEach((version) => {
           hasFlakyTests = false,
         }) => {
           const testAssertionsPromise = getTestAssertions(receiver, { isQuarantining, hasFlakyTests })
+          let testOutput = ''
           let proc
           try {
             proc = exec(
@@ -954,6 +1003,8 @@ versions.forEach((version) => {
                 },
               }
             )
+            proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
             const [[exitCode]] = await Promise.all([
               once(proc, 'exit'),
@@ -961,6 +1012,10 @@ versions.forEach((version) => {
             ])
 
             if (isQuarantining) {
+              assert.match(
+                testOutput,
+                /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+              )
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)

@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const exporters = require('../../../../ext/exporters')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
@@ -41,6 +42,13 @@ const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
+const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
+  exporters.CUCUMBER_WORKER,
+  exporters.JEST_WORKER,
+  exporters.MOCHA_WORKER,
+  exporters.PLAYWRIGHT_WORKER,
+  exporters.VITEST_WORKER,
+])
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -194,8 +202,11 @@ class Config extends ConfigBase {
     this.debug = log.configure(options)
 
     // Process stable config warnings, if any
-    for (const warning of this.stableConfig?.warnings ?? []) {
-      log.warn(warning)
+    const stableConfigWarnings = this.stableConfig?.warnings
+    if (stableConfigWarnings) {
+      for (const warning of stableConfigWarnings) {
+        log.warn(warning)
+      }
     }
 
     this.#applyDefaults()
@@ -593,9 +604,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
-    // TODO: Should this unconditionally be disabled?
-    if (getEnvironmentVariable('JEST_WORKER_ID') &&
-        !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
+    const isTestOptimizationWorker = this.isCiVisibility &&
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
+    if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 

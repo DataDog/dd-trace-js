@@ -25,9 +25,11 @@ withVersions('express', 'express', version => {
   }
 
   describe('Suspicious request blocking - path parameters', () => {
-    let axios /** @type {AxiosInstance} */
+    /** @type {import('axios').AxiosInstance} */
+    let axios
     let server
-    let paramCallbackSpy /** @type {SinonSpy} */
+    /** @type {import('sinon').SinonSpy} */
+    let paramCallbackSpy
 
     before(() => {
       return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })

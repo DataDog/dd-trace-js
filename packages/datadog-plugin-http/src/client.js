@@ -56,7 +56,7 @@ class HttpClientPlugin extends ClientPlugin {
         'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port, 10),
       },
     }, false)
 
