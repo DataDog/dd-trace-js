@@ -4,10 +4,12 @@ const log = require('../../log')
 
 class NoopDataset {
   #name
+  #description
   #records
 
   constructor (name = '', options = {}) {
     this.#name = name
+    this.#description = typeof options === 'string' ? options : (options.description ?? '')
     this.#records = (typeof options === 'string' ? [] : (options.records ?? [])).map(record => ({
       id: record.id ?? null,
       input: record.inputData,
@@ -27,6 +29,10 @@ class NoopDataset {
 
   name () {
     return this.#name
+  }
+
+  description () {
+    return this.#description
   }
 
   id () {
