@@ -29,7 +29,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  const range = '>=3.0.0 <3.5.3'
+  const range = semver.gte(process.version, '20.0.0') ? '>=3.0.0' : '>=3.0.0 <3.5.3'
   withVersions('mariadb', 'mariadb', range, (version, _, resolvedVersion) => {
     useSandbox([`'mariadb@${version}'`], false, [
       './packages/datadog-plugin-mariadb/test/integration-test/*'])
