@@ -41,7 +41,7 @@ function logIntegrations () {
 
   integrationsAlreadyRan = true
 
-  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(getLoadedIntegrationNames()))
 }
 
 /**
@@ -117,8 +117,14 @@ function configInfo () {
  */
 function tracerInfo () {
   const out = configInfo()
-  out.integrations_loaded = Object.keys(pluginManager._pluginsByName)
+  out.integrations_loaded = getLoadedIntegrationNames()
   return out
+}
+
+function getLoadedIntegrationNames () {
+  const integrations = pluginManager.getIntegrationsByName?.() || pluginManager._pluginsByName
+
+  return Object.keys(integrations)
 }
 
 /**

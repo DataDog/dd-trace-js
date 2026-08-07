@@ -130,15 +130,16 @@ function updateRetryData (error, retryObj) {
 
 function getIntegrations () {
   const newIntegrations = /** @type {Integration[]} */ ([])
-  for (const pluginName of Object.keys(pluginManager._pluginsByName ?? {})) {
-    if (!sentIntegrations.has(pluginName)) {
+  const integrations = pluginManager.getIntegrationsByName?.() || pluginManager._pluginsByName || {}
+  for (const integrationName of Object.keys(integrations)) {
+    if (!sentIntegrations.has(integrationName)) {
       newIntegrations.push({
-        name: pluginName,
-        enabled: pluginManager._pluginsByName[pluginName]._enabled,
+        name: integrationName,
+        enabled: integrations[integrationName]._enabled,
         auto_enabled: true,
         [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject,
       })
-      sentIntegrations.add(pluginName)
+      sentIntegrations.add(integrationName)
     }
   }
   return newIntegrations

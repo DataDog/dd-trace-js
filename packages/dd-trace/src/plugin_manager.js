@@ -155,6 +155,13 @@ module.exports = class PluginManager {
     this._eventManager = eventManager
   }
 
+  getIntegrationsByName () {
+    return {
+      ...this._pluginsByName,
+      ...this._eventManager?._integrationsByName,
+    }
+  }
+
   _isEnabled (pluginConfig) {
     if (typeof pluginConfig === 'boolean') return pluginConfig
     if (!pluginConfig) return true
