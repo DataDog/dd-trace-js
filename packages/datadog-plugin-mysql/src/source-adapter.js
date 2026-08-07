@@ -7,7 +7,7 @@ const {
   DatabaseQueryProcessor,
 } = require('../../dd-trace/src/events/database')
 const { getEventSourceRegistry } = require('../../dd-trace/src/events/source-registry')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const EventComponent = require('../../dd-trace/src/events/component')
 
 const legacyStorage = storage('legacy')
 const sourceRegistry = getEventSourceRegistry()
@@ -50,9 +50,7 @@ const mysqlAdapter = Object.freeze({
 /**
  * Translate package-scoped MySQL events into the normalized database lifecycle.
  */
-class MysqlSourceAdapter extends Plugin {
-  static id = 'mysql'
-
+class MysqlSourceAdapter extends EventComponent {
   constructor () {
     super()
 

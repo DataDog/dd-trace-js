@@ -16,11 +16,11 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-describe('Plugin', () => {
+describe('MySQL instrumentation', () => {
   let mysql
   let tracer
 
-  describe('mysql orchestrion plugin', () => {
+  describe('mysql event integration', () => {
     const legacyStorage = storage('legacy')
 
     afterEach(() => {
@@ -28,38 +28,40 @@ describe('Plugin', () => {
     })
 
     it('keeps package subscriptions in one shared source adapter', () => {
-      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const MysqlEventIntegration = require('../src/orchestrion')
       const { MysqlSourceAdapter } = require('../src/source-adapter')
-      const plugin = new MysqlOrchestrionPlugin({}, {})
+      const Plugin = require('../../dd-trace/src/plugins/plugin')
+      const integration = new MysqlEventIntegration({}, {})
       const adapter = new MysqlSourceAdapter()
 
-      assert.strictEqual(plugin._subscriptions.length, 0)
-      assert.strictEqual(plugin._bindings.length, 0)
+      assert.strictEqual(integration instanceof Plugin, false)
+      assert.strictEqual(adapter instanceof Plugin, false)
       assert.strictEqual(adapter._subscriptions.length, 3)
       assert.strictEqual(adapter._bindings.length, 4)
     })
 
     it('routes source configuration through the shared database processor', () => {
-      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const MysqlEventIntegration = require('../src/orchestrion')
       const { sourceRuntime } = require('../src/source-adapter')
       const tracer = {
         _env: 'test',
         _service: 'test',
         _version: '1.0.0',
       }
-      const plugin = new MysqlOrchestrionPlugin(tracer, {})
+      const tracerConfig = { dbmPropagationMode: 'disabled' }
+      const integration = new MysqlEventIntegration(tracer, tracerConfig)
       const config = { enabled: true, dbmPropagationMode: 'disabled' }
 
-      plugin.configure(config)
+      integration.configure(tracerConfig, config)
       try {
-        assert.strictEqual(plugin._registry.getSource('db.query', 'mysql').config, config)
-        assert.strictEqual(sourceRuntime.consumers.has(plugin), true)
+        assert.deepStrictEqual(integration._registry.getSource('db.query', 'mysql').config, config)
+        assert.strictEqual(sourceRuntime.consumers.has(integration), true)
       } finally {
-        plugin.configure(false)
+        integration.configure(tracerConfig, false)
       }
 
-      assert.strictEqual(plugin._registry.getSource('db.query', 'mysql'), undefined)
-      assert.strictEqual(sourceRuntime.consumers.has(plugin), false)
+      assert.strictEqual(integration._registry.getSource('db.query', 'mysql'), undefined)
+      assert.strictEqual(sourceRuntime.consumers.has(integration), false)
     })
 
     it('normalizes the Orchestrion context into the semantic query lifecycle', () => {
@@ -542,9 +544,8 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          const plugin = tracer._pluginManager._pluginsByName.mysql
-          computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
-          remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
+          computeStub = sinon.stub(tracer._eventManager._config, 'spanComputePeerService')
+          remapStub = sinon.stub(tracer._eventManager._config, 'peerServiceMapping')
         })
 
         afterEach(() => {

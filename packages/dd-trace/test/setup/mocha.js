@@ -199,7 +199,8 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       // Read the plugin off the live `TracerProxy`; a closure-captured
       // `tracer()` may point at a torn-down proxy after a gate-fired rebuild.
       const plugin = global._ddtrace._pluginManager._pluginsByName[pluginName]
-      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
+      const tracerConfig = plugin?._tracerConfig || global._ddtrace._eventManager._config
+      computePeerServiceSpy = sinon.stub(tracerConfig, 'spanComputePeerService').value(true)
     })
 
     afterEach(() => {

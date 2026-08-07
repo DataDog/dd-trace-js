@@ -9,6 +9,7 @@ const { storage } = require('../../../../datadog-core')
 const databaseChannels = require('../../../src/events/database/channels')
 const DatabaseQueryProcessor = require('../../../src/events/database/query-processor')
 const { EventDomainRegistry } = require('../../../src/events/registry')
+const DatabasePlugin = require('../../../src/plugins/database')
 
 const legacyStorage = storage('legacy')
 
@@ -16,6 +17,7 @@ describe('DatabaseQueryProcessor', () => {
   it('owns only the shared database query phases it processes', () => {
     const processor = new DatabaseQueryProcessor({}, {}, {})
 
+    assert.strictEqual(processor instanceof DatabasePlugin, false)
     assert.strictEqual(processor._subscriptions.length, 2)
     assert.strictEqual(processor._bindings.length, 1)
   })

@@ -2,14 +2,13 @@
 
 const { DatabaseQueryProcessor } = require('../../dd-trace/src/events/database')
 const { getEventDomainRegistry } = require('../../dd-trace/src/events/registry')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
 const {
   MYSQL_SOURCE,
   mysqlAdapter,
   sourceRegistry,
 } = require('./source-adapter')
 
-class MysqlOrchestrionPlugin extends Plugin {
+class MysqlEventIntegration {
   static id = 'mysql'
 
   /**
@@ -17,8 +16,6 @@ class MysqlOrchestrionPlugin extends Plugin {
    * @param {object} tracerConfig Global tracer configuration.
    */
   constructor (tracer, tracerConfig) {
-    super(tracer, tracerConfig)
-
     this._registry = getEventDomainRegistry(tracer, tracerConfig)
     this._registry.registerProcessor({
       operation: DatabaseQueryProcessor.eventOperation,
@@ -34,13 +31,16 @@ class MysqlOrchestrionPlugin extends Plugin {
   /**
    * Configure MySQL processing without creating package-specific span subscribers.
    *
-   * @param {boolean|object} config MySQL plugin configuration.
+   * @param {object} tracerConfig Global tracer configuration.
+   * @param {boolean|object} integrationConfig MySQL integration configuration.
    * @returns {void}
    */
-  configure (config) {
+  configure (tracerConfig, integrationConfig) {
+    const config = getMysqlConfig(tracerConfig, integrationConfig)
     const enabled = typeof config === 'boolean' ? config : config?.enabled !== false
     const operation = DatabaseQueryProcessor.eventOperation
     const source = MYSQL_SOURCE.integration
+    this._enabled = enabled
 
     if (enabled) {
       this._registry.configureSource(operation, source, config)
@@ -49,9 +49,20 @@ class MysqlOrchestrionPlugin extends Plugin {
       sourceRegistry.releaseSource(operation, source, this)
       this._registry.configureSource(operation, source, config)
     }
-
-    super.configure(config)
   }
 }
 
-module.exports = MysqlOrchestrionPlugin
+function getMysqlConfig (tracerConfig, integrationConfig) {
+  const config = typeof integrationConfig === 'boolean'
+    ? { enabled: integrationConfig }
+    : integrationConfig
+
+  return {
+    ...(tracerConfig.codeOriginForSpans ? { codeOriginForSpans: tracerConfig.codeOriginForSpans } : undefined),
+    dbmPropagationMode: tracerConfig.dbmPropagationMode,
+    ...(tracerConfig.serviceMapping?.mysql ? { service: tracerConfig.serviceMapping.mysql } : undefined),
+    ...config,
+  }
+}
+
+module.exports = MysqlEventIntegration

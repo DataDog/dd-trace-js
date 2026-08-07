@@ -27,11 +27,9 @@ class OutboundPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    if (this.constructor.traceConnect !== false) {
-      this.addTraceSub('connect', ctx => {
-        this.connect(ctx)
-      })
-    }
+    this.addTraceSub('connect', ctx => {
+      this.connect(ctx)
+    })
   }
 
   /**
