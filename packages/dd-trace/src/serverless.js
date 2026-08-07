@@ -50,8 +50,8 @@ function isInServerlessEnvironment () {
 function onRequestEnd (tracer) {
   if (getEnvironmentVariable('VERCEL') !== '1') return false
 
-  const exporter = tracer?._tracer?._exporter
-  if (typeof exporter?.flush !== 'function') return false
+  const flushAll = tracer?._tracer?.flushAll
+  if (typeof flushAll !== 'function') return false
 
   for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
     try {
@@ -62,7 +62,7 @@ function onRequestEnd (tracer) {
       const pending = new Promise(resolve => { done = resolve })
       waitUntil(pending)
       try {
-        exporter.flush(done)
+        flushAll.call(tracer._tracer, done)
       } catch {
         done()
       }

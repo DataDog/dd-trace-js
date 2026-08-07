@@ -197,14 +197,15 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @returns {void}
+   * @param {Function} [done] Called after the metric export completes
    */
-  forceFlush () {
+  forceFlush (done = () => {}) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
+      done()
       return
     }
-    this.#collectAndExport()
+    this.#collectAndExport(done)
   }
 
   /**

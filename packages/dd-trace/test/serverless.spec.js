@@ -50,7 +50,7 @@ describe('onRequestEnd', () => {
     else globalThis[requestContext] = originalContext
   })
 
-  it('retains the request until the exporter flush callback completes on Vercel', async () => {
+  it('retains the request until all exporters flush on Vercel', async () => {
     process.env.VERCEL = '1'
     let retained
     let done
@@ -60,9 +60,7 @@ describe('onRequestEnd', () => {
 
     const registered = onRequestEnd({
       _tracer: {
-        _exporter: {
-          flush: callback => { done = callback },
-        },
+        flushAll: callback => { done = callback },
       },
     })
 
@@ -83,9 +81,7 @@ describe('onRequestEnd', () => {
 
     const registered = onRequestEnd({
       _tracer: {
-        _exporter: {
-          flush: () => { flushed = true },
-        },
+        flushAll: () => { flushed = true },
       },
     })
 

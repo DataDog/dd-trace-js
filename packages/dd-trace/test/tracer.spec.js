@@ -50,6 +50,77 @@ describe('Tracer', () => {
     })
   })
 
+  describe('flushAll', () => {
+    it('waits for trace, log, and metric exporters', () => {
+      let traceDone
+      let logsDone
+      let metricsDone
+      const TestTracer = proxyquire('../src/tracer', {
+        '@opentelemetry/api': {
+          metrics: {
+            getMeterProvider: () => ({
+              forceFlush: done => { metricsDone = done },
+            }),
+          },
+        },
+        '@opentelemetry/api-logs': {
+          logs: {
+            getLoggerProvider: () => ({
+              forceFlush: done => { logsDone = done },
+            }),
+          },
+        },
+      })
+      const testTracer = new TestTracer(config)
+      testTracer._exporter.flush = done => { traceDone = done }
+      let complete = false
+
+      testTracer.flushAll(() => { complete = true })
+
+      assert.strictEqual(complete, false)
+      traceDone()
+      assert.strictEqual(complete, false)
+      logsDone()
+      assert.strictEqual(complete, false)
+      metricsDone()
+      assert.strictEqual(complete, true)
+    })
+
+    it('waits for promise-based providers', async () => {
+      let logsDone
+      let metricsDone
+      const TestTracer = proxyquire('../src/tracer', {
+        '@opentelemetry/api': {
+          metrics: {
+            getMeterProvider: () => ({
+              forceFlush: () => new Promise(resolve => { metricsDone = resolve }),
+            }),
+          },
+        },
+        '@opentelemetry/api-logs': {
+          logs: {
+            getLoggerProvider: () => ({
+              forceFlush: () => new Promise(resolve => { logsDone = resolve }),
+            }),
+          },
+        },
+      })
+      const testTracer = new TestTracer(config)
+      testTracer._exporter.flush = done => { done() }
+      let complete = false
+
+      testTracer.flushAll(() => { complete = true })
+
+      assert.strictEqual(complete, false)
+      logsDone()
+      await Promise.resolve()
+      assert.strictEqual(complete, false)
+      metricsDone()
+      await Promise.resolve()
+      assert.strictEqual(complete, true)
+    })
+  })
+
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
