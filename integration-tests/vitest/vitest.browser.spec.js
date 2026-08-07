@@ -104,8 +104,9 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     await receiver.stop()
   })
 
-  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0) {
-    childProcess = exec('./node_modules/.bin/vitest run', {
+  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0, extraArguments = []) {
+    const cliArguments = extraArguments.length > 0 ? ` ${extraArguments.join(' ')}` : ''
+    childProcess = exec(`./node_modules/.bin/vitest run${cliArguments}`, {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
@@ -222,6 +223,16 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
         VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
       }),
       payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles test commands containing a closing script tag', async () => {
+    const exitCode = await runVitest('browser-reporting.mjs', {
+      VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+    }, 0, [
+      "--testNamePattern='runs the test body|</script>'",
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)

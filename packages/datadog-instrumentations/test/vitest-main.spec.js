@@ -5,33 +5,103 @@ const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 const {
+  getProvidedContext,
   makeProvidedContextBrowserSafe,
   parseProvidedContextValue,
+  setProvidedContext,
 } = require('../src/vitest-util')
 
 describe('vitest utilities', () => {
   describe('browser-safe provided context', () => {
-    it('leaves safe context unchanged', () => {
+    it('leaves safe values unchanged', () => {
       const context = { knownTests: ['safe test'] }
 
+      assert.strictEqual(makeProvidedContextBrowserSafe(undefined), undefined)
+      assert.strictEqual(makeProvidedContextBrowserSafe(null), null)
+      assert.strictEqual(makeProvidedContextBrowserSafe(false), false)
+      assert.strictEqual(makeProvidedContextBrowserSafe(42), 42)
+      assert.strictEqual(makeProvidedContextBrowserSafe('safe test'), 'safe test')
       assert.strictEqual(makeProvidedContextBrowserSafe(context), context)
+      assert.strictEqual(parseProvidedContextValue('safe test'), 'safe test')
       assert.strictEqual(parseProvidedContextValue(context), context)
     })
 
-    it('round trips context containing a closing script tag without exposing HTML markup', () => {
+    it('round trips strings and objects containing a closing script tag without exposing HTML markup', () => {
+      const testCommand = 'vitest --testNamePattern=</script>'
       const context = {
         knownTests: ['test containing </ScRiPt> and <markup>'],
       }
 
+      const safeTestCommand = makeProvidedContextBrowserSafe(testCommand)
       const safeContext = makeProvidedContextBrowserSafe(context)
 
+      assert.strictEqual(typeof safeTestCommand, 'string')
+      assert.ok(!safeTestCommand.includes('<'))
+      assert.strictEqual(parseProvidedContextValue(safeTestCommand), testCommand)
       assert.strictEqual(typeof safeContext, 'string')
       assert.ok(!safeContext.includes('<'))
       assert.deepStrictEqual(parseProvidedContextValue(safeContext), context)
     })
 
     it('rejects malformed serialized context', () => {
-      assert.strictEqual(parseProvidedContextValue('{'), undefined)
+      const safeContext = makeProvidedContextBrowserSafe({ knownTests: ['test containing </script>'] })
+
+      assert.strictEqual(parseProvidedContextValue(safeContext.slice(0, -1)), undefined)
+    })
+
+    it('escapes every Datadog-provided value without changing user context', () => {
+      const providedContext = {}
+      const userContext = { testName: '</script>' }
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddIsKnownTestsEnabled: true,
+        _ddTestCommand: testCommand,
+        userContext,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddIsKnownTestsEnabled, true)
+      assert.ok(!providedContext._ddTestCommand.includes('<'))
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestCommand), testCommand)
+      assert.strictEqual(providedContext.userContext, userContext)
+    })
+
+    it('restores every Datadog-provided value for workers', () => {
+      const providedContext = {}
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const testPropertiesByFilepath = {
+        'test.mjs': { knownTests: ['test containing </script>'] },
+      }
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+      const previousWorker = globalThis.__vitest_worker__
+
+      setProvidedContext(ctx, {
+        _ddTestCommand: testCommand,
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      }, 'Could not set provided context.')
+      globalThis.__vitest_worker__ = { providedContext }
+
+      try {
+        const restoredContext = getProvidedContext()
+
+        assert.strictEqual(restoredContext.testCommand, testCommand)
+        assert.deepStrictEqual(restoredContext.testPropertiesByFilepath, testPropertiesByFilepath)
+      } finally {
+        if (previousWorker === undefined) {
+          delete globalThis.__vitest_worker__
+        } else {
+          globalThis.__vitest_worker__ = previousWorker
+        }
+      }
     })
   })
 })

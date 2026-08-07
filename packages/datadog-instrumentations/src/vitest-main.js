@@ -54,7 +54,6 @@ const {
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
-  makeProvidedContextBrowserSafe,
   parseProvidedContextValue,
   setProvidedContext,
   getVitestTestProperties,
@@ -927,7 +926,7 @@ async function runMainProcessSetup (
     )
     if (!shouldInstallNoWorkerInit) {
       setProvidedContext(ctx, {
-        _ddTestPropertiesByFilepath: makeProvidedContextBrowserSafe(testPropertiesByFilepath),
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
       }, 'Could not send test properties to workers so some Test Optimization features will not work.')
     }
   }

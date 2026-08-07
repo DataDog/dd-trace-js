@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
@@ -814,10 +815,10 @@ function getProvidedContext () {
  * @returns {object}
  */
 function parseProvidedContextValue (value) {
-  if (typeof value !== 'string') return value || {}
+  if (typeof value !== 'string' || !value.startsWith(SERIALIZED_CONTEXT_PREFIX)) return value || {}
 
   try {
-    return JSON.parse(value)
+    return JSON.parse(value.slice(SERIALIZED_CONTEXT_PREFIX.length))
   } catch {
     return {}
   }
