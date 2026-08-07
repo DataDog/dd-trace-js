@@ -57,9 +57,22 @@ describe('sql-injection-analyzer', () => {
   const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer,
   })
+  const sourceRegistry = {
+    registerContributor: sinon.stub(),
+    unregisterContributor: sinon.stub(),
+  }
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
     './stored-injection-analyzer': StoredInjectionAnalyzer,
+    '../../../events/source-registry': { getEventSourceRegistry: () => sourceRegistry },
   })
+
+  function getSubscriptionHandler (analyzer, channelName) {
+    const subscription = analyzer._subscriptions.find(({ _channel }) => _channel.name === channelName)
+
+    assert.ok(subscription, `Missing subscription for ${channelName}`)
+
+    return subscription._handler
+  }
 
   afterEach(() => {
     sinon.restore()
@@ -67,22 +80,28 @@ describe('sql-injection-analyzer', () => {
 
   sqlInjectionAnalyzer.configure(true)
 
-  it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[3]._channel.name, 'datadog:sequelize:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
+  it('should use one database contributor for mysql package events', () => {
+    assert.deepStrictEqual(sqlInjectionAnalyzer._subscriptions.map(({ _channel }) => _channel.name), [
+      'datadog:mysql2:outerquery:start',
+      'apm:pg:query:start',
+      'datadog:sequelize:query:finish',
+      'datadog:pg:pool:query:finish',
+    ])
 
-    assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[1]._channel.name, 'datadog:pg:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
+    assert.deepStrictEqual(sqlInjectionAnalyzer._bindings.map(({ _channel }) => _channel.name), [
+      'datadog:sequelize:query:start',
+      'datadog:pg:pool:query:start',
+      'datadog:knex:raw:start',
+      'datadog:knex:raw:subscribes',
+      'datadog:knex:raw:finish',
+    ])
+
+    sinon.assert.calledOnceWithMatch(
+      sourceRegistry.registerContributor,
+      'db.query',
+      'iast.sql-injection',
+      { start: sinon.match.func, finish: sinon.match.func }
+    )
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -169,17 +188,24 @@ describe('sql-injection-analyzer', () => {
 
   describe('analyze', () => {
     let sqlInjectionAnalyzer, analyze
+    let getStore
 
     const store = {}
     const iastContext = {}
 
     beforeEach(() => {
-      const getStore = sinon.stub().returns(store)
+      getStore = sinon.stub().returns(store)
       const getIastContext = sinon.stub().returns(iastContext)
+      const sourceRegistry = {
+        registerContributor: sinon.stub(),
+        unregisterContributor: sinon.stub(),
+      }
 
       const datadogCore = {
         storage: () => {
           return {
+            enterWith: sinon.stub(),
+            getHandle: sinon.stub(),
             getStore,
           }
         },
@@ -199,8 +225,14 @@ describe('sql-injection-analyzer', () => {
         './vulnerability-analyzer': ProxyAnalyzer,
       })
 
-      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+      const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
         './injection-analyzer': InjectionAnalyzer,
+      })
+
+      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+        './stored-injection-analyzer': StoredInjectionAnalyzer,
+        '../../../../../datadog-core': datadogCore,
+        '../../../events/source-registry': { getEventSourceRegistry: () => sourceRegistry },
       })
       analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
       sqlInjectionAnalyzer.configure(true)
@@ -208,16 +240,28 @@ describe('sql-injection-analyzer', () => {
 
     afterEach(sinon.restore)
 
-    it('should call analyze on apm:mysql:query:start', () => {
-      const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+    it('should analyze a normalized mysql connection query event', () => {
+      const event = {
+        source: { integration: 'mysql' },
+        data: { scope: 'connection', statement: 'SELECT 1' },
+      }
 
-      onMysqlQueryStart({ sql: 'SELECT 1' })
+      assert.strictEqual(sqlInjectionAnalyzer.analyzeDatabaseQuery(event, store), store)
+      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1', store, 'MYSQL')
+    })
 
-      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    it('should ignore normalized events from another database source', () => {
+      const event = {
+        source: { integration: 'mariadb' },
+        data: { scope: 'connection', statement: 'SELECT 1' },
+      }
+
+      assert.strictEqual(sqlInjectionAnalyzer.analyzeDatabaseQuery(event, store), store)
+      sinon.assert.notCalled(analyze)
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
-      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[1]._handler
+      const onMysql2QueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'datadog:mysql2:outerquery:start')
 
       onMysql2QueryStart({ sql: 'SELECT 1' })
 
@@ -225,11 +269,55 @@ describe('sql-injection-analyzer', () => {
     })
 
     it('should call analyze on apm:pg:query:start', () => {
-      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[2]._handler
+      const onPgQueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'apm:pg:query:start')
 
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
+    it('should return an analyzed store for a normalized mysql pool query event', () => {
+      const event = {
+        source: { integration: 'mysql' },
+        data: { scope: 'pool', statement: 'SELECT 1' },
+      }
+
+      const currentStore = sqlInjectionAnalyzer.analyzeDatabaseQuery(event, store)
+
+      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1', store, 'MYSQL')
+      assert.strictEqual(currentStore.sqlAnalyzed, true)
+      assert.strictEqual(currentStore.sqlParentStore, store)
+      assert.strictEqual(event.iastSqlAnalyzed, true)
+    })
+
+    it('should not analyze a nested mysql query twice', () => {
+      const currentStore = { sqlAnalyzed: true }
+      const event = {
+        source: { integration: 'mysql' },
+        data: { scope: 'connection', statement: 'SELECT 1' },
+      }
+
+      assert.strictEqual(sqlInjectionAnalyzer.analyzeDatabaseQuery(event, currentStore), currentStore)
+      sinon.assert.notCalled(analyze)
+    })
+
+    it('should restore the parent store at normalized mysql pool completion', () => {
+      const currentStore = { sqlAnalyzed: true, sqlParentStore: store }
+      const event = {
+        source: { integration: 'mysql' },
+        iastSqlAnalyzed: true,
+      }
+
+      assert.strictEqual(sqlInjectionAnalyzer.finishDatabaseQuery(event, currentStore), store)
+      assert.strictEqual(event.iastSqlAnalyzed, false)
+    })
+
+    it('should preserve stores for database events not analyzed by this contributor', () => {
+      const event = {
+        source: { integration: 'mysql' },
+      }
+
+      assert.strictEqual(sqlInjectionAnalyzer.finishDatabaseQuery(event, store), store)
     })
   })
 
