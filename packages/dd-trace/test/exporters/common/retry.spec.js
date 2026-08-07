@@ -15,6 +15,35 @@ function loadRetry () {
 }
 
 describe('retry', () => {
+  describe('getRateLimitResetDelay', () => {
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ now: 1_000_000 })
+    })
+
+    afterEach(() => {
+      clock.restore()
+    })
+
+    it('uses the absolute rate-limit reset timestamp', () => {
+      const { getRateLimitResetDelay } = require(RETRY_PATH)
+
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 5000)
+      clock.tick(4999)
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 1)
+      clock.tick(1)
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 0)
+    })
+
+    it('reports missing and invalid reset timestamps', () => {
+      const { getRateLimitResetDelay } = require(RETRY_PATH)
+
+      assert.strictEqual(Number.isNaN(getRateLimitResetDelay()), true)
+      assert.strictEqual(Number.isNaN(getRateLimitResetDelay({ 'x-ratelimit-reset': 'invalid' })), true)
+    })
+  })
+
   describe('isRetriableNetworkError', () => {
     const { isRetriableNetworkError } = require(RETRY_PATH)
 

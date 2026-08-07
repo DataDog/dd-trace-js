@@ -67,6 +67,7 @@ const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
 const runFilesWrappedPrototypes = new WeakSet()
 const activeRunFilesContexts = new WeakSet()
+const runErrorsByContext = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -1195,13 +1196,15 @@ function getFinishWrapper (exitOrClose) {
     }
 
     const failedSuites = this.state.getFailedFilepaths()
-    let error
-    if (failedSuites.length) {
+    const runError = runErrorsByContext.get(this)
+    runErrorsByContext.delete(this)
+    let error = runError
+    if (!error && failedSuites.length) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
     const flushPromise = getChannelPromise(testSessionFinishCh, {
-      status: areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state),
+      status: runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state)),
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,
@@ -1376,6 +1379,9 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
     activeRunFilesContexts.add(this)
     try {
       return await runFiles.apply(this, arguments)
+    } catch (error) {
+      runErrorsByContext.set(this, error)
+      throw error
     } finally {
       activeRunFilesContexts.delete(this)
     }

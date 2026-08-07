@@ -147,6 +147,45 @@ versions.forEach((version) => {
 
     const poolConfig = ['forks', 'threads']
 
+    newerVitestIt('reports a failed session when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+            VITEST_THROWING_REPORTER: '1',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule } = assertCompleteEventHierarchy(events, testOutput)
+
+          for (const event of [testSession, testModule]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     poolConfig.forEach((poolConfig) => {
       it(`can run and report tests with pool=${poolConfig}`, async () => {
         childProcess = exec(

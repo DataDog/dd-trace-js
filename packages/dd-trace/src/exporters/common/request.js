@@ -14,7 +14,9 @@ const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
+  RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRateLimitResetDelay,
   getRetryDelay,
   isRetriableNetworkError,
   markEndpointReached,
@@ -99,7 +101,8 @@ function request (data, options, callback) {
    * @param {import('node:http').IncomingMessage} res
    * @param {(error: Error|null, result?: string|null, statusCode?: number,
    *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
-   * @param {(error: Error) => void} handleError
+   * @param {(error: Error, statusCode?: number,
+   *   headers?: import('node:http').IncomingHttpHeaders) => void} handleError
    */
   const onResponse = (res, complete, handleError) => {
     markEndpointReached(options)
@@ -159,7 +162,11 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        complete(error, null, res.statusCode, res.headers)
+        if (options.retryOnHttpError) {
+          handleError(error, res.statusCode, res.headers)
+        } else {
+          complete(error, null, res.statusCode, res.headers)
+        }
       }
     })
   }
@@ -169,9 +176,22 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
+    if (options.signal?.aborted) {
+      return callback(options.signal.reason || Object.assign(new Error('Request aborted'), { code: 'ABORT_ERR' }))
+    }
+
     if (!request.writable) {
+      if (options.deadline !== undefined && Date.now() < options.deadline) {
+        const delay = Math.min(50, options.deadline - Date.now())
+        setTimeout(attempt, delay, attemptIndex).unref?.()
+        return
+      }
       log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+      if (options.deadline === undefined) return callback(null)
+
+      const error = new Error('Maximum number of active requests reached before the request deadline')
+      error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+      return callback(error)
     }
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
@@ -200,21 +220,37 @@ function request (data, options, callback) {
 
       /**
        * @param {Error} error
+       * @param {number} [statusCode]
+       * @param {import('node:http').IncomingHttpHeaders} [headers]
        */
-      const handleError = (error) => {
+      const handleError = (error, statusCode, headers) => {
         if (settled) return
 
+        const isRetriableHttpError = options.retryOnHttpError === true &&
+          (error.status === 429 || error.status >= 500)
+        let retryDelay
+        if (isRetriableHttpError && error.status === 429) {
+          const resetDelay = getRateLimitResetDelay(headers)
+          if (Number.isFinite(resetDelay)) {
+            const remaining = options.deadline === undefined ? Infinity : options.deadline - Date.now()
+            if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= remaining) {
+              complete(error, null, statusCode, headers)
+              return
+            }
+            retryDelay = resetDelay
+          }
+        }
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
-            isRetriableNetworkError(error)) {
+            (isRetriableNetworkError(error) || isRetriableHttpError)) {
           settled = true
           finalize()
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          setTimeout(attempt, retryDelay ?? getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
         } else {
-          complete(error)
+          complete(error, null, statusCode, headers)
         }
       }
 

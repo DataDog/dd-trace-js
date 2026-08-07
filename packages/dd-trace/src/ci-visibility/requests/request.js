@@ -9,6 +9,7 @@ const log = require('../../log')
 const { httpAgent, httpsAgent } = require('../../exporters/common/agents')
 const {
   RATE_LIMIT_MAX_WAIT_MS,
+  getRateLimitResetDelay,
   isRetriableNetworkError,
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
@@ -98,11 +99,7 @@ function request (data, options, callback) {
           }
 
           if (res.statusCode === 429 && !hasRetried) {
-            const resetHeader = res.headers['x-ratelimit-reset']
-            const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? NaN
-              : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
+            const waitMs = getRateLimitResetDelay(res.headers)
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true

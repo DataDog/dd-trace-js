@@ -64,6 +64,8 @@ require('./common')
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
+const runnerEndHandlers = new WeakMap()
+const wrappedRunnerEndEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -292,12 +294,12 @@ function getOnStartHandler (frameworkVersion) {
 /**
  * @param {boolean} isParallel
  * @param {() => void} onDone
- * @returns {() => void}
+ * @returns {(frameworkError?: unknown) => void}
  */
 function getOnEndHandler (isParallel, onDone) {
-  return function () {
+  return function (frameworkError) {
     let status = 'pass'
-    let error
+    let error = frameworkError
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
       if (this.stats.tests === 0) {
@@ -318,7 +320,9 @@ function getOnEndHandler (isParallel, onDone) {
       }
     }
 
-    if (status === 'fail') {
+    if (frameworkError) {
+      status = 'fail'
+    } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
 
@@ -363,6 +367,7 @@ function getOnEndHandler (isParallel, onDone) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
+      isFrameworkError: !!frameworkError,
     }, onDone)
 
     logTestOptimizationSummary({
@@ -372,6 +377,44 @@ function getOnEndHandler (isParallel, onDone) {
     })
     loggedAttemptToFixTests.clear()
   }
+}
+
+/**
+ * Runs Datadog's end handler after Mocha's listeners, even when a reporter throws,
+ * and then preserves whichever error Mocha originally exposed.
+ *
+ * @param {Function} Runner
+ * @returns {void}
+ */
+function wrapRunnerEndEmit (Runner) {
+  if (wrappedRunnerEndEmitPrototypes.has(Runner.prototype)) return
+
+  wrappedRunnerEndEmitPrototypes.add(Runner.prototype)
+  shimmer.wrap(Runner.prototype, 'emit', emit => function (event) {
+    if (event !== 'end') return emit.apply(this, arguments)
+
+    const endHandler = runnerEndHandlers.get(this)
+    if (!endHandler) return emit.apply(this, arguments)
+
+    runnerEndHandlers.delete(this)
+    let result
+    let frameworkError
+    try {
+      result = emit.apply(this, arguments)
+    } catch (error) {
+      frameworkError = error
+    }
+
+    try {
+      endHandler.call(this, frameworkError)
+    } catch (finalizerError) {
+      if (!frameworkError) throw finalizerError
+      log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
+    }
+
+    if (frameworkError) throw frameworkError
+    return result
+  })
 }
 
 function applyKnownTestsResponse ({ err, knownTests }) {
@@ -707,6 +750,7 @@ addHook({
   if (patched.has(Runner)) return Runner
 
   patched.add(Runner)
+  wrapRunnerEndEmit(Runner)
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
@@ -733,6 +777,7 @@ addHook({
     let hasEnded = false
     let hasFinishedRun = false
     let endRunner
+    let endError
 
     function updateRootTestForFinalAttempt (test) {
       if (!test._retriedTest) return
@@ -750,7 +795,7 @@ addHook({
       if (hasFinishedRun) return
       if (hasEnded && pendingRootFinalizations === 0) {
         hasFinishedRun = true
-        onEnd.call(endRunner)
+        onEnd.call(endRunner, endError)
       }
     }
 
@@ -833,9 +878,10 @@ addHook({
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
-    this.once('end', function () {
+    runnerEndHandlers.set(this, function (frameworkError) {
       hasEnded = true
       endRunner = this
+      endError = frameworkError
       finishRunIfReady()
     })
 
@@ -1115,6 +1161,8 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
+  wrapRunnerEndEmit(ParallelBufferedRunner)
+
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
@@ -1124,7 +1172,7 @@ addHook({
     arguments[0] = onRunDone
 
     this.once('start', getOnStartHandler(frameworkVersion))
-    this.once('end', getOnEndHandler(true, onFlushDone))
+    runnerEndHandlers.set(this, getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
     for (const filePath of files) {

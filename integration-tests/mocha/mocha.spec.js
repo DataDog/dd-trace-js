@@ -233,6 +233,41 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
+  it('finalizes a failed hierarchy when a custom reporter throws during runner end', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      [
+        'node node_modules/mocha/bin/mocha',
+        './ci-visibility/mocha-plugin-tests/passing.js',
+        '--reporter ./ci-visibility/mocha-reporter-throws.js',
+      ].join(' '),
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.error, 1)
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+  })
+
   it('can run tests and report tests with the APM protocol (old agents)', (done) => {
     receiver.setInfoResponse({ endpoints: [] })
     receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {

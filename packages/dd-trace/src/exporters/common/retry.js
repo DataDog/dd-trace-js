@@ -47,6 +47,20 @@ function singleJitteredDelay () {
 }
 
 /**
+ * Returns the delay requested by an intake rate-limit response.
+ *
+ * @param {import('node:http').IncomingHttpHeaders} [headers]
+ * @returns {number}
+ */
+function getRateLimitResetDelay (headers) {
+  const resetHeader = headers?.['x-ratelimit-reset']
+  const resetTimestamp = resetHeader === null || resetHeader === undefined
+    ? NaN
+    : Number.parseInt(resetHeader, 10)
+  return Number.isFinite(resetTimestamp) ? Math.max(0, resetTimestamp * 1000 - Date.now()) : NaN
+}
+
+/**
  * Stable key identifying the destination so the startup-phase gate is scoped
  * per endpoint. UDS path beats host:port because both can coexist on the same
  * options object after `parseUrl` runs.
@@ -97,6 +111,7 @@ function markEndpointReached (options) {
 module.exports = {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRateLimitResetDelay,
   getRetryDelay,
   isRetriableNetworkError,
   markEndpointReached,

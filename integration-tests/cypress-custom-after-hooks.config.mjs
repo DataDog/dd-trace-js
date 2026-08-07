@@ -18,6 +18,9 @@ export default defineConfig({
       on('after:run', (results) => {
         // eslint-disable-next-line no-console
         console.log('[custom:after:run]', results.totalPassed)
+        if (process.env.CYPRESS_REJECT_AFTER_RUN) {
+          return Promise.reject(new Error('custom after:run failed'))
+        }
         return new Promise((resolve) => {
           setTimeout(() => {
             // eslint-disable-next-line no-console

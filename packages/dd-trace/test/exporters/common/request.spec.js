@@ -39,6 +39,41 @@ const initHTTPServer = () => {
   })
 }
 
+/**
+ * Holds Nock responses until the test explicitly releases them.
+ *
+ * @param {number} requestCount
+ * @returns {{
+ *   release: (index: number) => void,
+ *   scope: import('nock').Scope,
+ *   waitForRequests: (expectedCount: number) => Promise<void>
+ * }}
+ */
+function interceptControlledRequests (requestCount) {
+  const responseCallbacks = []
+  let waiter
+  const scope = nock('http://test:123')
+    .put('/path')
+    .times(requestCount)
+    .reply((uri, requestBody, callback) => {
+      responseCallbacks.push(callback)
+      if (waiter && responseCallbacks.length >= waiter.expectedCount) {
+        const { resolve } = waiter
+        waiter = undefined
+        resolve()
+      }
+    })
+
+  return {
+    release: index => responseCallbacks[index](null, [200, 'OK']),
+    scope,
+    waitForRequests (expectedCount) {
+      if (responseCallbacks.length >= expectedCount) return Promise.resolve()
+      return new Promise(resolve => { waiter = { expectedCount, resolve } })
+    },
+  }
+}
+
 describe('request', function () {
   let request
   let log
@@ -46,6 +81,30 @@ describe('request', function () {
   let maxAttempts
   let retryStubs
   let runInNoopContext
+
+  /**
+   * Starts requests that occupy the shared active request buffer.
+   *
+   * @param {Buffer} data
+   * @param {number} count
+   * @returns {Promise<void>[]}
+   */
+  function startRequests (data, count) {
+    const requests = []
+    for (let index = 0; index < count; index++) {
+      requests.push(new Promise((resolve, reject) => {
+        request(data, {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {},
+        }, error => error ? reject(error) : resolve())
+      }))
+    }
+    return requests
+  }
 
   beforeEach(() => {
     log = {
@@ -62,6 +121,7 @@ describe('request', function () {
     // overridable per test.
     maxAttempts = 2
     retryStubs = {
+      getRateLimitResetDelay: sinon.stub().returns(NaN),
       getRetryDelay: sinon.fake.returns(0),
       getMaxAttempts: sinon.fake(() => maxAttempts),
       markEndpointReached: sinon.fake(),
@@ -164,6 +224,22 @@ describe('request', function () {
     abortController.abort()
 
     await assert.rejects(completed, { code: 'ABORT_ERR' })
+  })
+
+  it('does not start a request when its AbortSignal is already aborted', (done) => {
+    const abortController = new AbortController()
+    const error = new Error('final flush expired')
+    error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+    abortController.abort(error)
+
+    request(Buffer.from(''), {
+      method: 'GET',
+      path: '/path',
+      signal: abortController.signal,
+    }, (requestError) => {
+      assert.strictEqual(requestError, error)
+      done()
+    })
   })
 
   it('settles once when a response is truncated', async () => {
@@ -385,6 +461,133 @@ describe('request', function () {
       done()
     })
   })
+
+  it('should retry transient HTTP errors when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(500)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
+    })
+  })
+
+  it('should retry HTTP 429 responses when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err, res) => {
+      assert.strictEqual(res, 'OK')
+      done(err)
+    })
+  })
+
+  it('waits for a rate-limit reset that is inside the final flush deadline', (done) => {
+    retryStubs.getRateLimitResetDelay.returns(999)
+    const realSetTimeout = setTimeout
+    const retryTimer = { unref: sinon.spy() }
+    const setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 999) return realSetTimeout(callback, delay, ...args)
+      queueMicrotask(() => callback(...args))
+      return retryTimer
+    })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429, '', { 'x-ratelimit-reset': 'reset timestamp' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 2000,
+      retryOnHttpError: true,
+    }, (err, res) => {
+      setTimeoutStub.restore()
+      assert.strictEqual(res, 'OK')
+      sinon.assert.calledOnceWithExactly(retryStubs.getRateLimitResetDelay, {
+        'x-ratelimit-reset': 'reset timestamp',
+      })
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      sinon.assert.calledOnce(retryTimer.unref)
+      done(err)
+    })
+  })
+
+  it('does not retry a rate-limit reset at the final flush deadline', (done) => {
+    retryStubs.getRateLimitResetDelay.returns(1000)
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429, '', { 'x-ratelimit-reset': 'reset timestamp' })
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 1000,
+      retryOnHttpError: true,
+    }, (err, res, statusCode) => {
+      assert.strictEqual(err.status, 429)
+      assert.strictEqual(res, null)
+      assert.strictEqual(statusCode, 429)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  it('should not retry permanent HTTP errors when requested', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(499, '', { 'x-test-response': 'permanent' })
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      retryOnHttpError: true,
+    }, (err, res, statusCode, headers) => {
+      assert.strictEqual(err.status, 499)
+      assert.strictEqual(statusCode, 499)
+      assert.strictEqual(headers['x-test-response'], 'permanent')
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  for (const statusCode of [429, 500]) {
+    it(`should preserve an exhausted HTTP ${statusCode} response`, (done) => {
+      nock('http://localhost:80')
+        .put('/path')
+        .reply(statusCode)
+        .put('/path')
+        .reply(statusCode, '', { 'x-test-response': 'exhausted' })
+
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'PUT',
+        retryOnHttpError: true,
+      }, (err, res, finalStatusCode, headers) => {
+        assert.strictEqual(err.status, statusCode)
+        assert.strictEqual(finalStatusCode, statusCode)
+        assert.strictEqual(headers['x-test-response'], 'exhausted')
+        done()
+      })
+    })
+  }
 
   it('should not retry on a non-retriable error code', (done) => {
     const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
@@ -792,6 +995,84 @@ describe('request', function () {
             done()
           }
         })
+    }
+  })
+
+  it('reports when a final request reaches its deadline under backpressure', async () => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize)
+    const controlledRequests = interceptControlledRequests(8)
+
+    try {
+      const activeRequests = startRequests(buffer, 8)
+
+      const deadlineErrorPromise = new Promise(resolve => {
+        request(Buffer.from('final'), {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          deadline: Date.now(),
+          headers: {},
+        }, resolve)
+      })
+
+      await controlledRequests.waitForRequests(8)
+      const deadlineError = await deadlineErrorPromise
+      assert.strictEqual(deadlineError.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+
+      for (let index = 0; index < 8; index++) controlledRequests.release(index)
+      await Promise.all(activeRequests)
+      controlledRequests.scope.done()
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('waits for backpressure to clear before sending a final request', async () => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize)
+    const controlledRequests = interceptControlledRequests(9)
+    const realSetTimeout = setTimeout
+    let retryAfterBackpressure
+    const retryTimer = { unref: sinon.spy() }
+    sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 50) return realSetTimeout(callback, delay, ...args)
+      retryAfterBackpressure = () => callback(...args)
+      return retryTimer
+    })
+
+    try {
+      const requests = startRequests(buffer, 8)
+      requests.push(new Promise((resolve, reject) => {
+        request(Buffer.from('final'), {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          deadline: Date.now() + 1000,
+          headers: {},
+        }, error => error ? reject(error) : resolve())
+      }))
+
+      await controlledRequests.waitForRequests(8)
+      assert.strictEqual(typeof retryAfterBackpressure, 'function')
+      sinon.assert.calledOnce(retryTimer.unref)
+
+      controlledRequests.release(0)
+      await requests[0]
+      retryAfterBackpressure()
+      await controlledRequests.waitForRequests(9)
+
+      for (let index = 1; index < 9; index++) controlledRequests.release(index)
+      await Promise.all(requests)
+      controlledRequests.scope.done()
+    } finally {
+      clock.restore()
     }
   })
 

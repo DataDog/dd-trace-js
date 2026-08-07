@@ -24,7 +24,7 @@ class BufferingExporter {
     this._export(trace)
   }
 
-  _export (payload, writer = this._writer, timerKey = '_timer') {
+  _export (payload, writer = this._writer, timerKey = '_timer', deferImmediateFlush = false) {
     if (this._config.isCiVisibility) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
@@ -32,9 +32,9 @@ class BufferingExporter {
 
     const { flushInterval } = this._config
 
-    if (flushInterval === 0) {
+    if (flushInterval === 0 && !deferImmediateFlush) {
       writer.flush()
-    } else if (this[timerKey] === undefined) {
+    } else if (flushInterval !== 0 && this[timerKey] === undefined) {
       this[timerKey] = setTimeout(() => {
         writer.flush()
         this[timerKey] = undefined

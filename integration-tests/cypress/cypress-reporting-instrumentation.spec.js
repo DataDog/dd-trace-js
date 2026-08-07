@@ -478,6 +478,49 @@ moduleTypes.forEach(({
       assert.match(testOutput, /\[custom:after:run:resolved\]/)
     })
 
+    over10It('reports the session when a custom after:run handler rejects', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_AFTER_RUN: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom after:run failed/)
+          }
+        },
+        { hardTimeout: 60000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     // Tests the old manual API: dd-trace/ci/cypress/after-run and after-spec
     // used alongside the manual plugin, without NODE_OPTIONS auto-instrumentation.
     over10It('works if after:run and after:spec are explicitly used with the manual plugin', async () => {
@@ -1608,9 +1651,10 @@ if (requestedVersion === 'latest' &&
     /**
      * @param {object} [fsStub] filesystem overrides
      * @param {() => string} [randomUUID] UUID generator
+     * @param {(payload: object) => void} [publishSetupNodeEvents] setup-node-events channel subscriber
      * @returns {{ cypressConfig: object, errors: string[], warnings: string[] }} loaded instrumentation and logs
      */
-    function loadCypressConfig (fsStub, randomUUID) {
+    function loadCypressConfig (fsStub, randomUUID, publishSetupNodeEvents) {
       const warnings = []
       let uuid = 0
       const stubs = {
@@ -1621,7 +1665,9 @@ if (requestedVersion === 'latest' &&
           warn: (...args) => warnings.push(format(...args)),
         },
         './helpers/instrument': {
-          channel: () => ({ hasSubscribers: false, publish: () => {} }),
+          channel: name => name === 'ci:cypress:setup-node-events'
+            ? { hasSubscribers: Boolean(publishSetupNodeEvents), publish: publishSetupNodeEvents || (() => {}) }
+            : { hasSubscribers: false, publish: () => {} },
         },
       }
 
@@ -1694,6 +1740,42 @@ if (requestedVersion === 'latest' &&
     }
 
     describe('support wrapper', () => {
+      it('does not enable interactive run events when Test Optimization does not register', () => {
+        const projectRoot = createProjectRoot()
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+        assert.deepStrictEqual(warnings, [])
+      })
+
+      it('enables interactive run events after Test Optimization registers', () => {
+        const projectRoot = createProjectRoot()
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, (payload) => {
+          payload.registered = true
+        })
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
+      })
+
       it('falls back to the project root when the support directory is not writable', async () => {
         const projectRoot = createProjectRoot()
         const supportDirectory = path.join(projectRoot, 'cypress', 'support')
@@ -1928,7 +2010,13 @@ if (requestedVersion === 'latest' &&
           },
         }
         const handlers = {}
-        const { cypressConfig } = loadCypressConfig()
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
 
         cypressConfig.wrapConfig(config)
         config.e2e.setupNodeEvents(
@@ -1940,8 +2028,13 @@ if (requestedVersion === 'latest' &&
           (event, handler) => {
             handlers[event] = handler
           },
-          { projectRoot, supportFile: false }
+          resolvedConfig
         )
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
 
         const details = { path: 'original.png' }
         await handlers['after:screenshot'](details)

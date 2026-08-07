@@ -36,6 +36,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
 const { getChannelPromise } = require('./helpers/channel')
+const { finalizeAndRethrow } = require('./helpers/finalization')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -1367,7 +1368,18 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    let runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn
+    try {
+      runAllTestsReturn = await runAllTests.apply(this, arguments)
+    } catch (error) {
+      return finalizeAndRethrow(error, () => getChannelPromise(testSessionFinishCh, {
+        status: 'fail',
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+      }), 'Playwright')
+    }
 
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`

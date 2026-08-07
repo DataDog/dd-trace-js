@@ -4,8 +4,6 @@ const request = require('../../../exporters/common/request')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
 
-const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
-const BaseWriter = require('../../../exporters/common/writer')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -15,17 +13,34 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
   TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
+const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
+const BaseWriter = require('../../../exporters/common/writer')
+const TestOptimizationRequestTracker = require('./request-tracker')
 
 class Writer extends BaseWriter {
+  #requestTracker
+
   constructor ({ url, tags, evpProxyPrefix = '' }) {
     super(...arguments)
+    this.#requestTracker = new TestOptimizationRequestTracker(this)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
     this._evpProxyPrefix = evpProxyPrefix
   }
 
-  _sendPayload (data, _, done) {
+  /**
+   * Flushes buffered events, waiting for tracked requests during finalization.
+   *
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    this.#requestTracker.flush(done, options)
+  }
+
+  _sendPayload (data, _, done, flushOptions) {
     const options = {
       path: '/api/v2/citestcycle',
       method: 'POST',
@@ -35,6 +50,8 @@ class Writer extends BaseWriter {
       },
       timeout: 15_000,
       url: this._url,
+      deadline: flushOptions?.deadline,
+      retryOnHttpError: flushOptions?.deadline !== undefined,
     }
 
     if (this._evpProxyPrefix) {
@@ -51,23 +68,26 @@ class Writer extends BaseWriter {
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
-    request(data, options, (err, res, statusCode) => {
+    this.#requestTracker.send(request, data, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
         Date.now() - startRequestTime
       )
       if (err) {
+        const reason = err.code === 'ABORT_ERR' || err.code === 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+          ? 'final_flush_timeout'
+          : (statusCode ? 'http_error' : 'network_error')
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
           { endpoint: 'test_cycle', statusCode }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'test_cycle' }
+          { endpoint: 'test_cycle', reason }
         )
         log.error('Error sending CI agentless payload', err)
-        done()
+        done(err)
         return
       }
       log.debug('Response from the intake:', res)
