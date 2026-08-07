@@ -37,6 +37,6 @@ function registerRequireHook () {
       },
     })
   } catch {
-    return
+    // The compile hook remains the fallback.
   }
 }
