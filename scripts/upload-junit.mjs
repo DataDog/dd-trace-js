@@ -87,26 +87,36 @@ function mergeJunit (reportPaths) {
 }
 
 /**
- * Merge every sibling workflow's downloaded junit reports into one file and upload it to Datadog in
- * a single call, instead of uploading each workflow run's reports separately. Junit results have no
- * per-run tag that would require keeping uploads separate (unlike Codecov's per-workflow coverage
- * flag — see `upload-coverage.mjs`), so every matrix cell across every run is merged down to one
- * document; each testcase's `node_version` property (see `NODE_VERSION_XPATH_TAG`) is what keeps
- * cells distinguishable afterward, not which run or file they came from.
+ * Merge one sibling workflow run's downloaded junit reports into one file and upload it to Datadog,
+ * tagged with that run's own GitHub Actions metadata instead of All Green's. `datadog-ci junit
+ * upload` reads `GITHUB_WORKFLOW`/`GITHUB_RUN_ID`/`GITHUB_RUN_NUMBER`/`GITHUB_RUN_ATTEMPT` from the
+ * process environment to set each uploaded test's pipeline name/id/number in Test Optimization; since
+ * the upload always runs from inside the All Green job, every test would otherwise be attributed to
+ * the "All Green" workflow instead of the one that actually produced it. Every matrix cell within the
+ * run is still merged down to one document — each testcase's `node_version` property (see
+ * `NODE_VERSION_XPATH_TAG`) is what keeps cells distinguishable afterward, not which file they
+ * came from.
  *
+ * @param {{ id: number, name: string, run_number: number, run_attempt?: number }} run
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
-export async function uploadAllJunit () {
-  const reportPaths = collectJunitFiles(INPUT_DIR)
+export async function uploadJunitForRun (run) {
+  const reportPaths = collectJunitFiles(join(INPUT_DIR, String(run.id)))
   if (reportPaths.length === 0) return []
 
-  mkdirSync(OUTPUT_DIR, { recursive: true })
-  writeFileSync(join(OUTPUT_DIR, 'junit.xml'), mergeJunit(reportPaths))
+  const outputDir = join(OUTPUT_DIR, String(run.id))
+  mkdirSync(outputDir, { recursive: true })
+  writeFileSync(join(outputDir, 'junit.xml'), mergeJunit(reportPaths))
 
   const result = await runUpload('datadog-ci', [
-    'junit', 'upload', '--service', 'dd-trace-js-tests', '--auto-discovery', OUTPUT_DIR,
+    'junit', 'upload', '--service', 'dd-trace-js-tests', '--auto-discovery', outputDir,
     '--xpath-tag', NODE_VERSION_XPATH_TAG,
-  ])
+  ], {
+    GITHUB_WORKFLOW: run.name,
+    GITHUB_RUN_ID: String(run.id),
+    GITHUB_RUN_NUMBER: String(run.run_number),
+    GITHUB_RUN_ATTEMPT: String(run.run_attempt ?? 1),
+  })
   return [result]
 }
 
