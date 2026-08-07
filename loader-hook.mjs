@@ -120,7 +120,17 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  if (isCommonJSLoad(context)) {
+  if (hasRequireCondition(context)) {
+    const { format } = context
+    // CommonJS is instrumented by require-in-the-middle, while builtins and
+    // JSON are not rewritten. Keep ESM, TypeScript, and unknown formats on the
+    // existing path so their source can still be transformed when necessary.
+    if (format === undefined || format === 'commonjs' || format === 'builtin' || format === 'json') {
+      return nextLoad(url, context)
+    }
+  }
+
+  if (context.format === 'commonjs') {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
 
@@ -129,12 +139,17 @@ function loadSync (url, context, nextLoad) {
   })
 }
 
-function isCommonJSLoad (context) {
-  if (context.format) return context.format === 'commonjs'
+function resolveSync (specifier, context, nextResolve) {
+  // import-in-the-middle leaves require() resolutions untouched after calling
+  // nextResolve, so skip its additional bookkeeping on that path.
+  if (hasRequireCondition(context)) {
+    return nextResolve(specifier, context)
+  }
 
-  // Sync hooks report CommonJS require() dependency loads with a `require`
-  // condition but no format. If a format is present, trust it instead: ESM
-  // loaded through require() reports `format: 'module'` and still needs rewrite.
+  return getSyncImportInTheMiddleHook().resolveSync(specifier, context, nextResolve)
+}
+
+function hasRequireCondition (context) {
   const conditions = context.conditions
   if (!conditions) return false
 
@@ -185,7 +200,7 @@ function registerSyncLoaderHooks (data = {}) {
   // that `import http from 'node:http'` is wrapped on both paths.
   syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
   Module.registerHooks({
-    resolve: syncHook.resolveSync,
+    resolve: resolveSync,
     load: loadSync,
   })
 

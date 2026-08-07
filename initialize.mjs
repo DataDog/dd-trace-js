@@ -90,8 +90,6 @@ if (isMainThread) {
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
   if (Module.register && initialized) {
-    // The loader builds its own include/exclude matcher in `initialize`, so no
-    // options need to cross the registration boundary.
-    Module.register('./loader-hook.mjs', import.meta.url)
+    require('./register.js')
   }
 }

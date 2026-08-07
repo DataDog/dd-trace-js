@@ -22,7 +22,7 @@
         "USE_TRACER": "1",
         "EVERYTHING": "1",
         "ESM": "1",
-        "NODE_OPTIONS": "--import ../../../register.js"
+        "NODE_OPTIONS": "--import ../../../initialize.mjs"
       }
     }
   }
