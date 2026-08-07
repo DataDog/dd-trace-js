@@ -34,7 +34,6 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const contexts = new WeakMap()
-const requests = new WeakMap()
 const statusCodeRangesPattern = /^[1-5]\d{2}(?:-[1-5]\d{2})?(?:,[1-5]\d{2}(?:-[1-5]\d{2})?)*$/
 const whitespacePattern = /\s/g
 const MAX_HTTP_STATUS_CODE = 599
@@ -133,7 +132,6 @@ const web = {
     context.tracer = tracer
     context.span = span
     context.res = res
-    requests.set(span, req)
 
     this.setConfig(req, config)
     addRequestTags(context, this.TYPE)
@@ -318,7 +316,6 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context, spanType)
-    requests.delete(context.span)
 
     finishInferredProxySpan(context)
   },
@@ -347,9 +344,6 @@ const web = {
   },
   getContext (req) {
     return contexts.get(req)
-  },
-  getRequest (span) {
-    return requests.get(span)
   },
   setRouteOrEndpointTag (req) {
     const context = contexts.get(req)

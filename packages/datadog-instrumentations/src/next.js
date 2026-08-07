@@ -13,6 +13,34 @@ const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
 const queryParsedChannel = channel('apm:next:query-parsed')
 
+/**
+ * @typedef {import('node:http').IncomingMessage & {
+ *   error?: unknown,
+ *   originalRequest?: import('node:http').IncomingMessage
+ * }} NextNodeRequest
+ *
+ * @typedef {import('node:http').ServerResponse & {
+ *   originalResponse?: import('node:http').ServerResponse
+ * }} NextNodeResponse
+ *
+ * @typedef {object} NextRequest
+ * @property {unknown} [error]
+ *
+ * @typedef {object} NextRequestContext
+ * @property {NextNodeRequest} req
+ * @property {NextNodeResponse} res
+ * @property {boolean} [finishOnResponse]
+ * @property {unknown} [error]
+ * @property {NextRequest} [nextRequest]
+ *
+ * @typedef {object} HandleResponseOptions
+ * @property {NextNodeRequest} req
+ * @property {(...args: unknown[]) => Promise<unknown>} responseGenerator
+ *
+ * @typedef {object} ResponseCacheEntry
+ * @property {{ status?: number }} [value]
+ */
+
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
@@ -149,7 +177,16 @@ function getRequestMeta (req, key) {
   return typeof key === 'string' ? meta[key] : meta
 }
 
-function instrument (req, res, handler, error) {
+/**
+ * @template T
+ * @param {NextNodeRequest} req
+ * @param {NextNodeResponse} res
+ * @param {(ctx: NextRequestContext) => Promise<T>} handler
+ * @param {unknown} [error]
+ * @param {boolean} [finishOnResponse]
+ * @returns {Promise<T>}
+ */
+function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
@@ -165,7 +202,7 @@ function instrument (req, res, handler, error) {
 
   requests.add(req)
 
-  const ctx = { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
   if (queryParsedChannel.hasSubscribers && req.url) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
@@ -225,6 +262,11 @@ function finish (ctx, result, err) {
   finishChannel.publish(ctx)
 }
 
+/**
+ * @param {NextNodeRequest} req
+ * @param {NextRequestContext | undefined} ctx
+ * @param {unknown} error
+ */
 function publishError (req, ctx, error) {
   if (!error) return
 
@@ -242,7 +284,7 @@ function publishError (req, ctx, error) {
     ctx.error = error
     errorChannel.publish(ctx)
   } else {
-    errorChannel.publish({ error })
+    errorChannel.publish({ req, error })
   }
 }
 
@@ -267,12 +309,16 @@ addHook({
 // From Next 15.4.1, route modules execute through precompiled runtime bundles that bypass the
 // classic server hooks above. Match bundler and experimental filename variants without enumerating
 // them so App Routes, Pages APIs, and App Pages reuse the existing Next request lifecycle.
+// The route module classes and inherited methods are selected inside those bundles, so there is no
+// stable source function for Orchestrion to rewrite.
 const patchedRouteModules = new WeakSet()
+const routeResponses = new WeakMap()
+const activeRouteRequests = new WeakMap()
 const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
     if (error) {
-      errorChannel.publish({ error })
+      publishError(req, undefined, error)
     }
     return onRequestError.apply(this, arguments)
   }
@@ -302,31 +348,111 @@ function publishRoutePage (ctx, routeModule, fallbackPage, isAppPath) {
 
 function wrapAppRouteHandle (handle) {
   return function (req, context) {
-    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
-      return handle.apply(this, arguments)
+    if (finishChannel.hasSubscribers) {
+      const nodeRequest = activeRouteRequests.get(this)
+      if (nodeRequest) {
+        nodeNextRequestsToNextRequests.set(nodeRequest, req)
+      }
     }
 
-    const res = { statusCode: 500 }
-    nodeNextRequestsToNextRequests.set(req, req)
+    return handle.apply(this, arguments)
+  }
+}
+
+function wrapPrepare (prepare) {
+  return function (req, res) {
+    if (startChannel.hasSubscribers || queryParsedChannel.hasSubscribers) {
+      routeResponses.set(req, res)
+    }
+
+    return prepare.apply(this, arguments)
+  }
+}
+
+/**
+ * @param {(...args: unknown[]) => unknown} responseGenerator
+ * @param {object} routeModule
+ * @param {NextNodeRequest} req
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapResponseGenerator (responseGenerator, routeModule, req) {
+  return function () {
+    // Next calls the route module before the generator's first await. Limit the association to that
+    // synchronous call so concurrent requests can share the route module instance safely.
+    activeRouteRequests.set(routeModule, req)
+    try {
+      return responseGenerator.apply(this, arguments)
+    } finally {
+      activeRouteRequests.delete(routeModule)
+    }
+  }
+}
+
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @param {boolean} finishOnResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapHandleResponse (handleResponse, finishOnResponse) {
+  return function (options) {
+    const req = options.req
+    const res = routeResponses.get(req)
+    routeResponses.delete(req)
+
+    if (!res || (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers)) {
+      return handleResponse.apply(this, arguments)
+    }
+
+    if (!finishOnResponse) {
+      options.responseGenerator = wrapResponseGenerator(options.responseGenerator, this, req)
+    }
 
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, undefined, true)
 
-      return handle.apply(this, arguments).then(response => {
-        if (ctx) ctx.res.statusCode = response?.status || 200
-        return response
+      return handleResponse.apply(this, arguments).then(result => {
+        const statusCode = result?.value?.status
+        if (ctx && typeof statusCode === 'number') {
+          ctx.res.statusCode = statusCode
+        }
+
+        return result
+      }, error => {
+        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
+          ctx.res.statusCode = 500
+        }
+
+        throw error
       })
-    })
+    }, undefined, finishOnResponse)
   }
 }
 
-function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapAppRouteHandleResponse (handleResponse) {
+  return wrapHandleResponse(handleResponse, false)
+}
+
+/**
+ * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
+ * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
+ */
+function wrapAppPageHandleResponse (handleResponse) {
+  return wrapHandleResponse(handleResponse, true)
+}
+
+function instrumentRouteModule (RouteModule, wrappers, handleErrors) {
   const proto = RouteModule?.prototype
   if (!proto || patchedRouteModules.has(RouteModule)) return
 
   patchedRouteModules.add(RouteModule)
-  if (typeof proto[method] === 'function') {
-    shimmer.wrap(proto, method, wrapper)
+  for (const [method, wrapper] of wrappers) {
+    if (typeof proto[method] === 'function') {
+      shimmer.wrap(proto, method, wrapper)
+    }
   }
   if (handleErrors && typeof proto.onRequestError === 'function') {
     shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
@@ -334,7 +460,11 @@ function instrumentRouteModule (RouteModule, method, wrapper, handleErrors) {
 }
 
 function instrumentAppRouteRuntime (runtime) {
-  instrumentRouteModule(runtime.AppRouteRouteModule, 'handle', wrapAppRouteHandle, true)
+  instrumentRouteModule(runtime.AppRouteRouteModule, [
+    ['prepare', wrapPrepare],
+    ['handleResponse', wrapAppRouteHandleResponse],
+    ['handle', wrapAppRouteHandle],
+  ], true)
   return runtime
 }
 
@@ -361,40 +491,16 @@ function wrapPagesApiRender (render) {
 
 function instrumentPagesApiRuntime (runtime) {
   const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
-  instrumentRouteModule(PagesAPIRouteModule, 'render', wrapPagesApiRender, false)
+  instrumentRouteModule(PagesAPIRouteModule, [['render', wrapPagesApiRender]], false)
   return runtime
-}
-
-function wrapAppPageRender (render) {
-  return function (req, res, context = {}) {
-    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
-      return render.apply(this, arguments)
-    }
-
-    return instrument(req, res, ctx => {
-      publishRoutePage(ctx, this, context.page, true)
-
-      return render.apply(this, arguments).then(result => {
-        const statusCode = result?.metadata?.statusCode
-        if (ctx && typeof statusCode === 'number') {
-          ctx.res.statusCode = statusCode
-        }
-
-        return result
-      }, error => {
-        if (ctx && (typeof ctx.res.statusCode !== 'number' || ctx.res.statusCode < 400)) {
-          ctx.res.statusCode = 500
-        }
-
-        throw error
-      })
-    })
-  }
 }
 
 function instrumentAppPageRuntime (runtime) {
   const AppPageRouteModule = runtime.AppPageRouteModule || runtime.default
-  instrumentRouteModule(AppPageRouteModule, 'render', wrapAppPageRender, true)
+  instrumentRouteModule(AppPageRouteModule, [
+    ['prepare', wrapPrepare],
+    ['handleResponse', wrapAppPageHandleResponse],
+  ], true)
   return runtime
 }
 
