@@ -114,6 +114,8 @@ module.exports = class PluginManager {
 
   // TODO: merge config instead of replacing
   configurePlugin (name, pluginConfig) {
+    if (this._eventManager?.configureIntegration(name, pluginConfig)) return
+
     const enabled = this._isEnabled(pluginConfig)
 
     this._configsByName[name] = {
@@ -131,6 +133,7 @@ module.exports = class PluginManager {
   configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
+    this._eventManager?.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
@@ -143,7 +146,13 @@ module.exports = class PluginManager {
       this._pluginsByName[name].configure({ enabled: false })
     }
 
+    this._eventManager?.destroy()
+
     loadChannel.unsubscribe(this._loadedSubscriber)
+  }
+
+  setEventManager (eventManager) {
+    this._eventManager = eventManager
   }
 
   _isEnabled (pluginConfig) {

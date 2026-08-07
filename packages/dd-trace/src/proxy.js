@@ -12,6 +12,7 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
+const EventIntegrationManager = require('./events/manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
 const processTags = require('./process-tags')
@@ -99,6 +100,8 @@ class Tracer extends NoopProxy {
     this._initialized = false
     this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
+    this._eventManager = new EventIntegrationManager(this)
+    this._pluginManager.setEventManager(this._eventManager)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
     this._flare = new LazyModule(() => require('./flare'))
