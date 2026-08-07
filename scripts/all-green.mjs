@@ -4,7 +4,7 @@ import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads } from './run-upload.mjs'
-import { uploadJunitForRun } from './upload-junit.mjs'
+import { uploadAllJunit } from './upload-junit.mjs'
 import {
   uploadAllCoverageToDatadog, uploadCoverage, sendCodecovNotifications, hasCodecovCommit,
 } from './upload-coverage.mjs'
@@ -105,42 +105,33 @@ async function getRuns () {
 }
 
 // Runs whose reports have already been downloaded/merged, and the resulting promises — each
-// sibling workflow's reports are downloaded and its junit/Codecov uploads go out as soon as that
+// sibling workflow's reports are downloaded and its Codecov upload goes out as soon as that
 // workflow reaches a final state, instead of waiting for every workflow to finish, so a fast
-// workflow's results land while slower ones are still running. junit needs this same per-run
-// granularity even though it has no per-workflow flag constraint like Codecov: `datadog-ci junit
-// upload` tags every uploaded test with the pipeline name/id/number it reads from
-// GITHUB_WORKFLOW/GITHUB_RUN_ID/GITHUB_RUN_NUMBER in the process environment, and since the upload
-// always runs from inside the All Green job, a single merged upload across every run would
-// attribute every test to the "All Green" workflow instead of the one that produced it — see
-// `uploadJunitForRun`. Datadog coverage has no comparable per-test attribution to lose, so it stays
-// batched into one call after every run is done instead — see `uploadAllCoverageToDatadog`.
+// workflow's Codecov coverage lands while slower ones are still running. The junit and Datadog
+// coverage uploads don't have Codecov's per-workflow flag constraint, so they're batched into one
+// call each after every run is done instead — see `uploadAllJunit`/`uploadAllCoverageToDatadog`.
 const processedRunIds = new Set()
 const processingPromises = []
 
 /**
  * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
- * the junit merge to Datadog (tagged with this run's own CI metadata) and the coverage merge to
- * Codecov.
+ * the coverage merge to Codecov.
  *
- * @param {{ id: number, name: string, run_number: number, run_attempt?: number }} run
+ * @param {{ id: number, name: string }} run
  * @returns {Promise<void>}
  */
 async function processRun (run) {
   const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
 
-  const [junitResults, coverageResults] = await Promise.all([
-    uploadJunitForRun(run),
-    uploadCoverage(run, {
-      sha: HEAD_SHA,
-      branch: HEAD_BRANCH,
-      prNumber: PR_NUMBER,
-      eventName: GITHUB_EVENT_NAME,
-      baseRef: BASE_REF,
-    }),
-  ])
+  const coverageResults = await uploadCoverage(run, {
+    sha: HEAD_SHA,
+    branch: HEAD_BRANCH,
+    prNumber: PR_NUMBER,
+    eventName: GITHUB_EVENT_NAME,
+    baseRef: BASE_REF,
+  })
   const downloadSummary = failed > 0 ? `${downloaded} artifact(s), ${failed} failed` : `${downloaded} artifact(s)`
-  logUploads(`${run.name} (${downloadSummary})`, [...junitResults, ...coverageResults])
+  logUploads(`${run.name} (${downloadSummary})`, coverageResults)
 }
 
 /**
@@ -279,8 +270,8 @@ async function checkAllGreen () {
   console.log(`Waiting for ${processingPromises.length} workflow run report upload(s) to finish.`)
   await Promise.all(processingPromises)
 
-  const coverageResults = await uploadAllCoverageToDatadog()
-  logUploads('coverage (every run)', coverageResults)
+  const [junitResults, coverageResults] = await Promise.all([uploadAllJunit(), uploadAllCoverageToDatadog()])
+  logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
