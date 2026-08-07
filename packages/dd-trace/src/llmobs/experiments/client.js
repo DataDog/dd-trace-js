@@ -31,8 +31,7 @@ function datasetRecordFromResource (resource) {
     attrs.input ?? null,
     attrs.expected_output ?? null,
     attrs.metadata ?? {},
-    String(resource?.id ?? attrs.id ?? '') || null,
-    attrs.valid_from_version ?? attrs.version ?? null
+    String(resource?.id ?? attrs.id ?? '') || null
   )
 }
 
