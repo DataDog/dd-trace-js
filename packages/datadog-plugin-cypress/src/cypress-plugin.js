@@ -1064,9 +1064,13 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    // We need to make sure that the plugin is initialized before running the tests
-    // This is for the case where the user has not returned the promise from the init function
-    await this.libraryConfigurationPromise
+    if (this._isInit) {
+      // The user may not have returned the promise from the init function.
+      await this.libraryConfigurationPromise
+    } else {
+      // Cypress open reuses the same plugin process for every interactive run.
+      await this.init(this.tracer, this.cypressConfig)
+    }
 
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)

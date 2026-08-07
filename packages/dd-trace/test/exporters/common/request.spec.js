@@ -39,6 +39,41 @@ const initHTTPServer = () => {
   })
 }
 
+/**
+ * Holds Nock responses until the test explicitly releases them.
+ *
+ * @param {number} requestCount
+ * @returns {{
+ *   release: (index: number) => void,
+ *   scope: import('nock').Scope,
+ *   waitForRequests: (expectedCount: number) => Promise<void>
+ * }}
+ */
+function interceptControlledRequests (requestCount) {
+  const responseCallbacks = []
+  let waiter
+  const scope = nock('http://test:123')
+    .put('/path')
+    .times(requestCount)
+    .reply((uri, requestBody, callback) => {
+      responseCallbacks.push(callback)
+      if (waiter && responseCallbacks.length >= waiter.expectedCount) {
+        const { resolve } = waiter
+        waiter = undefined
+        resolve()
+      }
+    })
+
+  return {
+    release: index => responseCallbacks[index](null, [200, 'OK']),
+    scope,
+    waitForRequests (expectedCount) {
+      if (responseCallbacks.length >= expectedCount) return Promise.resolve()
+      return new Promise(resolve => { waiter = { expectedCount, resolve } })
+    },
+  }
+}
+
 describe('request', function () {
   let request
   let log
@@ -46,6 +81,30 @@ describe('request', function () {
   let maxAttempts
   let retryStubs
   let runInNoopContext
+
+  /**
+   * Starts requests that occupy the shared active request buffer.
+   *
+   * @param {Buffer} data
+   * @param {number} count
+   * @returns {Promise<void>[]}
+   */
+  function startRequests (data, count) {
+    const requests = []
+    for (let index = 0; index < count; index++) {
+      requests.push(new Promise((resolve, reject) => {
+        request(data, {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {},
+        }, error => error ? reject(error) : resolve())
+      }))
+    }
+    return requests
+  }
 
   beforeEach(() => {
     log = {
@@ -940,81 +999,81 @@ describe('request', function () {
   })
 
   it('reports when a final request reaches its deadline under backpressure', async () => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize)
-    const scope = nock('http://test:123')
-      .put('/path')
-      .times(8)
-      .delay(50)
-      .reply(200, 'OK')
+    const controlledRequests = interceptControlledRequests(8)
 
-    const activeRequests = []
-    for (let index = 0; index < 8; index++) {
-      activeRequests.push(new Promise((resolve, reject) => {
-        request(buffer, {
+    try {
+      const activeRequests = startRequests(buffer, 8)
+
+      const deadlineErrorPromise = new Promise(resolve => {
+        request(Buffer.from('final'), {
           protocol: 'http:',
           hostname: 'test',
           port: 123,
           path: '/path',
           method: 'PUT',
+          deadline: Date.now(),
           headers: {},
-        }, error => error ? reject(error) : resolve())
-      }))
+        }, resolve)
+      })
+
+      await controlledRequests.waitForRequests(8)
+      const deadlineError = await deadlineErrorPromise
+      assert.strictEqual(deadlineError.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+
+      for (let index = 0; index < 8; index++) controlledRequests.release(index)
+      await Promise.all(activeRequests)
+      controlledRequests.scope.done()
+    } finally {
+      clock.restore()
     }
-
-    const deadlineError = await new Promise(resolve => {
-      request(Buffer.from('final'), {
-        protocol: 'http:',
-        hostname: 'test',
-        port: 123,
-        path: '/path',
-        method: 'PUT',
-        deadline: Date.now(),
-        headers: {},
-      }, resolve)
-    })
-
-    assert.strictEqual(deadlineError.code, 'ERR_DD_REQUEST_BUFFER_FULL')
-    await Promise.all(activeRequests)
-    scope.done()
   })
 
   it('waits for backpressure to clear before sending a final request', async () => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize)
-    const scope = nock('http://test:123')
-      .put('/path')
-      .times(9)
-      .delay(50)
-      .reply(200, 'OK')
+    const controlledRequests = interceptControlledRequests(9)
+    const realSetTimeout = setTimeout
+    let retryAfterBackpressure
+    const retryTimer = { unref: sinon.spy() }
+    sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 50) return realSetTimeout(callback, delay, ...args)
+      retryAfterBackpressure = () => callback(...args)
+      return retryTimer
+    })
 
-    const requests = []
-    for (let index = 0; index < 8; index++) {
+    try {
+      const requests = startRequests(buffer, 8)
       requests.push(new Promise((resolve, reject) => {
-        request(buffer, {
+        request(Buffer.from('final'), {
           protocol: 'http:',
           hostname: 'test',
           port: 123,
           path: '/path',
           method: 'PUT',
+          deadline: Date.now() + 1000,
           headers: {},
         }, error => error ? reject(error) : resolve())
       }))
-    }
-    requests.push(new Promise((resolve, reject) => {
-      request(Buffer.from('final'), {
-        protocol: 'http:',
-        hostname: 'test',
-        port: 123,
-        path: '/path',
-        method: 'PUT',
-        deadline: Date.now() + 1000,
-        headers: {},
-      }, error => error ? reject(error) : resolve())
-    }))
 
-    await Promise.all(requests)
-    scope.done()
+      await controlledRequests.waitForRequests(8)
+      assert.strictEqual(typeof retryAfterBackpressure, 'function')
+      sinon.assert.calledOnce(retryTimer.unref)
+
+      controlledRequests.release(0)
+      await requests[0]
+      retryAfterBackpressure()
+      await controlledRequests.waitForRequests(9)
+
+      for (let index = 1; index < 9; index++) controlledRequests.release(index)
+      await Promise.all(requests)
+      controlledRequests.scope.done()
+    } finally {
+      clock.restore()
+    }
   })
 
   describe('stripping the Datadog API key from a non-TLS connection', () => {

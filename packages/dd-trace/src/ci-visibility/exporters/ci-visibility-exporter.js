@@ -471,6 +471,12 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
+    if (isFinalFlush && !this._isInitialized &&
+      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0) {
+      onDone()
+      return
+    }
+
     if (isFinalFlush) {
       finalFlush = {
         callbacks: [onDone],

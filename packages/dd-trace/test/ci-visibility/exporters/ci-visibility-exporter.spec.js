@@ -888,27 +888,49 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('flush', () => {
-    it('waits for exporter initialization before completing a final flush', async () => {
-      const writer = {
-        append: sinon.spy(),
-        flush: sinon.spy((done) => done()),
-        setUrl: sinon.spy(),
+    it('completes immediately when initialization is pending without buffered data', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        const timersBeforeFlush = clock.countTimers()
+        const done = sinon.spy()
+
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledOnceWithExactly(done)
+        assert.strictEqual(clock.countTimers(), timersBeforeFlush)
+      } finally {
+        clock.restore()
       }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url })
-      const done = sinon.spy()
-
-      ciVisibilityExporter.flush(done)
-      sinon.assert.notCalled(done)
-
-      ciVisibilityExporter._writer = writer
-      ciVisibilityExporter._isInitialized = true
-      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-      await Promise.resolve()
-
-      sinon.assert.calledOnce(writer.flush)
-      sinon.assert.calledOnceWithExactly(done, undefined)
-      assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
     })
+
+    for (const [payloadType, writerProperty, exportPayload] of [
+      ['trace', '_writer', exporter => exporter.export([{ type: 'test' }])],
+      ['coverage', '_coverageWriter', exporter => exporter.exportCoverage({})],
+    ]) {
+      it(`waits for exporter initialization with buffered ${payloadType}`, async () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy((done) => done()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        const done = sinon.spy()
+
+        exportPayload(ciVisibilityExporter)
+        ciVisibilityExporter.flush(done)
+        sinon.assert.notCalled(done)
+
+        ciVisibilityExporter[writerProperty] = writer
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        await Promise.resolve()
+
+        sinon.assert.calledOnce(writer.flush)
+        sinon.assert.calledOnceWithExactly(done, undefined)
+        assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
+      })
+    }
 
     it('starts a new final flush after more test data is exported', () => {
       const writer = {
@@ -964,6 +986,7 @@ describe('CI Visibility Exporter', () => {
         beforeExitHandler = [...beforeExitHandlers].at(-1)
         const done = sinon.spy()
 
+        ciVisibilityExporter.export([{ type: 'test' }])
         ciVisibilityExporter.flush(done)
         clock.tick(10_100)
 
