@@ -3,18 +3,48 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 5,
   "instructions": true,
   "variants": {
     "with-depth-off": {
-      "iterations": 7,
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "OPERATIONS": "1150" }
+      "operations_by_node": {
+        "20": "1825",
+        "24": "3650"
+      },
+      "env": {
+        "DEPTH": "0",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "OPERATIONS": "3650",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "6", "OPERATIONS": "800" }
+      "operations_by_node": {
+        "20": "1200",
+        "24": "2400"
+      },
+      "env": {
+        "COLLAPSE": "1",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "OPERATIONS": "2600",
+        "DEPTH": "6",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
+      "operations_by_node": {
+        "20": "400",
+        "24": "600"
+      },
+      "env": {
+        "COLLAPSE": "0",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "OPERATIONS": "600",
+        "DEPTH": "4",
+        "WITH_TRACER": "1"
+      }
     }
   }
 }
