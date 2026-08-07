@@ -31,6 +31,8 @@ const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 
+let loggerProvider
+
 /**
  * Initializes OpenTelemetry Logs support
  * @param {import('../../config/config-base')} config - Tracer configuration instance
@@ -75,13 +77,18 @@ function initializeOpenTelemetryLogs (config) {
   )
 
   // Create logger provider with processor for Datadog Agent export
-  const loggerProvider = new LoggerProvider({ processor })
+  loggerProvider = new LoggerProvider({ processor })
 
   // Register the logger provider globally with OpenTelemetry API
   loggerProvider.register()
 }
 
+function getLoggerProvider () {
+  return loggerProvider
+}
+
 module.exports = {
   LoggerProvider,
+  getLoggerProvider,
   initializeOpenTelemetryLogs,
 }

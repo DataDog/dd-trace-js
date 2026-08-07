@@ -143,6 +143,52 @@ class DatadogTracer extends Tracer {
     this._dataStreamsProcessor.setUrl(url)
   }
 
+  /**
+   * Flushes every configured telemetry pipeline.
+   * @param {Function} [done] Called after every configured export completes
+   */
+  flushAll (done = () => {}) {
+    const flushers = []
+
+    if (typeof this._exporter?.flush === 'function') {
+      flushers.push(callback => this._exporter.flush(callback))
+    }
+
+    const { getLoggerProvider } = require('./opentelemetry/logs')
+    const { getMeterProvider } = require('./opentelemetry/metrics')
+    const loggerProvider = getLoggerProvider()
+    const meterProvider = getMeterProvider()
+
+    if (typeof loggerProvider?.forceFlush === 'function') {
+      flushers.push(callback => loggerProvider.forceFlush(callback))
+    }
+    if (typeof meterProvider?.forceFlush === 'function') {
+      flushers.push(callback => meterProvider.forceFlush(callback))
+    }
+
+    let pending = flushers.length
+    if (pending === 0) return done()
+
+    const complete = () => {
+      if (--pending === 0) done()
+    }
+
+    for (const flush of flushers) {
+      let flushed = false
+      const onFlushed = () => {
+        if (flushed) return
+        flushed = true
+        complete()
+      }
+      try {
+        const result = flush(onFlushed)
+        result?.then(onFlushed, onFlushed)
+      } catch {
+        onFlushed()
+      }
+    }
+  }
+
   scope () {
     return this._scope
   }

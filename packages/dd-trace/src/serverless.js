@@ -2,6 +2,11 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const VERCEL_REQUEST_CONTEXTS = [
+  Symbol.for('@next/request-context'),
+  Symbol.for('@vercel/request-context'),
+]
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -42,10 +47,47 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
+function isVercelEnvironment () {
+  return getEnvironmentVariable('VERCEL') === '1'
+}
+
+function getVercelRequestEndHandler (tracer) {
+  if (!isVercelEnvironment()) return
+
+  const internalTracer = tracer?._tracer || tracer
+  const flushAll = internalTracer?.flushAll
+  if (typeof flushAll !== 'function') return
+
+  return function onVercelRequestEnd () {
+    for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
+      try {
+        const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+        if (typeof waitUntil !== 'function') continue
+
+        let done
+        const pending = new Promise(resolve => { done = resolve })
+        waitUntil(pending)
+        try {
+          flushAll.call(internalTracer, done)
+        } catch {
+          done()
+        }
+        return true
+      } catch {
+        // The other request-context implementation may still be available.
+      }
+    }
+
+    return false
+  }
+}
+
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  getVercelRequestEndHandler,
+  isVercelEnvironment,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

@@ -10,6 +10,8 @@ const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
+let meterProvider
+
 /**
  * @typedef {import('../../config')} Config
  */
@@ -74,8 +76,12 @@ function initializeOpenTelemetryMetrics (config) {
     config.OTEL_BSP_MAX_QUEUE_SIZE
   )
 
-  const meterProvider = new MeterProvider({ reader })
+  meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+}
+
+function getMeterProvider () {
+  return meterProvider
 }
 
 function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
@@ -124,6 +130,7 @@ function createOtlpSpanStatsExporter (config) {
 
 module.exports = {
   MeterProvider,
+  getMeterProvider,
   initializeOpenTelemetryMetrics,
   buildResourceAttributes,
   createOtlpSpanStatsExporter,

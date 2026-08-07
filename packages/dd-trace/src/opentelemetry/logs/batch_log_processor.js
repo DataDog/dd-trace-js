@@ -54,10 +54,18 @@ class BatchLogRecordProcessor {
 
   /**
    * Forces an immediate flush of all pending log records.
-   * @returns {undefined} Promise that resolves when flush is complete
+   * @param {Function} [done] Called after all pending log exports complete
    */
-  forceFlush () {
-    this.#export()
+  forceFlush (done = () => {}) {
+    const flush = () => {
+      if (this.#logRecords.length === 0) {
+        done()
+        return
+      }
+      this.#export(flush)
+    }
+
+    flush()
   }
 
   /**
@@ -78,12 +86,12 @@ class BatchLogRecordProcessor {
    * Exports the current batch of log records.
    * @private
    */
-  #export () {
+  #export (done = () => {}) {
     const logRecords = this.#logRecords.slice(0, this.#maxExportBatchSize)
     this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
 
     this.#clearTimer()
-    this.exporter.export(logRecords, () => {})
+    this.exporter.export(logRecords, done)
   }
 
   /**
