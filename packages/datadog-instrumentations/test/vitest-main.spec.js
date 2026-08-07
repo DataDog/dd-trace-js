@@ -4,6 +4,117 @@ const assert = require('node:assert/strict')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
+const {
+  getProvidedContext,
+  parseProvidedContextValue,
+  setProvidedContext,
+} = require('../src/vitest-util')
+
+describe('vitest utilities', () => {
+  describe('browser-safe provided context', () => {
+    it('leaves safe values unchanged', () => {
+      const context = { knownTests: ['safe test'] }
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddUndefined: undefined,
+        _ddNull: null,
+        _ddBoolean: false,
+        _ddNumber: 42,
+        _ddString: 'safe test',
+        _ddContext: context,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddUndefined, undefined)
+      assert.strictEqual(providedContext._ddNull, null)
+      assert.strictEqual(providedContext._ddBoolean, false)
+      assert.strictEqual(providedContext._ddNumber, 42)
+      assert.strictEqual(providedContext._ddString, 'safe test')
+      assert.strictEqual(providedContext._ddContext, context)
+      assert.strictEqual(parseProvidedContextValue('safe test'), 'safe test')
+      assert.strictEqual(parseProvidedContextValue(context), context)
+    })
+
+    it('rejects malformed serialized context', () => {
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddTestPropertiesByFilepath: { knownTests: ['test containing </script>'] },
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath.slice(0, -1)), undefined)
+    })
+
+    it('escapes every Datadog-provided value without changing user context', () => {
+      const providedContext = {}
+      const userContext = { testName: '</script>' }
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddIsKnownTestsEnabled: true,
+        _ddTestCommand: testCommand,
+        userContext,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddIsKnownTestsEnabled, true)
+      assert.ok(!providedContext._ddTestCommand.includes('<'))
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestCommand), testCommand)
+      assert.strictEqual(providedContext.userContext, userContext)
+    })
+
+    it('restores every Datadog-provided value for workers', () => {
+      const providedContext = {}
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const testPropertiesByFilepath = {
+        'test.mjs': { knownTests: ['test containing </ScRiPt> and <markup>'] },
+      }
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+      const previousWorker = globalThis.__vitest_worker__
+
+      setProvidedContext(ctx, {
+        _ddTestCommand: testCommand,
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      }, 'Could not set provided context.')
+      globalThis.__vitest_worker__ = { providedContext }
+
+      try {
+        assert.ok(!providedContext._ddTestCommand.includes('<'))
+        assert.ok(!providedContext._ddTestPropertiesByFilepath.includes('<'))
+
+        const restoredContext = getProvidedContext()
+
+        assert.strictEqual(restoredContext.testCommand, testCommand)
+        assert.deepStrictEqual(restoredContext.testPropertiesByFilepath, testPropertiesByFilepath)
+      } finally {
+        if (previousWorker === undefined) {
+          delete globalThis.__vitest_worker__
+        } else {
+          globalThis.__vitest_worker__ = previousWorker
+        }
+      }
+    })
+  })
+})
+
 describe('vitest main instrumentation', () => {
   it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
     const hooks = []
