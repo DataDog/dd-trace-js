@@ -21,11 +21,13 @@ tracer.use('pg', {
 })
 ```
 
-The `langchain` and `modelcontextprotocol-sdk` integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:
+LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
+
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
 
 ```javascript
-// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.
-tracer.use('modelcontextprotocol-sdk', {
+// Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
+tracer.use('openai', {
   llmobs: false
 })
 ```
