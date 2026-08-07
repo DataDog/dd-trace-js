@@ -1,7 +1,6 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { extractContext } = require('./helpers/azure-trace-context')
 const {
   endSpan,
   getTracer,
@@ -67,29 +66,56 @@ function orchestrationWrapper (method) {
 function wrapOrchestrationHandler (handler, functionName) {
   return function * (...args) {
     const invocationContext = args[0]
-    if (invocationContext?.df?.isReplaying) {
-      yield * handler.apply(this, args)
-      return
+    const { extractContext, getInstanceId } = require('./helpers/azure-trace-context')
+    const {
+      getOrchestrationSpan,
+      registerOrchestrationSpan,
+      unregisterOrchestrationSpan,
+    } = require('./helpers/otel-orchestration-registry')
+    const { publishOrchestrationSpanMetaSync } = require('./helpers/otel-orchestration-store')
+
+    const instanceId = getInstanceId(invocationContext)
+
+    function startOrchestrationSpan () {
+      const parentContext = extractContext(invocationContext?.traceContext)
+      const span = getTracer(TRACER_NAME).startSpan(
+        `orchestration ${functionName}`,
+        { attributes: spanAttributes(functionName, 'durable-orchestration') },
+        parentContext,
+      )
+      registerOrchestrationSpan(instanceId, span)
+      return span
     }
 
-    const parentContext = extractContext(invocationContext?.traceContext)
-    const span = getTracer(TRACER_NAME).startSpan(
-      `orchestration ${functionName}`,
-      { attributes: spanAttributes(functionName, 'durable-orchestration') },
-      parentContext,
-    )
+    function finishOrchestrationSpan (span) {
+      if (!span) return
+      publishOrchestrationSpanMetaSync(instanceId, span)
+      endSpan(span)
+      unregisterOrchestrationSpan(instanceId)
+    }
+
+    let span = getOrchestrationSpan(instanceId)
+    if (!span) {
+      span = startOrchestrationSpan()
+    }
 
     try {
       const gen = handler.apply(this, args)
       let step = gen.next()
       while (!step.done) {
+        finishOrchestrationSpan(span)
+        span = null
         const input = yield step.value
+        if (!span) {
+          span = startOrchestrationSpan()
+        }
         step = gen.next(input)
       }
-      endSpan(span)
+      finishOrchestrationSpan(span)
+      span = null
       return step.value
     } catch (error) {
-      endSpan(span, error)
+      finishOrchestrationSpan(span)
       throw error
     }
   }

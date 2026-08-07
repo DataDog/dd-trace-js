@@ -25,13 +25,26 @@ function spanAttributes (functionName, trigger, operationName) {
   }
 }
 
+function startChildSpan (tracerName, trigger, functionName, operationName, args, parentContext) {
+  return getTracer(tracerName).startSpan(
+    `${trigger} ${functionName}`,
+    { attributes: spanAttributes(functionName, trigger, operationName) },
+    parentContext,
+  )
+}
+
 function wrapSyncWithTraceContext (tracerName, trigger, handler, functionName, operationName) {
   return function (...args) {
-    const { runWithInvocationContext } = require('./azure-trace-context')
+    const { runWithInvocationContext, buildSpanParentContext } = require('./azure-trace-context')
     return runWithInvocationContext(args, trigger, () => {
-      const span = getTracer(tracerName).startSpan(`${trigger} ${functionName}`, {
-        attributes: spanAttributes(functionName, trigger, operationName),
-      })
+      const span = startChildSpan(
+        tracerName,
+        trigger,
+        functionName,
+        operationName,
+        args,
+        buildSpanParentContext(args, trigger),
+      )
       try {
         const result = handler.apply(this, args)
         endSpan(span)
@@ -46,11 +59,17 @@ function wrapSyncWithTraceContext (tracerName, trigger, handler, functionName, o
 
 function wrapAsyncWithTraceContext (tracerName, trigger, handler, functionName) {
   return function (...args) {
-    const { runWithInvocationContext } = require('./azure-trace-context')
-    return runWithInvocationContext(args, trigger, () =>
-      getTracer(tracerName).startActiveSpan(
+    const {
+      runWithInvocationContext,
+      buildSpanParentContextAsync,
+    } = require('./azure-trace-context')
+
+    return runWithInvocationContext(args, trigger, async () => {
+      const parentContext = await buildSpanParentContextAsync(args, trigger)
+      return getTracer(tracerName).startActiveSpan(
         `${trigger} ${functionName}`,
         { attributes: spanAttributes(functionName, trigger) },
+        parentContext,
         async (span) => {
           try {
             const result = await handler.apply(this, args)
@@ -61,7 +80,8 @@ function wrapAsyncWithTraceContext (tracerName, trigger, handler, functionName) 
             throw error
           }
         },
-      ))
+      )
+    })
   }
 }
 

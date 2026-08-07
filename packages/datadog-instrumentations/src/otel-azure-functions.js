@@ -47,24 +47,50 @@ function traceGenericOrchestrationHandler (handler, functionName) {
       return handler.apply(this, args)
     }
 
-    const { runWithInvocationContext } = require('./helpers/azure-trace-context')
-    const { getTracer, spanAttributes, endSpan } = require('./helpers/otel-azure-span')
+    const { runWithInvocationContext, getInstanceId } = require('./helpers/azure-trace-context')
+    const {
+      getTracer,
+      spanAttributes,
+      endSpan,
+    } = require('./helpers/otel-azure-span')
+    const {
+      registerOrchestrationSpan,
+      unregisterOrchestrationSpan,
+    } = require('./helpers/otel-orchestration-registry')
 
-    return runWithInvocationContext(args, 'orchestration-generic', () =>
-      getTracer(TRACER_NAME).startActiveSpan(
+    return runWithInvocationContext(args, 'orchestration-generic', () => {
+      const invocationContext = args[1]
+      const instanceId = getInstanceId(invocationContext)
+      const { getOrchestrationSpan } = require('./helpers/otel-orchestration-registry')
+      const existingSpan = getOrchestrationSpan(instanceId)
+
+      if (existingSpan) {
+        return handler.apply(this, args)
+      }
+
+      return getTracer(TRACER_NAME).startActiveSpan(
         `orchestration ${functionName}`,
         { attributes: spanAttributes(functionName, 'durable-orchestration') },
         async (span) => {
+          registerOrchestrationSpan(instanceId, span)
           try {
             const result = await handler.apply(this, args)
-            span.end()
+            const runtimeStatus = invocationContext?.traceContext?.attributes?.DurableFunctionsRuntimeStatus
+            if (runtimeStatus === 'Completed' || runtimeStatus === 'Failed' || runtimeStatus === 'Terminated') {
+              const { publishOrchestrationSpanMetaSync } = require('./helpers/otel-orchestration-store')
+              publishOrchestrationSpanMetaSync(instanceId, span)
+              span.end()
+              unregisterOrchestrationSpan(instanceId)
+            }
             return result
           } catch (error) {
             endSpan(span, error)
+            unregisterOrchestrationSpan(instanceId)
             throw error
           }
         },
-      ))
+      )
+    })
   }
 }
 

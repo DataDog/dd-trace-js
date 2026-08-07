@@ -5,8 +5,10 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 const {
+  buildSpanParentContext,
   carrierFromTraceContext,
   extractContext,
+  getInstanceId,
   getInvocationContext,
   runWithTraceContext,
 } = require('../../src/helpers/azure-trace-context')
@@ -46,9 +48,59 @@ describe('azure-trace-context', () => {
       assert.equal(getInvocationContext([ctx], 'durable-orchestration'), ctx)
     })
 
-    it('reads durable activity context from the last argument', () => {
+    it('reads durable activity context from any argument with traceContext', () => {
       const ctx = { traceContext: { traceParent: '00-a-b-01' } }
+      assert.equal(getInvocationContext([ctx], 'durable-activity'), ctx)
       assert.equal(getInvocationContext(['input', ctx], 'durable-activity'), ctx)
+    })
+  })
+
+  describe('getInstanceId', () => {
+    it('reads the durable instance id from traceContext attributes', () => {
+      assert.equal(getInstanceId({
+        traceContext: {
+          attributes: {
+            'durabletask.task.instance_id': 'abc123',
+          },
+        },
+      }), 'abc123')
+    })
+  })
+
+  describe('buildSpanParentContext', () => {
+    it('parents activity spans to the in-flight orchestration span', () => {
+      const api = require('@opentelemetry/api')
+      const {
+        registerOrchestrationSpan,
+        unregisterOrchestrationSpan,
+      } = require('../../src/helpers/otel-orchestration-registry')
+
+      const orchestrationSpan = {
+        spanContext () {
+          return {
+            traceId: '00000000000000000000000000000001',
+            spanId: '0000000000000002',
+            traceFlags: 1,
+          }
+        },
+      }
+
+      registerOrchestrationSpan('abc123', orchestrationSpan)
+
+      const activityContext = {
+        traceContext: {
+          traceParent: '00-00000000000000000000000000000001-0000000000000003-00',
+          attributes: {
+            'durabletask.task.instance_id': 'abc123',
+          },
+        },
+      }
+
+      const parentContext = buildSpanParentContext(['input', activityContext], 'durable-activity')
+      const span = api.trace.getSpan(parentContext)
+
+      assert.equal(span, orchestrationSpan)
+      unregisterOrchestrationSpan('abc123')
     })
   })
 
@@ -67,9 +119,9 @@ describe('azure-trace-context', () => {
   })
 
   describe('extractContext', () => {
-    it('returns active context when traceContext is missing', () => {
-      const active = extractContext(undefined)
-      assert.ok(active)
+    it('returns root context when traceContext is missing', () => {
+      const root = extractContext(undefined)
+      assert.ok(root)
     })
   })
 })
