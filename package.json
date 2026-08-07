@@ -9,6 +9,7 @@
     "prepare": "node scripts/patch-istanbul-lib-coverage.js && node scripts/patch-v8-to-istanbul.js && cd vendor && npm ci --include=dev",
     "prepack": "node scripts/release/swap-v5-types.js",
     "bench": "node benchmark/index.js",
+    "bench:native-spans:express": "node benchmark/native-spans-express/run.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
     "generate:config:types": "node scripts/generate-config-types.js",
