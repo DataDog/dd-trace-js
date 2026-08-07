@@ -86,6 +86,27 @@ class NoopExperiment {
   run () {
     return Promise.resolve({ experimentId: null, rows: [], url: null })
   }
+
+  /**
+   * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
+   */
+  submitSpan () {
+    return Promise.resolve({ experimentId: null, spanId: null, traceId: null, url: null })
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics () {
+    return Promise.resolve()
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  close () {
+    return Promise.resolve()
+  }
 }
 
 // No-op Experiments used when LLM Observability is disabled or the API/APP keys
@@ -93,9 +114,11 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
+  #startExperiment
 
-  constructor (reason) {
+  constructor (reason, options = {}) {
     this.#reason = reason || 'LLMObs experiments are not available'
+    this.#startExperiment = options.startExperiment
   }
 
   #warn () {
@@ -115,6 +138,19 @@ class NoopExperiments {
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<NoopExperiment>}
+   */
+  startExperiment (options = {}) {
+    if (this.#startExperiment !== undefined && options.projectName) {
+      return this.#startExperiment(options)
+    }
+
+    this.#warn()
+    return Promise.resolve(new NoopExperiment(options.name))
   }
 }
 

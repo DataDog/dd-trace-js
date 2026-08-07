@@ -26,17 +26,27 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #config
   #llmobs
   #projectName
 
   constructor (config, llmobs) {
+    this.#config = config
     this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
-    this.#client = new ExperimentsClient({
-      apiKey: config.DD_API_KEY,
-      appKey: config.DD_APP_KEY,
-      site: config.site,
-      projectName: this.#projectName,
+    this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  /**
+   * @param {string} projectName
+   * @returns {ExperimentsClient}
+   */
+  #clientForProject (projectName) {
+    return new ExperimentsClient({
+      apiKey: this.#config.DD_API_KEY,
+      appKey: this.#config.DD_APP_KEY,
+      site: this.#config.site,
+      projectName,
     })
   }
 
@@ -152,6 +162,21 @@ class Experiments {
   experiment (options) {
     return new Experiment(this.#client, options, this.#llmobs)
   }
+
+  /**
+   * Start an externally-driven experiment for eval frameworks that already own
+   * task execution. Call submitSpan() once per completed row, then
+   * submitEvaluationMetrics() with the generated span id.
+   *
+   * @param {object} options
+   * @returns {Promise<Experiment>}
+   */
+  startExperiment (options) {
+    const client = options?.projectName === undefined || options.projectName === this.#projectName
+      ? this.#client
+      : this.#clientForProject(options.projectName)
+    return new Experiment(client, { ...options, external: true }).start()
+  }
 }
 
 // Factory used by the LLMObs SDK: returns a real Experiments instance when
@@ -165,12 +190,13 @@ function createExperiments (config, llmobs) {
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }
   if (!config.llmobs?.mlApp && !config.service) {
-    log.warn('LLMObs experiments: no project name configured, set DD_LLMOBS_ML_APP or DD_SERVICE')
-    return new NoopExperiments(
-      'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
+    const reason = 'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
       'tracer.init()) to name the LLM Obs project, or DD_SERVICE (or service in tracer.init()) as a fallback, ' +
       'then retry'
-    )
+    const experiments = new Experiments(config, llmobs)
+    return new NoopExperiments(reason, {
+      startExperiment: (options) => experiments.startExperiment(options),
+    })
   }
   return new Experiments(config, llmobs)
 }
