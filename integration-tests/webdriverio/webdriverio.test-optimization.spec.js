@@ -156,7 +156,6 @@ for (const version of versions) {
       `@wdio/mocha-framework@${version}`,
     ], true, [
       './integration-tests/webdriverio/fixtures/*',
-      './integration-tests/webdriverio/fixtures/subdirectory',
       './integration-tests/ci-visibility/dynamic-instrumentation/dependency.js',
     ])
 
