@@ -54,6 +54,7 @@
   "graphql/utilities/index.mjs": "graphql",
   "graphql/validation/validate.js": "graphql",
   "graphql/validation/validate.mjs": "graphql",
+  "jasmine-core/lib/jasmine-core/jasmine.js": "jasmine-core",
   "mercurius/index.js": "mercurius",
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
