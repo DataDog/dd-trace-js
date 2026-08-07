@@ -183,6 +183,7 @@ class Tracer extends NoopProxy {
         tracingRemoteConfig.enable(rc, config, () => {
           this.#updateTracing(config)
           this.#updateDebugger(config, rc)
+          this.#updateProfiler(config)
         })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
@@ -227,7 +228,7 @@ class Tracer extends NoopProxy {
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
           ssiHeuristics.onTriggered(() => {
-            this._startProfiler(config)
+            this._profilerStarted = this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
@@ -409,6 +410,27 @@ class Tracer extends NoopProxy {
       log.debug('[proxy] Stopping Dynamic Instrumentation via remote config')
       DynamicInstrumentation.stop()
     }
+  }
+
+  /**
+   * Starts the profiler if remote config has turned it on and it isn't already running.
+   * Does not support stopping an already-started profiler via remote config.
+   *
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  #updateProfiler (config) {
+    const enabled = config.profiling.DD_PROFILING_ENABLED
+    if (enabled !== 'true') {
+      // Reset the sentinel so a later re-enable retries a start, even after a prior failed attempt.
+      this._profilerRcValueSeen = enabled
+      return
+    }
+    // Only retry on a change to this value, so a failed start isn't retried (and re-logged) on
+    // every unrelated remote config update while the value stays unchanged.
+    if (this._profilerStarted || enabled === this._profilerRcValueSeen) return
+    this._profilerRcValueSeen = enabled
+    log.debug('[proxy] Starting profiler via remote config')
+    this._profilerStarted = this._startProfiler(config)
   }
 
   /**
