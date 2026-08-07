@@ -406,6 +406,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 /**
  * @param {object} options
  * @param {string} options.plugin
+ * @param {object} [options.pluginConfig] - config passed to `tracer.use(plugin, ...)`
  * @param {object} options.tracerConfigOptions
  * @returns {{
  *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
@@ -415,6 +416,7 @@ function fromBuffer (spanProperty, isNumber = false) {
  */
 function useLlmObs ({
   plugin,
+  pluginConfig = {},
   tracerConfigOptions = {},
 } = {}) {
   /** @type {ReturnType<typeof agent.assertSomeTraces>} */
@@ -436,7 +438,7 @@ function useLlmObs ({
   })
 
   before(async () => {
-    await agent.load(plugin, {}, {
+    await agent.load(plugin, pluginConfig, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false,
