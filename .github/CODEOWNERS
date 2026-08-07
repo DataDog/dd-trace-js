@@ -416,6 +416,8 @@
 /packages/dd-trace/test/setup/ @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
 
+/.llm-validation/ @DataDog/lang-platform-js
+
 # Multiple teams
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
