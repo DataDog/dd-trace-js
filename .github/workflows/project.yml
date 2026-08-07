@@ -57,6 +57,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run test:release
       - run: npm run test:scripts
+      - run: npm run test:examples
 
   generated-config-types:
     runs-on: ubuntu-latest
