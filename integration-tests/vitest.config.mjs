@@ -26,6 +26,10 @@ const config = {
   },
 }
 
+if (process.env.VITEST_THROWING_REPORTER) {
+  config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
+}
+
 if (process.env.VITEST_PRESERVE_SYMLINKS) {
   config.resolve = {
     preserveSymlinks: true,

@@ -9,13 +9,13 @@ const log = require('../../dd-trace/src/log')
  * preserving the user's error as the framework-visible failure.
  *
  * @param {Promise<void>} userHandlers
- * @param {() => unknown} finalizer
+ * @param {(userError?: unknown) => unknown} finalizer
  * @returns {Promise<unknown>}
  */
 function finalizeAfterUserHandlers (userHandlers, finalizer) {
   return userHandlers.then(
     () => finalizer(),
-    userError => Promise.resolve().then(finalizer).then(
+    userError => Promise.resolve().then(() => finalizer(userError)).then(
       () => { throw userError },
       finalizerError => {
         log.error('Datadog Cypress finalizer failed after a user handler error', finalizerError)
@@ -56,7 +56,8 @@ class CypressPlugin extends Plugin {
             Promise.resolve()
           )
           if (afterRunHandler) {
-            return finalizeAfterUserHandlers(chain, () => afterRunHandler(results)).finally(cleanupWrapper)
+            return finalizeAfterUserHandlers(chain, userError => afterRunHandler(results, userError))
+              .finally(cleanupWrapper)
           }
           return chain.finally(cleanupWrapper)
         })
@@ -122,10 +123,10 @@ class CypressPlugin extends Plugin {
           (p, h) => p.then(() => h(spec, results)),
           Promise.resolve()
         )
-        return finalizeAfterUserHandlers(chain, () => cypressPlugin.afterSpec(spec, results))
+        return finalizeAfterUserHandlers(chain, userError => cypressPlugin.afterSpec(spec, results, userError))
       })
 
-      registerAfterRunWithCleanup((results) => cypressPlugin.afterRun(results))
+      registerAfterRunWithCleanup((results, userError) => cypressPlugin.afterRun(results, userError))
 
       on('task', cypressPlugin.getTasks())
 

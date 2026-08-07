@@ -502,7 +502,13 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          assert.ok(events.some(event => event.type === 'test_session_end'))
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom after:run failed/)
+          }
         },
         { hardTimeout: 60000 }
       )

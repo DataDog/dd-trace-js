@@ -585,6 +585,7 @@ class CypressPlugin {
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
+    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -1252,18 +1253,26 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun (suiteStats, error) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+        for (const testSuiteSpan of this.finishedTestSuiteSpans) {
+          testSuiteSpan.setTag(TEST_STATUS, 'fail')
+          testSuiteSpan.setTag('error', error)
+        }
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -1358,7 +1367,7 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results) {
+  afterSpec (spec, results, error) {
     const { tests, stats, screenshots } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
@@ -1586,13 +1595,14 @@ class CypressPlugin {
 
     const finishSuite = () => {
       if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
+        const status = error ? 'fail' : getSuiteStatus(stats)
         this.testSuiteSpan.setTag(TEST_STATUS, status)
 
-        if (latestError) {
-          this.testSuiteSpan.setTag('error', latestError)
+        if (error || latestError) {
+          this.testSuiteSpan.setTag('error', error || latestError)
         }
         this.testSuiteSpan.finish()
+        this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }

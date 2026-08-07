@@ -715,6 +715,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
+      isFrameworkError,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -730,6 +731,12 @@ class MochaPlugin extends CiPlugin {
         if (error) {
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
+          if (isFrameworkError) {
+            for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
+              testSuiteSpan.setTag(TEST_STATUS, 'fail')
+              testSuiteSpan.setTag('error', error)
+            }
+          }
         }
 
         if (isParallel) {
