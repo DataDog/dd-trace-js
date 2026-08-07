@@ -1,4 +1,5 @@
-import { mergeAllRunsCoverage, mergeRunCoverage } from './group-coverage.mjs'
+import { existsSync } from 'node:fs'
+import { OUTPUT_DIR, mergeRunCoverage } from './group-coverage.mjs'
 import { logUploads, runUpload, runUploadWithRetry } from './run-upload.mjs'
 
 // Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail.
@@ -108,18 +109,19 @@ export async function uploadCoverage (run, options) {
 }
 
 /**
- * Merge every sibling workflow's already-per-run-merged lcov file into one and upload it to Datadog
- * in a single call, instead of uploading each workflow run's coverage separately — Datadog's
- * coverage flag doesn't vary per run, so nothing needs the per-run separation Codecov's flags
- * require (see `uploadCoverage`).
+ * Upload every sibling workflow's already-per-run-merged lcov file to Datadog in a single call,
+ * instead of uploading each workflow run's coverage separately — Datadog's coverage flag doesn't
+ * vary per run, so nothing needs the per-run separation Codecov's flags require (see
+ * `uploadCoverage`). `datadog-ci coverage upload` recursively discovers every report file under a
+ * given path by default, so there's no need to merge every run's lcov file into one document first,
+ * the way junit upload used to (see `upload-junit.mjs`).
  *
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
 export async function uploadAllCoverageToDatadog () {
-  const lcovDir = mergeAllRunsCoverage()
-  if (!lcovDir) return []
+  if (!existsSync(OUTPUT_DIR)) return []
 
-  const result = await runUpload('datadog-ci', ['coverage', 'upload', lcovDir, '--flags', 'coverage'])
+  const result = await runUpload('datadog-ci', ['coverage', 'upload', OUTPUT_DIR, '--flags', 'coverage'])
   return [result]
 }
 
