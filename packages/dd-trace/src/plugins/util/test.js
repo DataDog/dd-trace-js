@@ -550,6 +550,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getFailedTestReplayPromise,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -1602,6 +1603,22 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+/**
+ * Combines the optional Failed Test Replay operations that must settle before a retry.
+ *
+ * @param {{setProbePromise?: Promise<void>, finishTestPromise?: Promise<void>}} promises
+ * @returns {Promise<void>|undefined}
+ */
+function getFailedTestReplayPromise (promises) {
+  if (promises.setProbePromise && promises.finishTestPromise) {
+    return Promise.all([
+      promises.setProbePromise,
+      promises.finishTestPromise,
+    ]).then(() => {})
+  }
+  return promises.setProbePromise || promises.finishTestPromise
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
