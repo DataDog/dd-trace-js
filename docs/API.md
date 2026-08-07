@@ -49,6 +49,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="azure-durable-functions"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
+<h5 id="browser-bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
 <h5 id="child_process"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
@@ -134,6 +135,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
+* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
 * [child_process](./interfaces/export_.plugins.child_process.html)
 * [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)

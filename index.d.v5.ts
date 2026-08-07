@@ -245,6 +245,7 @@ interface Plugins {
   "azure-durable-functions": tracer.plugins.azure_durable_functions
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
+  "browser-bunyan": tracer.plugins.browser_bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
   "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
@@ -2473,12 +2474,6 @@ declare namespace tracer {
       interface azure_durable_functions extends Integration {}
 
     /**
-     * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
-     * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
-     * on the tracer.
-     */
-    /**
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
@@ -2498,7 +2493,21 @@ declare namespace tracer {
       producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
     }
 
+    /**
+     * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
+     * to automatically inject trace identifiers in log records when the
+     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * on the tracer.
+     */
     interface bunyan extends Integration {}
+
+    /**
+     * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
+     * to automatically inject trace identifiers in log records when the
+     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * on the tracer.
+     */
+    interface browser_bunyan extends Integration {}
 
     /**
      * This plugin automatically instruments the

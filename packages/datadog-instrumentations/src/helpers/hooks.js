@@ -72,6 +72,7 @@ module.exports = {
   'body-parser': () => require('../body-parser'),
   bullmq: () => require('../bullmq'),
   bunyan: () => require('../bunyan'),
+  'browser-bunyan': () => require('../browser-bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),
   connect: () => require('../connect'),
   cookie: () => require('../cookie'),

@@ -308,6 +308,7 @@ tracer.use('azure-functions');
 tracer.use('bullmq');
 tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
+tracer.use('browser-bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('child_process');

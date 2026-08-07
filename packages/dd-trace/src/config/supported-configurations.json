@@ -2473,6 +2473,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_CASSANDRA_DRIVER_ENABLED": [
       {
         "implementation": "A",
