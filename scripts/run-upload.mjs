@@ -17,12 +17,16 @@ import { setTimeout as sleep } from 'node:timers/promises'
  *
  * @param {string} command
  * @param {string[]} args
+ * @param {Record<string, string>} [env] Overrides merged on top of `process.env` for this call only.
  * @returns {Promise<UploadResult>}
  */
-function spawnUpload (command, args) {
+function spawnUpload (command, args, env) {
   return new Promise(resolve => {
     const start = Date.now()
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: env ? { ...process.env, ...env } : process.env,
+    })
     let output = ''
     child.stdout.on('data', chunk => { output += chunk })
     child.stderr.on('data', chunk => { output += chunk })
@@ -40,10 +44,11 @@ function spawnUpload (command, args) {
  *
  * @param {string} command
  * @param {string[]} args
+ * @param {Record<string, string>} [env] Overrides merged on top of `process.env` for this call only.
  * @returns {Promise<UploadResult>}
  */
-export async function runUpload (command, args) {
-  const result = await spawnUpload(command, args)
+export async function runUpload (command, args, env) {
+  const result = await spawnUpload(command, args, env)
   if (result.code !== 0) process.exitCode = 1
   return result
 }
