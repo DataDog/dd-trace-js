@@ -32,10 +32,6 @@ function rewriteResult (result, url, format) {
         rewriter = require('./index.js')
       }
 
-      // Orchestrion drops a leading hashbang and emits the same number of lines
-      // either way, so restoring it here would shift every source map mapping by
-      // one line. Neither compiler needs it: Node accepts CommonJS and ESM source
-      // without a hashbang.
       result.source = rewriter.rewrite(result.source, url, format, target)
     }
   }
