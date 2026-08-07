@@ -42,7 +42,36 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
+/**
+ * Gets tags describing the platform where the tracer is running.
+ *
+ * @returns {Record<string, string>}
+ */
+function getPlatformTags () {
+  return getVercelTags()
+}
+
+/**
+ * @returns {Record<string, string>}
+ */
+function getVercelTags () {
+  if (getEnvironmentVariable('VERCEL') !== '1') return {}
+
+  const tags = {
+    'vercel.project_id': getEnvironmentVariable('VERCEL_PROJECT_ID'),
+    'vercel.environment': getEnvironmentVariable('VERCEL_ENV'),
+    'vercel.region': getEnvironmentVariable('VERCEL_REGION'),
+  }
+
+  for (const [name, value] of Object.entries(tags)) {
+    if (!value) delete tags[name]
+  }
+
+  return tags
+}
+
 module.exports = {
+  getPlatformTags,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
