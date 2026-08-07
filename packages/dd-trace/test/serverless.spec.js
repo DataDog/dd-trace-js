@@ -6,7 +6,7 @@ const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, onRequestEnd } = require('../src/serverless')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -34,5 +34,62 @@ describe('enableGCPPubSubPushSubscription', () => {
     process.env.K_SERVICE = 'svc'
     process.env.DD_TRACE_GCP_PUBSUB_PUSH_ENABLED = 'false'
     assert.strictEqual(enableGCPPubSubPushSubscription(), false)
+  })
+})
+
+describe('onRequestEnd', () => {
+  const requestContext = Symbol.for('@vercel/request-context')
+  const originalVercel = process.env.VERCEL
+  const originalContext = globalThis[requestContext]
+
+  afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
+
+    if (originalContext === undefined) delete globalThis[requestContext]
+    else globalThis[requestContext] = originalContext
+  })
+
+  it('retains the request until the exporter flush callback completes on Vercel', async () => {
+    process.env.VERCEL = '1'
+    let retained
+    let done
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    const registered = onRequestEnd({
+      _tracer: {
+        _exporter: {
+          flush: callback => { done = callback },
+        },
+      },
+    })
+
+    assert.strictEqual(registered, true)
+    let completed = false
+    retained.then(() => { completed = true })
+    await Promise.resolve()
+    assert.strictEqual(completed, false)
+
+    done()
+    await retained
+    assert.strictEqual(completed, true)
+  })
+
+  it('does not flush outside Vercel', () => {
+    delete process.env.VERCEL
+    let flushed = false
+
+    const registered = onRequestEnd({
+      _tracer: {
+        _exporter: {
+          flush: () => { flushed = true },
+        },
+      },
+    })
+
+    assert.strictEqual(registered, false)
+    assert.strictEqual(flushed, false)
   })
 })
