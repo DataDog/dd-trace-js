@@ -62,6 +62,7 @@ describe('request', function () {
     // overridable per test.
     maxAttempts = 2
     retryStubs = {
+      getRateLimitResetDelay: sinon.stub().returns(NaN),
       getRetryDelay: sinon.fake.returns(0),
       getMaxAttempts: sinon.fake(() => maxAttempts),
       markEndpointReached: sinon.fake(),
@@ -433,6 +434,60 @@ describe('request', function () {
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
       done(err)
+    })
+  })
+
+  it('waits for a rate-limit reset that is inside the final flush deadline', (done) => {
+    retryStubs.getRateLimitResetDelay.returns(999)
+    const realSetTimeout = setTimeout
+    const retryTimer = { unref: sinon.spy() }
+    const setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 999) return realSetTimeout(callback, delay, ...args)
+      queueMicrotask(() => callback(...args))
+      return retryTimer
+    })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429, '', { 'x-ratelimit-reset': 'reset timestamp' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 2000,
+      retryOnHttpError: true,
+    }, (err, res) => {
+      setTimeoutStub.restore()
+      assert.strictEqual(res, 'OK')
+      sinon.assert.calledOnceWithExactly(retryStubs.getRateLimitResetDelay, {
+        'x-ratelimit-reset': 'reset timestamp',
+      })
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      sinon.assert.calledOnce(retryTimer.unref)
+      done(err)
+    })
+  })
+
+  it('does not retry a rate-limit reset at the final flush deadline', (done) => {
+    retryStubs.getRateLimitResetDelay.returns(1000)
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(429, '', { 'x-ratelimit-reset': 'reset timestamp' })
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 1000,
+      retryOnHttpError: true,
+    }, (err, res, statusCode) => {
+      assert.strictEqual(err.status, 429)
+      assert.strictEqual(res, null)
+      assert.strictEqual(statusCode, 429)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
     })
   })
 

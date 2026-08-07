@@ -8,6 +8,7 @@ class TestOptimizationRequestTracker {
   #writer
   #pendingRequests = new Set()
   #finalFlushes = new Set()
+  #activeFinalFlush
 
   /**
    * Creates request tracking for a Test Optimization writer.
@@ -33,34 +34,53 @@ class TestOptimizationRequestTracker {
       return
     }
 
-    for (const pendingRequest of this.#pendingRequests) {
-      pendingRequest.options.deadline = options.deadline
-      pendingRequest.options.retryOnHttpError = true
-    }
-
     const finalFlush = {
+      deadline: options.deadline,
       done: done || (() => {}),
       error: undefined,
+      requests: new Set(),
       timeoutId: undefined,
+      writerDone: false,
     }
     this.#finalFlushes.add(finalFlush)
+
+    for (const pendingRequest of this.#pendingRequests) {
+      this.#attachRequest(finalFlush, pendingRequest)
+    }
 
     const remaining = Math.max(0, options.deadline - Date.now())
     finalFlush.timeoutId = setTimeout(() => {
       const error = new Error('Timed out flushing Test Optimization data')
       error.code = FINAL_FLUSH_TIMEOUT_CODE
 
-      for (const pendingFinalFlush of this.#finalFlushes) pendingFinalFlush.error ||= error
-      for (const pendingRequest of this.#pendingRequests) pendingRequest.controller.abort(error)
-      this.#pendingRequests.clear()
-      this.#finishFinalFlushes()
+      finalFlush.error ||= error
+      finalFlush.writerDone = true
+
+      for (const pendingRequest of finalFlush.requests) {
+        pendingRequest.finalFlushes.delete(finalFlush)
+        if (pendingRequest.finalFlushes.size === 0) {
+          pendingRequest.controller.abort(error)
+          this.#pendingRequests.delete(pendingRequest)
+        } else {
+          this.#updateRequestDeadline(pendingRequest)
+        }
+      }
+      finalFlush.requests.clear()
+      this.#finishFinalFlush(finalFlush)
     }, remaining)
 
-    BaseWriter.prototype.flush.call(this.#writer, (error) => {
-      finalFlush.error ||= error
-      this.#finishFinalFlushes()
-    }, options)
-    this.#finishFinalFlushes()
+    const previousFinalFlush = this.#activeFinalFlush
+    this.#activeFinalFlush = finalFlush
+    try {
+      BaseWriter.prototype.flush.call(this.#writer, (error) => {
+        finalFlush.error ||= error
+        finalFlush.writerDone = true
+        this.#finishFinalFlush(finalFlush)
+      }, options)
+    } finally {
+      this.#activeFinalFlush = previousFinalFlush
+    }
+    this.#finishFinalFlush(finalFlush)
   }
 
   /**
@@ -76,37 +96,69 @@ class TestOptimizationRequestTracker {
   send (request, data, options, callback) {
     const controller = new AbortController()
     const requestOptions = { ...options, signal: controller.signal }
-    const pendingRequest = { controller, options: requestOptions }
+    const pendingRequest = { controller, finalFlushes: new Set(), options: requestOptions }
     this.#pendingRequests.add(pendingRequest)
+    if (this.#activeFinalFlush) this.#attachRequest(this.#activeFinalFlush, pendingRequest)
 
     request(data, requestOptions, (error, result, statusCode, headers) => {
       if (error) {
-        for (const finalFlush of this.#finalFlushes) finalFlush.error ||= error
+        for (const finalFlush of pendingRequest.finalFlushes) finalFlush.error ||= error
       }
 
       try {
         callback(error, result, statusCode, headers)
       } finally {
         this.#pendingRequests.delete(pendingRequest)
-        this.#finishFinalFlushes()
+        for (const finalFlush of pendingRequest.finalFlushes) {
+          finalFlush.requests.delete(pendingRequest)
+          this.#finishFinalFlush(finalFlush)
+        }
+        pendingRequest.finalFlushes.clear()
       }
     })
   }
 
   /**
-   * Completes final flush callbacks once every request for this writer has
-   * settled.
+   * Associates a request with the final flush boundary that must wait for it.
    *
+   * @param {object} finalFlush
+   * @param {object} pendingRequest
    * @returns {void}
    */
-  #finishFinalFlushes () {
-    if (this.#pendingRequests.size !== 0) return
+  #attachRequest (finalFlush, pendingRequest) {
+    finalFlush.requests.add(pendingRequest)
+    pendingRequest.finalFlushes.add(finalFlush)
+    this.#updateRequestDeadline(pendingRequest)
+  }
 
-    for (const finalFlush of this.#finalFlushes) {
-      this.#finalFlushes.delete(finalFlush)
-      clearTimeout(finalFlush.timeoutId)
-      finalFlush.done(finalFlush.error)
+  /**
+   * Gives a shared request the latest deadline of the flushes waiting for it.
+   *
+   * @param {object} pendingRequest
+   * @returns {void}
+   */
+  #updateRequestDeadline (pendingRequest) {
+    let deadline = 0
+    for (const finalFlush of pendingRequest.finalFlushes) {
+      deadline = Math.max(deadline, finalFlush.deadline)
     }
+    pendingRequest.options.deadline = deadline
+    pendingRequest.options.retryOnHttpError = true
+  }
+
+  /**
+   * Completes a final flush callback once its writer and associated requests
+   * have settled.
+   *
+   * @param {object} finalFlush
+   * @returns {void}
+   */
+  #finishFinalFlush (finalFlush) {
+    if (!this.#finalFlushes.has(finalFlush) || !finalFlush.writerDone || finalFlush.requests.size !== 0) return
+
+    this.#finalFlushes.delete(finalFlush)
+    clearTimeout(finalFlush.timeoutId)
+    finalFlush.done(finalFlush.error)
   }
 }
 

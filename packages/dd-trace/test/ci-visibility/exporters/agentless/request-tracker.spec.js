@@ -87,6 +87,33 @@ describe('Test Optimization request tracker', () => {
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
+  it('does not let an older deadline abort requests owned by a newer final flush', () => {
+    const writer = getWriter()
+    writer._encoder.count.returns(1)
+    const firstDone = sinon.spy()
+    const secondDone = sinon.spy()
+
+    writer.flush(firstDone, { deadline: Date.now() + 1000 })
+    clock.tick(100)
+    const secondDeadline = Date.now() + 2000
+    writer.flush(secondDone, { deadline: secondDeadline })
+
+    clock.tick(900)
+
+    sinon.assert.calledOnce(firstDone)
+    assert.strictEqual(firstDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+    sinon.assert.notCalled(secondDone)
+    assert.strictEqual(pendingRequests[0].options.signal.aborted, false)
+    assert.strictEqual(pendingRequests[1].options.signal.aborted, false)
+    assert.strictEqual(pendingRequests[0].options.deadline, secondDeadline)
+    assert.strictEqual(pendingRequests[1].options.deadline, secondDeadline)
+
+    pendingRequests[0].callback(null)
+    pendingRequests[1].callback(null)
+
+    sinon.assert.calledOnceWithExactly(secondDone, null)
+  })
+
   it('reports request failures to the final flush callback', () => {
     const writer = getWriter()
     writer._encoder.count.returns(1)

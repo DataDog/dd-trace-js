@@ -14,7 +14,9 @@ const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
+  RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRateLimitResetDelay,
   getRetryDelay,
   isRetriableNetworkError,
   markEndpointReached,
@@ -226,6 +228,18 @@ function request (data, options, callback) {
 
         const isRetriableHttpError = options.retryOnHttpError === true &&
           (error.status === 429 || error.status >= 500)
+        let retryDelay
+        if (isRetriableHttpError && error.status === 429) {
+          const resetDelay = getRateLimitResetDelay(headers)
+          if (Number.isFinite(resetDelay)) {
+            const remaining = options.deadline === undefined ? Infinity : options.deadline - Date.now()
+            if (resetDelay > RATE_LIMIT_MAX_WAIT_MS || resetDelay >= remaining) {
+              complete(error, null, statusCode, headers)
+              return
+            }
+            retryDelay = resetDelay
+          }
+        }
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             (isRetriableNetworkError(error) || isRetriableHttpError)) {
@@ -234,7 +248,7 @@ function request (data, options, callback) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          setTimeout(attempt, retryDelay ?? getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
         } else {
           complete(error, null, statusCode, headers)
         }

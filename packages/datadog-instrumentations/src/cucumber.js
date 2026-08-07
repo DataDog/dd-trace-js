@@ -36,6 +36,7 @@ const {
 const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const satisfies = require('../../../vendor/dist/semifies')
 const { getChannelPromise } = require('./helpers/channel')
+const { finalizeAndRethrow } = require('./helpers/finalization')
 const { addHook, channel } = require('./helpers/instrument')
 
 const cucumberWorkerThreadsPatchModule = require.resolve('./cucumber-worker-threads')
@@ -1226,7 +1227,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     try {
       result = await start.apply(this, arguments)
     } catch (error) {
-      await getChannelPromise(sessionFinishCh, {
+      return finalizeAndRethrow(error, () => getChannelPromise(sessionFinishCh, {
         status: 'fail',
         error,
         isSuitesSkipped,
@@ -1237,8 +1238,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         isEarlyFlakeDetectionFaulty,
         isTestManagementTestsEnabled,
         isParallel,
-      })
-      throw error
+      }), 'Cucumber')
     }
     const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
