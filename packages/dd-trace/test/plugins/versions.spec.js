@@ -254,6 +254,43 @@ describe('resolvePluginVersions', () => {
     assert.deepEqual(versionKeys(node20).filter(version => version.startsWith('3.5')), ['3.5.1', '3.5.2', '3.5.3'])
   })
 
+  it('applies Node.js gates to the declaration owning a package override', () => {
+    const node18 = resolvePluginVersions({
+      name: 'mariadb',
+      declarations: externals.mariadb,
+      nodeVersion: '18.20.8',
+      env: { PACKAGE_VERSION_RANGE: '3.5.3' },
+    })
+    const node20 = resolvePluginVersions({
+      name: 'mariadb',
+      declarations: externals.mariadb,
+      nodeVersion: '20.0.0',
+      env: { PACKAGE_VERSION_RANGE: '>=3.5.3' },
+    })
+    const latestOnNode18 = resolvePluginVersions({
+      name: 'mariadb',
+      declarations: externals.mariadb,
+      nodeVersion: '18.20.8',
+      env: { PACKAGE_VERSION_RANGE: 'latest' },
+    })
+
+    assert.deepEqual(node18.versionList, [])
+    assert.deepEqual(latestOnNode18.versionList, [])
+    assert.deepEqual(versionKeys(node20), ['3.5.3'])
+    assert.equal(node20.unversioned, '>=3.5.3')
+  })
+
+  it('rejects an invalid declaration package range', () => {
+    assert.throws(
+      () => resolvePluginVersions({
+        name: 'mariadb',
+        declarations: [{ versions: ['3.5.3'], packageRange: 'invalid' }],
+        env: { PACKAGE_VERSION_RANGE: '3.5.3' },
+      }),
+      /Invalid package version range/
+    )
+  })
+
   it('applies a package version override once across active declarations', () => {
     const result = resolvePluginVersions({
       name: 'mongodb',

@@ -68,6 +68,23 @@ function assertTransactionSpans () {
   })
 }
 
+function consumeStream (stream) {
+  return new Promise((resolve, reject) => {
+    stream.once('error', reject)
+    stream.once('end', resolve)
+    stream.resume()
+  })
+}
+
+function assertQueuedTransactionSpan (sql, transaction) {
+  return agent.assertSomeTraces(traces => {
+    const trace = traces.find(trace => trace.some(span => span.name === 'test'))
+    assert.ok(trace, 'queued transaction trace has not flushed yet')
+    const resources = trace.filter(span => span.meta.component === 'mariadb').map(span => span.resource)
+    assert.deepStrictEqual(resources.sort(), [sql, transaction].sort())
+  })
+}
+
 function assertClusterMetadata (assertAutomaticRemoval = false) {
   const metadataByResource = new Map()
 
@@ -267,6 +284,43 @@ describe('Plugin', () => {
         }
 
         if (semver.gte(resolvedVersion, '3.5.3')) {
+          it('should trace object-form SQL', async () => {
+            const query = (method, sql, values) => new Promise((resolve, reject) => {
+              connection[method]({ sql }, values, error => error ? reject(error) : resolve())
+            })
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS object_query' }),
+              query('query', 'SELECT 1 AS object_query'),
+            ])
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: 'SELECT ? AS object_execute' }),
+              query('execute', 'SELECT ? AS object_execute', [1]),
+            ])
+          })
+
+          it('should trace query and prepared statement streams', async () => {
+            const statement = await new Promise((resolve, reject) => {
+              connection.prepare('SELECT ? AS prepared_stream', (error, statement) => {
+                if (error) return reject(error)
+                resolve(statement)
+              })
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS query_stream' }),
+                consumeStream(connection.queryStream('SELECT 1 AS query_stream')),
+              ])
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT ? AS prepared_stream' }),
+                consumeStream(statement.executeStream([1])),
+              ])
+            } finally {
+              statement.close()
+            }
+          })
+
           it('should normalize URL connection options', async () => {
             const uriConnection = mariadb.createConnection('mariadb://root@localhost/db')
             await new Promise((resolve, reject) => {
@@ -330,6 +384,24 @@ describe('Plugin', () => {
               await callPair('commit')
               await callPair('rollback')
             })
+
+            span.finish()
+            await assertion
+          })
+
+          it('should trace transaction helpers queued behind queries', async () => {
+            const assertion = assertQueuedTransactionSpan('SELECT SLEEP(0.1)', 'COMMIT')
+            const span = tracer.startSpan('test')
+
+            await tracer.scope().activate(span, () => new Promise((resolve, reject) => {
+              let pending = 2
+              const callback = error => {
+                if (error) return reject(error)
+                if (--pending === 0) resolve()
+              }
+              connection.query('SELECT SLEEP(0.1)', callback)
+              connection.commit(callback)
+            }))
 
             span.finish()
             await assertion
@@ -564,6 +636,61 @@ describe('Plugin', () => {
           })
 
           if (semver.gte(resolvedVersion, '3.5.3')) {
+            it('should trace object-form SQL', async () => {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS object_query' }),
+                connection.query({ sql: 'SELECT 1 AS object_query' }),
+              ])
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT ? AS object_execute' }),
+                connection.execute({ sql: 'SELECT ? AS object_execute' }, [1]),
+              ])
+
+              const statement = await connection.prepare({ sql: 'SELECT ? AS object_prepare' })
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: 'SELECT ? AS object_prepare' }),
+                  statement.execute([1]),
+                ])
+              } finally {
+                await statement.close()
+              }
+            })
+
+            it('should finish a synchronously failing command', async () => {
+              const assertion = agent.assertSomeTraces(traces => {
+                const trace = traces.find(trace => trace.some(span => span.name === 'test'))
+                assert.ok(trace, 'synchronous failure trace has not flushed yet')
+                assert.strictEqual(trace.filter(span => span.meta.component === 'mariadb').length, 1)
+              })
+              const span = tracer.startSpan('test')
+
+              tracer.scope().activate(span, () => {
+                assert.throws(() => connection.query(null))
+                assert.strictEqual(tracer.scope().active(), span)
+              })
+              span.finish()
+
+              await assertion
+            })
+
+            it('should trace query and prepared statement streams', async () => {
+              const statement = await connection.prepare('SELECT ? AS prepared_stream')
+
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS query_stream' }),
+                  consumeStream(connection.queryStream('SELECT 1 AS query_stream')),
+                ])
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: 'SELECT ? AS prepared_stream' }),
+                  consumeStream(statement.executeStream([1])),
+                ])
+              } finally {
+                await statement.close()
+              }
+            })
+
             it('should normalize URL connection options', async () => {
               const uriConnection = await mariadb.createConnection('mariadb://root@localhost/db')
 
@@ -616,6 +743,85 @@ describe('Plugin', () => {
               await assertion
             })
 
+            it('should trace transaction helpers queued behind queries', async () => {
+              const assertion = assertQueuedTransactionSpan('SELECT SLEEP(0.1)', 'COMMIT')
+              const span = tracer.startSpan('test')
+
+              await tracer.scope().activate(span, () => Promise.all([
+                connection.query('SELECT SLEEP(0.1)'),
+                connection.commit(),
+              ]))
+
+              span.finish()
+              await assertion
+            })
+
+            it('should trace transaction helpers queued behind prepared statements', async () => {
+              const sql = 'SELECT SLEEP(?) AS prepared_wait'
+              const statement = await connection.prepare(sql)
+              const assertion = assertQueuedTransactionSpan(sql, 'ROLLBACK')
+              const span = tracer.startSpan('test')
+
+              try {
+                await tracer.scope().activate(span, () => Promise.all([
+                  statement.execute([0.1]),
+                  connection.rollback(),
+                ]))
+              } finally {
+                span.finish()
+                await statement.close()
+              }
+
+              await assertion
+            })
+
+            it('should retain transaction tracking until every concurrent command finishes', async () => {
+              const assertion = agent.assertSomeTraces(traces => {
+                const trace = traces.find(trace => trace.some(span => span.name === 'test'))
+                assert.ok(trace, 'concurrent command trace has not flushed yet')
+                const resources = trace
+                  .filter(span => span.meta.component === 'mariadb')
+                  .map(span => span.resource)
+                  .sort()
+                assert.deepStrictEqual(resources, [
+                  'COMMIT',
+                  'SELECT SLEEP(0.01) AS first_command',
+                  'SELECT SLEEP(0.1) AS second_command',
+                ])
+              })
+              const span = tracer.startSpan('test')
+
+              await tracer.scope().activate(span, async () => {
+                const first = connection.query('SELECT SLEEP(0.01) AS first_command')
+                const second = connection.query('SELECT SLEEP(0.1) AS second_command')
+                await first
+                await Promise.all([second, connection.commit()])
+              })
+
+              span.finish()
+              await assertion
+            })
+
+            it('should tag stream errors', async () => {
+              const stream = connection.queryStream('SELECT * FROM definitely_missing_stream_table')
+              const query = new Promise(resolve => {
+                stream.once('error', resolve)
+                stream.resume()
+              })
+
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  resource: 'SELECT * FROM definitely_missing_stream_table',
+                  meta: {
+                    [ERROR_TYPE]: ANY_STRING,
+                    [ERROR_MESSAGE]: ANY_STRING,
+                    [ERROR_STACK]: ANY_STRING,
+                  },
+                }),
+                query,
+              ])
+            })
+
             it('should not trace transaction helpers when no command is sent', async () => {
               const assertion = agent.assertNoTraces(traces => {
                 const transactionSpan = traces.flat()
@@ -640,6 +846,29 @@ describe('Plugin', () => {
                 await Promise.all([
                   agent.assertFirstTraceSpan({ resource: 'SELECT 7 AS cluster_query' }),
                   cluster.of('primary').query('SELECT 7 AS cluster_query'),
+                ])
+              } finally {
+                await cluster.end()
+              }
+            })
+
+            it('should use the default cluster selector for false', async () => {
+              const cluster = mariadb.createPoolCluster()
+              cluster.add('primary', { host: 'localhost', user: 'root', database: 'db' })
+
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({
+                    resource: 'SELECT 1 AS false_selector',
+                    meta: { 'db.name': 'db' },
+                  }),
+                  cluster.getConnection(false).then(async connection => {
+                    try {
+                      await connection.query('SELECT 1 AS false_selector')
+                    } finally {
+                      await connection.end()
+                    }
+                  }),
                 ])
               } finally {
                 await cluster.end()
@@ -992,6 +1221,22 @@ describe('Plugin', () => {
           pool.query('SELECT 1 + 1 AS solution')
         })
 
+        if (semver.gte(resolvedVersion, '3.5.3')) {
+          it('should instrument connections exposed by the pool connection event', done => {
+            agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS event_connection' }).then(done, done)
+
+            pool.once('connection', connection => {
+              connection.query('SELECT 1 AS event_connection', error => {
+                if (error) done(error)
+              })
+            })
+            pool.getConnection((error, connection) => {
+              if (error) return done(error)
+              connection.end()
+            })
+          })
+        }
+
         it('should run the callback in the parent context', done => {
           pool.query('SELECT 1 + 1 AS solution', () => {
             assert.strictEqual(tracer.scope().active(), null)
@@ -1092,6 +1337,23 @@ describe('Plugin', () => {
             ])
           })
 
+          if (semver.gte(resolvedVersion, '3.5.3')) {
+            it('should instrument connections exposed by the pool connection event', async () => {
+              const query = new Promise((resolve, reject) => {
+                pool.once('connection', connection => {
+                  connection.query('SELECT 1 AS event_connection').then(resolve, reject)
+                })
+              })
+
+              const connection = await pool.getConnection()
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS event_connection' }),
+                query,
+              ])
+              await connection.end()
+            })
+          }
+
           it('should run promise continuations in the parent context', async () => {
             await pool.query('SELECT 1 + 1 AS solution').then(() => {
               assert.strictEqual(tracer.scope().active(), null)
@@ -1158,6 +1420,31 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (semver.gte(resolvedVersion, '3.5.3')) {
+          it('should not leak cluster minimum-idle connections into the active trace', done => {
+            assertNoConnectionSpanLeak().then(done, done)
+            const span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
+              pool = mariadb.createPoolCluster()
+              pool.add('primary', {
+                host: 'localhost',
+                user: 'root',
+                database: 'db',
+                minimumIdle: 1,
+              })
+              pool.getConnection('primary', (error, connection) => {
+                if (error) return done(error)
+                connection.query('SELECT 1 AS cluster_setup', error => {
+                  connection.end()
+                  if (error) return done(error)
+                  span.finish()
+                })
+              })
+            })
+          })
+        }
       })
 
       if (semver.intersects(version, '>=3')) {
@@ -1198,6 +1485,29 @@ describe('Plugin', () => {
 
             await assertion
           })
+
+          if (semver.gte(resolvedVersion, '3.5.3')) {
+            it('should not leak cluster minimum-idle connections into the active trace', async () => {
+              const assertion = assertNoConnectionSpanLeak()
+              const span = tracer.startSpan('test')
+
+              await tracer.scope().activate(span, async () => {
+                pool = mariadb.createPoolCluster()
+                pool.add('primary', {
+                  host: 'localhost',
+                  user: 'root',
+                  database: 'db',
+                  minimumIdle: 1,
+                })
+                const connection = await pool.getConnection('primary')
+                await connection.query('SELECT 1 AS cluster_setup')
+                await connection.end()
+                span.finish()
+              })
+
+              await assertion
+            })
+          }
         })
       }
     })

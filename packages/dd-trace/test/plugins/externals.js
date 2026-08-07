@@ -470,12 +470,14 @@ module.exports = {
         '3.5.1', // first ESM-only release
         '3.5.2', // last ESM-only release
       ],
+      packageRange: '<3.5.3',
     },
     {
       name: 'mariadb',
       versions: [
         '3.5.3', // first conditional CJS release
       ],
+      packageRange: '>=3.5.3',
       node: '>=20',
     },
   ],

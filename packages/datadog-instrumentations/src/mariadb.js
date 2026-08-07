@@ -1,5 +1,7 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
+
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
@@ -11,8 +13,11 @@ const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
 
+const activeCommands = new WeakMap()
+// Pool connection events inherit the internal skip store. An explicit empty store restores tracing for user listeners
+// without retaining the context in which a long-lived pool was created.
+const emptyConnectionContext = { currentStore: {} }
 const emptyOptions = {}
-const pendingTransactionStarts = new WeakMap()
 const wrappedClients = new WeakSet()
 const wrappedConnections = new WeakSet()
 const noop = () => {}
@@ -64,40 +69,45 @@ function wrapCommand (Command) {
   }
 }
 
-function createWrapQuery (options, preparedSql) {
+function createWrapQuery (options, preparedSql, commandOwner) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const ctx = { sql: preparedSql ?? sql, conf: options }
+      const owner = commandOwner ?? this
+      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
-        .then(result => {
-          ctx.result = result
-          finishCh.publish(ctx)
-          return result
-        }, error => {
-          ctx.error = error
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
-          throw error
-        })
+      startCommand(owner)
+
+      let result
+      try {
+        result = startCh.runStores(ctx, query, this, ...arguments)
+      } catch (error) {
+        finishCommand(ctx, owner, error)
+        throw error
+      }
+
+      return result.then(result => {
+        finishCommand(ctx, owner, undefined, result)
+        return result
+      }, error => {
+        finishCommand(ctx, owner, error)
+        throw error
+      })
     }
   }
 }
 
-function createWrapQueryCallback (options, preparedSql) {
+function createWrapQueryCallback (options, preparedSql, commandOwner) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
+      const owner = commandOwner ?? this
       const cb = arguments[arguments.length - 1]
-      const ctx = { sql: preparedSql ?? sql, conf: options }
+      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
       const wrapper = (cb) => function (err) {
-        if (err) {
-          ctx.error = err
-          errorCh.publish(ctx)
-        }
+        finishCommandState(ctx, owner, err)
 
         return typeof cb === 'function'
           ? finishCh.runStores(ctx, cb, this, ...arguments)
@@ -111,7 +121,141 @@ function createWrapQueryCallback (options, preparedSql) {
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      startCommand(owner)
+
+      try {
+        return startCh.runStores(ctx, query, this, ...arguments)
+      } catch (error) {
+        finishCommand(ctx, owner, error)
+        throw error
+      }
+    }
+  }
+}
+
+/**
+ * Extracts SQL from MariaDB's string and object command forms.
+ *
+ * @param {unknown} command
+ * @returns {unknown}
+ */
+function normalizeSql (command) {
+  return command !== null && typeof command === 'object' ? command.sql : command
+}
+
+/**
+ * Matches MariaDB's use of the default cluster selector for every falsy pattern.
+ *
+ * @param {unknown} pattern
+ * @returns {unknown}
+ */
+function normalizeClusterPattern (pattern) {
+  return pattern || /^/
+}
+
+/**
+ * Marks a command as active on its owning public connection.
+ *
+ * @param {object} owner
+ * @returns {void}
+ */
+function startCommand (owner) {
+  activeCommands.set(owner, (activeCommands.get(owner) ?? 0) + 1)
+}
+
+/**
+ * Releases one active command without clearing concurrent commands.
+ *
+ * @param {object} owner
+ * @returns {void}
+ */
+function endCommand (owner) {
+  const active = activeCommands.get(owner)
+  if (active === 1) {
+    activeCommands.delete(owner)
+  } else if (active !== undefined) {
+    activeCommands.set(owner, active - 1)
+  }
+}
+
+/**
+ * Publishes command completion state and releases its owner.
+ *
+ * @param {object} ctx
+ * @param {object} owner
+ * @param {Error} [error]
+ * @param {unknown} [result]
+ * @returns {void}
+ */
+function finishCommandState (ctx, owner, error, result) {
+  endCommand(owner)
+  if (error) {
+    ctx.error = error
+    errorCh.publish(ctx)
+  }
+  ctx.result = result
+}
+
+/**
+ * Publishes a complete command lifecycle outside a callback continuation.
+ *
+ * @param {object} ctx
+ * @param {object} owner
+ * @param {Error} [error]
+ * @param {unknown} [result]
+ * @returns {void}
+ */
+function finishCommand (ctx, owner, error, result) {
+  finishCommandState(ctx, owner, error, result)
+  finishCh.publish(ctx)
+}
+
+/**
+ * Traces a Readable-returning MariaDB command without replacing the stream.
+ *
+ * @param {object} options
+ * @param {unknown} [preparedSql]
+ * @param {object} [commandOwner]
+ * @returns {(streamMethod: Function) => Function}
+ */
+function createWrapStream (options, preparedSql, commandOwner) {
+  return function wrapStream (streamMethod) {
+    return function (sql) {
+      if (!startCh.hasSubscribers) return streamMethod.apply(this, arguments)
+
+      const owner = commandOwner ?? this
+      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      let stream
+
+      startCommand(owner)
+      try {
+        stream = startCh.runStores(ctx, streamMethod, this, ...arguments)
+      } catch (error) {
+        finishCommand(ctx, owner, error)
+        throw error
+      }
+
+      let finished = false
+      const cleanup = () => {
+        stream.removeListener('end', onEnd)
+        stream.removeListener('close', onClose)
+        stream.removeListener(errorMonitor, onError)
+      }
+      const complete = error => {
+        if (finished) return
+        finished = true
+        cleanup()
+        finishCommand(ctx, owner, error)
+      }
+      const onEnd = () => complete()
+      const onClose = () => complete()
+      const onError = error => complete(error)
+
+      stream.once('end', onEnd)
+      stream.once('close', onClose)
+      stream.once(errorMonitor, onError)
+
+      return stream
     }
   }
 }
@@ -189,8 +333,11 @@ function wrapPromiseConnection (connection, options) {
   if (wrappedConnections.has(connection)) return connection
 
   wrappedConnections.add(connection)
+  if (typeof connection.queryStream === 'function') {
+    shimmer.wrap(connection, 'queryStream', createWrapStream(options))
+  }
   shimmer.wrap(connection, 'prepare', createWrapPromisePrepare(options))
-  wrapTransactionMethods(connection, options, createWrapQuery, false)
+  wrapTransactionMethods(connection, options, createWrapQuery)
 
   return connection
 }
@@ -207,8 +354,11 @@ function wrapCallbackConnection (connection, options) {
   if (wrappedConnections.has(connection)) return connection
 
   wrappedConnections.add(connection)
+  if (typeof connection.queryStream === 'function') {
+    shimmer.wrap(connection, 'queryStream', createWrapStream(options))
+  }
   shimmer.wrap(connection, 'prepare', createWrapCallbackPrepare(options))
-  wrapTransactionMethods(connection, options, createWrapQueryCallback, true)
+  wrapTransactionMethods(connection, options, createWrapQueryCallback)
 
   return connection
 }
@@ -222,8 +372,13 @@ function wrapCallbackConnection (connection, options) {
 function createWrapPromisePrepare (options) {
   return function wrapPrepare (prepare) {
     return function (sql) {
+      const connection = this
+      const preparedSql = normalizeSql(sql)
       return prepare.apply(this, arguments).then(statement => {
-        shimmer.wrap(statement, 'execute', createWrapQuery(options, sql))
+        shimmer.wrap(statement, 'execute', createWrapQuery(options, preparedSql, connection))
+        if (typeof statement.executeStream === 'function') {
+          shimmer.wrap(statement, 'executeStream', createWrapStream(options, preparedSql, connection))
+        }
         return statement
       })
     }
@@ -239,12 +394,23 @@ function createWrapPromisePrepare (options) {
 function createWrapCallbackPrepare (options) {
   return function wrapPrepare (prepare) {
     return function (sql) {
+      const connection = this
+      const preparedSql = normalizeSql(sql)
       const cb = arguments[arguments.length - 1]
       if (typeof cb !== 'function') return prepare.apply(this, arguments)
 
       arguments[arguments.length - 1] = function () {
         const statement = arguments[1]
-        if (statement) shimmer.wrap(statement, 'execute', createWrapCallbackPreparedExecute(options, sql))
+        if (statement) {
+          shimmer.wrap(
+            statement,
+            'execute',
+            createWrapCallbackPreparedExecute(options, preparedSql, connection)
+          )
+          if (typeof statement.executeStream === 'function') {
+            shimmer.wrap(statement, 'executeStream', createWrapStream(options, preparedSql, connection))
+          }
+        }
         return cb.apply(this, arguments)
       }
 
@@ -257,13 +423,14 @@ function createWrapCallbackPrepare (options) {
  * Wraps callback prepared statements, which return a promise when no callback is provided.
  *
  * @param {object} options
- * @param {string} sql
+ * @param {unknown} sql
+ * @param {object} connection
  * @returns {(execute: Function) => Function}
  */
-function createWrapCallbackPreparedExecute (options, sql) {
+function createWrapCallbackPreparedExecute (options, sql, connection) {
   return function wrapExecute (execute) {
-    const executeWithCallback = createWrapQueryCallback(options, sql)(execute)
-    const executeWithPromise = createWrapQuery(options, sql)(execute)
+    const executeWithCallback = createWrapQueryCallback(options, sql, connection)(execute)
+    const executeWithPromise = createWrapQuery(options, sql, connection)(execute)
 
     return function () {
       const hasCallback = typeof arguments[1] === 'function' || typeof arguments[2] === 'function'
@@ -279,12 +446,11 @@ function createWrapCallbackPreparedExecute (options, sql) {
  * @param {object} client
  * @param {object} options
  * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
- * @param {boolean} callbackStyle
  * @returns {void}
  */
-function wrapTransactionMethods (client, options, createWrapper, callbackStyle) {
+function wrapTransactionMethods (client, options, createWrapper) {
   for (const [method, sql] of transactionMethods) {
-    shimmer.wrap(client, method, createWrapTransaction(options, sql, createWrapper, callbackStyle))
+    shimmer.wrap(client, method, createWrapTransaction(options, sql, createWrapper))
   }
 }
 
@@ -294,10 +460,9 @@ function wrapTransactionMethods (client, options, createWrapper, callbackStyle) 
  * @param {object} options
  * @param {string} sql
  * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
- * @param {boolean} callbackStyle
  * @returns {(transaction: Function) => Function}
  */
-function createWrapTransaction (options, sql, createWrapper, callbackStyle) {
+function createWrapTransaction (options, sql, createWrapper) {
   return function wrapTransaction (transaction) {
     const tracedTransaction = createWrapper(options, sql)(function () {
       return skipCh.runStores({}, transaction, this, ...arguments)
@@ -306,107 +471,14 @@ function createWrapTransaction (options, sql, createWrapper, callbackStyle) {
     return function () {
       if (!startCh.hasSubscribers) return transaction.apply(this, arguments)
 
-      if (sql === 'START TRANSACTION') {
-        addPendingTransactionStart(this)
-        return callbackStyle
-          ? traceCallbackTransactionStart(
-            this,
-            tracedTransaction,
-            arguments,
-            arguments[arguments.length - 1]
-          )
-          : tracePromiseTransactionStart(this, tracedTransaction, arguments)
-      }
-
-      if (!pendingTransactionStarts.has(this) && !(this.info?.status & STATUS_IN_TRANSACTION)) {
+      if (sql !== 'START TRANSACTION' &&
+        !activeCommands.has(this) &&
+        !(this.info?.status & STATUS_IN_TRANSACTION)) {
         return transaction.apply(this, arguments)
       }
 
       return tracedTransaction.apply(this, arguments)
     }
-  }
-}
-
-/**
- * Tracks transaction starts that MariaDB has queued but the server has not acknowledged yet.
- *
- * @param {object} connection
- * @returns {void}
- */
-function addPendingTransactionStart (connection) {
-  const pending = pendingTransactionStarts.get(connection) ?? 0
-  pendingTransactionStarts.set(connection, pending + 1)
-}
-
-/**
- * Releases one pending transaction start without clearing another queued start.
- *
- * @param {object} connection
- * @returns {void}
- */
-function finishPendingTransactionStart (connection) {
-  const pending = pendingTransactionStarts.get(connection)
-  if (pending === 1) {
-    pendingTransactionStarts.delete(connection)
-  } else if (pending !== undefined) {
-    pendingTransactionStarts.set(connection, pending - 1)
-  }
-}
-
-/**
- * Clears pending transaction state when a promise transaction start settles.
- *
- * @param {object} connection
- * @param {Function} transaction
- * @param {object} args
- * @returns {Promise<unknown>}
- */
-function tracePromiseTransactionStart (connection, transaction, args) {
-  let result
-
-  try {
-    result = transaction.apply(connection, args)
-  } catch (error) {
-    finishPendingTransactionStart(connection)
-    throw error
-  }
-
-  return result.then(value => {
-    finishPendingTransactionStart(connection)
-    return value
-  }, error => {
-    finishPendingTransactionStart(connection)
-    throw error
-  })
-}
-
-/**
- * Clears pending transaction state when a callback transaction start settles.
- *
- * @param {object} connection
- * @param {Function} transaction
- * @param {object} args
- * @param {unknown} callback
- * @returns {unknown}
- */
-function traceCallbackTransactionStart (connection, transaction, args, callback) {
-  const wrappedCallback = function () {
-    finishPendingTransactionStart(connection)
-    if (typeof callback === 'function') return callback.apply(this, arguments)
-  }
-
-  if (typeof callback === 'function') {
-    args[args.length - 1] = wrappedCallback
-  } else {
-    args.length = Math.max(args.length + 1, transaction.length)
-    args[args.length - 1] = wrappedCallback
-  }
-
-  try {
-    return transaction.apply(connection, args)
-  } catch (error) {
-    finishPendingTransactionStart(connection)
-    throw error
   }
 }
 
@@ -496,6 +568,28 @@ function createWrapCallbackGetConnection (options) {
 }
 
 /**
+ * Instruments public connection wrappers emitted when a bundled pool creates a connection.
+ *
+ * @param {object} pool
+ * @param {object} options
+ * @param {(connection: object, options: object) => object} wrapConnection
+ * @returns {void}
+ */
+function wrapPoolConnectionEvent (pool, options, wrapConnection) {
+  const onConnection = connection => wrapConnection(connection, options)
+
+  pool.prependListener('connection', onConnection)
+  shimmer.wrap(pool, 'emit', emit => function (event) {
+    if (event !== 'connection') return emit.apply(this, arguments)
+    return connectionFinishCh.runStores(emptyConnectionContext, emit, this, ...arguments)
+  })
+  shimmer.wrap(pool, 'end', end => function () {
+    pool.removeListener('connection', onConnection)
+    return end.apply(this, arguments)
+  })
+}
+
+/**
  * Captures the connection options registered with a pool cluster.
  *
  * @param {object} cluster
@@ -524,7 +618,7 @@ function captureClusterOptions (cluster, defaultOptions) {
       Object.prototype.toString.call(identifier) === '[object String]'
     const generatedIdentifier = hasIdentifier ? String(identifier) : `PoolNode-${nodeCounter++}`
     const connectionOptions = hasIdentifier ? options : identifier
-    const result = add.apply(this, arguments)
+    const result = skipCh.runStores({}, add, this, ...arguments)
     optionsByIdentifier.set(generatedIdentifier, normalizeOptions(defaultOptions, connectionOptions))
     optionsByPattern.clear()
     return result
@@ -544,11 +638,12 @@ function captureClusterOptions (cluster, defaultOptions) {
   })
 
   return pattern => {
-    const cacheKey = String(pattern ?? /^/)
+    const normalizedPattern = normalizeClusterPattern(pattern)
+    const cacheKey = String(normalizedPattern)
     const cachedOptions = optionsByPattern.get(cacheKey)
     if (cachedOptions !== undefined) return cachedOptions
 
-    const regularExpression = new RegExp(pattern ?? /^/)
+    const regularExpression = new RegExp(normalizedPattern)
     let matchedOptions
 
     for (const [identifier, options] of optionsByIdentifier) {
@@ -705,6 +800,7 @@ function wrapPromiseBundle (mariadb, _version, isIitm) {
   shimmer.wrap(mariadb, 'createPool', createPool => function (options) {
     const pool = skipCh.runStores({}, createPool, this, ...arguments)
     const normalizedOptions = normalizeOptions(mariadb.defaultOptions, options)
+    wrapPoolConnectionEvent(pool, normalizedOptions, wrapPromiseConnection)
     wrapClient(pool, createWrapPoolQuery(normalizedOptions, createWrapQuery))
     shimmer.wrap(pool, 'getConnection', createWrapPromiseGetConnection(normalizedOptions))
     return pool
@@ -738,6 +834,7 @@ function wrapCallbackBundle (mariadb) {
   shimmer.wrap(mariadb, 'createPool', createPool => function (options) {
     const pool = skipCh.runStores({}, createPool, this, ...arguments)
     const normalizedOptions = normalizeOptions(mariadb.defaultOptions, options)
+    wrapPoolConnectionEvent(pool, normalizedOptions, wrapCallbackConnection)
     wrapClient(pool, createWrapPoolQuery(normalizedOptions, createWrapQueryCallback))
     shimmer.wrap(pool, 'getConnection', createWrapCallbackGetConnection(normalizedOptions))
     return pool

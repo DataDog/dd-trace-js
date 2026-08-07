@@ -218,7 +218,7 @@ function highestMajor (name, range, floorMajor) {
  *
  * @param {object} options
  * @param {string} options.name The module name, e.g. `fastify`.
- * @param {Array<{ versions?: string[], node?: string }>} options.declarations
+ * @param {Array<{ versions?: string[], node?: string, packageRange?: string }>} options.declarations
  * @param {string} [options.nodeVersion] The current Node.js version; injectable for testing.
  * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
  *   externals that must stay on their declared versions while the matrix shards a different package.
@@ -234,10 +234,18 @@ function resolvePluginVersions ({
   env = process.env,
 }) {
   const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
+  const packageOverride = useEnvRange ? getCappedRange(name, env.PACKAGE_VERSION_RANGE) : undefined
   const versions = []
   let hasActiveDeclaration = false
 
   for (const declaration of declarations) {
+    if (useEnvRange && declaration.packageRange !== undefined) {
+      if (!validRange(declaration.packageRange)) {
+        throw new Error(`Invalid package version range for '${name}': ${declaration.packageRange}`)
+      }
+      if (!intersects(packageOverride, declaration.packageRange)) continue
+    }
+
     if (declaration.node !== undefined) {
       if (!validRange(declaration.node)) {
         throw new Error(`Invalid Node.js version range for '${name}': ${declaration.node}`)
