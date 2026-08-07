@@ -15,6 +15,8 @@ import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import { carrierFieldsConfig } from './eslint-rules/carrier-fields-policy.mjs'
+import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
@@ -293,11 +295,11 @@ export default [
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
-      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
-      'jsdoc/require-param': 'off',
+      'jsdoc/require-param': 'error',
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
@@ -405,6 +407,7 @@ export default [
       '@stylistic': eslintPluginStylistic,
       'eslint-rules': {
         rules: {
+          'eslint-carrier-fields': eslintCarrierFields,
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
@@ -645,6 +648,7 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/iteration-fallback-style': 'error',
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-unused-properties': 'error',
 
@@ -699,6 +703,7 @@ export default [
       'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
       'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
       'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
+      'unicorn/single-line-block-comment-style': 'off', // lots | preserve compact JSDoc typedefs
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
@@ -1061,6 +1066,7 @@ export default [
       'promise/valid-params': 'off',
     },
   },
+  ...carrierFieldsConfig,
   {
     // The Next.js fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`). The package is supplied to the app at runtime via a

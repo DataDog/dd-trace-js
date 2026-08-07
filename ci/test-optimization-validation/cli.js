@@ -906,6 +906,7 @@ function getStaticFailure (framework, blocker, reportPath) {
  * @param {object} framework framework entry
  * @param {string} diagnosis blocker diagnosis
  * @param {string} reasonCode blocker id
+ * @param {string | undefined} blockerCategory blocker category
  * @returns {object} result
  */
 function getBasicNotReached (framework, diagnosis, reasonCode, blockerCategory) {

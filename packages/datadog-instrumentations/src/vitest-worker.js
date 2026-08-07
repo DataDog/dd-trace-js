@@ -3,6 +3,7 @@
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
+const { isMainThread, parentPort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -12,6 +13,8 @@ const {
   getTestSuitePath,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
@@ -36,12 +39,15 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
+const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
 const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
 const fileToHasConcurrentTests = new WeakMap()
+const fileToEfdSuiteAdmission = new WeakMap()
+const pendingEfdSuiteAdmissionRequests = new Map()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
 const dynamicNameTasks = new WeakSet()
@@ -62,6 +68,9 @@ let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
 let preciseCoverageSession
+let didInitializeEfdSuiteAdmissionTransport = false
+let nextEfdSuiteAdmissionRequestId = 0
+let sendEfdSuiteAdmissionMessage
 let isPreciseCoverageUnavailable = false
 let vitestCoverageSnapshot
 const wrappedCoverageWorkerStates = new WeakSet()
@@ -137,8 +146,8 @@ function isFileInRepository (filename, repositoryRoot) {
 }
 
 function isV8ScriptCovered (scriptCoverage) {
-  for (const functionCoverage of scriptCoverage.functions || []) {
-    for (const range of functionCoverage.ranges || []) {
+  for (const functionCoverage of scriptCoverage.functions) {
+    for (const range of functionCoverage.ranges) {
       if (range.count > 0) return true
     }
   }
@@ -147,15 +156,18 @@ function isV8ScriptCovered (scriptCoverage) {
 
 function getCoveredFilesFromV8Result (coverage, repositoryRoot) {
   const coveredFiles = []
-  for (const scriptCoverage of coverage?.result || []) {
-    if (!isV8ScriptCovered(scriptCoverage)) continue
+  const scriptCoverageResults = coverage?.result
+  if (scriptCoverageResults) {
+    for (const scriptCoverage of scriptCoverageResults) {
+      if (!isV8ScriptCovered(scriptCoverage)) continue
 
-    const coverageFilename = getCoverageFilename(scriptCoverage.url)
-    if (!coverageFilename) continue
+      const coverageFilename = getCoverageFilename(scriptCoverage.url)
+      if (!coverageFilename) continue
 
-    const filename = realpath(coverageFilename)
-    if (isFileInRepository(filename, repositoryRoot)) {
-      coveredFiles.push(filename)
+      const filename = realpath(coverageFilename)
+      if (isFileInRepository(filename, repositoryRoot)) {
+        coveredFiles.push(filename)
+      }
     }
   }
   return coveredFiles
@@ -346,6 +358,123 @@ function hasConcurrentTests (file) {
 }
 
 /**
+ * Returns whether a collected Vitest file contains a runnable new test eligible for EFD.
+ *
+ * @param {{ filepath: string, tasks?: object[] }} file
+ * @param {object} providedContext
+ * @returns {boolean}
+ */
+function hasRunnableNewTest (file, providedContext) {
+  for (const task of getTypeTasks(file.tasks)) {
+    if (task.mode === 'skip' || task.mode === 'todo') continue
+
+    const testProperties = getVitestTestProperties(providedContext, file.filepath, getTestName(task))
+    if (testProperties.isNew && !testProperties.isAttemptToFix && !testProperties.isDisabled) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Resolves and removes one pending EFD suite admission request.
+ *
+ * @param {number} requestId
+ * @param {boolean} allowed
+ * @returns {void}
+ */
+function finishEfdSuiteAdmissionRequest (requestId, allowed) {
+  const request = pendingEfdSuiteAdmissionRequests.get(requestId)
+  if (!request) return
+
+  clearTimeout(request.timeout)
+  pendingEfdSuiteAdmissionRequests.delete(requestId)
+  request.resolve(allowed)
+}
+
+/**
+ * Handles an EFD suite admission response from the Vitest main process.
+ *
+ * @param {unknown} message
+ * @returns {void}
+ */
+function handleEfdSuiteAdmissionResponse (message) {
+  if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
+
+  const { allowed, requestId } = message[1] || {}
+  if (Number.isSafeInteger(requestId)) {
+    finishEfdSuiteAdmissionRequest(requestId, allowed === true)
+  }
+}
+
+/**
+ * Returns the child-process or worker-thread sender used by the current Vitest worker.
+ *
+ * @returns {((message: unknown) => void)|undefined}
+ */
+function getEfdSuiteAdmissionSender () {
+  if (didInitializeEfdSuiteAdmissionTransport) return sendEfdSuiteAdmissionMessage
+  didInitializeEfdSuiteAdmissionTransport = true
+
+  if (typeof process.send === 'function') {
+    process.on('message', handleEfdSuiteAdmissionResponse)
+    sendEfdSuiteAdmissionMessage = process.send.bind(process)
+  } else if (!isMainThread && parentPort) {
+    parentPort.on('message', handleEfdSuiteAdmissionResponse)
+    sendEfdSuiteAdmissionMessage = parentPort.postMessage.bind(parentPort)
+  }
+  return sendEfdSuiteAdmissionMessage
+}
+
+/**
+ * Requests permission from the Vitest main process to schedule EFD retries for one suite.
+ *
+ * @param {string} testSuite
+ * @param {boolean} hasNewTest
+ * @returns {Promise<boolean>}
+ */
+function requestEfdSuiteAdmission (testSuite, hasNewTest) {
+  const sendMessage = getEfdSuiteAdmissionSender()
+  if (!sendMessage) return Promise.resolve(false)
+
+  const requestId = ++nextEfdSuiteAdmissionRequestId
+  return new Promise(resolve => {
+    const timeout = setTimeout(
+      () => finishEfdSuiteAdmissionRequest(requestId, false),
+      EFD_SUITE_ADMISSION_TIMEOUT_MS
+    )
+    timeout.unref?.()
+    pendingEfdSuiteAdmissionRequests.set(requestId, { resolve, timeout })
+
+    try {
+      sendMessage([VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE, { hasNewTest, requestId, testSuite }])
+    } catch {
+      finishEfdSuiteAdmissionRequest(requestId, false)
+    }
+  })
+}
+
+/**
+ * Requests a single EFD admission decision for all tests collected in a Vitest file.
+ *
+ * @param {{ file: { filepath: string, tasks?: object[] } }} task
+ * @param {object} providedContext
+ * @param {string|undefined} testSuite
+ * @returns {Promise<boolean>}
+ */
+function isEfdSuiteAdmissionAllowed (task, providedContext, testSuite) {
+  let admission = fileToEfdSuiteAdmission.get(task.file)
+  if (admission) return admission
+
+  admission = requestEfdSuiteAdmission(
+    testSuite || task.file.filepath,
+    hasRunnableNewTest(task.file, providedContext)
+  )
+  fileToEfdSuiteAdmission.set(task.file, admission)
+  return admission
+}
+
+/**
  * Gets the task associated with a Vitest hook invocation.
  *
  * @param {unknown[]} args
@@ -380,7 +509,7 @@ function wrapSuiteHookFn (hookType, fn, fallbackTask) {
 function wrapVitestTestRunner (VitestTestRunner) {
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
-  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
     const testName = getTestName(task)
 
     const providedContext = getProvidedContext()
@@ -423,25 +552,28 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     if (isImpactedTestsEnabled && testProperties.isModified) {
-      if (isEarlyFlakeDetectionEnabled) {
-        efdRetryTasks.add(task)
-        disableFrameworkRetries(task)
-        task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-      }
       modifiedTasks.add(task)
-      taskToStatuses.set(task, [])
     }
 
     if (isKnownTestsEnabled && testProperties.isNew && !attemptToFixTasks.has(task)) {
-      if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
+      newTasks.add(task)
+      if (DYNAMIC_NAME_RE.test(testName)) {
+        dynamicNameTasks.add(task)
+      }
+    }
+
+    const isEfdCandidate = isEarlyFlakeDetectionEnabled &&
+      !attemptToFixTasks.has(task) &&
+      !disabledTasks.has(task) &&
+      (modifiedTasks.has(task) || newTasks.has(task))
+    if (isEfdCandidate) {
+      const isAdmissionAllowed = !providedContext.isEfdSuiteAdmissionEnabled ||
+        await isEfdSuiteAdmissionAllowed(task, providedContext, testProperties.testSuite)
+      if (isAdmissionAllowed) {
         efdRetryTasks.add(task)
         disableFrameworkRetries(task)
         task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-      }
-      newTasks.add(task)
-      taskToStatuses.set(task, [])
-      if (DYNAMIC_NAME_RE.test(testName)) {
-        dynamicNameTasks.add(task)
+        taskToStatuses.set(task, [])
       }
     }
 
@@ -451,7 +583,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
   // `onAfterRunTask` is run after all repetitions or attempts are run
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
-    const { isEarlyFlakeDetectionEnabled, isTestManagementTestsEnabled } = getProvidedContext()
+    const { isTestManagementTestsEnabled } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
@@ -473,7 +605,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)) {
+    if (efdRetryTasks.has(task)) {
       const statuses = taskToStatuses.get(task)
       // If the test has passed at least once, we consider it passed
       if (statuses.includes('pass')) {
@@ -498,7 +630,6 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const providedContext = getProvidedContext()
     const {
       isKnownTestsEnabled,
-      isEarlyFlakeDetectionEnabled,
       isDiEnabled,
       earlyFlakeDetectionRetryPolicy,
     } = providedContext
@@ -509,7 +640,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
     const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
-    const isEfdManagedTask = isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)
+    const isEfdManagedTask = efdRetryTasks.has(task)
 
     if (isEfdManagedTask && numRepetition > 0 && !efdDeterminedRetries.has(task)) {
       const previousExecutionStart = efdExecutionStartByTask.get(task)
@@ -571,8 +702,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const lastExecutionStatus = task.result.state
     const isAtf = attemptToFixTasks.has(task)
-    const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isAtf
+    const isEfd = efdRetryTasks.has(task)
+    const shouldTrackStatuses = isEfd || isAtf
+    const shouldFlipStatus = isEfd || isAtf
     const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -694,7 +826,6 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const result = await onAfterTryTask.apply(this, arguments)
 
       const {
-        isEarlyFlakeDetectionEnabled,
         testManagementAttemptToFixRetries,
         earlyFlakeDetectionRetryPolicy,
       } = getProvidedContext()
@@ -716,10 +847,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
 
       if (
-        isEarlyFlakeDetectionEnabled &&
+        efdRetryTasks.has(task) &&
         (retryInfo.repeats ?? 0) === 0 &&
-        taskToStatuses.has(task) &&
-        !attemptToFixTasks.has(task) &&
         !efdDeterminedRetries.has(task)
       ) {
         const executionStart = efdExecutionStartByTask.get(task)
@@ -918,8 +1047,7 @@ addHook({
           }
 
           // Check if all EFD retries failed
-          const isEfdRetry =
-            providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
+          const isEfdRetry = efdRetryTasks.has(task)
           if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
             const efdRetryCount = efdDeterminedRetries.get(task) ??

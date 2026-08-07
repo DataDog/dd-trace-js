@@ -17,6 +17,7 @@ const {
 const {
   parseAnnotations,
   getTestSuitePath,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
@@ -56,6 +57,7 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
 const workerFinishCh = channel('ci:playwright:worker:finish')
+const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
@@ -72,6 +74,7 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
+const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const DD_PROPERTIES_TIMEOUT = 5000
@@ -1639,6 +1642,30 @@ addHook({
 })
 
 /**
+ * @typedef {Record<string, unknown>} PlaywrightTest
+ */
+
+/**
+ * @typedef {Record<string, unknown>} PlaywrightSuite
+ */
+
+/**
+ * @typedef {{ _fullProject: unknown, _addSuite: (suite: unknown) => void }} PlaywrightProjectSuite
+ */
+
+/**
+ * @typedef {(
+ *   copiedTest: PlaywrightTest, originalTest: PlaywrightTest, repeatEachIndex: number
+ * ) => void} ConfigureCopiedTest
+ */
+
+/**
+ * @typedef {(
+ *   fileSuite: PlaywrightSuite, projectSuite: PlaywrightProjectSuite, repeatEachIndex: number, numRetries: number
+ * ) => number} GetRetryRepeatEachIndex
+ */
+
+/**
  * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
  * as playwright could change it at any time.
  *
@@ -1651,6 +1678,13 @@ addHook({
  * - we clone each of these file suites for each repeat index
  * - we execute `applyRepeatEachIndex` for each of these cloned file suites
  * - we add the cloned file suites to the project suite
+ *
+ * @param {Map<PlaywrightSuite, PlaywrightProjectSuite>} fileSuitesWithTestsToRetry
+ * @param {(test: PlaywrightTest) => unknown} filterTest
+ * @param {Array<string | ((test: PlaywrightTest) => unknown)>} tagsToApply
+ * @param {number} numRetries
+ * @param {ConfigureCopiedTest} [configureCopiedTest]
+ * @param {GetRetryRepeatEachIndex} [getRetryRepeatEachIndex]
  */
 function applyRetriesToTests (
   fileSuitesWithTestsToRetry,
@@ -1880,6 +1914,8 @@ function finishProcessHostStartRunner (processHost) {
         serializedTraces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
       })
+    } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(message[1])
     }
   })
 }
@@ -1928,6 +1964,8 @@ async function handlePageGoto (page) {
     return
   }
 
+  activeRumPages.add(page)
+
   let browserVersion
   try {
     browserVersion = page.context().browser()?.version()
@@ -1962,6 +2000,54 @@ async function handlePageGoto (page) {
   } catch (error) {
     log.error('Playwright RUM correlation cookie error', error)
   }
+}
+
+/**
+ * Stops a RUM session and expires its correlation cookie.
+ *
+ * @param {import('playwright-core').Page} page
+ * @returns {Promise<void>}
+ */
+async function cleanupRumPage (page) {
+  try {
+    const isRumActive = await page.evaluate(stopRumSession)
+
+    if (!isRumActive) {
+      return
+    }
+
+    // Give some time RUM to flush data, similar to what we do in selenium
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+    const url = page.url()
+    if (url) {
+      const domain = new URL(url).hostname
+      await page.context().addCookies([{
+        name: RUM_COOKIE_NAME,
+        value: '',
+        domain,
+        path: '/',
+        expires: 0,
+      }])
+    } else {
+      log.error('RUM is active but page.url() is not available')
+    }
+  } catch (error) {
+    // Cleanup must not change the test result.
+    log.error('afterEach hook error', error)
+  }
+}
+
+/**
+ * Stops RUM sessions and expires correlation cookies for pages visited by the current test.
+ *
+ * @returns {Promise<void[]>|undefined}
+ */
+function cleanupRumPages () {
+  if (activeRumPages.size === 0) return
+
+  const cleanupPromises = Array.from(activeRumPages, cleanupRumPage)
+  activeRumPages.clear()
+  return Promise.all(cleanupPromises)
 }
 
 addHook({
@@ -2013,6 +2099,7 @@ function instrumentWorkerMainMethods (workerMain) {
     }
     test._ddStartTime = performance.now()
     steps = []
+    activeRumPages.clear()
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -2076,34 +2163,7 @@ function instrumentWorkerMainMethods (workerMain) {
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
-          fn: async function ({ page }) {
-            try {
-              if (page) {
-                const isRumActive = await page.evaluate(stopRumSession)
-
-                if (isRumActive) {
-                  // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
-                  const url = page.url()
-                  if (url) {
-                    const domain = new URL(url).hostname
-                    await page.context().addCookies([{
-                      name: RUM_COOKIE_NAME,
-                      value: '',
-                      domain,
-                      path: '/',
-                      expires: 0,
-                    }])
-                  } else {
-                    log.error('RUM is active but page.url() is not available')
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore errors
-              log.error('afterEach hook error', e)
-            }
-          },
+          fn: cleanupRumPages,
           title: 'afterEach hook',
           _ddHook: true,
         })

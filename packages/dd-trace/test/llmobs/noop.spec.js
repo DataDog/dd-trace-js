@@ -64,6 +64,10 @@ describe('noop', () => {
     llmobs.submitEvaluation()
   })
 
+  it('using "submitFeedback" should not throw', () => {
+    llmobs.submitFeedback()
+  })
+
   it('using "flush" should not throw', () => {
     llmobs.flush()
   })

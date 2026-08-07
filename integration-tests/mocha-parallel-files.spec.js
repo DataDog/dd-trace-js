@@ -13,11 +13,11 @@ const fixturesDir = path.join(__dirname, 'mocha-parallel-files-fixtures')
  *   stdout: string,
  *   stderr: string,
  *   code: number|null,
- *   signal: NodeJS.Signals|null
+ *   signal: keyof import('node:os').SignalConstants|null
  * }} ChildResult
  *
  * @typedef {{
- *   killSignal?: NodeJS.Signals,
+ *   killSignal?: keyof import('node:os').SignalConstants,
  *   killOnFirstStdout?: boolean,
  *   timeoutMs?: number
  * }} RunOpts

@@ -1,11 +1,16 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const {
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const log = require('../../dd-trace/src/log')
 const {
   sendWebdriverioWorkerMessage,
@@ -44,6 +49,8 @@ const {
   TEST_FINAL_STATUS,
   TEST_HAS_DYNAMIC_NAME,
   TEST_FRAMEWORK_ADAPTER,
+  DYNAMIC_NAME_RE,
+  getFailedTestReplayPromise,
   getTestSuiteExecutionKey,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -62,14 +69,24 @@ const {
 
 const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
 const jasmineDoneCh = 'ci:webdriverio:jasmine:done'
+const jasmineExecuteAsyncEndCh = 'tracing:orchestrion:@wdio/utils:executeAsync:asyncEnd'
+const jasmineExecuteAsyncErrorCh = 'tracing:orchestrion:@wdio/utils:executeAsync:error'
+const jasmineExecuteAsyncStartCh = 'tracing:orchestrion:@wdio/utils:executeAsync:start'
 const jasmineReporterSpecDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end'
+const jasmineReporterSpecDoneStartCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:start'
 const jasmineReporterSpecStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end'
 const jasmineReporterSuiteDoneEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteDone:end'
 const jasmineReporterSuiteStartedEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_suiteStarted:end'
+const jasmineSpecAttemptDoneEndCh = 'tracing:orchestrion:jasmine-core:Spec_attemptDone:end'
+const jasmineSpecExecuteStartCh = 'tracing:orchestrion:jasmine-core:Spec_execute:start'
 const jasmineTestFunctionStartCh = 'tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start'
 const testFinishCh = channel('ci:mocha:test:finish')
+const testRetryCh = channel('ci:mocha:test:retry')
 const WEBDRIVERIO_JASMINE_ADAPTER = 'jasmine'
 const workerFinishCh = channel('ci:mocha:worker:finish')
+const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineFailedExpectationCount')
+const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
+const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 
 /**
  * @typedef {object} WebdriverioJasmineResult
@@ -170,7 +187,10 @@ class MochaPlugin extends CiPlugin {
       this._setRepositoryRoot(repositoryRoot)
       if (testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
         this._webdriverioJasmineState = {
+          completedTestStatuses: new Map(),
           currentResult: undefined,
+          pendingTestFinishCallbacks: [],
+          pendingTestFinishes: 0,
           specs: specs || [],
           suiteErrors: new Map(),
           suiteFiles: new Map(),
@@ -188,9 +208,80 @@ class MochaPlugin extends CiPlugin {
       const result = this._webdriverioJasmineState?.currentResult
       const type = ctx.arguments?.[1]
       if (type === 'Test' || (type === 'Hook' && result)) {
-        return this.#startWebdriverioJasmineTest(result)
+        return this.#configureWebdriverioJasmineFunction(ctx, result, type)
       }
       return storage('legacy').getStore()
+    })
+
+    this.addBind(jasmineExecuteAsyncStartCh, (ctx) => {
+      const currentStore = storage('legacy').getStore()
+      const test = currentStore?.[WEBDRIVERIO_JASMINE_TEST]
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER || !test) {
+        return currentStore
+      }
+
+      const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
+      if (functionType === 'Test') {
+        ctx.retryCallback = error => this.#retryWebdriverioJasmineTest(test, error)
+      }
+      const nextStore = {
+        ...test.currentStore,
+        [WEBDRIVERIO_JASMINE_FUNCTION_TYPE]: functionType,
+      }
+      if (functionType === 'Hook') {
+        nextStore[WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT] =
+          this._webdriverioJasmineState.currentResult?.failedExpectations?.length || 0
+      }
+      return nextStore
+    })
+
+    this.addBind(jasmineSpecExecuteStartCh, (ctx) => {
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
+        return storage('legacy').getStore()
+      }
+
+      this.#configureWebdriverioJasmineLifecycle(ctx)
+      return storage('legacy').getStore()
+    })
+
+    this.addSub(jasmineSpecAttemptDoneEndCh, (ctx) => {
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
+        return
+      }
+
+      const status = typeof ctx.result === 'string' ? ctx.result : ctx.self?.result?.status
+      const runnerStatus = this.#prepareWebdriverioJasmineAttempt(ctx.self, status)
+      if (typeof ctx.result === 'string') {
+        ctx.result = runnerStatus
+      } else if (ctx.self?.result) {
+        ctx.self.result.status = runnerStatus
+      }
+    })
+
+    this.addSub(jasmineExecuteAsyncErrorCh, (ctx) => {
+      const currentStore = ctx.currentStore || storage('legacy').getStore()
+      const test = currentStore?.[WEBDRIVERIO_JASMINE_TEST]
+      if (
+        this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER &&
+        test &&
+        currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE] === 'Hook'
+      ) {
+        test.hasFinalHookFailure = true
+      }
+    })
+
+    this.addSub(jasmineExecuteAsyncEndCh, (ctx) => {
+      const currentStore = ctx.currentStore || storage('legacy').getStore()
+      const test = currentStore?.[WEBDRIVERIO_JASMINE_TEST]
+      const failedExpectationCount = currentStore?.[WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT]
+      if (
+        this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER &&
+        test &&
+        currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE] === 'Hook' &&
+        this._webdriverioJasmineState.currentResult?.failedExpectations?.length > failedExpectationCount
+      ) {
+        test.hasFinalHookFailure = true
+      }
     })
 
     this.addSub(jasmineReporterSuiteStartedEndCh, (ctx) => {
@@ -239,9 +330,32 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
+    this.addBind(jasmineReporterSpecDoneStartCh, (ctx) => {
+      if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
+        return storage('legacy').getStore()
+      }
+
+      const result = ctx.arguments?.[0]
+      const test = this._webdriverioJasmineState?.tests.get(result?.id)
+      const recoveredEarlyFlakeDetection = test?.isEarlyFlakeDetection &&
+        !test.hasFinalHookFailure && test.statuses.includes('pass')
+      if (
+        result.status === 'failed' &&
+        ((test?.isQuarantined && !test.isAttemptToFix) || recoveredEarlyFlakeDetection)
+      ) {
+        test.reportedStatus = result.status
+        result.status = 'passed'
+      }
+      return test?.currentStore || storage('legacy').getStore()
+    })
+
     this.addSub(jasmineReporterSpecDoneEndCh, (ctx) => {
       if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
-        this.#finishWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+        const result = ctx.result
+        const finishPromise = this.#finishWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+        if (finishPromise) {
+          ctx.result = finishPromise.then(() => result)
+        }
       }
     })
 
@@ -510,10 +624,13 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test:retry', ({
       span,
       isFirstAttempt,
+      isFirstFailure = isFirstAttempt,
       willBeRetried,
       err,
       test,
+      isAttemptToFixRetry,
       isAtrRetry,
+      isEfdRetry,
       promises,
     }) => {
       if (span) {
@@ -528,8 +645,12 @@ class MochaPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
-          if (isAtrRetry) {
+          if (isAttemptToFixRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
+          } else if (isAtrRetry) {
             span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else if (isEfdRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           } else {
             span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
           }
@@ -543,7 +664,7 @@ class MochaPlugin extends CiPlugin {
           'test',
           this.getTestTelemetryTags(span)
         )
-        if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
+        if (isFirstFailure && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
             const { file, line, stackIndex, setProbePromise } = probeInformation
@@ -557,7 +678,7 @@ class MochaPlugin extends CiPlugin {
           }
         }
 
-        if (!isFirstAttempt &&
+        if (!isFirstFailure &&
           willBeRetried &&
           this.di &&
           this.libraryConfig?.isDiEnabled &&
@@ -683,6 +804,9 @@ class MochaPlugin extends CiPlugin {
     if (!state || !result?.id) {
       return currentStore
     }
+    if (state.completedTestStatuses.has(result.id)) {
+      return currentStore
+    }
 
     const existingTest = state.tests.get(result.id)
     if (existingTest) {
@@ -702,20 +826,333 @@ class MochaPlugin extends CiPlugin {
       return currentStore
     }
 
-    const span = this.startTestSpan({
-      testName: result.fullName || result.description,
+    const testName = result.fullName || result.description
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+    const properties = this.libraryConfig?.testManagementTests?.mocha
+      ?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+    const isAttemptToFix = this.libraryConfig?.isTestManagementTestsEnabled && properties.attempt_to_fix
+    const isDisabled = this.libraryConfig?.isTestManagementTestsEnabled && properties.disabled
+    const isQuarantined = this.libraryConfig?.isTestManagementTestsEnabled && properties.quarantined
+    const isModified = this.libraryConfig?.isImpactedTestsEnabled && isModifiedTest(
+      getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot || this.sourceRoot),
+      null,
+      null,
+      this.libraryConfig.modifiedFiles,
+      this.constructor.id
+    )
+    const knownTests = this.libraryConfig?.knownTests?.mocha
+    const isNew = this.libraryConfig?.isKnownTestsEnabled && knownTests &&
+      !(knownTests[testSuite] || []).includes(testName)
+    const isEarlyFlakeDetection = this.libraryConfig?.isEarlyFlakeDetectionEnabled &&
+      hasEfdRetries(this.libraryConfig.earlyFlakeDetectionRetryPolicy) &&
+      !isAttemptToFix && !isDisabled && (isNew || isModified)
+    const isAtr = this.libraryConfig?.isFlakyTestRetriesEnabled &&
+      !isAttemptToFix && !isEarlyFlakeDetection
+    let retryCount = 0
+    if (isAttemptToFix) {
+      retryCount = this.libraryConfig.testManagementAttemptToFixRetries
+    } else if (isEarlyFlakeDetection) {
+      retryCount = this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+    } else if (isAtr) {
+      retryCount = this.libraryConfig.flakyTestRetriesCount
+    }
+
+    const test = {
+      attempt: 0,
+      attemptStart: undefined,
+      currentStore: undefined,
+      earlyFlakeAbortReason: undefined,
+      hasDynamicName: isNew && DYNAMIC_NAME_RE.test(testName),
+      hasFailedAttempt: false,
+      hasFinalHookFailure: false,
+      isAttemptToFix,
+      isAtr,
+      isDisabled,
+      isEarlyFlakeDetection,
+      isModified,
+      isNew,
+      isQuarantined,
+      reportedStatus: undefined,
+      retryCount,
+      retryWait: undefined,
+      runnerStatus: undefined,
+      span: undefined,
+      statuses: [],
+      testName,
       testSuiteAbsolutePath,
       title: result.description,
-    })
-    const testStore = { ...currentStore, span }
-    state.tests.set(result.id, {
-      currentStore: testStore,
-      span,
-      testSuiteAbsolutePath,
-    })
-    this.activeTestSpan = span
+    }
+    state.tests.set(result.id, test)
+    this.#startWebdriverioJasmineAttempt(test, currentStore)
 
-    return testStore
+    return test.currentStore
+  }
+
+  /**
+   * Applies a managed Jasmine test's skip and retry policy to WebdriverIO's function wrapper.
+   *
+   * @param {object} context
+   * @param {WebdriverioJasmineResult|undefined} result
+   * @param {'Test'|'Hook'} type
+   * @returns {object|undefined}
+   */
+  #configureWebdriverioJasmineFunction (context, result, type) {
+    const currentStore = this.#startWebdriverioJasmineTest(result)
+    const test = this._webdriverioJasmineState?.tests.get(result?.id)
+    if (!test) {
+      return currentStore
+    }
+
+    if (test.isAttemptToFix || test.isAtr || test.isEarlyFlakeDetection) {
+      context.arguments[6] = 0
+    }
+    return {
+      ...test.currentStore,
+      [WEBDRIVERIO_JASMINE_FUNCTION_TYPE]: type,
+    }
+  }
+
+  /**
+   * Starts one WebdriverIO Jasmine test attempt under its suite span.
+   *
+   * @param {object} test
+   * @param {object|undefined} parentStore
+   * @returns {void}
+   */
+  #startWebdriverioJasmineAttempt (test, parentStore) {
+    test.attemptStart = performance.now()
+    test.hasFinalHookFailure = false
+    const span = this.startTestSpan({
+      hasDynamicName: test.hasDynamicName,
+      isAttemptToFix: test.isAttemptToFix,
+      isDisabled: test.isDisabled,
+      isEfdRetry: test.isEarlyFlakeDetection && test.attempt > 0,
+      isModified: test.isModified,
+      isNew: test.isNew,
+      isParallel: true,
+      isQuarantined: test.isQuarantined,
+      testName: test.testName,
+      testSuiteAbsolutePath: test.testSuiteAbsolutePath,
+      title: test.title,
+    })
+    test.span = span
+    test.currentStore = {
+      ...parentStore,
+      span,
+      [WEBDRIVERIO_JASMINE_TEST]: test,
+    }
+    this.activeTestSpan = span
+  }
+
+  /**
+   * Delays Jasmine's parent runner until every Datadog-managed spec execution has completed.
+   *
+   * @param {object} context
+   * @returns {void}
+   */
+  #configureWebdriverioJasmineLifecycle (context) {
+    const isLegacyJasmine = Boolean(context.self?.queueableFn)
+    const spec = isLegacyJasmine ? context.self : context.arguments?.[0]
+    const onComplete = context.arguments?.[1]
+    const originalTestFunction = spec?.queueableFn?.fn
+    if (!spec?.id || typeof onComplete !== 'function' || typeof originalTestFunction !== 'function') {
+      return
+    }
+
+    if (this.libraryConfig?.isTestManagementTestsEnabled) {
+      this.#startWebdriverioJasmineTest(spec.result)
+      const test = this._webdriverioJasmineState?.tests.get(spec.id)
+      if (test?.isDisabled && !test.isAttemptToFix) {
+        spec.pend('Skipped by Datadog Test Management')
+      }
+    }
+
+    const executionArguments = [...context.arguments]
+    context.arguments[1] = (...completeArguments) => {
+      const test = this._webdriverioJasmineState?.tests.get(spec.id)
+      if (!test?.willRetry) {
+        return onComplete(...completeArguments)
+      }
+
+      test.willRetry = false
+      const retry = () => {
+        try {
+          this.#startNextWebdriverioJasmineAttempt(test)
+          spec.reset()
+          spec.queueableFn.fn = originalTestFunction
+          if (isLegacyJasmine) {
+            spec.execute(
+              executionArguments[0],
+              onComplete,
+              executionArguments[2],
+              executionArguments[3]
+            )
+          } else {
+            context.self._executeSpec(spec, onComplete)
+          }
+        } catch (error) {
+          log.error('WebdriverIO Jasmine retry error', error)
+          onComplete(...completeArguments)
+        }
+      }
+      const retryWait = test.retryWait
+      test.retryWait = undefined
+      if (retryWait?.then) {
+        retryWait.then(retry, retry)
+      } else {
+        retry()
+      }
+    }
+  }
+
+  /**
+   * Selects the runner-visible status and whether Jasmine should execute the full spec again.
+   *
+   * @param {object|undefined} spec
+   * @param {string|undefined} status
+   * @returns {string|undefined}
+   */
+  #prepareWebdriverioJasmineAttempt (spec, status) {
+    const state = this._webdriverioJasmineState
+    const completedStatus = state?.completedTestStatuses.get(spec?.id)
+    if (completedStatus) {
+      return completedStatus
+    }
+
+    const test = state?.tests.get(spec?.id)
+    if (!test || !status) {
+      return status
+    }
+
+    const testStatus = getJasmineStatus(status)
+    if (
+      testStatus !== 'skip' &&
+      test.isEarlyFlakeDetection &&
+      test.attempt === 0
+    ) {
+      test.retryCount = getEfdRetryCountForDuration(
+        performance.now() - test.attemptStart,
+        this.libraryConfig.earlyFlakeDetectionRetryPolicy
+      )
+      if (test.retryCount === 0) {
+        test.earlyFlakeAbortReason = 'slow'
+      }
+    }
+
+    const hasManagedRetry = testStatus !== 'skip' && test.attempt < test.retryCount
+    test.willRetry = hasManagedRetry && (
+      test.isAttemptToFix ||
+      test.isEarlyFlakeDetection ||
+      (test.isAtr && testStatus === 'fail' && !test.hasFinalHookFailure)
+    )
+
+    let runnerStatus = status
+    const recoveredEarlyFlakeDetection = test.isEarlyFlakeDetection &&
+      !test.hasFinalHookFailure && test.statuses.includes('pass')
+    if (
+      testStatus === 'fail' &&
+      (test.willRetry || (test.isQuarantined && !test.isAttemptToFix) || recoveredEarlyFlakeDetection)
+    ) {
+      runnerStatus = 'passed'
+    } else if (testStatus !== 'skip' && !test.willRetry && test.isAttemptToFix) {
+      runnerStatus = test.statuses.every(previousStatus => previousStatus === 'pass') && testStatus === 'pass'
+        ? 'passed'
+        : 'failed'
+    }
+
+    if (runnerStatus !== status) {
+      test.reportedStatus = status
+    }
+    if (!test.willRetry) {
+      test.runnerStatus = runnerStatus
+    }
+    return runnerStatus
+  }
+
+  /**
+   * Finishes one Datadog-managed Jasmine attempt before the full spec is executed again.
+   *
+   * @param {object} test
+   * @param {WebdriverioJasmineResult} result
+   * @returns {void}
+   */
+  #finishWebdriverioJasmineRetry (test, result) {
+    const status = getJasmineStatus(test.reportedStatus || result.status)
+    const error = getJasmineError(result)
+    test.statuses.push(status)
+
+    if (error) {
+      const isFirstFailure = !test.hasFailedAttempt
+      test.hasFailedAttempt = true
+      const promises = {}
+      testRetryCh.publish({
+        err: error,
+        isAttemptToFixRetry: test.isAttemptToFix && test.attempt > 0,
+        isAtrRetry: test.isAtr && test.attempt > 0,
+        isEfdRetry: test.isEarlyFlakeDetection && test.attempt > 0,
+        isFirstAttempt: test.attempt === 0,
+        isFirstFailure,
+        promises,
+        test,
+        willBeRetried: true,
+        ...test.currentStore,
+      })
+      test.retryWait = getFailedTestReplayPromise(promises)
+    } else {
+      testFinishCh.publish({
+        hasBeenRetried: test.isAtr && test.attempt > 0,
+        isAttemptToFixRetry: test.isAttemptToFix && test.attempt > 0,
+        isAtrRetry: false,
+        isLastRetry: false,
+        status,
+        ...test.currentStore,
+      })
+    }
+  }
+
+  /**
+   * Advances a Jasmine test and starts its next attempt span.
+   *
+   * @param {object} test
+   * @returns {void}
+   */
+  #startNextWebdriverioJasmineAttempt (test) {
+    test.attempt++
+    test.reportedStatus = undefined
+    this.#startWebdriverioJasmineAttempt(test, test.currentStore)
+  }
+
+  /**
+   * Finishes an intermediate native WebdriverIO retry and starts its next span.
+   *
+   * @param {object} test
+   * @param {Error|undefined} error
+   * @returns {Promise<void>|undefined}
+   */
+  #retryWebdriverioJasmineTest (test, error) {
+    test.statuses.push('fail')
+    const isFirstFailure = !test.hasFailedAttempt
+    test.hasFailedAttempt = true
+    const promises = {}
+    testRetryCh.publish({
+      err: error,
+      isAttemptToFixRetry: false,
+      isAtrRetry: false,
+      isEfdRetry: false,
+      isFirstAttempt: test.attempt === 0,
+      isFirstFailure,
+      promises,
+      test,
+      willBeRetried: true,
+      ...test.currentStore,
+    })
+
+    const retryWait = getFailedTestReplayPromise(promises)
+    if (retryWait?.then) {
+      const startNextAttempt = () => this.#startNextWebdriverioJasmineAttempt(test)
+      return retryWait.then(startNextAttempt, startNextAttempt)
+    }
+    this.#startNextWebdriverioJasmineAttempt(test)
   }
 
   /**
@@ -723,7 +1160,7 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {WebdriverioJasmineResult|undefined} result
    * @param {string[]} [specs]
-   * @returns {void}
+   * @returns {Promise<void>|undefined}
    */
   #finishWebdriverioJasmineTest (result, specs) {
     const state = this._webdriverioJasmineState
@@ -737,20 +1174,86 @@ class MochaPlugin extends CiPlugin {
       return
     }
 
-    const status = getJasmineStatus(result.status)
+    if (state.currentResult?.id === result.id) {
+      state.currentResult = undefined
+    }
+    if (test.willRetry) {
+      this.#finishWebdriverioJasmineRetry(test, result)
+      return
+    }
+    if (test._ddShouldWaitForHitProbe) {
+      delete test._ddShouldWaitForHitProbe
+      state.pendingTestFinishes++
+      const finishTest = () => {
+        this.#completeWebdriverioJasmineTest(test, result)
+        state.pendingTestFinishes--
+        if (state.pendingTestFinishes === 0) {
+          const callbacks = state.pendingTestFinishCallbacks
+          state.pendingTestFinishCallbacks = []
+          for (const callback of callbacks) {
+            callback()
+          }
+        }
+      }
+      return this.waitForDiBreakpointHits().then(finishTest, finishTest)
+    }
+
+    this.#completeWebdriverioJasmineTest(test, result)
+  }
+
+  /**
+   * Finalizes the last reported attempt for one WebdriverIO Jasmine test.
+   *
+   * @param {object} test
+   * @param {WebdriverioJasmineResult} result
+   * @returns {void}
+   */
+  #completeWebdriverioJasmineTest (test, result) {
+    const state = this._webdriverioJasmineState
+
+    const status = getJasmineStatus(test.reportedStatus || result.status)
     const error = getJasmineError(result)
     if (error) {
       test.span.setTag('error', error)
     }
-    testFinishCh.publish({ span: test.span, status })
-    state.tests.delete(result.id)
-    if (state.currentResult?.id === result.id) {
-      state.currentResult = undefined
+    if (!test.isEarlyFlakeDetection || status !== 'skip') {
+      test.statuses.push(status)
     }
+    const hasFailedAllRetries = test.attempt > 0 &&
+      (test.isAttemptToFix || test.isAtr || test.isEarlyFlakeDetection) &&
+      test.statuses.every(testStatus => testStatus === 'fail')
+    const isSkipped = status === 'skip'
+    const attemptToFixPassed = !isSkipped && test.isAttemptToFix &&
+      test.statuses.every(testStatus => testStatus === 'pass')
+    const attemptToFixFailed = !isSkipped && test.isAttemptToFix && !attemptToFixPassed
+    let finalStatus = status
+    if (isSkipped || (!test.isAttemptToFix && (test.isDisabled || test.isQuarantined))) {
+      finalStatus = 'skip'
+    } else if (test.isAttemptToFix) {
+      finalStatus = attemptToFixPassed ? 'pass' : 'fail'
+    } else if (test.isEarlyFlakeDetection && status !== 'skip' && !test.hasFinalHookFailure) {
+      finalStatus = test.statuses.includes('pass') ? 'pass' : 'fail'
+    }
+    testFinishCh.publish({
+      attemptToFixFailed,
+      attemptToFixPassed,
+      earlyFlakeAbortReason: test.earlyFlakeAbortReason,
+      finalStatus,
+      hasBeenRetried: !test.isAttemptToFix && !test.isEarlyFlakeDetection && test.attempt > 0,
+      hasFailedAllRetries,
+      isAttemptToFixRetry: test.isAttemptToFix && test.attempt > 0,
+      isAtrRetry: test.isAtr && test.attempt > 0,
+      isLastRetry: true,
+      status,
+      ...test.currentStore,
+    })
+    state.completedTestStatuses.set(result.id, test.runnerStatus || result.status)
+    state.tests.delete(result.id)
 
+    const suiteStatus = test.isQuarantined && !test.isAttemptToFix ? 'pass' : finalStatus
     const previousStatus = state.suiteStatuses.get(test.testSuiteAbsolutePath)
-    if (status === 'fail' || !previousStatus || previousStatus === 'skip') {
-      state.suiteStatuses.set(test.testSuiteAbsolutePath, status)
+    if (suiteStatus === 'fail' || !previousStatus || previousStatus === 'skip') {
+      state.suiteStatuses.set(test.testSuiteAbsolutePath, suiteStatus)
     }
   }
 
@@ -765,28 +1268,28 @@ class MochaPlugin extends CiPlugin {
    */
   #finishWebdriverioJasmineWorker (context) {
     const state = this._webdriverioJasmineState
-    const results = []
-    const reportedFiles = new Set()
-    for (const [file, status] of state?.suiteStatuses || []) {
-      const error = state.suiteErrors.get(file)
-      const result = { file, status }
-      if (error) {
-        result.error = {
-          message: error.message,
-          stack: error.stack,
+    const reportWorker = onDone => {
+      const results = []
+      const reportedFiles = new Set()
+      for (const [file, status] of state.suiteStatuses) {
+        const error = state.suiteErrors.get(file)
+        const result = { file, status }
+        if (error) {
+          result.error = {
+            message: error.message,
+            stack: error.stack,
+          }
+        }
+        results.push(result)
+        reportedFiles.add(file)
+      }
+      for (const spec of state.specs) {
+        const file = normalizeJasmineFile(spec)
+        if (!reportedFiles.has(file)) {
+          results.push({ file, status: 'skip' })
         }
       }
-      results.push(result)
-      reportedFiles.add(file)
-    }
-    for (const spec of state?.specs || []) {
-      const file = normalizeJasmineFile(spec)
-      if (!reportedFiles.has(file)) {
-        results.push({ file, status: 'skip' })
-      }
-    }
 
-    const waitForWorker = onDone => {
       sendWebdriverioWorkerMessage({
         origin: 'datadog',
         name: SUITE_FINISH,
@@ -796,6 +1299,14 @@ class MochaPlugin extends CiPlugin {
           log.error('WebdriverIO Test Optimization IPC error', error)
         }
       }, () => workerFinishCh.publish({ onDone }))
+    }
+
+    const waitForWorker = onDone => {
+      if (state?.pendingTestFinishes) {
+        state.pendingTestFinishCallbacks.push(() => reportWorker(onDone))
+      } else {
+        reportWorker(onDone)
+      }
     }
     context.resolveCallback = waitForWorker
     context.rejectCallback = waitForWorker

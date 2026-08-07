@@ -486,7 +486,7 @@ class PlaywrightPlugin extends CiPlugin {
         {
           hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
           isNew,
-          isRum: isRUMActive,
+          isRum: isRUMActive === 'true' || undefined,
           browserDriver: 'playwright',
           isQuarantined,
           isDisabled,
