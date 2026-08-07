@@ -14,9 +14,9 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>Represents a single LLM chat model message</p>
 </div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Message</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#audioparts">audioParts</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.AudioPart.html" class="tsd-signature-type tsd-kind-interface">AudioPart</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#content">content</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#role">role</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#toolcalls">toolCalls</a><span class="tsd-signature-symbol">?:</span> <a href="../modules/llmobs.html" class="tsd-signature-type tsd-kind-namespace">llmobs</a><span class="tsd-signature-symbol">.</span><a href="llmobs.ToolCall.html" class="tsd-signature-type tsd-kind-interface">ToolCall</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Message</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#audioparts">audioParts</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.AudioPart.html" class="tsd-signature-type tsd-kind-interface">AudioPart</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#content">content</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#imageparts">imageParts</a><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.ImagePart.html" class="tsd-signature-type tsd-kind-type-alias">ImagePart</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#role">role</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#toolcalls">toolCalls</a><span class="tsd-signature-symbol">?:</span> <a href="../modules/llmobs.html" class="tsd-signature-type tsd-kind-namespace">llmobs</a><span class="tsd-signature-symbol">.</span><a href="llmobs.ToolCall.html" class="tsd-signature-type tsd-kind-interface">ToolCall</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3e183461555372197378cfa7fdd7e71a6658924c/index.d.ts#L4082">index.d.ts:4082</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4082">index.d.ts:4082</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -26,6 +26,7 @@
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#audioparts" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>audio<wbr/>Parts?</span></a>
 <a href="#content" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>content</span></a>
+<a href="#imageparts" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>image<wbr/>Parts?</span></a>
 <a href="#role" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>role?</span></a>
 <a href="#toolcalls" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tool<wbr/>Calls?</span></a>
 </div></section></div></details></section></section>
@@ -38,28 +39,35 @@
 <div class="tsd-comment tsd-typography"><p>Audio segments attached to the message (e.g. speech input/output)</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3e183461555372197378cfa7fdd7e71a6658924c/index.d.ts#L4101">index.d.ts:4101</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4101">index.d.ts:4101</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="content"><span>content</span><a href="#content" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">content</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Content of the message.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3e183461555372197378cfa7fdd7e71a6658924c/index.d.ts#L4086">index.d.ts:4086</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4086">index.d.ts:4086</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="imageparts"><code class="tsd-tag">Optional</code><span>image<wbr/>Parts</span><a href="#imageparts" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">imageParts</span><span class="tsd-signature-symbol">?:</span> <a href="../types/llmobs.ImagePart.html" class="tsd-signature-type tsd-kind-type-alias">ImagePart</a><span class="tsd-signature-symbol">[]</span></div>
+<div class="tsd-comment tsd-typography"><p>Images attached to the message (e.g. vision input, generated output)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4106">index.d.ts:4106</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="role"><code class="tsd-tag">Optional</code><span>role</span><a href="#role" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">role</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Role of the message (ie system, user, ai)</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3e183461555372197378cfa7fdd7e71a6658924c/index.d.ts#L4091">index.d.ts:4091</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4091">index.d.ts:4091</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="toolcalls"><code class="tsd-tag">Optional</code><span>tool<wbr/>Calls</span><a href="#toolcalls" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">toolCalls</span><span class="tsd-signature-symbol">?:</span> <a href="../modules/llmobs.html" class="tsd-signature-type tsd-kind-namespace">llmobs</a><span class="tsd-signature-symbol">.</span><a href="llmobs.ToolCall.html" class="tsd-signature-type tsd-kind-interface">ToolCall</a><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Tool calls of the message</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3e183461555372197378cfa7fdd7e71a6658924c/index.d.ts#L4096">index.d.ts:4096</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/c899285c98cf92070c9cc6307f71831cb92d6e0f/index.d.ts#L4096">index.d.ts:4096</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -74,7 +82,7 @@
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#audioparts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>audio<wbr/>Parts</span></a><a href="#content"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>content</span></a><a href="#role"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>role</span></a><a href="#toolcalls"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tool<wbr/>Calls</span></a></div></details></div></details></div>
+<div><a href="#audioparts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>audio<wbr/>Parts</span></a><a href="#content"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>content</span></a><a href="#imageparts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>image<wbr/>Parts</span></a><a href="#role"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>role</span></a><a href="#toolcalls"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tool<wbr/>Calls</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">dd-trace</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
