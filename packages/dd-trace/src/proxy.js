@@ -301,6 +301,14 @@ class Tracer extends NoopProxy {
   }
 
   /**
+   * `tracer.openfeature` is only reachable through this proxy. SSI itself (auto-injecting
+   * the tracer, resolving the vendored provider regardless of the customer's own
+   * `node_modules` layout) is unaffected -- that is what this PR fixes. The remaining gap is
+   * narrower: there is no `dd-trace-api` handoff for `openfeature` yet (see
+   * `packages/datadog-plugin-dd-trace-api`), so an application that calls into the tracer
+   * exclusively through the `dd-trace-api` shim -- instead of `require('dd-trace')` -- cannot
+   * reach the flagging provider through that shim.
+   *
    * @param {import('./config/config-base')} config
    */
   #enableOpenfeature (config) {
