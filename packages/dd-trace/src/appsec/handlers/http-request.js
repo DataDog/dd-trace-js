@@ -1,11 +1,13 @@
 'use strict'
 
 const { HTTP_CLIENT_IP } = require('../../../../../ext/tags')
+const log = require('../../log')
 const web = require('../../plugins/util/web')
 const { extractIp } = require('../../plugins/util/ip_extractor')
 const { isEmpty } = require('../../util')
 const addresses = require('../addresses')
 const apiSecurity = require('../api_security')
+const { normalizeRoute } = require('../api_security/normalized-route')
 const { handleResults } = require('../blocking')
 const Reporter = require('../reporter')
 const { getActiveRequest } = require('../store')
@@ -142,6 +144,17 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
+
+  if (config.appsec.DD_API_SECURITY_ENABLED) {
+    try {
+      const normalized = normalizeRoute(req)
+      if (normalized !== null) {
+        web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
+      }
+    } catch (e) {
+      log.debug('[ASM] Unable to compute normalized route: %s', e.message)
+    }
+  }
 
   const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
   if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
