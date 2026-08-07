@@ -12,18 +12,18 @@ const SUPPORTED_SYNC_HOOKS_NODE_VERSION = {
   NODE_MINOR: 11,
   NODE_PATCH: 1,
 }
-const SYNC_SOURCE_REWRITING_SYMBOL = Symbol.for('dd-trace.loader.sync-source-rewriting')
+const FULL_SYNC_LOADER_SYMBOL = Symbol.for('dd-trace.loader.full-sync')
 
 describe('register.js', () => {
   let emitWarning
 
   beforeEach(() => {
-    delete globalThis[SYNC_SOURCE_REWRITING_SYMBOL]
+    delete globalThis[FULL_SYNC_LOADER_SYMBOL]
     emitWarning = sinon.stub(process, 'emitWarning')
   })
 
   afterEach(() => {
-    delete globalThis[SYNC_SOURCE_REWRITING_SYMBOL]
+    delete globalThis[FULL_SYNC_LOADER_SYMBOL]
     emitWarning.restore()
   })
 
@@ -47,7 +47,7 @@ describe('register.js', () => {
     sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.notCalled(emitWarning)
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('registers sync loader hooks on supported Node.js versions', () => {
@@ -63,7 +63,7 @@ describe('register.js', () => {
     sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.notCalled(register)
     sinon.assert.notCalled(emitWarning)
-    assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
+    assert.strictEqual(globalThis[FULL_SYNC_LOADER_SYMBOL], true)
   })
 
   it('falls back to the async loader on the last Electron without the validator fix', () => {
@@ -81,7 +81,7 @@ describe('register.js', () => {
     sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.notCalled(emitWarning)
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('registers sync loader hooks on the first Electron with the validator fix', () => {
@@ -96,7 +96,7 @@ describe('register.js', () => {
     sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.notCalled(register)
     sinon.assert.notCalled(emitWarning)
-    assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], true)
+    assert.strictEqual(globalThis[FULL_SYNC_LOADER_SYMBOL], true)
   })
 
   it('warns and falls back if sync loader registration returns false', () => {
@@ -112,7 +112,7 @@ describe('register.js', () => {
     sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.calledOnceWithMatch(emitWarning, /dd-trace could not register synchronous loader hooks/)
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('warns and falls back if sync loader registration throws', () => {
@@ -132,7 +132,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*sync hook failure/
     )
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('falls back to the async loader if require(esm) is disabled', () => {
@@ -151,7 +151,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*require\(esm\) is disabled/
     )
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('warns and falls back if sync loader import fails', () => {
@@ -169,7 +169,7 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*loader import failure/
     )
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 
   it('warns and falls back if sync hook support detection fails', () => {
@@ -186,12 +186,12 @@ describe('register.js', () => {
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*support detection failure/
     )
-    assertSyncSourceRewritingInactive()
+    assertFullSyncLoaderInactive()
   })
 })
 
-function assertSyncSourceRewritingInactive () {
-  assert.strictEqual(globalThis[SYNC_SOURCE_REWRITING_SYMBOL], undefined)
+function assertFullSyncLoaderInactive () {
+  assert.strictEqual(globalThis[FULL_SYNC_LOADER_SYMBOL], undefined)
 }
 
 function withElectronVersion (version, fn) {
@@ -217,6 +217,7 @@ function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supports
     'node:module': { register },
     'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
     './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
+    './packages/datadog-instrumentations/src/helpers/rewriter/loader.js': {},
     './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
   })
 }

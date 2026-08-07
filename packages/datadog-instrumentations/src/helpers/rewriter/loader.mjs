@@ -1,4 +1,4 @@
-import * as Module from 'module'
+import * as Module from 'node:module'
 
 const require = Module.createRequire(import.meta.url)
 const { getFormat, loadSync, rewriteResult } = require('./hooks.js')

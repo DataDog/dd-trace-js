@@ -24,6 +24,8 @@ const jasmineModulePath = resolve(
   '../../fixtures/node_modules/@wdio/jasmine-framework/build/index.js'
 )
 const originalCompileSymbol = 'dd-trace.test.rewriter.original-compile'
+const rewrittenForCompileSymbolName = 'dd-trace.loader.rewritten-for-compile'
+const rewrittenForCompileSymbol = Symbol.for(rewrittenForCompileSymbolName)
 const instrumentationsEntryPath = join(repositoryRoot, 'packages', 'datadog-instrumentations')
 const rewriterLoaderPath = join(instrumentationsEntryPath, 'src', 'helpers', 'rewriter', 'loader')
 const supportsRegisterHooks = typeof require('node:module').registerHooks === 'function'
@@ -152,46 +154,80 @@ describe('rewriter loader', () => {
     assert.strictEqual(resultFromConditions.source, commonJSSource)
   })
 
-  it('rewrites CommonJS in the sync loader', () => {
+  it('rewrites CommonJS sync loader results', () => {
     const url = createAiModuleUrl()
-    const rewritten = loadSync(
+    const result = loadSync(
       url,
       { format: 'commonjs' },
       () => ({ format: 'commonjs', source: commonJSSource })
     )
-    const rewrittenFromContext = loadSync(
+    const resultFromContext = loadSync(
       url,
       { format: 'commonjs' },
       () => ({ source: commonJSSource })
     )
-    const rewrittenWithPreamble = loadSync(
-      url,
-      { format: 'commonjs' },
-      () => ({ format: 'commonjs', source: decoratedCommonJSSource })
-    )
-    const rewrittenFromConditions = loadSync(
+    const resultFromConditions = loadSync(
       url,
       { conditions: ['require'] },
       () => ({ source: decoratedCommonJSSource })
     )
 
-    assertCommonJSRewritten(rewritten.source)
-    assertCommonJSRewritten(rewrittenFromContext.source)
-    assertCommonJSRewritten(rewrittenWithPreamble.source)
-    assertCommonJSRewritten(rewrittenFromConditions.source)
-    assert.match(rewrittenWithPreamble.source.split('\n')[0], /^'use strict';$/)
-    assert.match(rewrittenWithPreamble.source.trimEnd().split('\n').at(-1), /^\/\/# sourceMappingURL=/)
+    assertCommonJSRewritten(result.source)
+    assertCommonJSRewritten(resultFromContext.source)
+    assertCommonJSRewritten(resultFromConditions.source)
+  })
+
+  it('marks rewritten CommonJS for the compiler to pass through', () => {
+    const url = createAiModuleUrl()
+
+    loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ format: 'commonjs', source: commonJSSource })
+    )
+
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol].delete(fileURLToPath(url)), true)
+  })
+
+  it('keeps nullish CommonJS source unchanged for the compile fallback', () => {
+    const url = createAiModuleUrl()
+    const result = loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ format: 'commonjs', source: undefined })
+    )
+
+    assert.deepStrictEqual(result, { format: 'commonjs', source: undefined })
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol]?.has(fileURLToPath(url)) ?? false, false)
   })
 
   it('does not restore the hashbang, which would shift every source map mapping', () => {
     const url = createAiModuleUrl()
-    const withHashbang = loadSync(url, { format: 'commonjs' }, () => ({ source: decoratedCommonJSSource }))
-    const withoutHashbang = loadSync(url, { format: 'commonjs' }, () => ({ source: strictCommonJSSource }))
+    const withHashbang = loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ source: decoratedCommonJSSource })
+    )
+    const withoutHashbang = loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ source: strictCommonJSSource })
+    )
 
     assert.doesNotMatch(withHashbang.source, /^#!/)
     // Orchestrion emits the same line count either way, so an extra hashbang line
     // would desynchronise the generated source map from the emitted source.
     assert.strictEqual(withHashbang.source.split('\n').length, withoutHashbang.source.split('\n').length)
+  })
+
+  it('rewrites ESM loaded through require in the sync loader', () => {
+    const result = loadSync(
+      createAiModuleUrl(),
+      { conditions: ['require'] },
+      () => ({ format: 'module', source })
+    )
+
+    assertRewritten(result.source)
   })
 
   it('trusts an ESM result format over the require condition', () => {
@@ -204,7 +240,7 @@ describe('rewriter loader', () => {
     assertRewritten(result.source)
   })
 
-  it('rewrites a CommonJS package once without installing the compile hook', function () {
+  it('rewrites a CommonJS package once with the compile hook', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
     }
@@ -221,13 +257,24 @@ describe('rewriter loader', () => {
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
       const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      const compile = Module.prototype._compile
+      const aiPath = require.resolve('ai')
       let starts = 0
+      let sourceMarked
 
       channel.subscribe({ start () { starts++ } })
+      Module.prototype._compile = function (content, filename, format) {
+        if (filename === aiPath) {
+          const rewritten = globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]
+          sourceMarked = rewritten?.has(filename) ?? false
+        }
+        return compile.call(this, content, filename, format)
+      }
       const value = require('ai').getTracer()
       require(${JSON.stringify(join(repositoryRoot, 'packages', 'datadog-instrumentations'))})
       console.log(JSON.stringify({
-        compileUnchanged: Module.prototype._compile === originalCompile,
+        compileChanged: Module.prototype._compile !== originalCompile,
+        sourceMarked,
         starts,
         value,
       }))
@@ -241,7 +288,8 @@ describe('rewriter loader', () => {
     })
 
     assert.deepStrictEqual(result, {
-      compileUnchanged: true,
+      compileChanged: true,
+      sourceMarked: true,
       starts: 1,
       value: 'tracer',
     })
@@ -252,9 +300,9 @@ describe('rewriter loader', () => {
       this.skip()
     }
 
-    // `--import` marks a loader this process has not installed yet, so the
-    // entrypoint takes the compile shim. `register.js` then installs the
-    // synchronous loader, and the shim has to stand down at compile time.
+    // The entrypoint hook and full synchronous loader can both see this module.
+    // Only the outer full loader rewrites it, and the compile fallback passes the
+    // marked result through.
     const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-preloaded-'))
     const packageDirectory = join(root, 'node_modules', 'ai')
 
@@ -361,7 +409,7 @@ describe('rewriter loader', () => {
       channel.subscribe({ start () { starts++ } })
       const value = require('ai').getTracer()
       console.log(JSON.stringify({
-        compileUnchanged: Module.prototype._compile === originalCompile,
+        compileChanged: Module.prototype._compile !== originalCompile,
         starts,
         value,
       }))
@@ -375,7 +423,7 @@ describe('rewriter loader', () => {
     })
 
     assert.deepStrictEqual(result, {
-      compileUnchanged: true,
+      compileChanged: true,
       starts: 1,
       value: 'tracer',
     })
@@ -447,23 +495,34 @@ describe('rewriter loader', () => {
     writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
     writeFileSync(join(root, 'main.mjs'), `
       import { createRequire } from 'node:module'
-      import ai from 'ai'
 
       const require = createRequire(import.meta.url)
+      const Module = require('node:module')
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
+      const compile = Module.prototype._compile
+      const aiPath = require.resolve('ai')
       let starts = 0
+      let sourceMarked
 
       channel.subscribe({ start () { starts++ } })
+      Module.prototype._compile = function (content, filename, format) {
+        if (filename === aiPath) {
+          const rewritten = globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]
+          sourceMarked = rewritten?.has(filename) ?? false
+        }
+        return compile.call(this, content, filename, format)
+      }
+      const { default: ai } = await import('ai')
       const value = ai.getTracer()
-      console.log(JSON.stringify({ starts, value }))
+      console.log(JSON.stringify({ sourceMarked, starts, value }))
     `)
 
     const result = runFixture(root, 'main.mjs', {
       NODE_OPTIONS: `--require ${rewriterLoaderPath}`,
     })
 
-    assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
+    assert.deepStrictEqual(result, { sourceMarked: true, starts: 1, value: 'tracer' })
   })
 
   it('leaves imported ESM to the loader when only the entrypoint hook is installed', function () {
@@ -612,7 +671,7 @@ describe('rewriter loader', () => {
       channel.subscribe({ start () { starts++ } })
       const value = require('ai').getTracer()
       console.log(JSON.stringify({
-        compileUnchanged: Module.prototype._compile === originalCompile,
+        compileChanged: Module.prototype._compile !== originalCompile,
         starts,
         value,
       }))
@@ -626,7 +685,7 @@ describe('rewriter loader', () => {
     })
 
     assert.deepStrictEqual(result, {
-      compileUnchanged: true,
+      compileChanged: true,
       starts: 1,
       value: 'tracer',
     })
@@ -703,23 +762,6 @@ describe('rewriter loader', () => {
     assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
   })
 
-  it('installs the entrypoint hook without patching the compiler', function () {
-    if (!supportsSynchronousLoader) {
-      this.skip()
-    }
-
-    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-entrypoint-wiring-'))
-
-    writeFileSync(join(root, 'main.js'), `
-      const Module = require('node:module')
-      const originalCompile = Module.prototype._compile
-      require(${JSON.stringify(instrumentationsEntryPath)})
-      console.log(JSON.stringify({ compileUnchanged: Module.prototype._compile === originalCompile }))
-    `)
-
-    assert.deepStrictEqual(runFixture(root), { compileUnchanged: true })
-  })
-
   it('rewrites CommonJS imported from ESM in the sync loader hook', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
@@ -733,26 +775,37 @@ describe('rewriter loader', () => {
     writeFileSync(join(packageDirectory, 'dist', 'index.js'), commonJSSource)
     writeFileSync(join(root, 'main.mjs'), `
       import { createRequire } from 'node:module'
-      import ai from 'ai'
 
       const require = createRequire(import.meta.url)
+      const Module = require('node:module')
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
+      const compile = Module.prototype._compile
+      const aiPath = require.resolve('ai')
       let starts = 0
+      let sourceMarked
 
       channel.subscribe({ start () { starts++ } })
+      Module.prototype._compile = function (content, filename, format) {
+        if (filename === aiPath) {
+          const rewritten = globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]
+          sourceMarked = rewritten?.has(filename) ?? false
+        }
+        return compile.call(this, content, filename, format)
+      }
+      const { default: ai } = await import('ai')
       const value = ai.getTracer()
-      console.log(JSON.stringify({ starts, value }))
+      console.log(JSON.stringify({ sourceMarked, starts, value }))
     `)
 
     // import-in-the-middle clears the source of a CommonJS module it pulls into its
-    // ESM graph, and the compile shim stands down for this loader, so the module is
-    // rewritten only if the loader reports that source before it is cleared.
+    // ESM graph. The compile shim rewrites the source when Node loads it through
+    // the native CommonJS path.
     const result = runFixture(root, 'main.mjs', {
       NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}`,
     })
 
-    assert.deepStrictEqual(result, { starts: 1, value: 'tracer' })
+    assert.deepStrictEqual(result, { sourceMarked: false, starts: 1, value: 'tracer' })
   })
 
   it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {

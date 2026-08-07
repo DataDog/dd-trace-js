@@ -7,7 +7,7 @@ const { pathToFileURL } = require('node:url')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
-const syncSourceRewritingSymbol = Symbol.for('dd-trace.loader.sync-source-rewriting')
+const fullSyncLoaderSymbol = Symbol.for('dd-trace.loader.full-sync')
 let isSyncLoaderRegistered = false
 
 if (shouldRegisterSyncLoaderHooks()) {
@@ -17,9 +17,9 @@ if (shouldRegisterSyncLoaderHooks()) {
     ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
     if (registerSyncLoaderHooks) {
       isSyncLoaderRegistered = registerSyncLoaderHooks()
-      // Capability checks alone are insufficient: the CommonJS compile fallback
-      // can only be disabled after the synchronous hooks are actually installed.
-      if (isSyncLoaderRegistered) globalThis[syncSourceRewritingSymbol] = true
+      // Capability checks alone are insufficient: the entrypoint's load hook can
+      // only stand down after the full synchronous hooks are actually installed.
+      if (isSyncLoaderRegistered) globalThis[fullSyncLoaderSymbol] = true
     }
   } catch (error) {
     syncRegistrationError = error
@@ -33,6 +33,11 @@ if (shouldRegisterSyncLoaderHooks()) {
 if (!isSyncLoaderRegistered) {
   register('./loader-hook.mjs', parentURL)
 }
+
+// IITM leaves CommonJS source nullish when native loading semantics are required.
+// The compile rewriter is the fallback for only those loads; source rewritten by
+// synchronous hooks is marked so the compiler passes it through unchanged.
+require('./packages/datadog-instrumentations/src/helpers/rewriter/loader.js')
 
 function shouldRegisterSyncLoaderHooks () {
   if (!isSyncLoaderHookVersionSupported() || !require('./packages/dd-trace/src/supports-register-hooks')()) {

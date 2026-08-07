@@ -1,6 +1,10 @@
 'use strict'
 
+const { fileURLToPath } = require('node:url')
+
 const { getRewriteTarget } = require('./targets.js')
+
+const rewrittenForCompileSymbol = Symbol.for('dd-trace.loader.rewritten-for-compile')
 
 let rewriter
 
@@ -11,36 +15,51 @@ let rewriter
  *
  * @param {string} url
  * @param {{ format?: string, conditions?: string[] }} context
- * @param {(url: string, context: object, onSource?: (source: unknown) => void) =>
- *   { format?: string, source?: unknown }} nextLoad
+ * @param {(url: string, context: object) => { format?: string, source?: unknown }} nextLoad
+ * @returns {{ format?: string, source?: unknown }}
  */
 function loadSync (url, context, nextLoad) {
-  // Only a rewrite target ever needs the discarded source below, so nothing is
-  // allocated for the modules that make up almost every load.
-  if (!getRewriteTarget(url)) return nextLoad(url, context)
+  const result = nextLoad(url, context)
+  const format = getFormat(result, context)
 
-  // import-in-the-middle clears the source of a CommonJS module it pulls into its
-  // ESM graph, so that Node loads it through its native CommonJS loader and
-  // require()s of `module-sync` packages inside it keep working. That leaves this
-  // hook nothing to rewrite, so the loader hands back the source it read before
-  // clearing it.
-  let discardedSource
-  const result = nextLoad(url, context, source => { discardedSource = source })
-
-  return rewriteResult(result, url, getFormat(result, context), discardedSource)
+  return rewriteSyncResult(result, url, format, context.conditions)
 }
 
 /**
  * @param {{ format?: string, source?: unknown }} result
  * @param {string} url
  * @param {string|undefined} format
- * @param {unknown} [discardedSource] Source a preceding loader read and then dropped.
+ * @param {string[]|undefined} conditions
+ * @returns {{ format?: string, source?: unknown }}
  */
-function rewriteResult (result, url, format, discardedSource) {
+function rewriteSyncResult (result, url, format, conditions) {
+  const source = result.source
+
+  rewriteResult(result, url, format)
+
+  if (
+    result.source !== source &&
+    (format === 'commonjs' || hasRequireCondition(conditions)) &&
+    url.startsWith('file:')
+  ) {
+    const rewrittenForCompile = globalThis[rewrittenForCompileSymbol] ??= new Set()
+    rewrittenForCompile.add(fileURLToPath(url))
+  }
+
+  return result
+}
+
+/**
+ * @param {{ format?: string, source?: unknown }} result
+ * @param {string} url
+ * @param {string|undefined} format
+ * @returns {{ format?: string, source?: unknown }}
+ */
+function rewriteResult (result, url, format) {
   const target = getRewriteTarget(url)
   if (!target) return result
 
-  const source = result.source ?? discardedSource
+  const source = result.source
   if (!source) return result
 
   if (!rewriter) {
@@ -85,4 +104,4 @@ function hasRequireCondition (conditions) {
   return false
 }
 
-module.exports = { getFormat, hasRequireCondition, loadSync, rewriteResult }
+module.exports = { getFormat, hasRequireCondition, loadSync, rewriteResult, rewriteSyncResult }

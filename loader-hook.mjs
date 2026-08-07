@@ -120,21 +120,8 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  return rewriterLoader.loadSync(url, context, (loadUrl, loadContext, onSource) => {
-    // import-in-the-middle asks for the source and then clears it for the CommonJS
-    // modules in its chain. `onSource` is only supplied for a rewrite target, and
-    // reports the source on its way past so the rewriter never re-reads the file.
-    // Only the module being loaded is reported: import-in-the-middle also loads
-    // other URLs through this step, and their source belongs to another rewrite.
-    const reportingNextLoad = onSource === undefined
-      ? nextLoad
-      : (nextUrl, nextContext) => {
-          const result = nextLoad(nextUrl, nextContext)
-          if (nextUrl === loadUrl && result.source != null) onSource(result.source)
-          return result
-        }
-
-    return getSyncImportInTheMiddleHook().loadSync(loadUrl, loadContext, reportingNextLoad)
+  return rewriterLoader.loadSync(url, context, (url, context) => {
+    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   })
 }
 
