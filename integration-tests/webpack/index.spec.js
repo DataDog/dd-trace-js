@@ -58,10 +58,6 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-skip-external.js', { timeout })
     })
 
-    it('bundles the vendored OpenFeature provider and bridges the real event emitter', () => {
-      execSync('node ./build-and-test-openfeature.js', { timeout })
-    })
-
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', { timeout })
     })

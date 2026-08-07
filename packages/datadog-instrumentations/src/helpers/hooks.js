@@ -32,7 +32,6 @@ module.exports = {
   'durable-functions': () => require('../azure-durable-functions'),
   '@azure/service-bus': () => require('../azure-service-bus'),
   '@cucumber/cucumber': () => require('../cucumber'),
-  '@openfeature/server-sdk': () => require('../openfeature-server-sdk'),
   '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),

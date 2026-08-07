@@ -33,7 +33,7 @@
     "@babel/preset-typescript": "8.0.1",
     "@confluentinc/kafka-javascript": "1.10.0",
     "@cucumber/cucumber": "13.2.0",
-    "@datadog/openfeature-node-server": "2.0.2",
+    "@datadog/openfeature-node-server": "2.1.0",
     "@elastic/elasticsearch": "9.4.2",
     "@elastic/transport": "9.3.7",
     "@electron/packager": "20.0.4",
