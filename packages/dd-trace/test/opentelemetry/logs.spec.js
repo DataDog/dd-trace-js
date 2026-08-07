@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
@@ -209,6 +210,155 @@ describe('OpenTelemetry Logs', () => {
       logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
     })
 
+    it('timestamps logs with UNIX-epoch nanoseconds', () => {
+      const now = new Date('2023-11-14T22:13:20.123Z')
+      sinon.useFakeTimers({ now })
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), '1700000000123000000')
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit(Object.freeze({ body: 'Timestamp test' }))
+    })
+
+    it('normalizes timestamps before passing a cloned record to the processor', () => {
+      const { logs, loggerProvider } = setupLogs()
+      const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+      const timestamp = 1700000000123
+      const logRecord = Object.freeze({
+        body: 'Timestamp test',
+        timestamp,
+        observedTimestamp: new Date('2023-11-14T22:13:20.456Z'),
+        attributes: Object.freeze({ key: 'value' }),
+      })
+
+      logs.getLogger('test').emit(logRecord)
+
+      sinon.assert.calledOnce(onEmit)
+      const emittedRecord = onEmit.firstCall.args[0]
+      assert.notStrictEqual(emittedRecord, logRecord)
+      assert.deepStrictEqual(emittedRecord.timestamp, timeInputToHrTime(timestamp))
+      assert.deepStrictEqual(emittedRecord.observedTimestamp, [1700000000, 456000000])
+      assert.deepStrictEqual(emittedRecord.attributes, { key: 'value' })
+    })
+
+    it('warns once when replacing invalid timestamps', () => {
+      const { logs } = setupLogs()
+      const log = require('../../src/log')
+      const warn = sinon.stub(log, 'warn')
+      const logger = logs.getLogger('test')
+
+      logger.emit({ body: 'invalid timestamp', timestamp: null })
+      logger.emit({ body: 'another invalid timestamp', timestamp: NaN })
+
+      sinon.assert.calledOnceWithExactly(warn, 'Invalid OpenTelemetry log timestamp; using the current time instead')
+    })
+
+    for (const invalidTimestamp of [
+      null,
+      NaN,
+      Infinity,
+      new Date('invalid'),
+      new Date('1960-01-01'),
+      [],
+      [1],
+      [-1, 0],
+      [1, NaN],
+      [18_446_744_074, 0],
+    ]) {
+      it(`uses the current time for invalid timestamps: ${String(invalidTimestamp)}`, () => {
+        const { logs, loggerProvider } = setupLogs()
+        const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+        const logger = logs.getLogger('test')
+        const now = new Date('2023-11-14T22:13:20.123Z')
+        sinon.useFakeTimers({ now })
+
+        logger.emit({ body: 'invalid timestamp', timestamp: invalidTimestamp })
+        logger.emit({ body: 'invalid observed timestamp', observedTimestamp: invalidTimestamp })
+
+        sinon.assert.calledTwice(onEmit)
+        for (const emittedRecord of onEmit.args.map(args => args[0])) {
+          assert.deepStrictEqual(emittedRecord.timestamp, [1700000000, 123000000])
+        }
+        assert.deepStrictEqual(onEmit.secondCall.args[0].observedTimestamp, [1700000000, 123000000])
+      })
+    }
+
+    it('normalizes all OpenTelemetry timestamp input types without losing precision', () => {
+      const numericTimestamp = 1700000000123
+      const [numericSeconds, numericNanoseconds] = timeInputToHrTime(numericTimestamp)
+      mockOtlpExport((decoded) => {
+        const records = decoded.resourceLogs[0].scopeLogs[0].logRecords
+        assert.deepStrictEqual(records.map(record => record.timeUnixNano.toString()), [
+          (BigInt(numericSeconds) * 1_000_000_000n + BigInt(numericNanoseconds)).toString(),
+          '1700000000456000000',
+          '1700000000789123456',
+        ])
+        assert.strictEqual(records[0].observedTimeUnixNano.toString(), '1700000000987654321')
+      })
+
+      const { logs } = setupLogs(true, '3')
+      const logger = logs.getLogger('test')
+      logger.emit({
+        body: 'number timestamp',
+        timestamp: numericTimestamp,
+        observedTimestamp: [1700000000, 987654321],
+      })
+      logger.emit({ body: 'date timestamp', timestamp: new Date('2023-11-14T22:13:20.456Z') })
+      logger.emit({ body: 'hrtime timestamp', timestamp: [1700000000, 789123456] })
+    })
+
+    it('accepts frozen HrTime timestamps without mutating or copying them', () => {
+      const { logs, loggerProvider } = setupLogs()
+      const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+      const timestamp = Object.freeze([1700000000, 789123456])
+
+      logs.getLogger('test').emit({ body: 'frozen HrTime', timestamp })
+
+      sinon.assert.calledOnce(onEmit)
+      assert.strictEqual(onEmit.firstCall.args[0].timestamp, timestamp)
+    })
+
+    it('preserves legacy numeric Unix-nanosecond timestamps', () => {
+      const legacyTimestamp = 1700000000123 * 1e6
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), BigInt(legacyTimestamp).toString())
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Legacy timestamp', timestamp: legacyTimestamp })
+    })
+
+    it('matches OpenTelemetry numeric timestamp handling', () => {
+      const timestamp = Date.UTC(1990, 0, 1)
+      const [seconds, nanoseconds] = timeInputToHrTime(timestamp)
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), (BigInt(seconds) * 1_000_000_000n + BigInt(nanoseconds)).toString())
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Numeric timestamp', timestamp })
+    })
+
+    it('encodes exact timestamp strings using the OTLP JSON protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      mockOtlpExport((decoded) => {
+        const record = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(record.timeUnixNano, '1700000000789123456')
+        assert.strictEqual(record.observedTimeUnixNano, '1700000000987654321')
+      }, 'json')
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({
+        body: 'JSON timestamp test',
+        timestamp: [1700000000, 789123456],
+        observedTimestamp: [1700000000, 987654321],
+      })
+    })
+
     it('exports logs using JSON protocol', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
       mockOtlpExport((decoded, capturedHeaders) => {
@@ -331,7 +481,7 @@ describe('OpenTelemetry Logs', () => {
         traceFlags: 1,
       }
       logs.getLogger('test-service', '1.0.0').emit({
-        observedTimestamp: Date.now() * 1000000,
+        observedTimestamp: new Date(),
         severityText: 'ERROR',
         severityNumber: 17,
         body: 'HTTP test message',
@@ -644,7 +794,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})
-      exporter.export([{ body: 'test', severityNumber: 9, timestamp: Date.now() * 1000000 }], () => {})
+      exporter.export([{ body: 'test', severityNumber: 9, timestamp: [1700000000, 0] }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
     })

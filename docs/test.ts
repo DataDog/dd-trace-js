@@ -372,6 +372,7 @@ tracer.use('kafkajs');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
+tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
 tracer.use('memcached');
@@ -381,6 +382,7 @@ tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
 tracer.use('modelcontextprotocol-sdk');
+tracer.use('modelcontextprotocol-sdk', { llmobs: false });
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
