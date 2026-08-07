@@ -2,9 +2,16 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 const { NODE_MAJOR } = require('../../version')
 const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
+
+// util.inspect renders an object's own symbol key as `[Symbol(x)]:` on Node <= 20 and
+// `Symbol(x):` on Node >= 22; derive the form so message assertions track the runtime.
+const objectSymbolKey = inspect({ [Symbol('password')]: 0 }, { breakLength: Infinity }).includes('[Symbol(')
+  ? '[Symbol(password)]'
+  : 'Symbol(password)'
 
 // Default settings is tested in unit tests, so we only need to test the env vars here
 describe('Dynamic Instrumentation snapshot PII redaction', function () {
@@ -80,7 +87,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
 
       assert.strictEqual(
         message,
-        "obj={ username: 'alice', password: '[redacted]', Symbol(password): '[redacted]' };" +
+        `obj={ username: 'alice', password: '[redacted]', ${objectSymbolKey}: '[redacted]' };` +
           "map=Map(3) { 'username' => 'alice', 'password' => '[redacted]', Symbol(password) => '[redacted]' }"
       )
     })
