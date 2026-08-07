@@ -15,6 +15,8 @@ const HISTOGRAM_MAX_MS = 600
 const mode = process.argv[2]
 if (mode === 'app') {
   runApp()
+} else if (mode === 'upstreams') {
+  runUpstreams()
 } else if (mode === 'load') {
   runLoad()
 } else {
@@ -28,13 +30,105 @@ function runApp () {
   const tracer = require(process.env.BENCHMARK_TRACER_ROOT)
   const express = require('express')
   const app = express()
-  app.get('/', (_request, response) => response.send('hello world'))
+  let upstreamAgent
+
+  if (process.env.BENCHMARK_WORKLOAD === 'third-party') {
+    const catalogUrl = new URL(process.env.BENCHMARK_CATALOG_URL)
+    const pricingUrl = new URL(process.env.BENCHMARK_PRICING_URL)
+    upstreamAgent = new http.Agent({ keepAlive: true })
+
+    app.use(function identifyRequest (_request, _response, next) {
+      next()
+    })
+    app.use(function applyResponseHeaders (_request, response, next) {
+      response.setHeader('x-benchmark-workload', 'third-party')
+      next()
+    })
+    app.get('/', (_request, response, next) => {
+      tracer.trace('benchmark.aggregate', () => {
+        return Promise.all([
+          requestJson(catalogUrl, upstreamAgent),
+          requestJson(pricingUrl, upstreamAgent),
+        ]).then(([catalog, pricing]) => {
+          return tracer.trace('benchmark.render', () => ({
+            currency: pricing.currency,
+            itemCount: catalog.items.length,
+            total: catalog.items[0].price * (1 - pricing.discount),
+          }))
+        })
+      }).then(result => response.json(result), next)
+    })
+  } else {
+    app.get('/', (_request, response) => response.send('hello world'))
+  }
 
   const server = app.listen(0, '127.0.0.1', () => {
     const { port } = server.address()
     process.stdout.write(`${JSON.stringify({ port, nativeSpans: tracer._tracer?._useJsSpans === false })}\n`)
   })
-  process.once('SIGTERM', () => server.close())
+  process.once('SIGTERM', () => {
+    server.close()
+    upstreamAgent?.destroy()
+  })
+}
+
+/**
+ * Fetch and decode one local third-party API response.
+ *
+ * @param {URL} url
+ * @param {http.Agent} agent
+ * @returns {Promise<Record<string, unknown>>}
+ */
+function requestJson (url, agent) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(url, { agent }, response => {
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => { body += chunk })
+      response.once('end', () => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Third-party API returned ${response.statusCode}`))
+          return
+        }
+        resolve(JSON.parse(body))
+      })
+    })
+    request.setTimeout(5_000, () => request.destroy(new Error('third-party request timed out')))
+    request.once('error', reject)
+  })
+}
+
+/**
+ * Serve two deterministic uninstrumented APIs on separate local ports.
+ *
+ * @returns {void}
+ */
+function runUpstreams () {
+  const catalogBody = Buffer.from('{"items":[{"id":"sku-1","price":42},{"id":"sku-2","price":17}]}')
+  const pricingBody = Buffer.from('{"currency":"USD","discount":0.15}')
+  const catalog = http.createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(catalogBody)
+  })
+  const pricing = http.createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(pricingBody)
+  })
+  let ready = 0
+  const announce = () => {
+    ready++
+    if (ready !== 2) return
+    process.stdout.write(`${JSON.stringify({
+      port: catalog.address().port,
+      pricingPort: pricing.address().port,
+    })}\n`)
+  }
+  catalog.listen(0, '127.0.0.1', announce)
+  pricing.listen(0, '127.0.0.1', announce)
+  process.once('SIGTERM', () => {
+    catalog.close()
+    pricing.close()
+  })
 }
 
 function runLoad () {
@@ -131,6 +225,7 @@ async function main () {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-native-spans-'))
   const createdWorktrees = []
   let mockAgent
+  let thirdPartyApis
 
   try {
     const baseline = await prepareVariant({
@@ -151,9 +246,10 @@ async function main () {
     })
 
     mockAgent = await startMockAgent()
+    if (options.workload === 'third-party') thirdPartyApis = await startThirdPartyApis()
     const modes = {
-      master: await detectMode(baseline, mockAgent.port),
-      pr9139: await detectMode(candidate, mockAgent.port),
+      master: await detectMode(baseline, mockAgent.port, options, thirdPartyApis),
+      pr9139: await detectMode(candidate, mockAgent.port, options, thirdPartyApis),
     }
     if (!modes.pr9139.nativeSpans) {
       throw new Error(`Candidate ${candidate.sha} did not enable native spans:\n${modes.pr9139.stderr}`)
@@ -164,7 +260,7 @@ async function main () {
     for (let repetition = 1; repetition <= options.repetitions; repetition++) {
       const order = repetition % 2 === 1 ? ['master', 'pr9139'] : ['pr9139', 'master']
       for (const label of order) {
-        const result = await measure(variants[label], label, repetition, options, mockAgent)
+        const result = await measure(variants[label], label, repetition, options, mockAgent, thirdPartyApis)
         records.push(result)
         printRecord(result)
       }
@@ -180,6 +276,7 @@ async function main () {
         warmupMs: options.warmupMs,
         durationMs: options.durationMs,
         concurrency: options.concurrency,
+        workload: options.workload,
       },
       variants: {
         master: { ref: options.baseline, sha: baseline.sha, nativeSpans: modes.master.nativeSpans },
@@ -193,6 +290,7 @@ async function main () {
     printSummary(summary)
     print(`\nResults: ${outputDirectory}`)
   } finally {
+    if (thirdPartyApis) await stopApplication(thirdPartyApis.child)
     if (mockAgent) await mockAgent.close()
     if (!options.keepWorktrees) {
       for (const worktree of createdWorktrees) {
@@ -216,6 +314,7 @@ function benchmarkOptions () {
     ['--warmup-ms', 'warmupMs'],
     ['--duration-ms', 'durationMs'],
     ['--concurrency', 'concurrency'],
+    ['--workload', 'workload'],
     ['--output', 'output'],
   ])
   for (let index = 2; index < process.argv.length; index++) {
@@ -235,6 +334,10 @@ function benchmarkOptions () {
     }
   }
 
+  const workload = values.workload || 'simple'
+  if (workload !== 'simple' && workload !== 'third-party') {
+    throw new Error('workload must be simple or third-party')
+  }
   const smoke = values.smoke === true
   return {
     baseline: values.baseline || DEFAULT_BASELINE,
@@ -245,6 +348,7 @@ function benchmarkOptions () {
     warmupMs: positiveInteger(values.warmupMs || (smoke ? 1_000 : 10_000), 'warmup-ms'),
     durationMs: positiveInteger(values.durationMs || (smoke ? 3_000 : 30_000), 'duration-ms'),
     concurrency: positiveInteger(values.concurrency || (smoke ? 25 : 100), 'concurrency'),
+    workload,
     output: values.output && path.resolve(values.output),
     keepWorktrees: values.keepWorktrees === true,
     help: values.help === true,
@@ -266,6 +370,7 @@ Options:
   --warmup-ms <n>        Warmup per measurement (default: 10000)
   --duration-ms <n>      Measured duration per measurement (default: 30000)
   --concurrency <n>      Closed-loop HTTP concurrency (default: 100)
+  --workload <name>      Workload: simple or third-party (default: simple)
   --output <path>        Results directory (default: a timestamped directory under /tmp)
   --smoke                One 1s warmup + 3s measurement at concurrency 25
   --keep-worktrees       Keep automatically-created worktrees for another run
@@ -304,14 +409,14 @@ async function resolveRef (repository, ref) {
   throw new Error(`Git ref not found: ${ref}. Fetch it or pass --candidate-dir/--baseline-dir.`)
 }
 
-async function detectMode (variant, agentPort) {
-  const application = await startApplication(variant, agentPort)
+async function detectMode (variant, agentPort, options, thirdPartyApis) {
+  const application = await startApplication(variant, agentPort, options, thirdPartyApis)
   await stopApplication(application.child)
   return { nativeSpans: application.nativeSpans, stderr: application.stderr() }
 }
 
-async function measure (variant, label, repetition, options, mockAgent) {
-  const application = await startApplication(variant, mockAgent.port)
+async function measure (variant, label, repetition, options, mockAgent, thirdPartyApis) {
+  const application = await startApplication(variant, mockAgent.port, options, thirdPartyApis)
   try {
     const warmup = await executeLoad(application.port, options.warmupMs, options.concurrency)
     if (warmup.failed !== 0) throw new Error(`${label} warmup had ${warmup.failed} failed requests`)
@@ -326,8 +431,8 @@ async function measure (variant, label, repetition, options, mockAgent) {
   }
 }
 
-async function startApplication (variant, agentPort) {
-  const environment = benchmarkEnvironment(variant.root, agentPort)
+async function startApplication (variant, agentPort, options, thirdPartyApis) {
+  const environment = benchmarkEnvironment(variant.root, agentPort, options, thirdPartyApis)
   const child = spawn(process.execPath, ['--require', path.join(variant.root, 'init.js'), __filename, 'app'], {
     cwd: variant.root,
     env: environment,
@@ -342,10 +447,13 @@ async function startApplication (variant, agentPort) {
   return { child, ...readiness, stderr: () => stderr }
 }
 
-function benchmarkEnvironment (root, agentPort) {
+function benchmarkEnvironment (root, agentPort, options, thirdPartyApis) {
   const environment = {
     ...process.env,
     BENCHMARK_TRACER_ROOT: root,
+    BENCHMARK_CATALOG_URL: thirdPartyApis?.catalogUrl || '',
+    BENCHMARK_PRICING_URL: thirdPartyApis?.pricingUrl || '',
+    BENCHMARK_WORKLOAD: options.workload,
     DD_ENV: 'benchmark',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
     DD_PROFILING_ENABLED: 'false',
@@ -389,6 +497,32 @@ async function stopApplication (child) {
     new Promise(resolve => child.once('exit', resolve)),
     delay(2_000).then(() => child.kill('SIGKILL')),
   ])
+}
+
+/**
+ * Start the deterministic APIs without tracer preloading.
+ *
+ * @returns {Promise<{child: import('node:child_process').ChildProcess, catalogUrl: string, pricingUrl: string}>}
+ */
+async function startThirdPartyApis () {
+  const environment = { ...process.env, DD_TRACE_ENABLED: 'false', NODE_OPTIONS: '' }
+  for (const key of Object.keys(environment)) {
+    if (key.startsWith('OTEL_')) delete environment[key]
+  }
+  const child = spawn(process.execPath, [__filename, 'upstreams'], {
+    env: environment,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', chunk => { stdout += chunk })
+  child.stderr.on('data', chunk => { stderr += chunk })
+  const readiness = await waitForApplication(child, () => stdout, () => stderr)
+  return {
+    child,
+    catalogUrl: `http://127.0.0.1:${readiness.port}/catalog`,
+    pricingUrl: `http://127.0.0.1:${readiness.pricingPort}/pricing`,
+  }
 }
 
 async function executeLoad (port, durationMs, concurrency) {
@@ -499,7 +633,7 @@ function writeReport (outputDirectory, report) {
       `${metrics.p95Ms.toFixed(2)}${suffix} | ${metrics.p99Ms.toFixed(2)}${suffix} |`
   }
   const markdown = [
-    '# PR #9139 Express benchmark',
+    `# PR #9139 Express ${report.configuration.workload} benchmark`,
     '',
     '| Variant | req/s | p50 ms | p95 ms | p99 ms |',
     '|---|---:|---:|---:|---:|',
