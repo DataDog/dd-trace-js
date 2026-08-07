@@ -16,6 +16,11 @@ module.exports = {
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',
   PROPAGATED_SESSION_ID_KEY: '_dd.p.llmobs_sid',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
+
+  PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
+  PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
+  PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',
+  PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_pagent_name',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',
   PROPAGATED_SAMPLING_DECISION_KEY: '_dd.p.llmobs_sd',
   SAMPLE_RATE: '_ml_obs.sample_rate',
