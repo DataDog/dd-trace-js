@@ -1,17 +1,23 @@
 'use strict'
 
+const {
+  EVP_PROXY_AGENT_BASE_PATH,
+  EVP_SUBDOMAIN_HEADER_NAME,
+  EVP_PAYLOAD_SIZE_LIMIT,
+} = require('../../evp_proxy/constants')
+
 module.exports = {
   /**
    * @constant
    * @type {string} Base path for EVP proxy agent endpoint
    */
-  EVP_PROXY_AGENT_BASE_PATH: '/evp_proxy/v2/',
+  EVP_PROXY_AGENT_BASE_PATH,
 
   /**
    * @constant
    * @type {string} HTTP header name for EVP subdomain routing
    */
-  EVP_SUBDOMAIN_HEADER_NAME: 'X-Datadog-EVP-Subdomain',
+  EVP_SUBDOMAIN_HEADER_NAME,
 
   /**
    * @constant
@@ -27,9 +33,15 @@ module.exports = {
 
   /**
    * @constant
+   * @type {string} API endpoint for flag evaluation events EVP track
+   */
+  FLAGEVALUATIONS_ENDPOINT: '/api/v2/flagevaluation',
+
+  /**
+   * @constant
    * @type {number} Maximum payload size for EVP intake (5MB, actual limit is 5.1MB)
    */
-  EVP_PAYLOAD_SIZE_LIMIT: 5 << 20,
+  EVP_PAYLOAD_SIZE_LIMIT,
 
   /**
    * @constant
