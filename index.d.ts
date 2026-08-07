@@ -3864,6 +3864,7 @@ declare namespace tracer {
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
+      description (): string
       id (): string | null
       projectId (): string | null
       version (): number | null
