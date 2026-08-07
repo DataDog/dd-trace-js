@@ -51,9 +51,12 @@ describe('Test Optimization request tracker', () => {
     writer.flush()
 
     const done = sinon.spy()
-    writer.flush(done, { deadline: Date.now() + 1000 })
+    const deadline = Date.now() + 1000
+    writer.flush(done, { deadline })
 
     sinon.assert.notCalled(done)
+    assert.strictEqual(pendingRequests[0].options.deadline, deadline)
+    assert.strictEqual(pendingRequests[0].options.retryOnHttpError, true)
     pendingRequests[0].callback(null)
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
@@ -96,7 +99,7 @@ describe('Test Optimization request tracker', () => {
     sinon.assert.calledOnceWithExactly(done, error)
   })
 
-  it('keeps the process alive for an unrefed final-payload retry', (done) => {
+  it('upgrades an in-flight request and keeps the process alive for its unrefed retry', (done) => {
     clock.restore()
     clock = undefined
     const fixture = path.join(__dirname, 'fixtures', 'final-flush-retry.js')

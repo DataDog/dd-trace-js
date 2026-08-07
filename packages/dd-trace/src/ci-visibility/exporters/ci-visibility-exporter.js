@@ -89,6 +89,8 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 }
 
 class CiVisibilityExporter extends BufferingExporter {
+  #finalFlush
+
   constructor (config, options = {}) {
     super(config)
     this._timer = undefined
@@ -390,6 +392,8 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   export (trace) {
+    this.#resetFinalFlush()
+
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
       this._traceBuffer.push(trace)
@@ -402,6 +406,8 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   exportCoverage (formattedCoverage) {
+    this.#resetFinalFlush()
+
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {
       this._coverageBuffer.push(formattedCoverage)
@@ -446,6 +452,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
+    this.#resetFinalFlush()
     this._export(
       this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
@@ -456,6 +463,21 @@ class CiVisibilityExporter extends BufferingExporter {
   flush (done) {
     const isFinalFlush = typeof done === 'function'
     const onDone = done || (() => {})
+
+    if (isFinalFlush && this.#finalFlush) {
+      if (this.#finalFlush.completed) onDone(this.#finalFlush.error)
+      else this.#finalFlush.callbacks.push(onDone)
+      return
+    }
+
+    if (isFinalFlush) {
+      this.#finalFlush = {
+        callbacks: [onDone],
+        completed: false,
+        error: undefined,
+      }
+    }
+
     const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
     let hasCompleted = false
 
@@ -472,7 +494,16 @@ class CiVisibilityExporter extends BufferingExporter {
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
       if (error) log.error('Error flushing Test Optimization data', error)
-      onDone(error)
+      if (!isFinalFlush) {
+        onDone(error)
+        return
+      }
+
+      this.#finalFlush.completed = true
+      this.#finalFlush.error = error
+      const callbacks = this.#finalFlush.callbacks
+      this.#finalFlush.callbacks = []
+      for (const callback of callbacks) callback(error)
     }
 
     const flushWriters = () => {
@@ -514,6 +545,16 @@ class CiVisibilityExporter extends BufferingExporter {
     this._canUseCiVisProtocolPromise.then(() => {
       if (!hasCompleted) flushWriters()
     })
+  }
+
+  /**
+   * Allows a later test session to establish a new finalization boundary after
+   * more reportable data arrives.
+   *
+   * @returns {void}
+   */
+  #resetFinalFlush () {
+    if (this.#finalFlush?.completed) this.#finalFlush = undefined
   }
 
   exportUncodedCoverages () {

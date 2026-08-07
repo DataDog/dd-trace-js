@@ -34,6 +34,11 @@ class TestOptimizationRequestTracker {
       return
     }
 
+    for (const pendingRequest of this.#pendingRequests) {
+      pendingRequest.options.deadline = options.deadline
+      pendingRequest.options.retryOnHttpError = true
+    }
+
     const finalFlush = {
       done: done || (() => {}),
       error: undefined,
@@ -47,7 +52,7 @@ class TestOptimizationRequestTracker {
       error.code = FINAL_FLUSH_TIMEOUT_CODE
 
       for (const pendingFinalFlush of this.#finalFlushes) pendingFinalFlush.error ||= error
-      for (const controller of this.#pendingRequests) controller.abort(error)
+      for (const pendingRequest of this.#pendingRequests) pendingRequest.controller.abort(error)
       this.#pendingRequests.clear()
       this.#finishFinalFlushes()
     }, remaining)
@@ -71,9 +76,11 @@ class TestOptimizationRequestTracker {
    */
   send (request, data, options, callback) {
     const controller = new AbortController()
-    this.#pendingRequests.add(controller)
+    const requestOptions = { ...options, signal: controller.signal }
+    const pendingRequest = { controller, options: requestOptions }
+    this.#pendingRequests.add(pendingRequest)
 
-    request(data, { ...options, signal: controller.signal }, (error, result, statusCode, headers) => {
+    request(data, requestOptions, (error, result, statusCode, headers) => {
       if (error) {
         for (const finalFlush of this.#finalFlushes) finalFlush.error ||= error
       }
@@ -81,7 +88,7 @@ class TestOptimizationRequestTracker {
       try {
         callback(error, result, statusCode, headers)
       } finally {
-        this.#pendingRequests.delete(controller)
+        this.#pendingRequests.delete(pendingRequest)
         this.#finishFinalFlushes()
       }
     })

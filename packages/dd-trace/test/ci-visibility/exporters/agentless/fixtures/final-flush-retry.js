@@ -13,16 +13,9 @@ const http = {
     outgoing.end = () => {
       setImmediate(() => {
         attempts++
-        if (attempts === 1) {
-          const error = new Error('socket closed')
-          error.code = 'ECONNRESET'
-          outgoing.emit('error', error)
-          return
-        }
-
         const response = new EventEmitter()
         response.headers = {}
-        response.statusCode = 200
+        response.statusCode = attempts === 1 ? 500 : 200
         response.setTimeout = () => {}
         onResponse(response)
         response.emit('end')
@@ -49,9 +42,13 @@ const TestOptimizationRequestTracker = require(
 
 const writer = new BaseWriter({ url: 'http://localhost' })
 const requestTracker = new TestOptimizationRequestTracker(writer)
+let hasPayload = true
 writer._encoder = {
-  count: () => 1,
-  makePayload: () => Buffer.from('payload'),
+  count: () => hasPayload ? 1 : 0,
+  makePayload: () => {
+    hasPayload = false
+    return Buffer.from('payload')
+  },
   reset: () => {},
 }
 writer._sendPayload = function (data, count, done, options) {
@@ -59,6 +56,7 @@ writer._sendPayload = function (data, count, done, options) {
 }
 writer.flush = (done, options) => requestTracker.flush(done, options)
 
+writer.flush()
 writer.flush((error) => {
   process.stdout.write(error ? error.code : 'flushed')
 }, { deadline: Date.now() + 1000 })

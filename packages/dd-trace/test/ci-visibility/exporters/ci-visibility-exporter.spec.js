@@ -910,20 +910,51 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
     })
 
-    it('releases a final flush when exporter initialization reaches the deadline', () => {
+    it('starts a new final flush after more test data is exported', () => {
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy((done) => done?.()),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+
+      ciVisibilityExporter.flush(() => {})
+      ciVisibilityExporter.export([{ type: 'test_session_end' }])
+      ciVisibilityExporter.flush(() => {})
+
+      sinon.assert.calledTwice(writer.flush)
+    })
+
+    it('reuses an expired final flush when exporter initialization never completes', () => {
       const clock = sinon.useFakeTimers()
       const logError = sinon.stub(ciVisibilityLog, 'error')
+      const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+      let beforeExitHandler
       try {
         const ciVisibilityExporter = new CiVisibilityExporter({ url })
+        beforeExitHandler = [...beforeExitHandlers].at(-1)
         const done = sinon.spy()
 
         ciVisibilityExporter.flush(done)
         clock.tick(10_100)
 
         sinon.assert.calledOnce(done)
-        assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+        const timeoutError = done.firstCall.args[0]
+        assert.strictEqual(timeoutError.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+
+        const repeatedDone = sinon.spy()
+        ciVisibilityExporter.flush(repeatedDone)
+        sinon.assert.calledOnceWithExactly(repeatedDone, timeoutError)
+
+        const timersBeforeExit = clock.countTimers()
+        beforeExitHandler()
+        assert.strictEqual(clock.countTimers(), timersBeforeExit)
         sinon.assert.calledOnce(logError)
       } finally {
+        beforeExitHandlers.delete(beforeExitHandler)
         clock.restore()
       }
     })
