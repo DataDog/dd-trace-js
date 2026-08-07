@@ -123,6 +123,8 @@ describe('SpanAggKey', () => {
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
     assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,`)
+    assert.strictEqual(key.parentId, undefined)
+    assert.strictEqual(key.isTraceRoot, undefined)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -201,6 +203,15 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(
       key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
+  })
+
+  it('should defer trace-root detection until bucketing requests it', () => {
+    const span = { ...basicSpan, parent_id: { toString: (radix) => (123).toString(radix) } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.parentId, span.parent_id)
+    assert.strictEqual(key.isTraceRoot, undefined)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,')
   })
 
   it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {
@@ -336,6 +347,37 @@ describe('SpanBuckets', () => {
   it('should add a new entry when new span does not match existing agg keys', () => {
     buckets.forSpan(errorSpan)
     assert.strictEqual(buckets.size, 2)
+  })
+
+  it('should split trace roots only when requested by the OTLP exporter', () => {
+    const rootSpan = { ...basicSpan, parent_id: { toString: () => '0' } }
+    const parentIdToString = sinon.stub().returns('1')
+    const childSpan = { ...basicSpan, parent_id: { toString: parentIdToString } }
+    const legacyBuckets = new SpanBuckets()
+    const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+
+    legacyBuckets.forSpan(rootSpan)
+    legacyBuckets.forSpan(childSpan)
+    sinon.assert.notCalled(parentIdToString)
+
+    otlpBuckets.forSpan(rootSpan)
+    otlpBuckets.forSpan(childSpan)
+
+    assert.strictEqual(legacyBuckets.size, 1)
+    assert.strictEqual(legacyBuckets.values().next().value.aggKey.isTraceRoot, undefined)
+    assert.strictEqual(otlpBuckets.size, 2)
+    assert.deepStrictEqual([...otlpBuckets.values()].map(({ aggKey }) => aggKey.isTraceRoot), [true, false])
+    sinon.assert.calledOnceWithExactly(parentIdToString, 10)
+  })
+
+  it('should leave trace-root unknown when parent_id is missing or null', () => {
+    for (const parentId of [undefined, null]) {
+      const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+
+      otlpBuckets.forSpan({ ...basicSpan, parent_id: parentId })
+
+      assert.strictEqual(otlpBuckets.values().next().value.aggKey.isTraceRoot, undefined)
+    }
   })
 })
 
@@ -548,6 +590,17 @@ describe('SpanStatsProcessor', () => {
     const [drained, bucketSizeNs] = otlpExporter.export.firstCall.args
     assert.strictEqual(drained.length, 1)
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
+  })
+
+  it('should split OTLP trace roots when their attribute is exported', () => {
+    const childSpan = { ...topLevelSpan, parent_id: { toString: () => '1' } }
+    const processor = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(processor.timer)
+
+    processor.onSpanFinished(topLevelSpan)
+    processor.onSpanFinished(childSpan)
+
+    assert.strictEqual(processor.buckets.values().next().value.size, 2)
   })
 
   it('should not call OTLP exporter on interval when drained is empty', () => {

@@ -130,6 +130,9 @@ class SpanAggKey {
     } else {
       this.rpcStatusCode = ''
     }
+
+    this.parentId = span.parent_id
+    // peer_tags isn't aggregated in the legacy v0.6/stats export here either; mirror it in both once added.
   }
 
   toString () {
@@ -150,9 +153,24 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {object} [options]
+   * @param {boolean} [options.includeTraceRoot]
+   */
+  constructor ({ includeTraceRoot = false } = {}) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
-    const key = aggKey.toString()
+    const baseKey = aggKey.toString()
+    if (this.#includeTraceRoot && aggKey.parentId !== undefined && aggKey.parentId !== null) {
+      aggKey.isTraceRoot = aggKey.parentId.toString(10) === '0'
+    }
+    const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {
       this.set(key, new SpanAggStats(aggKey))
@@ -163,9 +181,20 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
+  #spanBucketOptions
+
+  /**
+   * @param {object} [spanBucketOptions]
+   * @param {boolean} [spanBucketOptions.includeTraceRoot]
+   */
+  constructor (spanBucketOptions) {
+    super()
+    this.#spanBucketOptions = spanBucketOptions
+  }
+
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new SpanBuckets(this.#spanBucketOptions))
     }
 
     return this.get(time)
@@ -192,7 +221,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets()
+    this.buckets = new TimeBuckets({ includeTraceRoot: Boolean(otlpExporter) })
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
