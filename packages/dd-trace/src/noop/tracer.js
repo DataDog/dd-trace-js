@@ -29,6 +29,14 @@ class NoopTracer {
 
   setUrl () {}
 
+  /**
+   * @param {Function} [done] - Callback invoked immediately, since there is nothing to flush.
+   * @returns {void}
+   */
+  flush (done = () => {}) {
+    done()
+  }
+
   startSpan (name, options) {
     return this._span
   }

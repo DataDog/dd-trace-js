@@ -132,6 +132,23 @@ class DatadogTracer {
       return null
     }
   }
+
+  /**
+   * @param {Function} [done]
+   * @returns {void}
+   */
+  flush (done = () => {}) {
+    try {
+      if (typeof this._exporter.flush === 'function') {
+        this._exporter.flush(done)
+      } else {
+        done()
+      }
+    } catch (error) {
+      log.error('Error flushing exporter:', error)
+      done()
+    }
+  }
 }
 
 /**

@@ -67,6 +67,20 @@ interface Tracer extends opentracing.Tracer {
   setUrl (url: string): this;
 
   /**
+   * Flushes any buffered/pending spans immediately, without waiting for the
+   * usual flush interval, and resolves once the resulting export completes.
+   *
+   * Resolves immediately (without exporting anything) if there is nothing to
+   * flush, e.g. before `init()` is called or when tracing is disabled. Never
+   * rejects.
+   *
+   * Useful in serverless/isolate runtimes (e.g. `ctx.waitUntil(tracer.flush())`
+   * in Cloudflare Workers, or as part of a Lambda/graceful shutdown handler) to
+   * ensure spans are sent before the runtime freezes or exits.
+   */
+  flush (): Promise<void>;
+
+  /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
