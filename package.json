@@ -62,7 +62,7 @@
     "test:llmobs:sdk:ci": "node scripts/c8-ci.js test:llmobs:sdk",
     "test:llmobs:plugins": "mocha \"packages/dd-trace/test/llmobs/plugins/@(${PLUGINS})/*.spec.js\"",
     "test:llmobs:plugins:ci": "yarn services && node scripts/c8-ci.js test:llmobs:plugins",
-    "test:openfeature": "mocha \"packages/dd-trace/test/openfeature/**/*.spec.js\" \"packages/datadog-instrumentations/test/openfeature-server-sdk.spec.{js,mjs}\"",
+    "test:openfeature": "mocha \"packages/dd-trace/test/openfeature/**/*.spec.js\" \"packages/datadog-instrumentations/test/**/openfeature-server-sdk.spec.js\"",
     "test:openfeature:ci": "node scripts/c8-ci.js test:openfeature",
     "test:plugins": "node --expose-gc ./node_modules/mocha/bin/mocha.js \"packages/datadog-plugin-@(${PLUGINS})/test/**/${SPEC:-*}*.spec.js\"",
     "test:plugins:ci": "yarn services && node scripts/c8-ci.js test:plugins",
