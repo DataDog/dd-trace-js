@@ -90,6 +90,11 @@ function hasAsynchronousLoaderFlag () {
     if (LOADER_FLAG.test(execArgv[i])) return true
   }
 
+  // Read straight from the environment rather than through the configuration
+  // helper: `process.execArgv` omits everything NODE_OPTIONS contributes, and a
+  // loader passed that way is the common case. This is a Node flag, not tracer
+  // configuration, so it has no stable-config source to consult.
+  // eslint-disable-next-line eslint-rules/eslint-process-env
   return LOADER_FLAG.test(process.env.NODE_OPTIONS ?? '')
 }
 
