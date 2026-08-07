@@ -15,9 +15,9 @@ runs:
   steps:
     # The reports live at `<report-dir>/node-<version>-<label>/{lcov.info,coverage-final.json}`, one
     # level below `report-dir`, so the presence check has to recurse — a top-level-only probe finds
-    # nothing and silently skips the upload, which is what starved the Datadog coverage upload.
-    # Both formats ship: Codecov reads branch/function coverage from the istanbul JSON, Datadog from
-    # the lcov.
+    # nothing and silently skips the upload, which is what starved the Datadog coverage upload. Both
+    # formats ship: Datadog reads the lcov, Codecov reads the istanbul JSON (see
+    # `scripts/upload-coverage.mjs`).
     - id: check
       shell: bash
       run: |
