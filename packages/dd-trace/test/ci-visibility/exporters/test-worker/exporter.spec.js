@@ -16,8 +16,11 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
@@ -138,6 +141,17 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
     })
 
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
+      cucumberWorkerExporter.exportTelemetry(telemetry)
+      cucumberWorkerExporter.flush()
+      sinon.assert.calledWith(
+        send,
+        [CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
+      )
+    })
+
     it('signals completion after traces flush', () => {
       const callbacks = []
       send = sinon.stub().callsFake((payload, callback) => {
@@ -181,6 +195,14 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(traceSecond)
       mochaWorkerExporter.flush()
       sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
+      mochaWorkerExporter.exportTelemetry(telemetry)
+      mochaWorkerExporter.flush()
+      sinon.assert.calledWith(send, [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
     })
 
     it('can export DI logs', () => {
@@ -245,6 +267,14 @@ describe('CI Visibility Test Worker Exporter', () => {
       playwrightWorkerExporter.export(traceSecond)
       playwrightWorkerExporter.flush()
       sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('can export telemetry', () => {
+      const telemetry = { type: 'ciVisEvent', name: 'test_event' }
+      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
+      playwrightWorkerExporter.exportTelemetry(telemetry)
+      playwrightWorkerExporter.flush()
+      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
     })
 
     it('does not break if process.send is undefined', () => {

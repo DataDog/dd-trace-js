@@ -33,6 +33,7 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
+  TEST_PARAMETERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -69,10 +70,12 @@ const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
+const jestMajor = JEST_VERSION === 'latest' ? Infinity : Number(JEST_VERSION.split('.')[0])
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
-const onlyBeforeJest30It = JEST_VERSION !== 'latest' && Number(JEST_VERSION.split('.')[0]) < 30 ? it : it.skip
-const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
-const isJestCoverageBackfillSupported = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const onlyJest28Before30It = jestMajor >= 28 && jestMajor < 30 ? it : it.skip
+const onlyJest28AndLaterIt = jestMajor >= 28 ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = jestMajor >= 28
+const isJestCoverageBackfillSupported = jestMajor >= 28
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -1806,7 +1809,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('keeps concurrent originals and EFD retries concurrent', async () => {
+    onlyJest28AndLaterIt('keeps concurrent originals and EFD retries concurrent', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-sibling-test.js'
       const newTestName = 'early flake detection concurrent siblings new test waits for its known sibling'
@@ -1900,7 +1903,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('retries a concurrent test after its original times out', async () => {
+    onlyJest28AndLaterIt('retries a concurrent test after its original times out', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-timeout-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -1954,7 +1957,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    onlyBeforeJest30It('applies the Jest timeout to concurrent EFD retry bodies', async () => {
+    onlyJest28Before30It('applies the Jest timeout to concurrent EFD retry bodies', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-retry-timeout-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -2058,7 +2061,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('retries a concurrent test after its original throws synchronously', async () => {
+    onlyJest28AndLaterIt('retries a concurrent test after its original throws synchronously', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const testSuite = 'ci-visibility/test-early-flake-detection/concurrent-throw-test.js'
       receiver.setKnownTests({ jest: {} })
@@ -3986,7 +3989,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it('picks the retry budget of a concurrent test from its own execution time', async () => {
+    onlyJest28AndLaterIt('picks the retry budget of a concurrent test from its own execution time', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       receiver.setKnownTests({ jest: {} })
       receiver.setSettings({
@@ -4280,6 +4283,80 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('preserves parameterized test identity between automatic retries', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const testSuite = 'ci-visibility/jest-flaky/parameterized-fails.js'
+      const testName = 'test-flaky-test-retries preserves parameters between retries'
+      const passingAttempt = {
+        isRetry: false,
+        parameters: { arguments: ['passing row', true], metadata: {} },
+        retryReason: undefined,
+        status: 'pass',
+      }
+      const failingAttempt = {
+        isRetry: false,
+        parameters: { arguments: ['failing row', false], metadata: {} },
+        retryReason: undefined,
+        status: 'fail',
+      }
+      const retryAttempt = {
+        isRetry: true,
+        parameters: { arguments: ['failing row', false], metadata: {} },
+        retryReason: TEST_RETRY_REASON_TYPES.atr,
+        status: 'fail',
+      }
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite && test.meta[TEST_NAME] === testName)
+
+          const attempts = tests.map(test => ({
+            isRetry: test.meta[TEST_IS_RETRY] === 'true',
+            parameters: JSON.parse(test.meta[TEST_PARAMETERS]),
+            retryReason: test.meta[TEST_RETRY_REASON],
+            status: test.meta[TEST_STATUS],
+          }))
+
+          assert.strictEqual(attempts.length, 3)
+          assert.deepStrictEqual(
+            attempts.find(({ isRetry, status }) => !isRetry && status === 'pass'),
+            passingAttempt
+          )
+          assert.deepStrictEqual(
+            attempts.find(({ isRetry, status }) => !isRetry && status === 'fail'),
+            failingAttempt
+          )
+          assert.deepStrictEqual(attempts.find(({ isRetry }) => isRetry), retryAttempt)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/parameterized-fails',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            ...(JEST_VERSION === 'latest' ? { JEST_RANDOMIZE: '1', JEST_SEED: '4' } : {}),
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
     it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {

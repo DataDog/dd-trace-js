@@ -116,9 +116,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': 123123,
-        'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2,
+        'x-datadog-trace-id': '123123',
+        'x-datadog-parent-id': '345345',
+        'x-datadog-sampling-priority': '2',
       }
 
       const propagator = new TextMapPropagator(config)
@@ -131,9 +131,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': 123123,
-        'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2,
+        'x-datadog-trace-id': '123123',
+        'x-datadog-parent-id': '345345',
+        'x-datadog-sampling-priority': '2',
         'x-datadog-tags': '_dd.p.dm=-4',
       }
 
@@ -147,9 +147,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': 123123,
-        'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2,
+        'x-datadog-trace-id': '123123',
+        'x-datadog-parent-id': '345345',
+        'x-datadog-sampling-priority': '2',
         'x-datadog-tags': '_dd.p.ts=02,_dd.p.dm=-5',
       }
 
@@ -164,9 +164,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': 123123,
-        'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 1,
+        'x-datadog-trace-id': '123123',
+        'x-datadog-parent-id': '345345',
+        'x-datadog-sampling-priority': '1',
         'x-datadog-tags': '_dd.p.ts=02',
       }
 
@@ -181,9 +181,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       const carrier = {
-        'x-datadog-trace-id': 123123,
-        'x-datadog-parent-id': 345345,
-        'x-datadog-sampling-priority': 2,
+        'x-datadog-trace-id': '123123',
+        'x-datadog-parent-id': '345345',
+        'x-datadog-sampling-priority': '2',
       }
 
       const propagator = new TextMapPropagator(config)

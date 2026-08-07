@@ -172,4 +172,85 @@ module.exports = [
     },
     channelName: 'testFrameworkFnWrapper',
   },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      functionName: 'executeAsync',
+      kind: 'Async',
+    },
+    channelName: 'executeAsync',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
+      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
+      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
+      '[test.right.property.name="attempts"]',
+    channelName: 'executeAsync',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackArgumentNames: ['err'],
+      callbackName: 'retryCallback',
+    },
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <6.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
+      '[left.object.property.name="prototype"][left.property.name="execute"] > FunctionExpression',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'Spec_execute',
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <6.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
+      '[left.object.property.name="prototype"][left.property.name="status"] > FunctionExpression',
+    functionQuery: {
+      kind: 'Sync',
+    },
+    channelName: 'Spec_attemptDone',
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <6.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    functionQuery: {
+      className: 'Spec',
+      methodName: 'executionFinished',
+      kind: 'Sync',
+    },
+    channelName: 'Spec_attemptDone',
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <6.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    functionQuery: {
+      className: 'TreeRunner',
+      methodName: '_executeSpec',
+      kind: 'Sync',
+    },
+    channelName: 'Spec_execute',
+  },
 ]
