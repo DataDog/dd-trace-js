@@ -3224,6 +3224,25 @@ describe('Config', () => {
     })
   })
 
+  describe('flushInterval in Vercel', () => {
+    it('should set the default flush interval to 0', () => {
+      process.env.VERCEL = '1'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.flushInterval, 0)
+    })
+
+    it('should preserve an explicit flush interval', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_TRACE_FLUSH_INTERVAL = '1234'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.flushInterval, 1234)
+    })
+  })
+
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'

@@ -6,7 +6,8 @@ const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, onRequestEnd, retainVercelRequest } = require('../src/serverless')
+const { trackExport } = require('../src/serverless/pending_exports')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -34,5 +35,66 @@ describe('enableGCPPubSubPushSubscription', () => {
     process.env.K_SERVICE = 'svc'
     process.env.DD_TRACE_GCP_PUBSUB_PUSH_ENABLED = 'false'
     assert.strictEqual(enableGCPPubSubPushSubscription(), false)
+  })
+})
+
+describe('retainVercelRequest', () => {
+  const requestContext = Symbol.for('@vercel/request-context')
+  const originalVercel = process.env.VERCEL
+  const originalRequestContext = globalThis[requestContext]
+
+  afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = originalVercel
+
+    if (originalRequestContext === undefined) delete globalThis[requestContext]
+    else globalThis[requestContext] = originalRequestContext
+  })
+
+  it('retains globally pending exports until they complete', async () => {
+    process.env.VERCEL = '1'
+    let retained
+    const finishExport = trackExport()
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    assert.strictEqual(onRequestEnd(), true)
+
+    let completed = false
+    retained.then(() => { completed = true })
+    await Promise.resolve()
+    assert.strictEqual(completed, false)
+
+    finishExport()
+    await retained
+    assert.strictEqual(completed, true)
+  })
+
+  it('retains exports started by completion callbacks', async () => {
+    process.env.VERCEL = '1'
+    let retained
+    const finishInitialExport = trackExport()
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    assert.strictEqual(onRequestEnd(), true)
+    finishInitialExport()
+
+    const finishFallbackExport = trackExport()
+    let completed = false
+    retained.then(() => { completed = true })
+    await Promise.resolve()
+    assert.strictEqual(completed, false)
+
+    finishFallbackExport()
+    await retained
+    assert.strictEqual(completed, true)
+  })
+
+  it('does nothing outside Vercel', () => {
+    delete process.env.VERCEL
+    assert.strictEqual(retainVercelRequest(Promise.resolve()), false)
   })
 })

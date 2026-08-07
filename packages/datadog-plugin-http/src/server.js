@@ -6,6 +6,7 @@ const { withRequest } = require('../../dd-trace/src/appsec/store')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const { onRequestEnd } = require('../../dd-trace/src/serverless')
 
 const legacyStorage = storage('legacy')
 
@@ -96,6 +97,7 @@ class HttpServerPlugin extends ServerPlugin {
     }
 
     web.finishAll(context)
+    onRequestEnd()
   }
 
   exit ({ req }) {

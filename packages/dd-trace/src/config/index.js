@@ -455,6 +455,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'flushInterval', 0)
     }
 
+    // Vercel freezes Node functions once the request completes. Flush immediately by default so
+    // the request exists before the serverless lifecycle attaches it to `waitUntil`.
+    if (getEnvironmentVariable('VERCEL') === '1' && !trackedConfigOrigins.has('flushInterval')) {
+      setAndTrack(this, 'flushInterval', 0)
+    }
+
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
         trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
       setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
