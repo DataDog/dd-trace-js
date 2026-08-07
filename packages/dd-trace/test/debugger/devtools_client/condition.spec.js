@@ -167,7 +167,9 @@ describe('Expression language', function () {
       )
       // getmember compiles to a guarded accessor, so assert only that the terminal member
       // name is threaded as the direct-reference identifier.
-      const memberResult = compileSegments([{ dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } }])
+      const memberResult = compileSegments(
+        [{ dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } }]
+      )
       assert.match(memberResult, /return \$dd_inspectSegment\(result, "password"\)/)
     })
   })
