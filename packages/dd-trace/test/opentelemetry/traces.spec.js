@@ -63,7 +63,7 @@ describe('OpenTelemetry Traces', () => {
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
-    sinon.stub(http, 'request').callsFake((options, callback) => {
+    sinon.stub(http, 'request').callsFake((options, onResponse) => {
       if (options.path && options.path.includes('/v1/traces')) {
         capturedHeaders = options.headers
         const mockReq = {
@@ -77,7 +77,7 @@ describe('OpenTelemetry Traces', () => {
           once: () => {},
           setTimeout: () => {},
         }
-        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+        onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
       const mockReq = {
@@ -87,7 +87,7 @@ describe('OpenTelemetry Traces', () => {
         once: () => {},
         setTimeout: () => {},
       }
-      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+      onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 

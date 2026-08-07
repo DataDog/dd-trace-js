@@ -318,12 +318,12 @@ describe('Plugin', () => {
 
         it('should handle custom errors', async () => {
           const client = await buildClient({
-            getUnary: (_, callback) => {
+            getUnary: (_, respond) => {
               const metadata = new grpc.Metadata()
 
               metadata.set('extra', 'information')
 
-              callback({ message: 'foobar', code: grpc.status.NOT_FOUND }, {}, metadata)
+              respond({ message: 'foobar', code: grpc.status.NOT_FOUND }, {}, metadata)
             },
           })
 
