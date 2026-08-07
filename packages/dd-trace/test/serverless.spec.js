@@ -1,12 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 
 const { describe, it, afterEach } = require('mocha')
+const { logs } = require('@opentelemetry/api-logs')
+const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
 
 const { enableGCPPubSubPushSubscription, onRequestEnd } = require('../src/serverless')
+const Tracer = require('../src/tracer')
+const { getConfigFresh } = require('./helpers/config')
+const { getLoggerProvider, initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
+const { getMeterProvider, initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -41,6 +48,13 @@ describe('onRequestEnd', () => {
   const requestContext = Symbol.for('@vercel/request-context')
   const originalVercel = process.env.VERCEL
   const originalContext = globalThis[requestContext]
+  const endpointVariables = [
+    'DD_LOGS_OTEL_ENABLED',
+    'DD_METRICS_OTEL_ENABLED',
+    'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
+    'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
+  ]
+  const originalEndpoints = Object.fromEntries(endpointVariables.map(name => [name, process.env[name]]))
 
   afterEach(() => {
     if (originalVercel === undefined) delete process.env.VERCEL
@@ -48,44 +62,76 @@ describe('onRequestEnd', () => {
 
     if (originalContext === undefined) delete globalThis[requestContext]
     else globalThis[requestContext] = originalContext
+
+    for (const name of endpointVariables) {
+      if (originalEndpoints[name] === undefined) delete process.env[name]
+      else process.env[name] = originalEndpoints[name]
+    }
+
+    logs.disable()
+    metrics.disable()
   })
 
-  it('retains the request until all exporters flush on Vercel', async () => {
+  it('retains a Vercel request until trace, log, and metric payloads reach the intake', async () => {
     process.env.VERCEL = '1'
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    const received = new Set()
+    let intakeReceived
+    const intake = http.createServer((req, res) => {
+      req.resume()
+      req.once('end', () => {
+        if (req.url === '/v1/logs') received.add('logs')
+        if (req.url === '/v1/metrics') received.add('metrics')
+        if (req.url?.startsWith('/v0.')) received.add('traces')
+        res.end()
+        if (received.size === 3) intakeReceived()
+      })
+    })
+    await new Promise(resolve => intake.listen(0, '127.0.0.1', resolve))
+    const { port } = intake.address()
+    const endpoint = `http://127.0.0.1:${port}`
+    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = `${endpoint}/v1/logs`
+    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = `${endpoint}/v1/metrics`
+
     let retained
-    let done
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
     }
+    const intakeRequests = new Promise(resolve => { intakeReceived = resolve })
 
-    const registered = onRequestEnd({
-      _tracer: {
-        flushAll: callback => { done = callback },
-      },
-    })
+    try {
+      const config = getConfigFresh({ service: 'serverless-flush', url: endpoint })
+      const tracer = new Tracer(config)
+      initializeOpenTelemetryLogs(config)
+      initializeOpenTelemetryMetrics(config)
 
-    assert.strictEqual(registered, true)
-    let completed = false
-    retained.then(() => { completed = true })
-    await Promise.resolve()
-    assert.strictEqual(completed, false)
+      tracer.trace('serverless.flush', {}, () => {})
+      logs.getLogger('serverless-flush').emit({ body: 'flush me' })
+      metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
 
-    done()
-    await retained
-    assert.strictEqual(completed, true)
-  })
+      assert.strictEqual(onRequestEnd({ _tracer: tracer }), true)
+      await Promise.race([
+        intakeRequests,
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error(`Missing intake signals: ${[...received].join(', ')}`)),
+          1000
+        )),
+      ])
 
-  it('does not flush outside Vercel', () => {
-    delete process.env.VERCEL
-    let flushed = false
-
-    const registered = onRequestEnd({
-      _tracer: {
-        flushAll: () => { flushed = true },
-      },
-    })
-
-    assert.strictEqual(registered, false)
-    assert.strictEqual(flushed, false)
+      await Promise.race([
+        retained,
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error('waitUntil did not resolve after all intake responses completed')),
+          1000
+        )),
+      ])
+      assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
+    } finally {
+      getMeterProvider()?.reader?.shutdown()
+      getLoggerProvider()?.shutdown?.()
+      intake.closeAllConnections()
+      intake.close()
+    }
   })
 })

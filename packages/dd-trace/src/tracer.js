@@ -154,10 +154,10 @@ class DatadogTracer extends Tracer {
       flushers.push(callback => this._exporter.flush(callback))
     }
 
-    const { logs } = require('@opentelemetry/api-logs')
-    const { metrics } = require('@opentelemetry/api')
-    const loggerProvider = logs.getLoggerProvider()
-    const meterProvider = metrics.getMeterProvider()
+    const { getLoggerProvider } = require('./opentelemetry/logs')
+    const { getMeterProvider } = require('./opentelemetry/metrics')
+    const loggerProvider = getLoggerProvider()
+    const meterProvider = getMeterProvider()
 
     if (typeof loggerProvider?.forceFlush === 'function') {
       flushers.push(callback => loggerProvider.forceFlush(callback))
