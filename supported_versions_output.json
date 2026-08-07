@@ -3,7 +3,7 @@
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
     "minimum_tracer_supported": "0.2.113",
-    "max_tracer_supported": "0.3.220",
+    "max_tracer_supported": "0.3.221",
     "auto-instrumented": "True"
   },
   {
@@ -248,7 +248,7 @@
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
-    "max_tracer_supported": "9.30.0",
+    "max_tracer_supported": "9.30.1",
     "auto-instrumented": "True"
   },
   {
@@ -549,7 +549,7 @@
     "dependency": "mocha",
     "integration": "mocha",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "11.7.6",
+    "max_tracer_supported": "11.8.0",
     "auto-instrumented": "True"
   },
   {
@@ -612,7 +612,7 @@
     "dependency": "next",
     "integration": "next",
     "minimum_tracer_supported": "10.2.0",
-    "max_tracer_supported": "16.2.12",
+    "max_tracer_supported": "16.3.0",
     "auto-instrumented": "True"
   },
   {
@@ -703,7 +703,7 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.62.0",
+    "max_tracer_supported": "1.62.1",
     "auto-instrumented": "True"
   },
   {

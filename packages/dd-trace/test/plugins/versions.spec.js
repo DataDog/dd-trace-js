@@ -10,6 +10,7 @@ const {
   getVersionList,
   resolvePluginVersions,
 } = require('./versions')
+const externals = require('./externals')
 
 const latests = require('./versions/package.json').dependencies
 
@@ -233,6 +234,24 @@ describe('resolvePluginVersions', () => {
       ['5.0.0', '5', '6.0.0', '6']
     )
     assert.equal(result.unversioned, '5 || 6')
+  })
+
+  it('excludes mariadb 3.5.3 below Node.js 20', () => {
+    const node18 = resolvePluginVersions({
+      name: 'mariadb',
+      declarations: externals.mariadb,
+      nodeVersion: '18.20.8',
+      env: {},
+    })
+    const node20 = resolvePluginVersions({
+      name: 'mariadb',
+      declarations: externals.mariadb,
+      nodeVersion: '20.0.0',
+      env: {},
+    })
+
+    assert.deepEqual(versionKeys(node18).filter(version => version.startsWith('3.5')), ['3.5.1', '3.5.2'])
+    assert.deepEqual(versionKeys(node20).filter(version => version.startsWith('3.5')), ['3.5.1', '3.5.2', '3.5.3'])
   })
 
   it('applies a package version override once across active declarations', () => {

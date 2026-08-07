@@ -14,6 +14,12 @@ const skipCh = channel('apm:mariadb:pool:skip')
 const wrappedClients = new WeakSet()
 const wrappedConnections = new WeakSet()
 const noop = () => {}
+const STATUS_IN_TRANSACTION = 1
+const transactionMethods = [
+  ['beginTransaction', 'START TRANSACTION'],
+  ['commit', 'COMMIT'],
+  ['rollback', 'ROLLBACK'],
+]
 
 function wrapCommandStart (start, ctx) {
   return shimmer.wrapFunction(start, start => function (...args) {
@@ -184,6 +190,7 @@ function wrapPromiseConnection (connection, options) {
 
   wrappedConnections.add(connection)
   shimmer.wrap(connection, 'prepare', createWrapPromisePrepare(options))
+  wrapTransactionMethods(connection, options, createWrapQuery)
 
   return connection
 }
@@ -201,6 +208,7 @@ function wrapCallbackConnection (connection, options) {
 
   wrappedConnections.add(connection)
   shimmer.wrap(connection, 'prepare', createWrapCallbackPrepare(options))
+  wrapTransactionMethods(connection, options, createWrapQueryCallback)
 
   return connection
 }
@@ -236,11 +244,71 @@ function createWrapCallbackPrepare (options) {
 
       arguments[arguments.length - 1] = function () {
         const statement = arguments[1]
-        if (statement) shimmer.wrap(statement, 'execute', createWrapQueryCallback(options, sql))
+        if (statement) shimmer.wrap(statement, 'execute', createWrapCallbackPreparedExecute(options, sql))
         return cb.apply(this, arguments)
       }
 
       return prepare.apply(this, arguments)
+    }
+  }
+}
+
+/**
+ * Wraps callback prepared statements, which return a promise when no callback is provided.
+ *
+ * @param {object} options
+ * @param {string} sql
+ * @returns {(execute: Function) => Function}
+ */
+function createWrapCallbackPreparedExecute (options, sql) {
+  return function wrapExecute (execute) {
+    const executeWithCallback = createWrapQueryCallback(options, sql)(execute)
+    const executeWithPromise = createWrapQuery(options, sql)(execute)
+
+    return function () {
+      const hasCallback = typeof arguments[1] === 'function' || typeof arguments[2] === 'function'
+      const wrappedExecute = hasCallback ? executeWithCallback : executeWithPromise
+      return wrappedExecute.apply(this, arguments)
+    }
+  }
+}
+
+/**
+ * Wraps transaction helpers whose bundled implementations bypass the public query methods.
+ *
+ * @param {object} client
+ * @param {object} options
+ * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
+ * @returns {object}
+ */
+function wrapTransactionMethods (client, options, createWrapper) {
+  for (const [method, sql] of transactionMethods) {
+    shimmer.wrap(client, method, createWrapTransaction(options, sql, createWrapper))
+  }
+
+  return client
+}
+
+/**
+ * Traces a transaction helper while suppressing any nested public query it invokes.
+ *
+ * @param {object} options
+ * @param {string} sql
+ * @param {(options: object, sql: string) => (query: Function) => Function} createWrapper
+ * @returns {(transaction: Function) => Function}
+ */
+function createWrapTransaction (options, sql, createWrapper) {
+  return function wrapTransaction (transaction) {
+    const tracedTransaction = createWrapper(options, sql)(function () {
+      return skipCh.runStores({}, transaction, this, ...arguments)
+    })
+
+    return function () {
+      if (sql !== 'START TRANSACTION' && !(this.info?.status & STATUS_IN_TRANSACTION)) {
+        return transaction.apply(this, arguments)
+      }
+
+      return tracedTransaction.apply(this, arguments)
     }
   }
 }
@@ -277,7 +345,7 @@ function finishPromiseGetConnection (ctx, connection, options) {
  *
  * @param {object} ctx
  * @param {Error} error
- * @throws {Error}
+ * @throws {Error} The connection acquisition error.
  */
 function finishPromiseGetConnectionError (ctx, error) {
   return connectionFinishCh.runStores(ctx, () => { throw error })
@@ -331,6 +399,166 @@ function createWrapCallbackGetConnection (options) {
 }
 
 /**
+ * Captures the connection options registered with a pool cluster.
+ *
+ * @param {object} cluster
+ * @param {Function} defaultOptions
+ * @returns {(pattern: string|undefined) => object}
+ */
+function captureClusterOptions (cluster, defaultOptions) {
+  const optionsByIdentifier = new Map()
+  let nodeCounter = 0
+
+  shimmer.wrap(cluster, 'add', add => function (identifier, options) {
+    const hasIdentifier = typeof identifier === 'string' ||
+      Object.prototype.toString.call(identifier) === '[object String]'
+    const generatedIdentifier = hasIdentifier ? String(identifier) : `PoolNode-${nodeCounter++}`
+    const connectionOptions = hasIdentifier ? options : identifier
+    const result = add.apply(this, arguments)
+    optionsByIdentifier.set(generatedIdentifier, normalizeOptions(defaultOptions, connectionOptions))
+    return result
+  })
+
+  shimmer.wrap(cluster, 'remove', remove => function (pattern) {
+    const result = remove.apply(this, arguments)
+    removeClusterOptions(optionsByIdentifier, pattern)
+    return result
+  })
+
+  cluster.on('remove', identifier => optionsByIdentifier.delete(identifier))
+
+  return pattern => {
+    const regularExpression = new RegExp(pattern ?? /^/)
+    let matchedOptions
+
+    for (const [identifier, options] of optionsByIdentifier) {
+      regularExpression.lastIndex = 0
+      if (!regularExpression.test(identifier)) continue
+      if (matchedOptions !== undefined) return {}
+      matchedOptions = options
+    }
+
+    return matchedOptions ?? {}
+  }
+}
+
+/**
+ * Removes the options for every cluster node matching a selector.
+ *
+ * @param {Map<string, object>} optionsByIdentifier
+ * @param {string} pattern
+ * @returns {void}
+ */
+function removeClusterOptions (optionsByIdentifier, pattern) {
+  const regularExpression = new RegExp(pattern)
+
+  for (const identifier of optionsByIdentifier.keys()) {
+    regularExpression.lastIndex = 0
+    if (regularExpression.test(identifier)) optionsByIdentifier.delete(identifier)
+  }
+}
+
+/**
+ * Normalizes connection options with MariaDB's public parser without allowing instrumentation to break the factory.
+ *
+ * @param {Function} defaultOptions
+ * @param {unknown} options
+ * @returns {object}
+ */
+function normalizeOptions (defaultOptions, options) {
+  try {
+    return defaultOptions(options)
+  } catch {
+    return options !== null && typeof options === 'object' ? options : {}
+  }
+}
+
+/**
+ * Wraps promise connections acquired from a bundled pool cluster using the selected node's options.
+ *
+ * @param {(pattern: string|undefined) => object} getOptions
+ * @returns {(getConnection: Function) => Function}
+ */
+function createWrapPromiseClusterGetConnection (getOptions) {
+  return function wrapGetConnection (getConnection) {
+    return function (pattern) {
+      const ctx = {}
+      const options = getOptions(pattern)
+
+      connectionStartCh.publish(ctx)
+
+      return skipCh.runStores({}, getConnection, this, ...arguments).then(
+        connection => finishPromiseGetConnection(ctx, connection, options),
+        error => finishPromiseGetConnectionError(ctx, error)
+      )
+    }
+  }
+}
+
+/**
+ * Wraps callback connections acquired from a bundled pool cluster using the selected node's options.
+ *
+ * @param {(pattern: string|undefined) => object} getOptions
+ * @returns {(getConnection: Function) => Function}
+ */
+function createWrapCallbackClusterGetConnection (getOptions) {
+  return function wrapGetConnection (getConnection) {
+    return function (pattern) {
+      const callback = arguments[arguments.length - 1]
+      if (typeof callback !== 'function') return getConnection.apply(this, arguments)
+
+      const ctx = {}
+      const options = getOptions(typeof pattern === 'function' ? undefined : pattern)
+      arguments[arguments.length - 1] = function () {
+        const connection = arguments[1]
+        if (connection) wrapCallbackConnection(connection, options)
+        return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
+      }
+
+      connectionStartCh.publish(ctx)
+
+      return skipCh.runStores({}, getConnection, this, ...arguments)
+    }
+  }
+}
+
+/**
+ * Wraps promise connections acquired from a bundled pool cluster.
+ *
+ * @param {object} cluster
+ * @param {Function} defaultOptions
+ * @returns {object}
+ */
+function wrapPromiseCluster (cluster, defaultOptions) {
+  const getOptions = captureClusterOptions(cluster, defaultOptions)
+
+  shimmer.wrap(cluster, 'getConnection', createWrapPromiseClusterGetConnection(getOptions))
+
+  return cluster
+}
+
+/**
+ * Wraps callback connections acquired from a bundled pool cluster.
+ *
+ * @param {object} cluster
+ * @param {Function} defaultOptions
+ * @returns {object}
+ */
+function wrapCallbackCluster (cluster, defaultOptions) {
+  const getOptions = captureClusterOptions(cluster, defaultOptions)
+
+  shimmer.wrap(cluster, 'getConnection', createWrapCallbackClusterGetConnection(getOptions))
+
+  shimmer.wrap(cluster, 'of', of => function (pattern) {
+    const filteredCluster = of.apply(this, arguments)
+    shimmer.wrap(filteredCluster, 'getConnection', createWrapCallbackClusterGetConnection(() => getOptions(pattern)))
+    return filteredCluster
+  })
+
+  return cluster
+}
+
+/**
  * Instruments the promise API exported by MariaDB's bundled CommonJS entry.
  *
  * @param {object} mariadb
@@ -345,19 +573,25 @@ function wrapPromiseBundle (mariadb, _version, isIitm) {
 
   shimmer.wrap(mariadb, 'createConnection', createConnection => function (options) {
     return createConnection.apply(this, arguments).then(connection => {
-      return wrapPromiseConnection(connection, options)
+      return wrapPromiseConnection(connection, normalizeOptions(mariadb.defaultOptions, options))
     })
   })
 
   shimmer.wrap(mariadb, 'createPool', createPool => function (options) {
     const pool = skipCh.runStores({}, createPool, this, ...arguments)
-    wrapClient(pool, createWrapPoolQuery(options, createWrapQuery))
-    shimmer.wrap(pool, 'getConnection', createWrapPromiseGetConnection(options))
+    const normalizedOptions = normalizeOptions(mariadb.defaultOptions, options)
+    wrapClient(pool, createWrapPoolQuery(normalizedOptions, createWrapQuery))
+    shimmer.wrap(pool, 'getConnection', createWrapPromiseGetConnection(normalizedOptions))
     return pool
+  })
+
+  shimmer.wrap(mariadb, 'createPoolCluster', createPoolCluster => function () {
+    return wrapPromiseCluster(createPoolCluster.apply(this, arguments), mariadb.defaultOptions)
   })
 
   mariadb.default.createConnection = mariadb.createConnection
   mariadb.default.createPool = mariadb.createPool
+  mariadb.default.createPoolCluster = mariadb.createPoolCluster
 
   return mariadb
 }
@@ -372,18 +606,25 @@ function wrapCallbackBundle (mariadb) {
   mariadb = { ...mariadb, default: { ...mariadb.default } }
 
   shimmer.wrap(mariadb, 'createConnection', createConnection => function (options) {
-    return wrapCallbackConnection(createConnection.apply(this, arguments), options)
+    const connection = createConnection.apply(this, arguments)
+    return wrapCallbackConnection(connection, normalizeOptions(mariadb.defaultOptions, options))
   })
 
   shimmer.wrap(mariadb, 'createPool', createPool => function (options) {
     const pool = skipCh.runStores({}, createPool, this, ...arguments)
-    wrapClient(pool, createWrapPoolQuery(options, createWrapQueryCallback))
-    shimmer.wrap(pool, 'getConnection', createWrapCallbackGetConnection(options))
+    const normalizedOptions = normalizeOptions(mariadb.defaultOptions, options)
+    wrapClient(pool, createWrapPoolQuery(normalizedOptions, createWrapQueryCallback))
+    shimmer.wrap(pool, 'getConnection', createWrapCallbackGetConnection(normalizedOptions))
     return pool
+  })
+
+  shimmer.wrap(mariadb, 'createPoolCluster', createPoolCluster => function () {
+    return wrapCallbackCluster(createPoolCluster.apply(this, arguments), mariadb.defaultOptions)
   })
 
   mariadb.default.createConnection = mariadb.createConnection
   mariadb.default.createPool = mariadb.createPool
+  mariadb.default.createPoolCluster = mariadb.createPoolCluster
 
   return mariadb
 }
@@ -432,7 +673,7 @@ addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase)
   return shimmer.wrapFunction(PoolBase, wrapPoolBase)
 })
 
-// MariaDB 3.5.3 added conditional CommonJS exports built as single-file bundles. Since their internal classes do not
-// pass through the module loader, instrument the public factories in those bundles instead.
+// MariaDB 3.5.3 added minified single-file CommonJS bundles whose internal classes cannot be targeted by Orchestrion
+// or module-loader hooks, so instrument the runtime objects returned by their public factories instead.
 addHook({ name, versions: ['>=3.5.3'] }, wrapPromiseBundle)
 addHook({ name, file: 'dist/callback.cjs', versions: ['>=3.5.3'] }, wrapCallbackBundle)

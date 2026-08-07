@@ -16,7 +16,9 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
 const lowerBound = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 // mariadb 3.5.1 and 3.5.2 are ESM-only, so they are covered by the ESM integration test instead of this CJS fixture.
-const range = `${lowerBound} <3.5.1 || >=3.5.3`
+const range = semver.gte(process.version, '20.0.0')
+  ? `${lowerBound} <3.5.1 || >=3.5.3`
+  : `${lowerBound} <3.5.1`
 
 /**
  * Loads MariaDB through its real CommonJS entry when testing bundled exports.
@@ -49,6 +51,41 @@ function assertNoConnectionSpanLeak () {
 
     assert.ok(names.has('test'), 'root span has not flushed yet')
     assert.strictEqual(names.has('tcp.connect'), false, 'tcp.connect leaked into the request trace')
+  })
+}
+
+function assertTransactionSpans () {
+  return agent.assertSomeTraces(traces => {
+    const trace = traces.find(trace => trace.some(span => span.name === 'test'))
+    assert.ok(trace, 'transaction trace has not flushed yet')
+
+    const resources = trace
+      .filter(span => span.meta.component === 'mariadb')
+      .map(span => span.resource)
+      .sort()
+
+    assert.deepStrictEqual(resources, ['COMMIT', 'ROLLBACK', 'START TRANSACTION', 'START TRANSACTION'])
+  })
+}
+
+function assertClusterMetadata (assertAutomaticRemoval = false) {
+  const metadataByResource = new Map()
+
+  return agent.assertSomeTraces(traces => {
+    for (const span of traces.flat()) {
+      if (span.resource.startsWith('SELECT') && span.resource.endsWith('AS cluster_metadata')) {
+        metadataByResource.set(span.resource, span.meta)
+      }
+    }
+
+    assert.strictEqual(metadataByResource.size, assertAutomaticRemoval ? 4 : 3,
+      'cluster metadata spans have not all flushed yet')
+    assert.strictEqual(metadataByResource.get('SELECT 7 AS cluster_metadata')['db.name'], undefined)
+    assert.strictEqual(metadataByResource.get('SELECT 8 AS cluster_metadata')['db.name'], undefined)
+    assert.strictEqual(metadataByResource.get('SELECT 9 AS cluster_metadata')['db.name'], 'db')
+    if (assertAutomaticRemoval) {
+      assert.strictEqual(metadataByResource.get('SELECT 10 AS cluster_metadata')['db.name'], undefined)
+    }
   })
 }
 
@@ -208,6 +245,133 @@ describe('Plugin', () => {
 
               statement.close()
             })
+          })
+
+          it('should support prepared statements without callbacks', async () => {
+            const statement = await new Promise((resolve, reject) => {
+              connection.prepare('SELECT ? + ? AS solution', (error, statement) => {
+                if (error) return reject(error)
+                resolve(statement)
+              })
+            })
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: 'SELECT ? + ? AS solution' }, {
+                spanResourceMatch: /SELECT \? \+ \? AS solution/,
+              }),
+              statement.execute([1, 1]),
+            ])
+
+            statement.close()
+          })
+        }
+
+        if (semver.gte(resolvedVersion, '3.5.3')) {
+          it('should normalize URL connection options', async () => {
+            const uriConnection = mariadb.createConnection('mariadb://root@localhost/db')
+            await new Promise((resolve, reject) => {
+              uriConnection.connect(error => error ? reject(error) : resolve())
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  resource: 'SELECT 1 AS url_options',
+                  meta: {
+                    'db.name': 'db',
+                    'db.user': 'root',
+                    'out.host': 'localhost',
+                  },
+                }),
+                new Promise((resolve, reject) => {
+                  uriConnection.query('SELECT 1 AS url_options', error => error ? reject(error) : resolve())
+                }),
+              ])
+            } finally {
+              await new Promise((resolve, reject) => {
+                uriConnection.end(error => error ? reject(error) : resolve())
+              })
+            }
+          })
+
+          it('should support transaction helpers', async () => {
+            const call = method => new Promise((resolve, reject) => {
+              connection[method](error => error ? reject(error) : resolve())
+            })
+            const assertion = assertTransactionSpans()
+            const span = tracer.startSpan('test')
+
+            await tracer.scope().activate(span, async () => {
+              await call('beginTransaction')
+              await call('commit')
+              await call('beginTransaction')
+              await call('rollback')
+            })
+
+            span.finish()
+            await assertion
+          })
+
+          it('should not trace transaction helpers when no command is sent', async () => {
+            const assertion = agent.assertNoTraces(traces => {
+              const transactionSpan = traces.flat()
+                .find(span => span.resource === 'COMMIT' || span.resource === 'ROLLBACK')
+              assert.strictEqual(transactionSpan, undefined)
+            })
+
+            await new Promise((resolve, reject) => connection.commit(error => error ? reject(error) : resolve()))
+            await new Promise((resolve, reject) => connection.rollback(error => error ? reject(error) : resolve()))
+            await assertion
+          })
+
+          it('should support pool clusters', async () => {
+            const cluster = mariadb.createPoolCluster()
+            cluster.add('primary', {
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'SELECT 7 AS cluster_query' }),
+                new Promise((resolve, reject) => {
+                  cluster.of('primary').query('SELECT 7 AS cluster_query', error => {
+                    if (error) return reject(error)
+                    resolve()
+                  })
+                }),
+              ])
+            } finally {
+              await new Promise((resolve, reject) => cluster.end(error => error ? reject(error) : resolve()))
+            }
+          })
+
+          it('should not guess options for ambiguous or removed cluster nodes', async () => {
+            const cluster = mariadb.createPoolCluster()
+            cluster.add('node-1', { host: 'localhost', user: 'root', database: 'db' })
+            cluster.add('node-2', { host: 'localhost', user: 'root' })
+            const filteredCluster = cluster.of('^node-', 'RR')
+            const query = sql => new Promise((resolve, reject) => {
+              filteredCluster.query(sql, error => error ? reject(error) : resolve())
+            })
+            const assertion = assertClusterMetadata()
+
+            try {
+              await query('SELECT 7 AS cluster_metadata')
+              await query('SELECT 8 AS cluster_metadata')
+              cluster.remove('^node-')
+              cluster.add('node-3', { host: 'localhost', user: 'root', database: 'db' })
+              await new Promise((resolve, reject) => {
+                cluster.of('^node-').query(
+                  'SELECT 9 AS cluster_metadata',
+                  error => error ? reject(error) : resolve()
+                )
+              })
+              await assertion
+            } finally {
+              await new Promise((resolve, reject) => cluster.end(error => error ? reject(error) : resolve()))
+            }
           })
         }
 
@@ -375,6 +539,94 @@ describe('Plugin', () => {
 
             await statement.close()
           })
+
+          if (semver.gte(resolvedVersion, '3.5.3')) {
+            it('should normalize URL connection options', async () => {
+              const uriConnection = await mariadb.createConnection('mariadb://root@localhost/db')
+
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({
+                    resource: 'SELECT 1 AS url_options',
+                    meta: {
+                      'db.name': 'db',
+                      'db.user': 'root',
+                      'out.host': 'localhost',
+                    },
+                  }),
+                  uriConnection.query('SELECT 1 AS url_options'),
+                ])
+              } finally {
+                await uriConnection.end()
+              }
+            })
+
+            it('should support transaction helpers', async () => {
+              const assertion = assertTransactionSpans()
+              const span = tracer.startSpan('test')
+
+              await tracer.scope().activate(span, async () => {
+                await connection.beginTransaction()
+                await connection.commit()
+                await connection.beginTransaction()
+                await connection.rollback()
+              })
+
+              span.finish()
+              await assertion
+            })
+
+            it('should not trace transaction helpers when no command is sent', async () => {
+              const assertion = agent.assertNoTraces(traces => {
+                const transactionSpan = traces.flat()
+                  .find(span => span.resource === 'COMMIT' || span.resource === 'ROLLBACK')
+                assert.strictEqual(transactionSpan, undefined)
+              })
+
+              await connection.commit()
+              await connection.rollback()
+              await assertion
+            })
+
+            it('should support pool clusters', async () => {
+              const cluster = mariadb.createPoolCluster()
+              cluster.add('primary', {
+                host: 'localhost',
+                user: 'root',
+                database: 'db',
+              })
+
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: 'SELECT 7 AS cluster_query' }),
+                  cluster.of('primary').query('SELECT 7 AS cluster_query'),
+                ])
+              } finally {
+                await cluster.end()
+              }
+            })
+
+            it('should not guess options for ambiguous or removed cluster nodes', async () => {
+              const cluster = mariadb.createPoolCluster()
+              cluster.add('node-1', { host: 'localhost', user: 'root', database: 'db' })
+              cluster.add('node-2', { host: 'localhost', user: 'root' })
+              const filteredCluster = cluster.of('^node-', 'RR')
+              const assertion = assertClusterMetadata(true)
+
+              try {
+                await filteredCluster.query('SELECT 7 AS cluster_metadata')
+                await filteredCluster.query('SELECT 8 AS cluster_metadata')
+                cluster.remove('^node-')
+                cluster.add('node-3', { host: 'localhost', user: 'root', database: 'db' })
+                await cluster.of('^node-').query('SELECT 9 AS cluster_metadata')
+                cluster.emit('remove', 'node-3')
+                await cluster.of('^node-3$').query('SELECT 10 AS cluster_metadata')
+                await assertion
+              } finally {
+                await cluster.end()
+              }
+            })
+          }
 
           it('should handle errors', async () => {
             const queryPromise = connection.query('SELECT * FROM definitely_missing_table').catch(() => {})
