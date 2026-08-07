@@ -61,15 +61,9 @@ module.exports = {
       }),
     ],
   },
-  // These are shared between dd-trace and users, so they need to be external.
+  // This is shared between dd-trace and users, so it needs to be external.
   externals: {
     '@opentelemetry/api': '@opentelemetry/api',
-    // `@datadog/openfeature-node-server` only uses `@openfeature/server-sdk` for
-    // `OpenFeatureEventEmitter` and `ProviderEvents`. Bundling our own copy of the SDK would give
-    // those a different identity than the customer's own copy, so this is redirected to a bridge
-    // module that the `openfeature-server-sdk` instrumentation fills in from the customer's own
-    // `require('@openfeature/server-sdk')` (see #8635).
-    '@openfeature/server-sdk': 'commonjs2 ../../../../packages/dd-trace/src/openfeature/server-sdk-bridge'
   },
   plugins: [
     new LicenseWebpackPlugin({
