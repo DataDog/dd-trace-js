@@ -5,16 +5,17 @@ const { execFile } = require('node:child_process')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../../setup/core')
 
-describe('Test Optimization writer', () => {
+const BaseWriter = require('../../../../src/exporters/common/writer')
+const TestOptimizationRequestTracker = require('../../../../src/ci-visibility/exporters/agentless/request-tracker')
+
+describe('Test Optimization request tracker', () => {
   let clock
   let pendingRequests
   let request
-  let TestOptimizationWriter
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
@@ -23,7 +24,6 @@ describe('Test Optimization writer', () => {
       pendingRequests.push({ data, options, callback })
     }
     request.writable = true
-    TestOptimizationWriter = proxyquire('../../../../src/ci-visibility/exporters/agentless/base-writer', {})
   })
 
   afterEach(() => {
@@ -31,15 +31,17 @@ describe('Test Optimization writer', () => {
   })
 
   function getWriter () {
-    const writer = new TestOptimizationWriter({ url: 'http://localhost' })
+    const writer = new BaseWriter({ url: 'http://localhost' })
+    const requestTracker = new TestOptimizationRequestTracker(writer)
     writer._encoder = {
       count: sinon.stub(),
       makePayload: sinon.stub().returns(Buffer.from('payload')),
       reset: sinon.stub(),
     }
-    writer._sendPayload = function (data, count, done, options = {}) {
-      this._sendRequest(request, data, options, done)
+    writer._sendPayload = (data, count, done, options = {}) => {
+      requestTracker.send(request, data, options, done)
     }
+    writer.flush = (done, options) => requestTracker.flush(done, options)
     return writer
   }
 
@@ -67,6 +69,19 @@ describe('Test Optimization writer', () => {
     assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+  })
+
+  it('does not wait for a timed-out request on a later final flush', () => {
+    const writer = getWriter()
+    writer._encoder.count.onFirstCall().returns(1).returns(0)
+
+    writer.flush(sinon.spy(), { deadline: Date.now() + 1000 })
+    clock.tick(1000)
+
+    const done = sinon.spy()
+    writer.flush(done, { deadline: Date.now() + 1000 })
+
+    sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
   it('reports request failures to the final flush callback', () => {

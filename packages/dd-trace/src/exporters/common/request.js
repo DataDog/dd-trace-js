@@ -99,7 +99,8 @@ function request (data, options, callback) {
    * @param {import('node:http').IncomingMessage} res
    * @param {(error: Error|null, result?: string|null, statusCode?: number,
    *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
-   * @param {(error: Error) => void} handleError
+   * @param {(error: Error, statusCode?: number,
+   *   headers?: import('node:http').IncomingHttpHeaders) => void} handleError
    */
   const onResponse = (res, complete, handleError) => {
     markEndpointReached(options)
@@ -160,7 +161,7 @@ function request (data, options, callback) {
         error.status = res.statusCode
 
         if (options.retryOnHttpError) {
-          handleError(error)
+          handleError(error, res.statusCode, res.headers)
         } else {
           complete(error, null, res.statusCode, res.headers)
         }
@@ -217,8 +218,10 @@ function request (data, options, callback) {
 
       /**
        * @param {Error} error
+       * @param {number} [statusCode]
+       * @param {import('node:http').IncomingHttpHeaders} [headers]
        */
-      const handleError = (error) => {
+      const handleError = (error, statusCode, headers) => {
         if (settled) return
 
         const isRetriableHttpError = options.retryOnHttpError === true &&
@@ -233,7 +236,7 @@ function request (data, options, callback) {
           // event loop is held open by their own work.
           setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
         } else {
-          complete(error)
+          complete(error, null, statusCode, headers)
         }
       }
 

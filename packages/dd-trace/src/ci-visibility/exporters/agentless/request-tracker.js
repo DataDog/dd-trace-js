@@ -4,13 +4,19 @@ const BaseWriter = require('../../../exporters/common/writer')
 
 const FINAL_FLUSH_TIMEOUT_CODE = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
 
-class TestOptimizationWriter extends BaseWriter {
+class TestOptimizationRequestTracker {
+  #writer
   #pendingRequests = new Set()
   #finalFlushes = new Set()
 
-  constructor () {
-    super(...arguments)
-    this._bufferWhenUnavailable = true
+  /**
+   * Creates request tracking for a Test Optimization writer.
+   *
+   * @param {BaseWriter} writer
+   */
+  constructor (writer) {
+    this.#writer = writer
+    writer._bufferWhenUnavailable = true
   }
 
   /**
@@ -24,7 +30,7 @@ class TestOptimizationWriter extends BaseWriter {
    */
   flush (done, options) {
     if (options?.deadline === undefined) {
-      super.flush(done, options)
+      BaseWriter.prototype.flush.call(this.#writer, done, options)
       return
     }
 
@@ -39,14 +45,14 @@ class TestOptimizationWriter extends BaseWriter {
     finalFlush.timeoutId = setTimeout(() => {
       const error = new Error('Timed out flushing Test Optimization data')
       error.code = FINAL_FLUSH_TIMEOUT_CODE
-      finalFlush.error ||= error
 
+      for (const pendingFinalFlush of this.#finalFlushes) pendingFinalFlush.error ||= error
       for (const controller of this.#pendingRequests) controller.abort(error)
-
-      if (this.#finalFlushes.delete(finalFlush)) finalFlush.done(finalFlush.error)
+      this.#pendingRequests.clear()
+      this.#finishFinalFlushes()
     }, remaining)
 
-    super.flush((error) => {
+    BaseWriter.prototype.flush.call(this.#writer, (error) => {
       finalFlush.error ||= error
       this.#finishFinalFlushes()
     }, options)
@@ -54,26 +60,26 @@ class TestOptimizationWriter extends BaseWriter {
   }
 
   /**
-   * Sends a request while tracking it so a later final flush can wait for or
-   * abort it.
+   * Sends and tracks a request so a later final flush can wait for or abort it.
    *
    * @param {Function} request
    * @param {Buffer|string|object} data
    * @param {object} options
-   * @param {(error: Error|null, result?: string|null, statusCode?: number) => void} callback
+   * @param {(error: Error|null, result?: string|null, statusCode?: number,
+   *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
    * @returns {void}
    */
-  _sendRequest (request, data, options, callback) {
+  send (request, data, options, callback) {
     const controller = new AbortController()
     this.#pendingRequests.add(controller)
 
-    request(data, { ...options, signal: controller.signal }, (error, result, statusCode) => {
+    request(data, { ...options, signal: controller.signal }, (error, result, statusCode, headers) => {
       if (error) {
         for (const finalFlush of this.#finalFlushes) finalFlush.error ||= error
       }
 
       try {
-        callback(error, result, statusCode)
+        callback(error, result, statusCode, headers)
       } finally {
         this.#pendingRequests.delete(controller)
         this.#finishFinalFlushes()
@@ -91,11 +97,11 @@ class TestOptimizationWriter extends BaseWriter {
     if (this.#pendingRequests.size !== 0) return
 
     for (const finalFlush of this.#finalFlushes) {
+      this.#finalFlushes.delete(finalFlush)
       clearTimeout(finalFlush.timeoutId)
       finalFlush.done(finalFlush.error)
     }
-    this.#finalFlushes.clear()
   }
 }
 
-module.exports = TestOptimizationWriter
+module.exports = TestOptimizationRequestTracker

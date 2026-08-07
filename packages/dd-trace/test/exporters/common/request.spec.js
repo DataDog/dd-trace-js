@@ -439,18 +439,41 @@ describe('request', function () {
   it('should not retry permanent HTTP errors when requested', (done) => {
     nock('http://localhost:80')
       .put('/path')
-      .reply(499)
+      .reply(499, '', { 'x-test-response': 'permanent' })
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
       retryOnHttpError: true,
-    }, (err) => {
+    }, (err, res, statusCode, headers) => {
       assert.strictEqual(err.status, 499)
+      assert.strictEqual(statusCode, 499)
+      assert.strictEqual(headers['x-test-response'], 'permanent')
       sinon.assert.notCalled(retryStubs.getRetryDelay)
       done()
     })
   })
+
+  for (const statusCode of [429, 500]) {
+    it(`should preserve an exhausted HTTP ${statusCode} response`, (done) => {
+      nock('http://localhost:80')
+        .put('/path')
+        .reply(statusCode)
+        .put('/path')
+        .reply(statusCode, '', { 'x-test-response': 'exhausted' })
+
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'PUT',
+        retryOnHttpError: true,
+      }, (err, res, finalStatusCode, headers) => {
+        assert.strictEqual(err.status, statusCode)
+        assert.strictEqual(finalStatusCode, statusCode)
+        assert.strictEqual(headers['x-test-response'], 'exhausted')
+        done()
+      })
+    })
+  }
 
   it('should not retry on a non-retriable error code', (done) => {
     const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })

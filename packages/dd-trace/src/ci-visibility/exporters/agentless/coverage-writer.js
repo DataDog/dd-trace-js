@@ -14,14 +14,29 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
-const TestOptimizationWriter = require('./base-writer')
+const BaseWriter = require('../../../exporters/common/writer')
+const TestOptimizationRequestTracker = require('./request-tracker')
 
-class Writer extends TestOptimizationWriter {
+class Writer extends BaseWriter {
+  #requestTracker
+
   constructor ({ url, evpProxyPrefix = '' }) {
     super(...arguments)
+    this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
     this._evpProxyPrefix = evpProxyPrefix
+  }
+
+  /**
+   * Flushes buffered coverage, waiting for tracked requests during finalization.
+   *
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    this.#requestTracker.flush(done, options)
   }
 
   _sendPayload (form, _, done, flushOptions) {
@@ -52,7 +67,7 @@ class Writer extends TestOptimizationWriter {
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'code_coverage' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'code_coverage' }, form.size())
 
-    this._sendRequest(request, form, options, (err, res, statusCode) => {
+    this.#requestTracker.send(request, form, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'code_coverage' },
