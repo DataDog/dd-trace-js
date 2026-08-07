@@ -81,7 +81,7 @@ class Experiments {
         if (pulledDataset === null) {
           const datasets = await this.#client.listDatasets(projectId, { name })
           for (const dataset of datasets) {
-            if (dataset.name === name) {
+            if (dataset.name() === name) {
               pulledDataset = dataset
               latestVersion = dataset.latestVersion()
               datasetVersion = version ?? latestVersion
@@ -138,7 +138,7 @@ class Experiments {
     return Dataset.fromExisting(
       this.#client,
       name,
-      pulledDataset.description,
+      pulledDataset.description(),
       pulledDataset.id(),
       projectId,
       records,

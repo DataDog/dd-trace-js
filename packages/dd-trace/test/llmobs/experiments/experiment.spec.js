@@ -17,9 +17,7 @@ function client () {
   })
 }
 
-function clientWithMockBackend ({
-  createDatasetError,
-} = {}) {
+function clientWithMockBackend ({ createDatasetError } = {}) {
   const c = client()
   const requests = []
 
@@ -27,7 +25,7 @@ function clientWithMockBackend ({
   c.createDataset = async (projectId, attributes) => {
     requests.push({ method: 'createDataset', projectId, attributes })
     if (createDatasetError) throw createDatasetError
-    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 0, 0)
+    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 1, 1)
   }
   c.appendDatasetRecords = async (projectId, datasetId, records) => {
     requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
@@ -95,14 +93,14 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
-  it('advances the pinned dataset version after appending records', async () => {
+  it('advances appended dataset versions from the current latest version', async () => {
     const { client: c } = clientWithMockBackend()
-    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [], [], 2, 5).addRecord('a')
 
     await dataset.push()
 
-    assert.equal(dataset.version(), 1)
-    assert.equal(dataset.latestVersion(), 1)
+    assert.equal(dataset.version(), 6)
+    assert.equal(dataset.latestVersion(), 6)
   })
 
   it('keeps evaluator results aligned for summary evaluators when rows fail', async () => {
@@ -220,11 +218,12 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
-  it('exposes dataset properties and accepts a DatasetRecord instance', () => {
+  it('exposes dataset getters and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
       .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec'))
       .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
-    assert.equal(dataset.name, 'my-name')
+    assert.equal(dataset.name(), 'my-name')
+    assert.equal(dataset.description(), 'desc')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
     const record = dataset.records()[0]

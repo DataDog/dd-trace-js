@@ -18,8 +18,8 @@ function waitForBackend (defaultDelayMs = 2000) {
 }
 
 function nextDatasetVersion (dataset) {
-  const version = Number(dataset.version())
-  return Number.isFinite(version) ? version + 1 : undefined
+  const version = Number(dataset.latestVersion())
+  return Number.isFinite(version) ? version + 1 : null
 }
 
 function recordDataByInputValue (records) {
@@ -95,8 +95,8 @@ describe('LLMObs Experiments control-plane client', function () {
     })
     trackBackendDataset(client, projectId, dataset.id())
 
-    assert.equal(dataset.name, backendClientDatasetName)
-    assert.equal(dataset.description, 'created by a dd-trace-js experiments client VCR test')
+    assert.equal(dataset.name(), backendClientDatasetName)
+    assert.equal(dataset.description(), 'created by a dd-trace-js experiments client VCR test')
     assert.equal(dataset.projectId(), projectId)
     assert.match(dataset.id(), /\S+/)
     assert.match(dataset.url(), /^https:\/\//)
@@ -113,7 +113,7 @@ describe('LLMObs Experiments control-plane client', function () {
     ])
 
     await waitForBackend(5_000)
-    const listed = await client.listDatasets(projectId, { name: dataset.name })
+    const listed = await client.listDatasets(projectId, { name: dataset.name() })
     assert.equal(listed.some(item => item.id() === dataset.id()), true)
 
     const records = await client.listDatasetRecords(projectId, dataset.id(), { version: nextDatasetVersion(dataset) })

@@ -18,9 +18,9 @@ function recordIdFromCreatedRecord (record) {
 // A local buffer of dataset records, created remotely and pushed on first run
 // (or eagerly via push()). Pushes are incremental.
 class Dataset {
-  name
-  description
   #client
+  #name
+  #description
   #records
   #recordIds
   #id
@@ -30,9 +30,9 @@ class Dataset {
   #latestVersion
 
   constructor (client, name, description = '') {
-    this.name = name
-    this.description = description
     this.#client = client
+    this.#name = name
+    this.#description = description
     this.#records = []
     this.#recordIds = []
     this.#id = null
@@ -62,6 +62,14 @@ class Dataset {
       : new DatasetRecord(recordOrInput, expectedOutput, metadata)
     this.#records.push(record)
     return this
+  }
+
+  name () {
+    return this.#name
+  }
+
+  description () {
+    return this.#description
   }
 
   records () {
@@ -107,13 +115,13 @@ class Dataset {
     if (this.#id === null) {
       let response
       try {
-        response = await this.#client.createDataset(projectId, { name: this.name, description: this.description })
+        response = await this.#client.createDataset(projectId, { name: this.#name, description: this.#description })
       } catch (err) {
-        throw new Error(`Failed to create dataset '${this.name}': ${err.message}`)
+        throw new Error(`Failed to create dataset '${this.#name}': ${err.message}`)
       }
       this.#id = response?.id() ?? null
       if (this.#id === null) {
-        throw new Error(`Failed to create dataset '${this.name}': backend response is missing dataset id`)
+        throw new Error(`Failed to create dataset '${this.#name}': backend response is missing dataset id`)
       }
       this.#projectId = projectId
       this.#version = response.version() ?? this.#version
@@ -141,17 +149,18 @@ class Dataset {
     try {
       response = await this.#client.appendDatasetRecords(projectId, this.#id, records)
     } catch (err) {
-      throw new Error(`Failed to push records to dataset '${this.name}': ${err.message}`)
+      throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
     }
 
     const created = response
-    const previousVersion = Number(this.#version)
-    if (Number.isFinite(previousVersion)) {
-      const pushedVersion = previousVersion + 1
-      const latestVersion = Number(this.#latestVersion)
+    const latestVersion = Number(this.#latestVersion)
+    if (Number.isFinite(latestVersion)) {
+      const pushedVersion = latestVersion + 1
       this.#version = pushedVersion
-      this.#latestVersion = Number.isFinite(latestVersion) ? Math.max(latestVersion, pushedVersion) : pushedVersion
+      this.#latestVersion = pushedVersion
     } else {
+      // The dataset contents changed, but without a known latest version we
+      // cannot safely pin later experiments to a concrete version.
       this.#version = null
     }
 

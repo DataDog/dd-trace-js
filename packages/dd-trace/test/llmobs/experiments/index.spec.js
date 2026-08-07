@@ -89,9 +89,9 @@ describe('LLMObs Experiments facade', () => {
 
   function datasetResource ({ name = 'remote-dataset', id = 'ds', description = 'desc', latestVersion = 3 } = {}) {
     return {
-      name,
+      name: () => name,
       id: () => id,
-      description,
+      description: () => description,
       latestVersion: () => latestVersion,
     }
   }
@@ -112,7 +112,7 @@ describe('LLMObs Experiments facade', () => {
 
       const dataset = exp.createDataset('d', { records: [{ inputData: 'in' }] })
 
-      assert.equal(dataset.name, 'd')
+      assert.equal(dataset.name(), 'd')
       assert.equal(dataset.records()[0].input, 'in')
       sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
@@ -175,12 +175,12 @@ describe('LLMObs Experiments facade', () => {
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
       const dataset = exp.createDataset('d', 'desc')
-      assert.equal(dataset.description, 'desc')
+      assert.equal(dataset.description(), 'desc')
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
       assert.equal(dataset.url(), null)
 
       const pulled = await exp.pullDataset('d')
-      assert.equal(pulled.name, 'd')
+      assert.equal(pulled.name(), 'd')
 
       const experiment = exp.experiment({ name: 'exp' })
       assert.equal(experiment.name(), 'exp')
@@ -188,12 +188,12 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.calledThrice(warn)
     })
 
-    it('models inert datasets and experiments with stable properties and accessors', async () => {
+    it('models inert datasets and experiments with stable accessors', async () => {
       const warn = sinon.spy(log, 'warn')
       const exp = new NoopExperiments()
 
       const ignoredDescriptionDataset = exp.createDataset('legacy description', 'ignored')
-      assert.equal(ignoredDescriptionDataset.description, 'ignored')
+      assert.equal(ignoredDescriptionDataset.description(), 'ignored')
       assert.deepEqual(ignoredDescriptionDataset.records(), [])
 
       const dataset = exp.createDataset('d', {
@@ -207,8 +207,8 @@ describe('LLMObs Experiments facade', () => {
       })
       dataset.addRecord('input only')
 
-      assert.equal(dataset.name, 'd')
-      assert.equal(dataset.description, 'desc')
+      assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.description(), 'desc')
       assert.equal(dataset.id(), null)
       assert.equal(dataset.projectId(), null)
       assert.equal(dataset.version(), null)
@@ -227,8 +227,8 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
 
       const pulled = await exp.pullDataset('pulled')
-      assert.equal(pulled.name, 'pulled')
-      assert.equal(pulled.description, '')
+      assert.equal(pulled.name(), 'pulled')
+      assert.equal(pulled.description(), '')
 
       const experiment = exp.experiment()
       assert.equal(experiment.name(), '')
@@ -257,8 +257,8 @@ describe('LLMObs Experiments facade', () => {
         version: 2,
       })
 
-      assert.equal(dataset.name, 'remote-dataset')
-      assert.equal(dataset.description, 'desc')
+      assert.equal(dataset.name(), 'remote-dataset')
+      assert.equal(dataset.description(), 'desc')
       assert.equal(dataset.id(), 'ds')
       assert.equal(dataset.projectId(), 'proj')
       assert.equal(dataset.version(), 2)
