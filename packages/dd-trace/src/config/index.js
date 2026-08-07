@@ -477,9 +477,13 @@ class Config extends ConfigBase {
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling.
+    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
+    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
+    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
+    // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
+          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
