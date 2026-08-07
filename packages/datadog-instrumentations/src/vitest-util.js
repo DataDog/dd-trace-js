@@ -32,6 +32,9 @@ const knownTestsCh = channel('ci:vitest:known-tests')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
+const CLOSING_SCRIPT_TAG_RE = /<\/script/i
+const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
+
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
@@ -104,10 +107,63 @@ function getWorkspaceProject (ctx) {
 
 function setProvidedContext (ctx, values, warningMessage) {
   try {
-    Object.assign(getWorkspaceProject(ctx)._provided, values)
+    const providedContext = getWorkspaceProject(ctx)._provided
+    for (const key of Object.keys(values)) {
+      providedContext[key] = key.startsWith('_dd')
+        ? makeProvidedContextBrowserSafe(values[key])
+        : values[key]
+    }
   } catch {
     log.warn(warningMessage)
   }
+}
+
+/**
+ * Prevent Vitest Browser Mode from terminating its inline bootstrap script with Datadog metadata.
+ *
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function makeProvidedContextBrowserSafe (value) {
+  if (typeof value !== 'string' && (typeof value !== 'object' || value === null)) return value
+  if (typeof value === 'string' && !CLOSING_SCRIPT_TAG_RE.test(value)) return value
+
+  const serializedValue = JSON.stringify(value)
+  return CLOSING_SCRIPT_TAG_RE.test(serializedValue)
+    ? SERIALIZED_CONTEXT_PREFIX + serializedValue.replaceAll('<', String.raw`\u003c`)
+    : value
+}
+
+/**
+ * Restore context serialized by makeProvidedContextBrowserSafe.
+ *
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function parseProvidedContextValue (value) {
+  if (typeof value !== 'string' || !value.startsWith(SERIALIZED_CONTEXT_PREFIX)) return value
+
+  let parsedValue
+  try {
+    parsedValue = JSON.parse(value.slice(SERIALIZED_CONTEXT_PREFIX.length))
+  } catch {}
+  return parsedValue
+}
+
+/**
+ * Restores Datadog context values serialized for Vitest Browser Mode.
+ *
+ * @param {Record<string, unknown>} values
+ * @returns {Record<string, unknown>}
+ */
+function parseProvidedContextValues (values) {
+  const parsedValues = {}
+  for (const key of Object.keys(values)) {
+    if (key.startsWith('_dd')) {
+      parsedValues[key] = parseProvidedContextValue(values[key])
+    }
+  }
+  return parsedValues
 }
 
 function getProvidedContext () {
@@ -116,7 +172,7 @@ function getProvidedContext () {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsEfdSuiteAdmissionEnabled: isEfdSuiteAdmissionEnabled,
       _ddIsDiEnabled,
-      _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      _ddTestPropertiesByFilepath,
       _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
@@ -135,8 +191,9 @@ function getProvidedContext () {
       _ddItrCorrelationId: itrCorrelationId,
       _ddUnskippableSuites: unskippableSuites,
       _ddForcedToRunSuites: forcedToRunSuites,
-    } = globalThis.__vitest_worker__.providedContext
+    } = parseProvidedContextValues(globalThis.__vitest_worker__.providedContext)
     const retryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+    const testPropertiesByFilepath = _ddTestPropertiesByFilepath || {}
 
     return {
       isDiEnabled: _ddIsDiEnabled,
@@ -274,6 +331,7 @@ module.exports = {
   getTestName,
   getWorkspaceProject,
   setProvidedContext,
+  parseProvidedContextValue,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
   getVitestTestProperties,
