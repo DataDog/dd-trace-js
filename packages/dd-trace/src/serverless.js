@@ -47,32 +47,39 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
-function onRequestEnd (tracer) {
-  if (getEnvironmentVariable('VERCEL') !== '1') return false
+function isVercelEnvironment () {
+  return getEnvironmentVariable('VERCEL') === '1'
+}
 
-  const flushAll = tracer?._tracer?.flushAll
-  if (typeof flushAll !== 'function') return false
+function getVercelRequestEndHandler (tracer) {
+  if (!isVercelEnvironment()) return
 
-  for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
-    try {
-      const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
-      if (typeof waitUntil !== 'function') continue
+  const internalTracer = tracer?._tracer || tracer
+  const flushAll = internalTracer?.flushAll
+  if (typeof flushAll !== 'function') return
 
-      let done
-      const pending = new Promise(resolve => { done = resolve })
-      waitUntil(pending)
+  return function onVercelRequestEnd () {
+    for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
       try {
-        flushAll.call(tracer._tracer, done)
-      } catch {
-        done()
-      }
-      return true
-    } catch {
-      // The other request-context implementation may still be available.
-    }
-  }
+        const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+        if (typeof waitUntil !== 'function') continue
 
-  return false
+        let done
+        const pending = new Promise(resolve => { done = resolve })
+        waitUntil(pending)
+        try {
+          flushAll.call(internalTracer, done)
+        } catch {
+          done()
+        }
+        return true
+      } catch {
+        // The other request-context implementation may still be available.
+      }
+    }
+
+    return false
+  }
 }
 
 module.exports = {
@@ -80,6 +87,7 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
-  onRequestEnd,
+  getVercelRequestEndHandler,
+  isVercelEnvironment,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

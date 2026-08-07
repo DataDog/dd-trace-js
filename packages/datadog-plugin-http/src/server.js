@@ -6,7 +6,7 @@ const { withRequest } = require('../../dd-trace/src/appsec/store')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
-const { onRequestEnd } = require('../../dd-trace/src/serverless')
+const { getVercelRequestEndHandler } = require('../../dd-trace/src/serverless')
 
 const legacyStorage = storage('legacy')
 
@@ -24,8 +24,12 @@ class HttpServerPlugin extends ServerPlugin {
   /** @type {string | undefined} */
   #serviceSource
 
+  /** @type {(() => boolean) | undefined} */
+  #serverlessRequestEnd
+
   constructor (...args) {
     super(...args)
+    this.#serverlessRequestEnd = getVercelRequestEndHandler(this.tracer)
     this.addTraceSub('exit', message => this.exit(message))
   }
 
@@ -97,7 +101,7 @@ class HttpServerPlugin extends ServerPlugin {
     }
 
     web.finishAll(context)
-    onRequestEnd(this.tracer)
+    this.#serverlessRequestEnd?.()
   }
 
   exit ({ req }) {

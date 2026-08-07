@@ -9,7 +9,7 @@ const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
 
-const { enableGCPPubSubPushSubscription, onRequestEnd } = require('../src/serverless')
+const { enableGCPPubSubPushSubscription, getVercelRequestEndHandler } = require('../src/serverless')
 const Tracer = require('../src/tracer')
 const { getConfigFresh } = require('./helpers/config')
 const { getLoggerProvider, initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
@@ -44,7 +44,7 @@ describe('enableGCPPubSubPushSubscription', () => {
   })
 })
 
-describe('onRequestEnd', () => {
+describe('getVercelRequestEndHandler', () => {
   const requestContext = Symbol.for('@vercel/request-context')
   const originalVercel = process.env.VERCEL
   const originalContext = globalThis[requestContext]
@@ -110,7 +110,8 @@ describe('onRequestEnd', () => {
       logs.getLogger('serverless-flush').emit({ body: 'flush me' })
       metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
 
-      assert.strictEqual(onRequestEnd({ _tracer: tracer }), true)
+      const onRequestEnd = getVercelRequestEndHandler(tracer)
+      assert.strictEqual(onRequestEnd(), true)
       await Promise.race([
         intakeRequests,
         new Promise((_, reject) => setTimeout(
