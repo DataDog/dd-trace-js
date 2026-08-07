@@ -6,7 +6,6 @@ const proxyquire = require('proxyquire').noPreserveCache()
 
 const {
   getProvidedContext,
-  makeProvidedContextBrowserSafe,
   parseProvidedContextValue,
   setProvidedContext,
 } = require('../src/vitest-util')
@@ -15,38 +14,45 @@ describe('vitest utilities', () => {
   describe('browser-safe provided context', () => {
     it('leaves safe values unchanged', () => {
       const context = { knownTests: ['safe test'] }
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
 
-      assert.strictEqual(makeProvidedContextBrowserSafe(undefined), undefined)
-      assert.strictEqual(makeProvidedContextBrowserSafe(null), null)
-      assert.strictEqual(makeProvidedContextBrowserSafe(false), false)
-      assert.strictEqual(makeProvidedContextBrowserSafe(42), 42)
-      assert.strictEqual(makeProvidedContextBrowserSafe('safe test'), 'safe test')
-      assert.strictEqual(makeProvidedContextBrowserSafe(context), context)
+      setProvidedContext(ctx, {
+        _ddUndefined: undefined,
+        _ddNull: null,
+        _ddBoolean: false,
+        _ddNumber: 42,
+        _ddString: 'safe test',
+        _ddContext: context,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddUndefined, undefined)
+      assert.strictEqual(providedContext._ddNull, null)
+      assert.strictEqual(providedContext._ddBoolean, false)
+      assert.strictEqual(providedContext._ddNumber, 42)
+      assert.strictEqual(providedContext._ddString, 'safe test')
+      assert.strictEqual(providedContext._ddContext, context)
       assert.strictEqual(parseProvidedContextValue('safe test'), 'safe test')
       assert.strictEqual(parseProvidedContextValue(context), context)
     })
 
-    it('round trips strings and objects containing a closing script tag without exposing HTML markup', () => {
-      const testCommand = 'vitest --testNamePattern=</script>'
-      const context = {
-        knownTests: ['test containing </ScRiPt> and <markup>'],
+    it('rejects malformed serialized context', () => {
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
       }
 
-      const safeTestCommand = makeProvidedContextBrowserSafe(testCommand)
-      const safeContext = makeProvidedContextBrowserSafe(context)
+      setProvidedContext(ctx, {
+        _ddTestPropertiesByFilepath: { knownTests: ['test containing </script>'] },
+      }, 'Could not set provided context.')
 
-      assert.strictEqual(typeof safeTestCommand, 'string')
-      assert.ok(!safeTestCommand.includes('<'))
-      assert.strictEqual(parseProvidedContextValue(safeTestCommand), testCommand)
-      assert.strictEqual(typeof safeContext, 'string')
-      assert.ok(!safeContext.includes('<'))
-      assert.deepStrictEqual(parseProvidedContextValue(safeContext), context)
-    })
-
-    it('rejects malformed serialized context', () => {
-      const safeContext = makeProvidedContextBrowserSafe({ knownTests: ['test containing </script>'] })
-
-      assert.strictEqual(parseProvidedContextValue(safeContext.slice(0, -1)), undefined)
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath.slice(0, -1)), undefined)
     })
 
     it('escapes every Datadog-provided value without changing user context', () => {
@@ -75,7 +81,7 @@ describe('vitest utilities', () => {
       const providedContext = {}
       const testCommand = 'vitest --testNamePattern=</script>'
       const testPropertiesByFilepath = {
-        'test.mjs': { knownTests: ['test containing </script>'] },
+        'test.mjs': { knownTests: ['test containing </ScRiPt> and <markup>'] },
       }
       const ctx = {
         getRootProject () {
@@ -91,6 +97,9 @@ describe('vitest utilities', () => {
       globalThis.__vitest_worker__ = { providedContext }
 
       try {
+        assert.ok(!providedContext._ddTestCommand.includes('<'))
+        assert.ok(!providedContext._ddTestPropertiesByFilepath.includes('<'))
+
         const restoredContext = getProvidedContext()
 
         assert.strictEqual(restoredContext.testCommand, testCommand)

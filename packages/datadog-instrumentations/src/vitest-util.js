@@ -331,7 +331,6 @@ module.exports = {
   getTestName,
   getWorkspaceProject,
   setProvidedContext,
-  makeProvidedContextBrowserSafe,
   parseProvidedContextValue,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
