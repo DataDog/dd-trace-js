@@ -21,14 +21,8 @@ class Writer {
     const count = this._encoder.count()
 
     if (!request.writable && options?.deadline === undefined) {
-      if (this._bufferWhenUnavailable) {
-        const error = new Error('Maximum number of active requests reached: payload was retained')
-        error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
-        done(error)
-      } else {
-        this._encoder.reset()
-        done()
-      }
+      this._encoder.reset()
+      done()
     } else if (count > 0) {
       if (this.#isFirstFlush && firstFlushChannel.hasSubscribers && this._beforeFirstFlush) {
         this.#isFirstFlush = false
@@ -61,7 +55,7 @@ class Writer {
   }
 
   append (payload) {
-    if (!request.writable && !this._bufferWhenUnavailable) {
+    if (!request.writable) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return

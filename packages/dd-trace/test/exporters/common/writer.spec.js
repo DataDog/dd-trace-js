@@ -100,25 +100,20 @@ describe('common Writer', () => {
     sinon.assert.calledOnceWithExactly(done)
   })
 
-  it('can retain a final payload while the request buffer is full', () => {
+  it('sends a bounded final payload when the request buffer is full', () => {
     request.writable = false
-    writer._bufferWhenUnavailable = true
-    const payload = [{ type: 'test_session_end' }]
-
-    writer.append(payload)
-
-    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
-  })
-
-  it('retains queued Test Optimization payloads until a later final flush', () => {
-    request.writable = false
-    writer._bufferWhenUnavailable = true
     const done = sinon.stub()
+    const options = { deadline: Date.now() + 1000 }
 
-    writer.flush(done)
+    writer.flush(done, options)
 
     sinon.assert.notCalled(encoder.reset)
-    sinon.assert.calledOnce(done)
-    assert.match(done.firstCall.args[0].message, /payload was retained/)
+    sinon.assert.calledOnceWithExactly(
+      writer._sendPayload,
+      Buffer.from('payload'),
+      2,
+      done,
+      options
+    )
   })
 })

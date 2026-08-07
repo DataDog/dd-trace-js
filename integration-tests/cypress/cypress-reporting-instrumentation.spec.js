@@ -1645,9 +1645,10 @@ if (requestedVersion === 'latest' &&
     /**
      * @param {object} [fsStub] filesystem overrides
      * @param {() => string} [randomUUID] UUID generator
+     * @param {(payload: object) => void} [publishSetupNodeEvents] setup-node-events channel subscriber
      * @returns {{ cypressConfig: object, errors: string[], warnings: string[] }} loaded instrumentation and logs
      */
-    function loadCypressConfig (fsStub, randomUUID) {
+    function loadCypressConfig (fsStub, randomUUID, publishSetupNodeEvents) {
       const warnings = []
       let uuid = 0
       const stubs = {
@@ -1658,7 +1659,9 @@ if (requestedVersion === 'latest' &&
           warn: (...args) => warnings.push(format(...args)),
         },
         './helpers/instrument': {
-          channel: () => ({ hasSubscribers: false, publish: () => {} }),
+          channel: name => name === 'ci:cypress:setup-node-events'
+            ? { hasSubscribers: Boolean(publishSetupNodeEvents), publish: publishSetupNodeEvents || (() => {}) }
+            : { hasSubscribers: false, publish: () => {} },
         },
       }
 
@@ -1731,9 +1734,27 @@ if (requestedVersion === 'latest' &&
     }
 
     describe('support wrapper', () => {
-      it('enables interactive run events so open mode can finish the test session', () => {
+      it('does not enable interactive run events when Test Optimization does not register', () => {
         const projectRoot = createProjectRoot()
         const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+        assert.deepStrictEqual(warnings, [])
+      })
+
+      it('enables interactive run events after Test Optimization registers', () => {
+        const projectRoot = createProjectRoot()
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, (payload) => {
+          payload.registered = true
+        })
         const resolvedConfig = {
           projectRoot,
           supportFile: false,
@@ -1983,7 +2004,13 @@ if (requestedVersion === 'latest' &&
           },
         }
         const handlers = {}
-        const { cypressConfig } = loadCypressConfig()
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
 
         cypressConfig.wrapConfig(config)
         config.e2e.setupNodeEvents(
@@ -1995,8 +2022,13 @@ if (requestedVersion === 'latest' &&
           (event, handler) => {
             handlers[event] = handler
           },
-          { projectRoot, supportFile: false }
+          resolvedConfig
         )
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
 
         const details = { path: 'original.png' }
         await handlers['after:screenshot'](details)

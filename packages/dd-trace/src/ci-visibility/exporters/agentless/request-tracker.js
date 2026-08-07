@@ -16,7 +16,6 @@ class TestOptimizationRequestTracker {
    */
   constructor (writer) {
     this.#writer = writer
-    writer._bufferWhenUnavailable = true
   }
 
   /**

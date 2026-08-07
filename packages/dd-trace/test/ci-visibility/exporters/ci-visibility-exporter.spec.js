@@ -928,6 +928,32 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledTwice(writer.flush)
     })
 
+    it('does not coalesce new test data into an active final flush', () => {
+      const flushCallbacks = []
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => flushCallbacks.push(done)),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+      const firstDone = sinon.spy()
+      const secondDone = sinon.spy()
+
+      ciVisibilityExporter.flush(firstDone)
+      ciVisibilityExporter.export([{ type: 'test_session_end' }])
+      ciVisibilityExporter.flush(secondDone)
+
+      sinon.assert.calledTwice(writer.flush)
+      flushCallbacks[0]()
+      sinon.assert.calledOnceWithExactly(firstDone, undefined)
+      sinon.assert.notCalled(secondDone)
+      flushCallbacks[1]()
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+    })
+
     it('reuses an expired final flush when exporter initialization never completes', () => {
       const clock = sinon.useFakeTimers()
       const logError = sinon.stub(ciVisibilityLog, 'error')

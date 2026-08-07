@@ -463,6 +463,7 @@ class CiVisibilityExporter extends BufferingExporter {
   flush (done) {
     const isFinalFlush = typeof done === 'function'
     const onDone = done || (() => {})
+    let finalFlush
 
     if (isFinalFlush && this.#finalFlush) {
       if (this.#finalFlush.completed) onDone(this.#finalFlush.error)
@@ -471,11 +472,12 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     if (isFinalFlush) {
-      this.#finalFlush = {
+      finalFlush = {
         callbacks: [onDone],
         completed: false,
         error: undefined,
       }
+      this.#finalFlush = finalFlush
     }
 
     const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
@@ -499,10 +501,10 @@ class CiVisibilityExporter extends BufferingExporter {
         return
       }
 
-      this.#finalFlush.completed = true
-      this.#finalFlush.error = error
-      const callbacks = this.#finalFlush.callbacks
-      this.#finalFlush.callbacks = []
+      finalFlush.completed = true
+      finalFlush.error = error
+      const callbacks = finalFlush.callbacks
+      finalFlush.callbacks = []
       for (const callback of callbacks) callback(error)
     }
 
@@ -548,13 +550,12 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
-   * Allows a later test session to establish a new finalization boundary after
-   * more reportable data arrives.
+   * Allows later test activity to establish a new finalization boundary.
    *
    * @returns {void}
    */
   #resetFinalFlush () {
-    if (this.#finalFlush?.completed) this.#finalFlush = undefined
+    this.#finalFlush = undefined
   }
 
   exportUncodedCoverages () {
