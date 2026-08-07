@@ -2,7 +2,6 @@
 
 const id = require('../../id')
 
-const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
   buildExperimentTagObject,
@@ -172,13 +171,11 @@ class Experiment {
 
     let created
     try {
-      created = await this.#client.request('POST', `${API_BASE_PATH}/experiments`, {
-        data: { type: 'experiments', attributes },
-      })
+      created = await this.#client.createExperiment(attributes)
     } catch (err) {
       throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
     }
-    this.#experimentId = created?.data?.id ?? null
+    this.#experimentId = created.experimentId
     const experimentId = this.#experimentId
     const runId = id().toString(16).padStart(16, '0')
     const runIteration = 0
@@ -454,9 +451,7 @@ class Experiment {
   async #postEvents (experimentId, spans, metrics) {
     const attributes = { metrics }
     if (spans.length > 0) attributes.spans = spans
-    await this.#client.request('POST', `${API_BASE_PATH}/experiments/${experimentId}/events`, {
-      data: { type: 'experiments', attributes },
-    })
+    await this.#client.postExperimentEvents(experimentId, attributes)
   }
 
   async #updateStatus (experimentId, status, error) {
@@ -465,9 +460,7 @@ class Experiment {
     const attributes = { status }
     if (error !== null) attributes.error = error
     try {
-      await this.#client.request('PATCH', `${API_BASE_PATH}/experiments/${experimentId}`, {
-        data: { type: 'experiments', attributes },
-      })
+      await this.#client.updateExperiment(experimentId, attributes)
     } catch {
       // Status update is best-effort; never let it mask the real result/error.
     }
