@@ -3,6 +3,7 @@
 const { randomUUID } = require('crypto')
 const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
+const { NODE_MAJOR } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const {
   MAX_SAMPLED_PROBES_PER_PAUSE,
@@ -28,6 +29,14 @@ require('./remote_config')
 const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
   const $dd_types = global.require('node:util').types;
+  // Intrinsics are captured from the global object rather than resolved against the paused
+  // call frame, so an application local named Set/Map/Object/Reflect cannot shadow them and
+  // turn the whole setup into a TypeError (which would send every log probe at that pause
+  // with an empty message).
+  const $dd_Object = global.Object;
+  const $dd_Reflect = global.Reflect;
+  const $dd_Map = global.Map;
+  const $dd_Set = global.Set;
   const $dd_segmentInspectOptions = {
     depth: 0,
     customInspect: false,
@@ -35,7 +44,12 @@ const templateExpressionSetupCode = `
     maxStringLength: 8 * 1024,
     breakLength: Infinity
   };
-  const $dd_redactedIdentifiers = new Set(${JSON.stringify([...REDACTED_IDENTIFIERS])});
+  // On Node.js <= 18, util.inspect does not apply maxArrayLength to Maps, so every entry is
+  // rendered; on Node.js > 18 only the first maxArrayLength entries render. The redaction
+  // window must follow the runtime so a sensitive key that is actually rendered on Node.js 18
+  // is not missed by the bounded pre-scan.
+  const $dd_boundMapRendering = ${NODE_MAJOR > 18};
+  const $dd_redactedIdentifiers = new $dd_Set(${JSON.stringify([...REDACTED_IDENTIFIERS])});
   const $dd_normalizeIdentifier = (key) => {
     if (typeof key === 'string') return key.toLowerCase().replace(/[-_@$.]/g, '');
     // Symbol('x').toString() is 'Symbol(x)'; slice(7, -1) yields 'x', matching
@@ -51,36 +65,73 @@ const templateExpressionSetupCode = `
     for (const key of keys) if ($dd_isRedactedIdentifier(key)) return true;
     return false;
   };
+  const $dd_enumerableOwnKeys = (value) => {
+    const keys = [];
+    for (const key of $dd_Reflect.ownKeys(value)) {
+      if ($dd_Object.getOwnPropertyDescriptor(value, key).enumerable) keys.push(key);
+    }
+    return keys;
+  };
+  // Copies own properties, substituting '[redacted]' for values whose key is a redacted
+  // identifier. Descriptors are copied verbatim for non-redacted keys so getters remain
+  // getters (util.inspect renders them as [Getter] without invoking them in the paused frame).
+  const $dd_redactOwnPropertiesInto = (target, source, keys) => {
+    for (const key of keys) {
+      const descriptor = $dd_Object.getOwnPropertyDescriptor(source, key);
+      if ($dd_isRedactedIdentifier(key)) {
+        $dd_Object.defineProperty(target, key,
+          { value: '[redacted]', writable: true, enumerable: descriptor.enumerable, configurable: true });
+      } else {
+        $dd_Object.defineProperty(target, key, descriptor);
+      }
+    }
+  };
   const $dd_redactSegmentValue = (value) => {
-    if (value === null || typeof value !== 'object') return value;
+    if (value === null) return value;
+    const $dd_type = typeof value;
+    if ($dd_type !== 'object' && $dd_type !== 'function') return value;
     if ($dd_types.isMap(value)) {
-      // Only the first maxArrayLength entries are rendered, so scanning past that
-      // window cannot affect the output. Bounding the scan keeps the common
-      // large-Map case constant-time on the paused application thread.
+      // Iterate via the intrinsic Map.prototype so a Map subclass that overrides keys()/entries()
+      // cannot run its own code (or mutate state, or throw) while the application thread is paused.
       const $dd_max = $dd_segmentInspectOptions.maxArrayLength;
       let $dd_index = 0;
       let $dd_hasRenderedRedactedKey = false;
-      for (const key of value.keys()) {
-        if ($dd_index++ >= $dd_max) break;
+      for (const key of $dd_Map.prototype.keys.call(value)) {
+        if ($dd_boundMapRendering && $dd_index++ >= $dd_max) break;
         if ($dd_isRedactedIdentifier(key)) { $dd_hasRenderedRedactedKey = true; break; }
       }
-      if (!$dd_hasRenderedRedactedKey) return value;
-      const redacted = new Map();
-      for (const [key, val] of value) redacted.set(key, $dd_isRedactedIdentifier(key) ? '[redacted]' : val);
+      const $dd_ownKeys = $dd_Reflect.ownKeys(value);
+      const $dd_ownKeysRedacted = $dd_hasRedactedKey($dd_ownKeys);
+      if (!$dd_hasRenderedRedactedKey && !$dd_ownKeysRedacted) return value;
+      // A full copy keeps the rendered Map(N) size and "... K more items" marker matching the
+      // original; only entries inside the rendered window can be displayed, so entry values are
+      // redacted only within that window (entries beyond it are copied by reference, never shown).
+      const redacted = new $dd_Map();
+      $dd_index = 0;
+      for (const [key, val] of $dd_Map.prototype.entries.call(value)) {
+        const $dd_withinWindow = !$dd_boundMapRendering || $dd_index++ < $dd_max;
+        redacted.set(key, $dd_withinWindow && $dd_isRedactedIdentifier(key) ? '[redacted]' : val);
+      }
+      // A Map can also carry its own string/symbol properties, which util.inspect renders
+      // alongside its entries; redact those the same way as plain object properties.
+      if ($dd_ownKeysRedacted) $dd_redactOwnPropertiesInto(redacted, value, $dd_ownKeys);
       return redacted;
     }
-    const keys = Reflect.ownKeys(value);
-    if (!$dd_hasRedactedKey(keys)) return value;
-    const redacted = Object.create(Object.getPrototypeOf(value));
-    for (const key of keys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if ($dd_isRedactedIdentifier(key)) {
-        Object.defineProperty(redacted, key,
-          { value: '[redacted]', writable: true, enumerable: descriptor.enumerable, configurable: true });
-      } else {
-        Object.defineProperty(redacted, key, descriptor);
-      }
+    if ($dd_type === 'function') {
+      // Functions render as \`[Function: name] { ...own props... }\`, so a sensitive own property
+      // leaks unless redacted. Clone into a same-named function to preserve that rendering (an
+      // async/generator function degrades to the plain [Function: name] tag in this rare case,
+      // but the value is still redacted).
+      const $dd_ownKeys = $dd_enumerableOwnKeys(value);
+      if (!$dd_hasRedactedKey($dd_ownKeys)) return value;
+      const redacted = ({ [value.name]: function () {} })[value.name];
+      $dd_redactOwnPropertiesInto(redacted, value, $dd_ownKeys);
+      return redacted;
     }
+    const $dd_keys = $dd_Reflect.ownKeys(value);
+    if (!$dd_hasRedactedKey($dd_keys)) return value;
+    const redacted = $dd_Object.create($dd_Object.getPrototypeOf(value));
+    $dd_redactOwnPropertiesInto(redacted, value, $dd_keys);
     return redacted;
   };
   const $dd_inspectSegment = (value, directRefIdentifier) => {
@@ -89,10 +140,12 @@ const templateExpressionSetupCode = `
     // the reference name the compiler passed in, matching the snapshot path.
     if (directRefIdentifier !== undefined && $dd_isRedactedIdentifier(directRefIdentifier)) return '[redacted]';
     if (typeof value === 'string') return value;
-    // Proxies are rendered as a fixed token: enumerating one via Reflect.ownKeys
-    // would run its traps (customer code) in the paused frame, and letting
+    // Proxies (of objects or functions) are rendered as a fixed token: enumerating one via
+    // Reflect.ownKeys would run its traps (customer code) in the paused frame, and letting
     // util.inspect render the target would leak a proxy-wrapped secret.
-    if (value !== null && typeof value === 'object' && $dd_types.isProxy(value)) return '[Proxy]';
+    if (value !== null && (typeof value === 'object' || typeof value === 'function') && $dd_types.isProxy(value)) {
+      return '[Proxy]';
+    }
     return $dd_inspect($dd_redactSegmentValue(value), $dd_segmentInspectOptions);
   };
 `
