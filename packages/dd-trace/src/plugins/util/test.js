@@ -8,17 +8,18 @@ const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
+const { parse } = require('../../../../../vendor/dist/jest-docblock')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../carrier')
 const id = require('../../id')
 const {
   incrementCountMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../ci-visibility/telemetry')
-
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
@@ -124,12 +125,6 @@ const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
-const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
-  { limitMs: 5 * 1000, key: '5s' },
-  { limitMs: 10 * 1000, key: '10s' },
-  { limitMs: 30 * 1000, key: '30s' },
-  { limitMs: 5 * 60 * 1000, key: '5m' },
-]
 const CI_APP_ORIGIN = 'ciapp-test'
 // eslint-disable-next-line no-control-regex
 const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
@@ -166,6 +161,7 @@ const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
 const ITR_CORRELATION_ID = 'itr_correlation_id'
+const TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE = 'Test Impact Analysis skipped all tests.'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -184,19 +180,24 @@ const JEST_WORKER_QUARANTINE_PAYLOAD_CODE = 64
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
+const CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE = 71
 
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const MOCHA_WORKER_LOGS_PAYLOAD_CODE = 81
+const MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE = 82
 
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+const PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE = 91
 
 // vitest worker variables
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_COVERAGE_PAYLOAD_CODE = 101
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 const VITEST_WORKER_TELEMETRY_PAYLOAD_CODE = 103
+const VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE = 104
+const VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE = 105
 
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
@@ -481,13 +482,18 @@ module.exports = {
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
@@ -503,6 +509,7 @@ module.exports = {
   getTestParametersString,
   finishAllTraceSpans,
   getTestParentSpan,
+  isMarkedAsUnskippable,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -526,6 +533,7 @@ module.exports = {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   getCoveredFilesFromCoverage,
@@ -542,9 +550,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getFailedTestReplayPromise,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -745,6 +751,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
  *
  * @param {string=} testFramework
  * @param {TestEnvironmentConfig=} config
+ * @param {boolean=} shouldSkipGitMetadataExtraction
  * @returns {TestEnvironmentMetadata}
  */
 function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
@@ -901,10 +908,10 @@ function setRumTestCorrelation (context, activeSpan) {
  * @returns {import('../../opentracing/span_context')}
  */
 function getTestParentSpan (tracer, testExecutionId) {
-  return tracer.extract('text_map', {
-    'x-datadog-trace-id': testExecutionId || id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-  })
+  const carrier = /** @type {Record<string, unknown>} */ ({})
+  writeDatadogTraceId(carrier, testExecutionId || id().toString(10))
+  writeDatadogParentId(carrier, '0000000000000000')
+  return tracer.extract('text_map', carrier)
 }
 
 function getTestCommonTags (name, suite, version, testFramework) {
@@ -925,6 +932,10 @@ function getTestCommonTags (name, suite, version, testFramework) {
 /**
  * We want to make sure that test suites are reported the same way for
  * every OS, so we replace `path.sep` by `/`
+ *
+ * @param {string | undefined} testSuiteAbsolutePath
+ * @param {string} sourceRoot
+ * @returns {string}
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
@@ -935,6 +946,62 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replaceAll(path.sep, '/')
+}
+
+const globalDocblockRegExp = /^\s*(\/\*\*?(.|\r?\n)*?\*\/)/
+const MAX_COMMENTS_CHECKED = 10
+
+function isMarkedAsUnskippable (test) {
+  let testSource
+
+  try {
+    testSource = fs.readFileSync(test.path, 'utf8')
+  } catch {
+    return false
+  }
+
+  const re = globalDocblockRegExp
+  re.lastIndex = 0
+  let commentsChecked = 0
+
+  while (testSource.length) {
+    const match = re.exec(testSource)
+    if (!match) break
+    const comment = match[1]
+
+    let docblocks
+    try {
+      docblocks = parse(comment)
+    } catch {
+      // Skip unparsable comment and continue scanning
+      if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+        return false
+      }
+      continue
+    }
+
+    if (docblocks?.datadog) {
+      try {
+        // @ts-expect-error The datadog type is defined by us and may only be a string.
+        return JSON.parse(docblocks.datadog).unskippable
+      } catch {
+        // If the @datadog block comment is present but malformed, we'll run the suite
+        log.warn('@datadog block comment is malformed.')
+        return true
+      }
+    }
+
+    if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+      return false
+    }
+
+    // To stop as soon as no doc blocks are found, slice the source. That way the
+    // regexp works by using the `^` anchor. Without it, it would continue
+    // scanning the rest of the file.
+    testSource = testSource.slice(match[0].length)
+  }
+
+  return false
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
@@ -1539,43 +1606,19 @@ function parseAnnotations (annotations) {
 }
 
 /**
- * Given a test's first-execution duration (ms) and the slow_test_retries map
- * from the backend, return how many EFD retries to run.
+ * Combines the optional Failed Test Replay operations that must settle before a retry.
  *
- * Returns 0 when the test is too slow to retry (≥ 5 min).
- *
- * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
+ * @param {{setProbePromise?: Promise<void>, finishTestPromise?: Promise<void>}} promises
+ * @returns {Promise<void>|undefined}
  */
-function getEfdRetryCount (durationMs, slowTestRetries) {
-  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
-    if (durationMs < limitMs) {
-      return slowTestRetries[key] ?? 0
-    }
+function getFailedTestReplayPromise (promises) {
+  if (promises.setProbePromise && promises.finishTestPromise) {
+    return Promise.all([
+      promises.setProbePromise,
+      promises.finishTestPromise,
+    ]).then(() => {})
   }
-  return 0 // ≥ 5 min — abort
-}
-
-/**
- * Returns the maximum retry count configured by the backend for EFD.
- *
- * @param {Record<string, number> | undefined} slowTestRetries
- * @returns {number | undefined}
- */
-function getMaxEfdRetryCount (slowTestRetries) {
-  if (slowTestRetries === undefined) return
-
-  const retryCounts = Object.values(slowTestRetries)
-  if (retryCounts.length === 0) return
-
-  let maxRetries = 0
-  for (const retryCount of retryCounts) {
-    if (retryCount > maxRetries) {
-      maxRetries = retryCount
-    }
-  }
-  return maxRetries
+  return promises.setProbePromise || promises.finishTestPromise
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

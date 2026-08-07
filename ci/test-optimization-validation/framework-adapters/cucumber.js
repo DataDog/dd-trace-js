@@ -66,6 +66,18 @@ const RETAINED_PROFILE_VALUES = new Set([
   '--require-module',
   '--world-parameters',
 ])
+const JAVASCRIPT_STRING_ESCAPES = Object.freeze({
+  '"': '"',
+  "'": "'",
+  '/': '/',
+  '\\': '\\',
+  b: '\b',
+  f: '\f',
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  v: '\v',
+})
 
 /**
  * Reports whether the installed Cucumber CLI can bypass customer profiles with a validator-owned config.
@@ -152,6 +164,7 @@ function getGeneratedStepsPath (testDirectory) {
  * Returns Cucumber arguments that select one existing feature.
  *
  * @param {string} filename selected Cucumber feature
+ * @param {string} cwd project working directory
  * @returns {string[]} focused Cucumber arguments
  */
 function getFocusedTestArgs (filename, cwd) {
@@ -163,6 +176,7 @@ function getFocusedTestArgs (filename, cwd) {
  *
  * @param {string} filename generated Cucumber feature
  * @param {string} stepsFile generated Cucumber step definitions
+ * @param {string} cwd project working directory
  * @returns {string[]} generated scenario arguments
  */
 function getGeneratedTestArgs (filename, stepsFile, cwd) {
@@ -263,10 +277,10 @@ function readProfileDefinitions (filename) {
   if (extension === '.yaml' || extension === '.yml') {
     return getYamlStringProfileDefinitions(source)
   }
-  return getJavascriptStringProfileDefinitions(source)
+  return getJavascriptProfileDefinitions(source)
 }
 
-function getJavascriptStringProfileDefinitions (source) {
+function getJavascriptProfileDefinitions (source) {
   const syntax = maskJavascriptCommentsAndStrings(source)
   const exports = [...syntax.matchAll(/^\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gm)]
   if (exports.length === 0) return new Map()
@@ -300,13 +314,19 @@ function getJavascriptStringProfileDefinitions (source) {
     index = skipWhitespace(syntax, index)
     if (syntax[index] !== ':') throw new Error(`profile ${JSON.stringify(name)} must have a literal value`)
     index = skipWhitespace(syntax, index + 1)
-    const definition = readQuotedString(source, index)
-    if (!definition) throw new Error(`profile ${JSON.stringify(name)} must be a literal string`)
+    const definition = readJavascriptLiteral(source, syntax, index)
+    if (!definition || (typeof definition.value !== 'string' &&
+      (!definition.value || typeof definition.value !== 'object' || Array.isArray(definition.value)))) {
+      throw new Error(`profile ${JSON.stringify(name)} must be a literal string or object`)
+    }
     definitions.set(name, definition.value)
     index = skipWhitespace(syntax, definition.end)
     if (index < objectEnd && syntax[index] !== ',') {
       throw new Error(`profile ${JSON.stringify(name)} must be followed by a comma`)
     }
+  }
+  if (!/^[\s;]*$/.test(syntax.slice(objectEnd + 1))) {
+    throw new Error('configuration contains code after the exported profile object')
   }
   return definitions
 }
@@ -371,6 +391,82 @@ function skipWhitespace (source, start) {
   return index
 }
 
+/**
+ * Reads a bounded JSON-shaped JavaScript literal without evaluating customer code.
+ *
+ * @param {string} source original JavaScript source
+ * @param {string} syntax source with comments and string contents masked
+ * @param {number} start literal start offset
+ * @param {number} [depth] current literal nesting depth
+ * @returns {{end: number, value: unknown}|undefined} parsed literal and ending offset
+ */
+function readJavascriptLiteral (source, syntax, start, depth = 0) {
+  if (depth > 16) return
+  let index = skipWhitespace(syntax, start)
+  const quoted = readQuotedString(source, index)
+  if (quoted) return quoted
+
+  const primitive = /^(true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)(?![\w$.])/.exec(
+    syntax.slice(index)
+  )
+  if (primitive) {
+    const values = { false: false, null: null, true: true }
+    const value = Object.hasOwn(values, primitive[1]) ? values[primitive[1]] : Number(primitive[1])
+    if (typeof value === 'number' && (!Number.isFinite(value) || Object.is(value, -0))) return
+    return {
+      end: index + primitive[0].length,
+      value,
+    }
+  }
+
+  const open = syntax[index]
+  if (open !== '[' && open !== '{') return
+  const close = open === '[' ? ']' : '}'
+  const value = open === '[' ? [] : Object.create(null)
+  index++
+  while (index < syntax.length) {
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] === close) return { end: index + 1, value }
+
+    let item
+    if (open === '[') {
+      item = readJavascriptLiteral(source, syntax, index, depth + 1)
+      if (!item) return
+      value.push(item.value)
+    } else {
+      const property = readJavascriptPropertyName(source, syntax, index)
+      if (!property || property.value === '__proto__' || Object.hasOwn(value, property.value)) return
+      index = skipWhitespace(syntax, property.end)
+      if (syntax[index] !== ':') return
+      item = readJavascriptLiteral(source, syntax, index + 1, depth + 1)
+      if (!item) return
+      value[property.value] = item.value
+    }
+    index = item.end
+
+    index = skipWhitespace(syntax, index)
+    if (syntax[index] === close) return { end: index + 1, value }
+    if (syntax[index] !== ',') return
+    index++
+  }
+}
+
+/**
+ * Reads one static quoted or identifier JavaScript object property name.
+ *
+ * @param {string} source original JavaScript source
+ * @param {string} syntax source with comments and string contents masked
+ * @param {number} start property start offset
+ * @returns {{end: number, value: string}|undefined} property name and ending offset
+ */
+function readJavascriptPropertyName (source, syntax, start) {
+  const index = skipWhitespace(syntax, start)
+  const quoted = readQuotedString(source, index)
+  if (quoted) return quoted
+  const identifier = /^[A-Za-z_$][\w$]*/.exec(syntax.slice(index))
+  if (identifier) return { end: index + identifier[0].length, value: identifier[0] }
+}
+
 function getDataProfileDefinitions (value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('configuration must contain a profile object')
@@ -426,18 +522,60 @@ function readQuotedString (source, start) {
   const quote = source[start]
   if (quote !== '"' && quote !== "'") return
   let value = ''
-  for (let index = start + 1; index < source.length; index++) {
+  let index = start + 1
+  while (index < source.length) {
     const character = source[index]
     if (character === quote) return { end: index + 1, value }
+    if (character === '\r' || character === '\n') return
     if (character !== '\\') {
       value += character
+      index++
       continue
     }
-    const escaped = source[++index]
-    const escapes = { n: '\n', r: '\r', t: '\t' }
-    if (escaped === quote || escaped === '\\') value += escaped
-    else if (escapes[escaped]) value += escapes[escaped]
-    else return
+    const escaped = readJavascriptStringEscape(source, index + 1)
+    if (!escaped) return
+    value += escaped.value
+    index = escaped.end
+  }
+}
+
+/**
+ * Decodes one bounded JavaScript string escape without evaluating source.
+ *
+ * @param {string} source original JavaScript source
+ * @param {number} start first character after the backslash
+ * @returns {{end: number, value: string}|undefined} decoded character and ending offset
+ */
+function readJavascriptStringEscape (source, start) {
+  const escaped = source[start]
+  if (Object.hasOwn(JAVASCRIPT_STRING_ESCAPES, escaped)) {
+    return { end: start + 1, value: JAVASCRIPT_STRING_ESCAPES[escaped] }
+  }
+  if (escaped === '\n') return { end: start + 1, value: '' }
+  if (escaped === '\r') {
+    return { end: source[start + 1] === '\n' ? start + 2 : start + 1, value: '' }
+  }
+
+  if (escaped === 'x') {
+    const hexadecimal = source.slice(start + 1, start + 3)
+    if (/^[\da-fA-F]{2}$/.test(hexadecimal)) {
+      return { end: start + 3, value: String.fromCharCode(Number.parseInt(hexadecimal, 16)) }
+    }
+    return
+  }
+  if (escaped !== 'u') return
+
+  if (source[start + 1] === '{') {
+    const match = /^\{([\da-fA-F]{1,6})\}/.exec(source.slice(start + 1))
+    if (!match) return
+    const codePoint = Number.parseInt(match[1], 16)
+    if (codePoint > 1_114_111) return
+    return { end: start + 1 + match[0].length, value: String.fromCodePoint(codePoint) }
+  }
+
+  const hexadecimal = source.slice(start + 1, start + 5)
+  if (/^[\da-fA-F]{4}$/.test(hexadecimal)) {
+    return { end: start + 5, value: String.fromCharCode(Number.parseInt(hexadecimal, 16)) }
   }
 }
 
@@ -459,12 +597,21 @@ function getProfileArgs (definition) {
     }
     const option = PROFILE_VALUE_OPTIONS.get(key)
     if (!option) return { error: `contains unsupported option ${key}`, args: [] }
+
+    if (key === 'worldParameters') {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return { error: 'contains non-object worldParameters', args: [] }
+      }
+      args.push(option, JSON.stringify(value))
+      continue
+    }
+
     const values = Array.isArray(value) ? value : [value]
     for (const item of values) {
-      const serialized = key === 'worldParameters' && item !== null && typeof item === 'object'
-        ? JSON.stringify(item)
-        : String(item)
-      args.push(option, serialized)
+      if (item !== null && typeof item === 'object') {
+        return { error: `contains unsupported object value for ${key}`, args: [] }
+      }
+      args.push(option, String(item))
     }
   }
   return { args }

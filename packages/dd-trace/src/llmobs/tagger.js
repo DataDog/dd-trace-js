@@ -696,6 +696,59 @@ class LLMObsTagger {
     return filteredAudioParts
   }
 
+  // Image counterpart of #filterAudioParts, with the same wire shape and validation.
+  #filterImageParts (imageParts) {
+    if (!Array.isArray(imageParts)) {
+      imageParts = [imageParts]
+    }
+
+    const filteredImageParts = []
+    for (const imagePart of imageParts) {
+      if (imagePart == null || typeof imagePart !== 'object') {
+        this.#handleFailure('Image part must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { mimeType, content, attachmentKey } = imagePart
+
+      if (typeof mimeType !== 'string' || !mimeType) {
+        this.#handleFailure('Image part mimeType must be a non-empty string.', 'invalid_io_messages')
+        continue
+      }
+
+      if (content == null && attachmentKey == null) {
+        this.#handleFailure("Image part must have either 'content' or 'attachmentKey'.", 'invalid_io_messages')
+        continue
+      }
+
+      if (content != null && attachmentKey != null) {
+        this.#handleFailure(
+          "Image part must have only one of 'content' or 'attachmentKey', not both.", 'invalid_io_messages'
+        )
+        continue
+      }
+
+      const imagePartObj = { mime_type: mimeType }
+
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Image part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        imagePartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Image part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        imagePartObj.content = content
+      }
+
+      filteredImageParts.push(imagePartObj)
+    }
+    return filteredImageParts
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -723,6 +776,7 @@ class LLMObsTagger {
         toolResults,
         toolId,
         audioParts,
+        imageParts,
       } = message
       const messageObj = {}
 
@@ -761,6 +815,14 @@ class LLMObsTagger {
 
         if (filteredAudioParts.length) {
           messageObj.audio_parts = filteredAudioParts
+        }
+      }
+
+      if (imageParts != null) {
+        const filteredImageParts = this.#filterImageParts(imageParts)
+
+        if (filteredImageParts.length) {
+          messageObj.image_parts = filteredImageParts
         }
       }
 

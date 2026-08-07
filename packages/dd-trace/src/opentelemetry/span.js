@@ -38,6 +38,10 @@ function hrTimeToMilliseconds (hrTime) {
 /**
  * Several of these attributes are not yet supported by the Node.js OTel API.
  * We check for old equivalents where we can, but not all had equivalents.
+ *
+ * @param {string | undefined} spanName
+ * @param {import('@opentelemetry/api').SpanKind} kind
+ * @param {import('@opentelemetry/api').Attributes} attributes
  */
 function spanNameMapper (spanName, kind, attributes) {
   if (spanName) return spanName

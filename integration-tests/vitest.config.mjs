@@ -87,6 +87,9 @@ if (process.env.VITEST_BROWSER_MODE) {
     : 'playwright'
 
   config.test.browser = {
+    connectTimeout: process.env.VITEST_BROWSER_CONNECT_TIMEOUT
+      ? Number(process.env.VITEST_BROWSER_CONNECT_TIMEOUT)
+      : undefined,
     enabled: true,
     headless: true,
     provider,

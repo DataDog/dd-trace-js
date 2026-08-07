@@ -114,6 +114,9 @@ const uniq = (items) => [...new Set(items)]
  *
  * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
  * and GHES environments where the runner may be installed under arbitrary directories/users.
+ *
+ * @param {string | undefined} runnerTemp value of the `RUNNER_TEMP` environment variable
+ * @returns {string[]}
  */
 function getGithubDiagnosticDirsFromEnv (runnerTemp) {
   const dirs = []
@@ -182,6 +185,9 @@ function expandGlobPattern (pattern) {
 /**
  * Expands a mixed list of literal directories and glob patterns into concrete
  * directories. Literals pass through unchanged (existence is checked later).
+ *
+ * @param {string[]} candidates
+ * @returns {string[]}
  */
 function expandDiagnosticDirCandidates (candidates) {
   const expanded = []

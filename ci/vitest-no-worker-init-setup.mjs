@@ -3,17 +3,19 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
-const earlyFlakeDetectionRetries = providedContext.earlyFlakeDetectionRetries || 0
-const earlyFlakeDetectionRetryThresholds = Array.isArray(providedContext.earlyFlakeDetectionRetryThresholds)
-  ? providedContext.earlyFlakeDetectionRetryThresholds
-  : []
-const earlyFlakeDetectionSlowRetries = providedContext.earlyFlakeDetectionSlowRetries || {}
-const hasEarlyFlakeDetectionSlowRetries = Object.keys(earlyFlakeDetectionSlowRetries).length > 0
+const efdSuiteAdmissionBrowserCommand = providedContext.efdSuiteAdmissionBrowserCommand
+const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || {
+  durationRetryCounts: [],
+  schedulingRetryCount: 0,
+}
+const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
@@ -35,6 +37,7 @@ const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
+let browserCommands
 let now
 let timeOrigin
 // Use an unfaked monotonic clock in Node and Vitest's parent frame in Browser Mode.
@@ -49,18 +52,42 @@ if (typeof globalThis.process?.uptime === 'function') {
   timeOrigin = Number.isFinite(clock?.timeOrigin) ? clock.timeOrigin : Date.now() - now()
 }
 
+/**
+ * Requests permission from the Vitest main process to schedule Browser Mode EFD retries for one suite.
+ *
+ * @param {string} testSuite
+ * @param {boolean} hasNewTest
+ * @returns {Promise<boolean>}
+ */
+async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
+  try {
+    if (!browserCommands) {
+      const vitestBrowser = await import('@vitest/browser/context')
+      browserCommands = vitestBrowser.commands
+    }
+    return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
+  } catch (error) {
+    // Browser Mode setup runs without dd-trace, so the tracer logger is unavailable.
+    globalThis.console?.error('Datadog Test Optimization could not request Vitest EFD suite admission.', error)
+    return false
+  }
+}
+
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
-  beforeAll(function ({}, suite) {
+  beforeAll(async function ({}, suite) {
     suite ||= arguments[0]
-    applyExecutionChanges(suite)
+    const efdSuiteCandidate = getEarlyFlakeDetectionSuiteCandidate(suite)
+    const isEfdSuiteAdmissionAllowed = !efdSuiteCandidate || !isEfdSuiteAdmissionEnabled ||
+      await requestBrowserEfdSuiteAdmission(efdSuiteCandidate.testSuite, efdSuiteCandidate.hasNewTest)
+    applyExecutionChanges(suite, isEfdSuiteAdmissionAllowed)
   })
 
   beforeEach(function ({ onTestFinished, task, skip }) {
     const testSuite = getTestSuite(task)
     const testName = getTestName(task)
     const isAttemptToFixTest = attemptToFixTests[testSuite]?.[testName]
-    const isEarlyFlakeDetectionTestAttempt = isEarlyFlakeDetectionTest(testSuite, testName)
+    const isEarlyFlakeDetectionTestAttempt = isEarlyFlakeDetectionTask(task)
     const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
     const attemptStart = now()
@@ -109,27 +136,30 @@ if (isNoWorkerInitActive) {
   })
 }
 
-function applyExecutionChanges (suite) {
-  for (const task of suite?.tasks || []) {
-    if (task.type === 'suite') {
-      applyExecutionChanges(task)
-      continue
-    }
+function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
+  const tasks = suite?.tasks
+  if (tasks) {
+    for (const task of tasks) {
+      if (task.type === 'suite') {
+        applyExecutionChanges(task, isEfdSuiteAdmissionAllowed)
+        continue
+      }
 
-    const testSuite = getTestSuite(task)
-    const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName]) {
-      task.retry = 0
-      task.repeats = attemptToFixRetries
-      task.meta.__ddTestOptAtfRetries = attemptToFixRetries
-    } else if (disabledTests[testSuite]?.[testName]) {
-      task.mode = 'skip'
-    } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
-      task.retry = 0
-      task.repeats = earlyFlakeDetectionRetries
-      task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      const testSuite = getTestSuite(task)
+      const testName = getTestName(task)
+      if (attemptToFixTests[testSuite]?.[testName]) {
+        task.retry = 0
+        task.repeats = attemptToFixRetries
+        task.meta.__ddTestOptAtfRetries = attemptToFixRetries
+      } else if (disabledTests[testSuite]?.[testName]) {
+        task.mode = 'skip'
+      } else if (isEfdSuiteAdmissionAllowed && isEarlyFlakeDetectionTest(testSuite, testName)) {
+        task.retry = 0
+        task.repeats = earlyFlakeDetectionRetries
+        task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
+      }
+      wrapRetryCondition(task)
     }
-    wrapRetryCondition(task)
   }
 }
 
@@ -331,7 +361,7 @@ function recordTestOptimizationStatus (task, attemptIndex = task.result?.repeatC
 
   if (attemptToFixTests[testSuite]?.[testName]) {
     recordAttemptToFixStatus(task, attemptIndex, onlyIfNewErrors)
-  } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+  } else if (isEarlyFlakeDetectionTask(task)) {
     recordEarlyFlakeDetectionStatus(task, attemptIndex, onlyIfNewErrors)
   } else if (task.repeats > 0) {
     recordManualRepeatStatus(task, attemptIndex)
@@ -380,7 +410,7 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionSlowRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -508,7 +538,7 @@ function getFinalAttemptIndex (task) {
   if (attemptToFixTests[testSuite]?.[testName]) {
     return getAttemptToFixRetryCount(task)
   }
-  if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+  if (isEarlyFlakeDetectionTask(task)) {
     return getEarlyFlakeDetectionRetryCountForTask(task)
   }
 
@@ -606,7 +636,7 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionSlowRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -633,16 +663,10 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
 }
 
 function getEarlyFlakeDetectionRetryCount (task) {
-  if (!hasEarlyFlakeDetectionSlowRetries) {
-    return earlyFlakeDetectionRetries
-  }
-
   const executionStart = earlyFlakeDetectionStartByTask.get(task)
   const duration = executionStart === undefined ? task.result?.duration ?? 0 : now() - executionStart
-  for (const { key, limitMs } of earlyFlakeDetectionRetryThresholds) {
-    if (duration < limitMs) {
-      return earlyFlakeDetectionSlowRetries[key] ?? 0
-    }
+  for (const { durationLimitMs, retryCount } of earlyFlakeDetectionRetryPolicy.durationRetryCounts) {
+    if (duration < durationLimitMs) return retryCount
   }
   return 0
 }
@@ -673,6 +697,64 @@ function isEarlyFlakeDetectionTest (testSuite, testName) {
   if (isModifiedTest(testSuite)) return true
   const testsForSuite = knownTests[testSuite] || []
   return !testsForSuite.includes(testName)
+}
+
+/**
+ * Returns whether Datadog admitted this task for EFD retries.
+ *
+ * @param {object} task
+ * @returns {boolean}
+ */
+function isEarlyFlakeDetectionTask (task) {
+  return task.meta.__ddTestOptEfdRetries !== undefined
+}
+
+/**
+ * Returns suite admission data when a collected suite contains an EFD candidate.
+ *
+ * @param {object} suite
+ * @returns {{ hasNewTest: boolean, testSuite: string }|undefined}
+ */
+function getEarlyFlakeDetectionSuiteCandidate (suite) {
+  const tasks = suite?.tasks
+  if (!tasks) return
+
+  let candidate
+  for (const task of tasks) {
+    if (task.type === 'suite') {
+      const nestedCandidate = getEarlyFlakeDetectionSuiteCandidate(task)
+      if (nestedCandidate) {
+        candidate ||= nestedCandidate
+        candidate.hasNewTest ||= nestedCandidate.hasNewTest
+      }
+      continue
+    }
+
+    if (task.mode === 'skip' || task.mode === 'todo') continue
+
+    const testSuite = getTestSuite(task)
+    const testName = getTestName(task)
+    if (attemptToFixTests[testSuite]?.[testName] || disabledTests[testSuite]?.[testName]) continue
+    if (!isEarlyFlakeDetectionTest(testSuite, testName)) continue
+
+    candidate ||= {
+      hasNewTest: false,
+      testSuite,
+    }
+    candidate.hasNewTest ||= isNewTest(testSuite, testName)
+  }
+  return candidate
+}
+
+/**
+ * Returns whether a collected test is absent from the known-tests response.
+ *
+ * @param {string} testSuite
+ * @param {string} testName
+ * @returns {boolean}
+ */
+function isNewTest (testSuite, testName) {
+  return !(knownTests[testSuite] || []).includes(testName)
 }
 
 function isModifiedTest (testSuite) {
@@ -716,12 +798,28 @@ function getIsNoWorkerInitActive () {
 
 function getProvidedContext () {
   try {
-    return inject('_ddVitestWorkerSetup') || {}
+    return parseProvidedContextValue(inject('_ddVitestWorkerSetup'))
   } catch {
     try {
-      return globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup || {}
+      return parseProvidedContextValue(globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup)
     } catch {
       return {}
     }
+  }
+}
+
+/**
+ * Restore context serialized to keep Vitest's inline browser bootstrap script valid.
+ *
+ * @param {object|string|undefined} value
+ * @returns {object}
+ */
+function parseProvidedContextValue (value) {
+  if (typeof value !== 'string' || !value.startsWith(SERIALIZED_CONTEXT_PREFIX)) return value || {}
+
+  try {
+    return JSON.parse(value.slice(SERIALIZED_CONTEXT_PREFIX.length))
+  } catch {
+    return {}
   }
 }

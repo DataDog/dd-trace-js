@@ -32,6 +32,9 @@ const {
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
 } = require('../../../ci-visibility/telemetry')
 
+/** @typedef {{ isEvpProxy: boolean, evpProxyPrefix: string }} EvpProxyConfiguration */
+/** @typedef {EvpProxyConfiguration & { url: URL, repositoryUrl: string }} GitUploadTarget */
+
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
 
@@ -62,6 +65,10 @@ function getCommonRequestOptions (url) {
  * This function posts the SHAs of the commits of the last month
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
+ *
+ * @param {GitUploadTarget & { latestCommits: string[] }} options
+ * @param {(error: Error | null, commitsToUpload?: string[]) => void} callback
+ * @returns {void}
  */
 function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
@@ -127,6 +134,10 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
 
 /**
  * This function uploads a git packfile
+ *
+ * @param {GitUploadTarget & { packFileToUpload: string, headCommit: string }} options
+ * @param {(error: Error | null, uploadSize?: number) => void} callback
+ * @returns {void}
  */
 function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
@@ -245,6 +256,12 @@ function generateAndUploadPackFiles ({
 
 /**
  * This function uploads git metadata to CI Visibility's backend.
+ *
+ * @param {URL} url
+ * @param {EvpProxyConfiguration} evpProxyConfiguration
+ * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
+ * @param {(error?: Error | null) => void} callback
+ * @returns {void}
  */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   if (!isGitAvailable()) {
