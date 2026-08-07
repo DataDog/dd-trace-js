@@ -165,6 +165,8 @@ class Experiment {
   #metadata
   #projectId
   #experimentId
+  #runId
+  #runIteration
 
   constructor (client, options = {}, llmobs) {
     if (!options.name) throw new Error('Experiment name is required')
@@ -187,6 +189,8 @@ class Experiment {
     this.#metadata = { ...options.metadata }
     this.#projectId = null
     this.#experimentId = null
+    this.#runId = null
+    this.#runIteration = null
   }
 
   name () {
@@ -217,6 +221,7 @@ class Experiment {
       dataset_id: dataset.id,
       description: this.#description,
       ensure_unique: true,
+      run_count: 1,
     }
     if (dataset.version != null) attributes.dataset_version = dataset.version
     if (hasEntries(this.#config)) attributes.config = this.#config
@@ -232,6 +237,8 @@ class Experiment {
       throw new Error(`Failed to create experiment '${this.#name}': ${err.message}`)
     }
     this.#experimentId = created.experimentId
+    this.#runId = id().toString(16).padStart(16, '0')
+    this.#runIteration = 0
     return this
   }
 
@@ -297,8 +304,8 @@ class Experiment {
       projectId: this.#projectId,
       datasetId: this.#dataset.id,
       datasetRecordId: input.datasetRecordId,
-      runId: input.runId,
-      runIteration: input.runIteration,
+      runId: input.runId ?? this.#runId,
+      runIteration: input.runIteration ?? this.#runIteration,
     }, input.name ?? this.#name, mergeTags(this.#tags, input.tags))
 
     await this.#postEvents(this.#experimentId, [span], [])
@@ -328,12 +335,15 @@ class Experiment {
     if (experimentId !== this.#experimentId) {
       throw new Error(`Experiment span belongs to '${experimentId}', not '${this.#experimentId}'`)
     }
+    if (!span.traceId) {
+      throw new Error('Experiment trace id is required')
+    }
 
     const payload = []
     for (const metric of metrics) {
       validateEvaluatorName(metric.label)
       const metricError = errorMessage(metric.error)
-      if (metric.value == null && metricError == null) {
+      if (!Object.hasOwn(metric, 'value') && metricError == null) {
         log.warn('LLMObs experiments: skipping external metric %s because it has neither value nor error', metric.label)
         continue
       }
@@ -342,7 +352,7 @@ class Experiment {
         metric.value,
         metricError,
         span.spanId,
-        span.traceId ?? '',
+        span.traceId,
         timestampMs(metric.timestamp),
         experimentId,
         mergeTags(this.#tags, metric.tags),

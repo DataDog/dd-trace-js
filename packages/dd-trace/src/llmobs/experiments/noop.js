@@ -88,10 +88,10 @@ class NoopExperiment {
   }
 
   /**
-   * @returns {Promise<{experimentId: string, spanId: null, traceId: null, url: null}>}
+   * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
    */
   submitSpan () {
-    return Promise.resolve({ experimentId: '', spanId: null, traceId: null, url: null })
+    return Promise.resolve({ experimentId: null, spanId: null, traceId: null, url: null })
   }
 
   /**

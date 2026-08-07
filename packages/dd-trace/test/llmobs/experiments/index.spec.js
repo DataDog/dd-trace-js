@@ -488,6 +488,7 @@ describe('LLMObs Experiments facade', () => {
         dataset_id: 'dataset',
         description: 'eve eval run',
         ensure_unique: true,
+        run_count: 1,
         dataset_version: 1,
         config: { revision: 'abc123' },
         metadata: { suite: 'smoke', tags: ['source:eve'] },
@@ -507,11 +508,15 @@ describe('LLMObs Experiments facade', () => {
         metadata: { verdict: 'passed' },
       })
       assert.equal(submittedSpan.dataset_id, 'dataset')
+      const runTag = submittedSpan.tags.find(tag => tag.startsWith('run_id:'))
+      assert.match(runTag, /^run_id:[a-f0-9]{16}$/)
       assert.deepEqual(new Set(submittedSpan.tags), new Set([
         'source:eve',
         'eval:smoke',
         'experiment_id:exp',
         'dataset_id:dataset',
+        runTag,
+        'run_iteration:0',
       ]))
 
       const metrics = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].metrics
@@ -580,13 +585,14 @@ describe('LLMObs Experiments facade', () => {
 
       await recorder.submitEvaluationMetrics(span, [
         { label: 'valid_metric', value: 1 },
+        { label: 'null_metric', value: null },
         { label: 'score' },
       ])
       sinon.assert.calledOnce(ExperimentsClient.prototype.postExperimentEvents)
-      assert.deepEqual(
-        ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].metrics.map(metric => metric.label),
-        ['valid_metric']
-      )
+      const metrics = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].metrics
+      assert.deepEqual(metrics.map(metric => metric.label), ['valid_metric', 'null_metric'])
+      assert.equal(metrics[1].metric_type, 'json')
+      assert.deepEqual(metrics[1].json_value, { value: null })
 
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
       await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
@@ -597,6 +603,27 @@ describe('LLMObs Experiments facade', () => {
         'LLMObs experiments: skipping external metric %s because it has neither value nor error',
         'score'
       )
+    })
+
+    it('requires external metric trace ids before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-trace-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ ...span, traceId: null }, [{ label: 'score', value: 1 }]),
+        /Experiment trace id is required/
+      )
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ spanId: span.spanId }, [{ label: 'score', value: 1 }]),
+        /Experiment trace id is required/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
     })
 
     it('omits null dataset versions when starting external experiments', async () => {
@@ -691,8 +718,8 @@ describe('LLMObs Experiments facade', () => {
       const recorder = await experiments.startExperiment({ name: 'disabled' })
       assert.equal(recorder.name(), 'disabled')
       assert.equal(recorder.url(), null)
-      assert.deepEqual(await recorder.submitSpan(), { experimentId: '', spanId: null, traceId: null, url: null })
-      await recorder.submitEvaluationMetrics({ spanId: 'span' }, [{ label: 'score', value: 1 }])
+      assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
+      await recorder.submitEvaluationMetrics({ spanId: 'span', traceId: null }, [{ label: 'score', value: 1 }])
       await recorder.close({ status: 'completed' })
 
       sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
