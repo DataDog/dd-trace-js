@@ -24,6 +24,7 @@ jobs:
           sparse-checkout: |
             .github
             bunfig.toml
+            package.json
             scripts
       - uses: ./.github/actions/node
         with:
