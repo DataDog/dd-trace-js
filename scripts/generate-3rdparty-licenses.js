@@ -54,11 +54,7 @@ const FETCH_CONCURRENCY = 16
  */
 
 /**
- * @typedef {{
- *   name: string,
- *   versions?: Set<string>,
- *   isRoot?: boolean
- * }} WantedComponent
+ * @typedef {{ name: string, isRoot: true } | { name: string, versions: Set<string>, isRoot?: false }} WantedComponent
  */
 
 run().catch(error => {
@@ -196,8 +192,7 @@ async function fillMetadata (wanted, previous) {
       out.push({ component: entry.name, ...rootSelfMetadata() })
       continue
     }
-    for (const version of entry.versions ?? []) {
-      if (!version) throw new Error(`Cannot fetch exact npm metadata for ${entry.name} without a locked version`)
+    for (const version of entry.versions) {
       toFetch.push({ name: entry.name, version })
     }
   }
@@ -226,12 +221,12 @@ async function fillMetadata (wanted, previous) {
       for (const license of packageLicenses) licenses.add(license)
       for (const owner of packageCopyright) copyright.add(owner)
     }
-    const prev = previous.get(name)
+    const previousOrigin = metadata.length > 1 ? previous.get(name)?.origin : undefined
     out.push({
       component: name,
-      origin: prev?.origin ?? metadata[0].origin,
+      origin: previousOrigin ?? metadata[0].origin,
       license: pythonList([...licenses]),
-      copyright: prev && metadata.length === 1 ? prev.copyright : pythonList([...copyright]),
+      copyright: pythonList([...copyright]),
     })
   }
 
@@ -288,7 +283,9 @@ async function fetchPackageMetadata ({ name, version }) {
 function extractLicenses (data) {
   const licenses = []
   addLicense(data.license, licenses)
-  for (const license of data.licenses ?? []) addLicense(license, licenses)
+  if (data.licenses) {
+    for (const license of data.licenses) addLicense(license, licenses)
+  }
   return [...new Set(licenses)]
 }
 
@@ -346,7 +343,8 @@ function extractCopyright (data) {
   const out = []
   const author = extractName(data.author)
   if (author) out.push(author)
-  for (const contributor of data.contributors ?? []) {
+  if (!data.contributors) return out
+  for (const contributor of data.contributors) {
     const name = extractName(contributor)
     if (name) out.push(name)
   }
