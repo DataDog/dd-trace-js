@@ -10,14 +10,17 @@ describe('direct EVP route', () => {
   let createDirectEVPRoute
   let getProxyForUrl
   let HttpsProxyAgent
+  let log
 
   beforeEach(() => {
     getProxyForUrl = sinon.stub().returns('')
     HttpsProxyAgent = sinon.stub().callsFake(proxyUrl => ({ proxyUrl }))
+    log = { debug: sinon.spy() }
 
     ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
       'https-proxy-agent': { HttpsProxyAgent },
       'proxy-from-env': { getProxyForUrl },
+      '../log': log,
     }))
   })
 
@@ -28,7 +31,6 @@ describe('direct EVP route', () => {
     }, 'event-platform-intake')
 
     assert.deepStrictEqual(route, {
-      mode: 'direct',
       url: new URL('https://event-platform-intake.datadoghq.com'),
       basePath: '',
       headers: {
@@ -71,5 +73,11 @@ describe('direct EVP route', () => {
       DD_API_KEY: 'test-api-key',
       site: 'not a host',
     }, 'event-platform-intake'), undefined)
+
+    sinon.assert.calledOnceWithExactly(
+      log.debug,
+      'Unable to configure direct EVP intake: %s',
+      sinon.match.string
+    )
   })
 })

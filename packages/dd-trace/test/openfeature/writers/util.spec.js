@@ -74,7 +74,6 @@ describe('OpenFeature exposure delivery strategy', () => {
       basePath: '/evp_proxy/v4',
     }
     const directRoute = {
-      mode: 'direct',
       url: new URL('https://event-platform-intake.datadoghq.com'),
       basePath: '',
       headers: { 'DD-API-KEY': 'test-api-key' },
@@ -88,7 +87,6 @@ describe('OpenFeature exposure delivery strategy', () => {
       supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
     }, sinon.match.func)
     sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, {
-      mode: 'local',
       ...localRoute,
       headers: {
         'X-Datadog-EVP-Subdomain': 'event-platform-intake',
@@ -113,7 +111,6 @@ describe('OpenFeature exposure delivery strategy', () => {
       supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
     }, sinon.match.func)
     sinon.assert.calledOnceWithMatch(setWriterEnabledValue, true, {
-      mode: 'local',
       basePath: '/evp_proxy/v2',
     })
   })
@@ -124,7 +121,6 @@ describe('OpenFeature exposure delivery strategy', () => {
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
     }
     const directRoute = {
-      mode: 'direct',
       url: new URL('https://event-platform-intake.datadoghq.com'),
       basePath: '',
       headers: { 'DD-API-KEY': 'test-api-key' },
@@ -144,7 +140,6 @@ describe('OpenFeature exposure delivery strategy', () => {
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
     }
     const directRoute = {
-      mode: 'direct',
       url: new URL('https://event-platform-intake.datadoghq.com'),
       basePath: '',
       headers: { 'DD-API-KEY': 'test-api-key' },

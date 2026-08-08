@@ -4,10 +4,10 @@ const { format } = require('node:url')
 
 const { HttpsProxyAgent } = require('https-proxy-agent')
 const { getProxyForUrl } = require('proxy-from-env')
+const log = require('../log')
 
 /**
  * @typedef {object} DirectEVPRoute
- * @property {'direct'} mode - Route mode
  * @property {URL} url - Direct intake URL
  * @property {string} basePath - Direct intake base path
  * @property {object} headers - Direct intake authentication headers
@@ -36,7 +36,6 @@ function createDirectEVPRoute (config, intake) {
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
 
     return {
-      mode: 'direct',
       url,
       basePath: '',
       headers: {
@@ -44,7 +43,9 @@ function createDirectEVPRoute (config, intake) {
       },
       ...(agent && { agent }),
     }
-  } catch {}
+  } catch (error) {
+    log.debug('Unable to configure direct EVP intake: %s', error.message)
+  }
 }
 
 module.exports = { createDirectEVPRoute }

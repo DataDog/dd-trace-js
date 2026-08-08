@@ -410,7 +410,6 @@ describe('OpenFeature Exposures Writer', () => {
     it('should flush events through the selected EVP v4 proxy path', () => {
       const url = new URL('http://serverless-init:9126')
       writer.setEnabled(true, {
-        mode: 'local',
         url,
         basePath: '/evp_proxy/v4/',
         headers: {
@@ -446,7 +445,6 @@ describe('OpenFeature Exposures Writer', () => {
       const url = new URL('https://event-platform-intake.datadoghq.com')
       const agent = {}
       writer.setEnabled(true, {
-        mode: 'direct',
         url,
         basePath: '',
         agent,
@@ -478,14 +476,12 @@ describe('OpenFeature Exposures Writer', () => {
         const directAgent = {}
         request.onFirstCall().yieldsAsync(error, null, statusCode)
         writer.setEnabled(true, {
-          mode: 'local',
           url: localUrl,
           basePath: '/evp_proxy/v4',
           headers: {
             'X-Datadog-EVP-Subdomain': 'event-platform-intake',
           },
           fallback: {
-            mode: 'direct',
             url: directUrl,
             basePath: '',
             agent: directAgent,
@@ -524,14 +520,12 @@ describe('OpenFeature Exposures Writer', () => {
       it(`should not retry ambiguous local ${name} through direct intake`, async () => {
         request.yieldsAsync(error, null, statusCode)
         writer.setEnabled(true, {
-          mode: 'local',
           url: new URL('http://serverless-init:8126'),
           basePath: '/evp_proxy/v4',
           headers: {
             'X-Datadog-EVP-Subdomain': 'event-platform-intake',
           },
           fallback: {
-            mode: 'direct',
             url: new URL('https://event-platform-intake.datadoghq.com'),
             basePath: '',
             headers: {

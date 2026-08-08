@@ -71,7 +71,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
   }, (error, localRoute) => {
     if (localRoute) {
       const route = {
-        mode: 'local',
         ...localRoute,
         headers: {
           [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,

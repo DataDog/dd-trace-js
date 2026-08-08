@@ -61,7 +61,6 @@ describe('OpenFeature Exposures Writer transport', () => {
       setExposureDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
-          assert.strictEqual(route.mode, 'local')
           assert.strictEqual(route.basePath, '/evp_proxy/v4')
           writer.setEnabled(enabled, route)
           resolve()
@@ -118,8 +117,8 @@ describe('OpenFeature Exposures Writer transport', () => {
       setExposureDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
-          assert.strictEqual(route.mode, 'local')
-          assert.strictEqual(route.fallback.mode, 'direct')
+          assert.strictEqual(route.basePath, '/evp_proxy/v4')
+          assert.strictEqual(route.fallback.basePath, '')
           writer.setEnabled(enabled, route)
           resolve()
         } catch (error) {
@@ -173,7 +172,7 @@ describe('OpenFeature Exposures Writer transport', () => {
       setExposureDeliveryStrategy(config, (enabled, route) => {
         try {
           assert.strictEqual(enabled, true)
-          assert.strictEqual(route.mode, 'direct')
+          assert.strictEqual(route.basePath, '')
           writer.setEnabled(enabled, route)
           resolve()
         } catch (error) {
