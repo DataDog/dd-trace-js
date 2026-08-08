@@ -99,10 +99,7 @@ function invalidateCacheOnNodeAbiChange () {
   const versionsDir = join(__dirname, '..', 'versions')
   const nodeAbiFile = join(versionsDir, '.node-abi')
   const currentAbi = process.versions.modules
-  let recordedAbi = ''
-  try {
-    recordedAbi = readFileSync(nodeAbiFile, 'utf8').trim()
-  } catch {}
+  const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : ''
   if (recordedAbi && recordedAbi !== currentAbi && existsSync(join(versionsDir, 'node_modules'))) {
     rmSync(join(versionsDir, 'node_modules'), { recursive: true, force: true })
     rmSync(join(versionsDir, 'bun.lock'), { force: true })
@@ -148,7 +145,8 @@ function buildInstallStages (packages) {
 
     for (let index = 0; index < rangeStages.length; index++) {
       const stagedRanges = rangeStages[index].get(entry.name)
-      for (const stagedRange of stagedRanges ?? []) {
+      if (!stagedRanges) continue
+      for (const stagedRange of stagedRanges) {
         if (semver.intersects(range, stagedRange)) {
           stageIndex = index + 1
           break
@@ -203,12 +201,19 @@ function applyExternalConfiguration (moduleNames, packages) {
   for (const { name } of packages) activeNames.add(name)
 
   for (const name of activeNames) {
-    for (const external of externals[name] ?? []) {
+    const configurations = externals[name]
+    if (!configurations) continue
+
+    for (const external of configurations) {
       if (external.dep) trustedDependencies.add(external.name)
-      for (const trustedDependency of external.trustedDependencies ?? []) {
-        trustedDependencies.add(trustedDependency)
+      if (external.trustedDependencies) {
+        for (const trustedDependency of external.trustedDependencies) {
+          trustedDependencies.add(trustedDependency)
+        }
       }
-      for (const [dependency, version] of Object.entries(external.overrides ?? {})) {
+      if (!external.overrides) continue
+
+      for (const [dependency, version] of Object.entries(external.overrides)) {
         // Bun only honours a bare package name. A Yarn-style selective path (`parent@1.0.0/child`) or an
         // npm-style nested object is accepted into the manifest and then silently ignored, so the range
         // reads as enforced while resolution stays untouched.

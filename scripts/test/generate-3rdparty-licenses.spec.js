@@ -36,6 +36,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       },
     }))
     fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), `{
+      "lockfileVersion": 1,
       "workspaces": {
         "": {
           "dependencies": {
@@ -54,6 +55,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     }`)
     fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'package.json'), '{}')
     fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'bun.lock'), JSON.stringify({
+      lockfileVersion: 1,
       workspaces: {
         '': {
           dependencies: {},
@@ -136,6 +138,30 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     )
   })
 
+  it('refreshes attribution metadata for a single locked version', async () => {
+    fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: { '': { dependencies: { foo: '2.0.0' } } },
+      packages: { foo: ['foo@2.0.0', '', {}] },
+    }))
+
+    await runGenerator({
+      DD_TEST_LICENSE_METADATA: JSON.stringify({
+        '2.0.0': {
+          license: 'Apache-2.0',
+          repository: 'https://new.example/repository',
+          author: 'New author',
+        },
+      }),
+    })
+
+    const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
+    assert.match(
+      generated,
+      /"foo","https:\/\/new\.example\/repository","\['Apache-2\.0'\]","\['New author'\]"/
+    )
+  })
+
   it('fails when a copied-source attribution names an installed dependency', async () => {
     fs.writeFileSync(
       path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),
@@ -164,28 +190,9 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     assert.strictEqual(fs.readFileSync(csvPath, 'utf8'), before)
   })
 
-  it('fails when a lock entry has no exact registry version', async () => {
-    fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), `{
-      "workspaces": {
-        "": {
-          "dependencies": {
-            "foo": "file:../foo"
-          }
-        }
-      },
-      "packages": {
-        "foo": ["foo", "", {}],
-      },
-    }`)
-
-    await assert.rejects(
-      runGenerator({}),
-      matchesMissingLockedVersion
-    )
-  })
-
   /**
-   * @param {NodeJS.ProcessEnv} env
+   * @param {Record<string, string | undefined>} env
+   * @returns {ReturnType<typeof execFileAsync>}
    */
   function runGenerator (env) {
     const preloadPath = path.join(fixtureDirectory, 'registry-preload.js')
@@ -194,6 +201,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       env: {
         ...process.env,
         ...env,
+        NODE_PATH: [path.join(repoRoot, 'node_modules'), process.env.NODE_PATH].filter(Boolean).join(path.delimiter),
         NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${preloadPath}`.trim(),
       },
     })
@@ -213,14 +221,6 @@ function matchesRegistryFailure (error) {
  */
 function matchesDuplicateAttribution (error) {
   assert.match(error.stderr, /'foo' is both a resolved dependency and a vendored-source entry/)
-  return true
-}
-
-/**
- * @param {Error & { stderr: string }} error
- */
-function matchesMissingLockedVersion (error) {
-  assert.match(error.stderr, /Cannot fetch exact npm metadata for foo without a locked version/)
   return true
 }
 
