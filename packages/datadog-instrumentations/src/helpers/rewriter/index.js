@@ -2,7 +2,7 @@
 
 const { readFileSync } = require('fs')
 const { join } = require('path')
-const { pathToFileURL } = require('url')
+const { fileURLToPath, pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
 const instrumentations = require('./instrumentations')
@@ -57,7 +57,11 @@ function rewrite (content, filename, format, target) {
   target ||= getRewriteTarget(filename)
   if (!target) return content
 
-  filename = filename.replace('file://', '')
+  // The synchronous loader passes a `file:` URL, whose percent-encoded segments
+  // (e.g. `%20`) are unreadable on disk and break `getVersion()`'s `package.json`
+  // lookup. `_compile` already supplies a decoded filesystem path, so decode only
+  // the URL form here.
+  if (filename.startsWith('file:')) filename = fileURLToPath(filename)
 
   const moduleType = format === 'module' ? 'esm' : 'cjs'
   const { moduleName, filePath } = target
