@@ -1,9 +1,10 @@
 # TODO: Restructure the project by product and clean up this file.
 
-# Default recursive ownership
+# Default recursive ownership. GitHub applies the last matching rule, so the per-product entries
+# further down re-assign the parts of these trees that a product team owns.
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
-/.github/actions/ @DataDog/lang-platform-js
+/.github/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 
 # AppSec
@@ -84,6 +85,7 @@
 /packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
+/versions/bunfig.toml @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
@@ -340,6 +342,9 @@
 
 # Language Platform
 /* @DataDog/lang-platform-js
+
+/docs/bun.lock @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/lang-platform-js
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/sirun/* @DataDog/lang-platform-js

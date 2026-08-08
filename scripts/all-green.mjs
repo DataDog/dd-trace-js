@@ -1,7 +1,7 @@
-import { setTimeout } from 'timers/promises'
-import { Octokit } from 'octokit'
+import { setTimeout } from 'node:timers/promises'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import { Octokit } from 'octokit'
 import { downloadArtifacts } from './download-artifacts.mjs'
 
 /* eslint-disable no-console */

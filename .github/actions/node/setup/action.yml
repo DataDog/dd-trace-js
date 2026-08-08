@@ -81,7 +81,12 @@ runs:
       run: |
         MAJOR=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
         echo "supported=$([ "$MAJOR" -ge 12 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+    # `scripts/bun.js` bootstraps the pinned version locally whenever the global one differs, so a
+    # hard-coded version here would not run the wrong Bun — it would just make every job pay for that
+    # bootstrap once Dependabot bumps the devDependency. Read the pin instead of restating it.
     - name: Install Bun
       if: steps.bun-check.outputs.supported == 'true'
       shell: bash
-      run: npm install -g bun@1.3.1 --prefer-offline --no-audit --no-fund
+      run: |
+        VERSION=$(node -p "require('./package.json').devDependencies.bun")
+        npm install -g "bun@$VERSION" --prefer-offline --no-audit --no-fund
