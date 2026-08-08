@@ -11,6 +11,7 @@ const {
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
+  getFailedTestReplayPromise,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -953,14 +954,7 @@ function getOnTestRetryHandler (config) {
         promises,
         ...ctx.currentStore,
       })
-      if (promises.setProbePromise && promises.finishTestPromise) {
-        test._ddFailedTestReplayPromise = Promise.all([
-          promises.setProbePromise,
-          promises.finishTestPromise,
-        ]).then(() => {})
-      } else if (promises.setProbePromise || promises.finishTestPromise) {
-        test._ddFailedTestReplayPromise = promises.setProbePromise || promises.finishTestPromise
-      }
+      test._ddFailedTestReplayPromise = getFailedTestReplayPromise(promises)
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)
