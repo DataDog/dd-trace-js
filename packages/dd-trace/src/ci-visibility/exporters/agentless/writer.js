@@ -40,6 +40,7 @@ class Writer extends BaseWriter {
     if (this._evpProxyPrefix) {
       options.path = `${this._evpProxyPrefix}/api/v2/citestcycle`
       delete options.headers['dd-api-key']
+      // TODO: Migrate CI Visibility EVP headers and subdomains to the shared utilities in src/evp_proxy.
       options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
     }
 
