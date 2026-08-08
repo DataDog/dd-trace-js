@@ -3721,6 +3721,8 @@ if (DD_MAJOR < 6) {
 }
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
+  'bunyan',
+  'pino',
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
@@ -3735,13 +3737,13 @@ function recordMockedFile (suiteFilePath, moduleName) {
   if (!suiteFilePath || typeof moduleName !== 'string') return
 
   const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-  const suiteDir = path.dirname(suiteFilePath)
-  const mockPath = path.resolve(suiteDir, moduleName)
+  const mockPath = path.resolve(path.dirname(suiteFilePath), moduleName)
   existingMockedFiles.push(mockPath)
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
 }
 
-const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|setMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+const JEST_CJS_MOCK_METHODS = ['mock', 'doMock', 'setMock']
 
 function getStaticMockedFiles (suiteFilePath) {
   if (!suiteFilePath) return []
@@ -3777,12 +3779,12 @@ function wrapJestObject (jestObject, suiteFilePath) {
   testSuiteJestObjects.set(suiteFilePath, jestObject)
   wrappedJestObjects.add(jestObject)
 
-  shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    recordMockedFile(suiteFilePath, moduleName)
-    return mock.apply(this, arguments)
-  })
+  for (const methodName of JEST_CJS_MOCK_METHODS) {
+    shimmer.wrap(jestObject, methodName, mockMethod => function (moduleName) {
+      recordMockedFile(suiteFilePath, moduleName)
+      return mockMethod.apply(this, arguments)
+    })
+  }
 }
 
 function wrapJestGlobalsForRuntime (runtime) {
@@ -3888,7 +3890,10 @@ addHook({
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
     try {
-      const returnedValue = requireModule.apply(this, arguments)
+      // Jest calls requireModule only after deciding that the module should not be mocked.
+      const returnedValue = LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)
+        ? requireOutsideJestRequireEngine(this, moduleName)
+        : requireModule.apply(this, arguments)
       if (moduleName === '@jest/globals') {
         wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
       }
@@ -3917,11 +3922,6 @@ addHook({
       return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
-      // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        // To bypass jest's own require engine
-        return requireOutsideJestRequireEngine(this, moduleName)
-      }
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)

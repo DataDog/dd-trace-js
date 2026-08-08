@@ -113,6 +113,10 @@ if (process.env.JEST_BAIL) {
   options.bail = true
 }
 
+if (process.env.TEST_SEQUENCER) {
+  options.testSequencer = process.env.TEST_SEQUENCER
+}
+
 if (process.env.JEST_RANDOMIZE) {
   options.randomize = true
   options.seed = Number(process.env.JEST_SEED ?? 1)

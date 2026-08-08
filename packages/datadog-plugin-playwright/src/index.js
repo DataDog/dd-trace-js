@@ -387,6 +387,7 @@ class PlaywrightPlugin extends CiPlugin {
       finalStatus,
       earlyFlakeAbortReason,
       onDone,
+      registerCompletion,
     }) => {
       if (!span) {
         onDone?.()
@@ -496,7 +497,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(onDone)
+        this.tracer._exporter.flush(registerCompletion?.() || onDone)
       }
     })
 

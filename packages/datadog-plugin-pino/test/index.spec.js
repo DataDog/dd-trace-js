@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -11,6 +12,8 @@ const { NODE_MAJOR } = require('../../../version')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -112,8 +115,18 @@ describe('Plugin', () => {
           })
 
           it('should add the trace identifiers to logger instances', () => {
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
+
             tracer.scope().activate(span, () => {
-              logger.info('message')
+              try {
+                logger.info('message')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
 
               sinon.assert.called(stream.write)
 
@@ -126,6 +139,9 @@ describe('Plugin', () => {
 
               assert.ok('msg' in record)
               assert.deepStrictEqual(record.msg, 'message')
+
+              assert.strictEqual(submittedLog.source, 'pino')
+              assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
             })
           })
 
@@ -171,14 +187,26 @@ describe('Plugin', () => {
           })
 
           it('should not overwrite a caller-supplied dd field', () => {
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
+
             tracer.scope().activate(span, () => {
-              logger.info({ dd: { custom: 'value' } }, 'message')
+              try {
+                logger.info({ dd: { custom: 'value' } }, 'message')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
 
               sinon.assert.called(stream.write)
 
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
               assert.deepStrictEqual(record.dd, { custom: 'value' })
+              assert.strictEqual(submittedLog.source, 'pino')
+              assert.deepStrictEqual(JSON.parse(submittedLog.message).dd, { custom: 'value' })
             })
           })
 

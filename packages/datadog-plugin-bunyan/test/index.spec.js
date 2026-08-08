@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
 const { inspect } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -72,8 +75,18 @@ describe('Plugin', () => {
         })
 
         it('should add the trace identifiers to logger instances', () => {
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
           tracer.scope().activate(span, () => {
-            logger.info('message')
+            try {
+              logger.info('message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
 
             sinon.assert.called(stream.write)
 
@@ -83,7 +96,38 @@ describe('Plugin', () => {
               trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId(),
             })
+
+            assert.strictEqual(submittedLogs.length, 1)
+            const [submittedLog] = submittedLogs
+            assert.strictEqual(submittedLog.source, 'bunyan')
+            assert.strictEqual(submittedLog.message.msg, 'message')
+            assertObjectContains(submittedLog.message.dd, record.dd)
           })
+        })
+
+        it('should submit a caller-supplied dd field without overwriting it', () => {
+          let submittedLog
+          const onLogSubmission = payload => {
+            submittedLog = payload
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          tracer.scope().activate(span, () => {
+            try {
+              logger.info({ dd: { custom: 'value' } }, 'message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
+          })
+
+          sinon.assert.called(stream.write)
+
+          const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+          assert.deepStrictEqual(record.dd, { custom: 'value' })
+          assert.strictEqual(submittedLog.source, 'bunyan')
+          assert.strictEqual(submittedLog.message.msg, 'message')
+          assert.deepStrictEqual(submittedLog.message.dd, { custom: 'value' })
         })
 
         it('should not mutate the original record', () => {

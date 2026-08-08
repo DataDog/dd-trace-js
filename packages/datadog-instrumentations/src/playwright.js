@@ -35,7 +35,7 @@ const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
-const { getChannelPromise } = require('./helpers/channel')
+const { getChannelBarrierPromise, getChannelPromise, publishWithCompletionBarrier } = require('./helpers/channel')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -56,6 +56,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const workerFinishCh = channel('ci:playwright:worker:finish')
 const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
@@ -2219,7 +2220,7 @@ function instrumentWorkerMainMethods (workerMain) {
       testStatus: STATUS_TO_TEST_STATUS[status],
     })
 
-    await getChannelPromise(testFinishCh, {
+    await getChannelBarrierPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
       error,
@@ -2245,10 +2246,14 @@ function instrumentWorkerMainMethods (workerMain) {
     return res
   })
 
+  // WorkerMain is created dynamically from Playwright 1.60, so Orchestrion cannot cover every supported version.
   // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
-    if (event === 'testBegin' || event === 'testEnd') {
+    if (event === 'done') {
+      publishWithCompletionBarrier(workerFinishCh, {}, () => dispatchEvent.apply(this, arguments))
+      return
+    } else if (event === 'testBegin' || event === 'testEnd') {
       automaticFailureScreenshotPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {

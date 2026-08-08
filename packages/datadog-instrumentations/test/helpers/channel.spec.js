@@ -7,6 +7,7 @@ const { describe, it } = require('mocha')
 
 const Plugin = require('../../../dd-trace/src/plugins/plugin')
 const {
+  getChannelBarrierPromise,
   getChannelPromise,
   getRunStoresPromise,
   publishWithCompletion,
@@ -17,6 +18,12 @@ describe('packages/datadog-instrumentations/src/helpers/channel.js', () => {
     const finishCh = channel('ci:channel:test:no-subscriber')
 
     assert.strictEqual(await getChannelPromise(finishCh), undefined)
+  })
+
+  it('completes a barrier without a subscriber', async () => {
+    const finishCh = channel('ci:channel:test:barrier-no-subscriber')
+
+    assert.strictEqual(await getChannelBarrierPromise(finishCh), undefined)
   })
 
   it('waits while a subscriber owns completion', async () => {
@@ -45,6 +52,40 @@ describe('packages/datadog-instrumentations/src/helpers/channel.js', () => {
       await completedPromise
     } finally {
       finishCh.unsubscribe(onFinish)
+    }
+  })
+
+  it('waits for every registered completion', async () => {
+    const finishCh = channel('ci:channel:test:completion-barrier')
+    const completions = []
+    const firstSubscriber = ({ registerCompletion }) => {
+      completions.push(registerCompletion())
+    }
+    const secondSubscriber = ({ registerCompletion }) => {
+      completions.push(registerCompletion())
+    }
+    finishCh.subscribe(firstSubscriber)
+    finishCh.subscribe(secondSubscriber)
+
+    try {
+      let hasCompleted = false
+      const finishPromise = getChannelBarrierPromise(finishCh).then(() => {
+        hasCompleted = true
+      })
+
+      await Promise.resolve()
+      assert.strictEqual(hasCompleted, false)
+
+      completions[0]()
+      await Promise.resolve()
+      assert.strictEqual(hasCompleted, false)
+
+      completions[1]()
+      await finishPromise
+      assert.strictEqual(hasCompleted, true)
+    } finally {
+      finishCh.unsubscribe(firstSubscriber)
+      finishCh.unsubscribe(secondSubscriber)
     }
   })
 

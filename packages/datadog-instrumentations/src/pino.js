@@ -6,6 +6,8 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+const logSubmissionCh = channel('ci:log-submission:log')
+
 /**
  * @param {string} symbol
  * @param {(original: Function) => Function} wrapper
@@ -36,13 +38,20 @@ function wrapAsJson (asJson) {
     obj = arguments[0] = obj || {}
 
     // Caller-provided `dd` wins -- skip the splice so a bespoke `dd` survives.
+    let line
     if (!jsonCh.hasSubscribers || Object.hasOwn(obj, 'dd')) {
-      return asJson.apply(this, arguments)
+      line = asJson.apply(this, arguments)
+    } else {
+      const payload = { line: asJson.apply(this, arguments) }
+      jsonCh.publish(payload)
+      line = payload.line
     }
 
-    const payload = { line: asJson.apply(this, arguments) }
-    jsonCh.publish(payload)
-    return payload.line
+    if (logSubmissionCh.hasSubscribers) {
+      logSubmissionCh.publish({ source: 'pino', message: line })
+    }
+
+    return line
   }
 }
 
@@ -69,6 +78,8 @@ function wrapPrettyFactory (prettyFactory) {
   }
 }
 
+// Pino installs a symbol-keyed serialization method on each logger instance at runtime,
+// which Orchestrion cannot replace across the supported Pino 2+ shapes.
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
