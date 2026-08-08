@@ -22,26 +22,21 @@ function loadSync (url, context, nextLoad) {
   const result = nextLoad(url, context)
   const format = getFormat(result, context)
 
-  return rewriteSyncResult(result, url, format, context.conditions)
+  return rewriteSyncResult(result, url, format)
 }
 
 /**
  * @param {{ format?: string, source?: unknown }} result
  * @param {string} url
  * @param {string|undefined} format
- * @param {string[]|undefined} conditions
  * @returns {{ format?: string, source?: unknown }}
  */
-function rewriteSyncResult (result, url, format, conditions) {
+function rewriteSyncResult (result, url, format) {
   const source = result.source
 
   rewriteResult(result, url, format)
 
-  if (
-    result.source !== source &&
-    (format === 'commonjs' || hasRequireCondition(conditions)) &&
-    url.startsWith('file:')
-  ) {
+  if (result.source !== source && format === 'commonjs' && url.startsWith('file:')) {
     const rewrittenForCompile = globalThis[rewrittenForCompileSymbol] ??= new Set()
     rewrittenForCompile.add(fileURLToPath(url))
   }

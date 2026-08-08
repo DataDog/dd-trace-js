@@ -33,7 +33,7 @@ function registerRequireHook () {
         const format = getFormat(result, context)
         if (format !== 'commonjs' && !hasRequireCondition(context.conditions)) return result
 
-        return rewriteSyncResult(result, url, format, context.conditions)
+        return rewriteSyncResult(result, url, format)
       },
     })
   } catch {
