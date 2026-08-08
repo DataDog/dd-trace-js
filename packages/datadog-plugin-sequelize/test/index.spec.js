@@ -1,0 +1,212 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const dc = require('dc-polyfill')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
+const queryStartCh = dc.channel('datadog:sequelize:query:start')
+
+const databases = [
+  {
+    config: {
+      database: 'db',
+      databaseVersion: '10.4.0',
+      dialect: 'mysql',
+      host: '127.0.0.1',
+      password: '',
+      port: 3306,
+      username: 'root',
+    },
+    driver: 'mysql2',
+    metric: 'mysql2.pool.wait_time',
+    querySpan: 'mysql.query',
+    versions: '>=4',
+  },
+  {
+    config: {
+      database: 'postgres',
+      databaseVersion: '9.5.0',
+      dialect: 'postgres',
+      host: '127.0.0.1',
+      password: 'postgres',
+      port: Number(process.env.PG_TEST_PORT) || 5432,
+      username: 'postgres',
+    },
+    driver: 'pg',
+    metric: 'db.pool.wait_time_ms',
+    querySpan: 'pg.query',
+    versions: '>=6',
+  },
+]
+
+describe('sequelize pool acquisition', () => {
+  for (const database of databases) {
+    describe(`with ${database.driver}`, () => {
+      let tracer
+
+      withVersions('sequelize', 'sequelize', database.versions, version => {
+        let Sequelize
+        let sequelize
+
+        before(async () => {
+          tracer = await agent.load(database.driver)
+        })
+
+        after(() => agent.close({ ritmReset: false }))
+
+        beforeEach(() => {
+          Sequelize = require(`../../../versions/sequelize@${version}`).get().Sequelize
+          const config = database.config
+          sequelize = new Sequelize(config.database, config.username, config.password, {
+            databaseVersion: config.databaseVersion,
+            dialect: config.dialect,
+            host: config.host,
+            logging: false,
+            port: config.port,
+            pool: { min: 0, max: 1 },
+          })
+        })
+
+        afterEach(() => sequelize.close())
+
+        it('adds a pool wait tag to a query instead of creating an acquire span', async () => {
+          let queryStartCount = 0
+          const onQueryStart = () => { queryStartCount++ }
+          queryStartCh.subscribe(onQueryStart)
+
+          const connection = await sequelize.connectionManager.getConnection()
+          const parent = tracer.startSpan('sequelize-query-parent')
+          const tracePromise = assertQueryWaitTrace('sequelize-query-parent', database)
+
+          try {
+            const queryPromise = tracer.scope().activate(parent, () => sequelize.query('SELECT 1 AS one'))
+            await waitForPendingAcquire(sequelize.connectionManager.pool)
+            await sequelize.connectionManager.releaseConnection(connection)
+            await queryPromise
+            parent.finish()
+
+            await tracePromise
+            assert.ok(queryStartCount > 0)
+          } finally {
+            queryStartCh.unsubscribe(onQueryStart)
+          }
+        })
+
+        it('adds a pool wait tag to the first transaction query', async () => {
+          const connection = await sequelize.connectionManager.getConnection()
+          const parent = tracer.startSpan('sequelize-transaction-parent')
+          const tracePromise = assertQueryWaitTrace('sequelize-transaction-parent', database)
+
+          const transactionPromise = tracer.scope().activate(parent, () => sequelize.transaction(async transaction => {
+            await sequelize.transaction({ transaction }, async nestedTransaction => {
+              await sequelize.query('SELECT 1 AS one', { transaction: nestedTransaction })
+            })
+          }))
+          await waitForPendingAcquire(sequelize.connectionManager.pool)
+          await sequelize.connectionManager.releaseConnection(connection)
+          await transactionPromise
+          parent.finish()
+
+          await tracePromise
+        })
+
+        if (database.driver === 'mysql2') {
+          it('selects the read and write pools for direct replicated acquires', async () => {
+            await sequelize.close()
+
+            const config = database.config
+            const connectionConfig = {
+              database: config.database,
+              host: config.host,
+              password: config.password,
+              port: config.port,
+              username: config.username,
+            }
+            sequelize = new Sequelize(config.database, config.username, config.password, {
+              databaseVersion: config.databaseVersion,
+              dialect: config.dialect,
+              logging: false,
+              pool: { min: 0, max: 1 },
+              replication: {
+                read: [{ ...connectionConfig }],
+                write: { ...connectionConfig },
+              },
+            })
+
+            const idleReadConnection = await sequelize.connectionManager.getConnection({ type: 'SELECT' })
+            await sequelize.connectionManager.releaseConnection(idleReadConnection)
+
+            const parent = tracer.startSpan('sequelize-replication-parent')
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const acquireSpans = traces[0].filter(span => span.name === 'mysql2.pool.acquire')
+
+              assert.strictEqual(acquireSpans.length, 2)
+            }, { spanResourceMatch: /^sequelize-replication-parent$/ })
+
+            await tracer.scope().activate(parent, async () => {
+              const readConnection = await sequelize.connectionManager.getConnection({ type: 'SELECT' })
+              await sequelize.connectionManager.releaseConnection(readConnection)
+              const writeConnection = await sequelize.connectionManager.getConnection({ type: 'UPDATE' })
+              await sequelize.connectionManager.releaseConnection(writeConnection)
+              parent.finish()
+            })
+
+            await tracePromise
+          })
+        }
+
+        it('creates one driver acquire span for a direct getConnection call', async () => {
+          const parent = tracer.startSpan('sequelize-acquire-parent')
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+            const acquireSpans = spans.filter(span => span.name === `${database.driver}.pool.acquire`)
+
+            assert.strictEqual(acquireSpans.length, 1)
+            assert.strictEqual(typeof acquireSpans[0].metrics[database.metric], 'number')
+            assert.strictEqual(spans.some(span => span.name === 'sequelize.pool.acquire'), false)
+          }, { spanResourceMatch: /^sequelize-acquire-parent$/ })
+
+          await tracer.scope().activate(parent, async () => {
+            const connection = await sequelize.connectionManager.getConnection()
+            await sequelize.connectionManager.releaseConnection(connection)
+            parent.finish()
+          })
+
+          await tracePromise
+        })
+      })
+    })
+  }
+})
+
+/**
+ * @param {string} parentResource
+ * @param {{ driver: string, metric: string, querySpan: string }} database
+ * @returns {Promise<void>}
+ */
+function assertQueryWaitTrace (parentResource, database) {
+  return agent.assertSomeTraces(traces => {
+    const spans = traces[0]
+    const querySpan = spans.find(span => span.name === database.querySpan &&
+      span.metrics[database.metric] !== undefined)
+
+    assert.ok(querySpan)
+    assert.strictEqual(typeof querySpan.metrics[database.metric], 'number')
+    assert.strictEqual(spans.some(span => span.name === `${database.driver}.pool.acquire`), false)
+    assert.strictEqual(spans.some(span => span.name === 'sequelize.pool.acquire'), false)
+  }, { spanResourceMatch: new RegExp(`^${parentResource}$`) })
+}
+
+/**
+ * @param {{ waiting?: number, _waitingClientsQueue?: { length: number } }} pool
+ * @returns {Promise<void>}
+ */
+async function waitForPendingAcquire (pool) {
+  while ((pool.waiting ?? pool._waitingClientsQueue?.length) === 0) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+}
