@@ -332,6 +332,7 @@ describe('no yarn dev references', function () {
     const [allGreenCheckout] = allGreenConfig.jobs['all-green'].steps
     assert.match(allGreenCheckout.uses, /^actions\/checkout@/)
     assert.match(allGreenCheckout.with['sparse-checkout'], /^bunfig\.toml$/m)
+    assert.match(allGreenCheckout.with['sparse-checkout'], /^package\.json$/m)
     const allGreenPackage = JSON.parse(fs.readFileSync(
       path.join(repoRoot, '.github/all-green/package.json'),
       'utf8'
@@ -350,6 +351,11 @@ describe('no yarn dev references', function () {
     assert.match(platformWorkflow, /bun --config="\$GITHUB_WORKSPACE\/bunfig\.toml" add --linker=hoisted/)
     const projectWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/project.yml'), 'utf8')
     assert.match(projectWorkflow, /bun --config=\/tmp\/dd-trace-bunfig\.toml install/)
+    const projectConfig = yaml.parse(projectWorkflow)
+    for (const job of ['actionlint', 'workflow-job-names']) {
+      const [checkout] = projectConfig.jobs[job].steps
+      assert.match(checkout.with['sparse-checkout'], /^package\.json$/m)
+    }
     const systemTestsWorkflow = yaml.parse(fs.readFileSync(
       path.join(repoRoot, '.github/workflows/system-tests.yml'),
       'utf8'
@@ -363,11 +369,13 @@ describe('no yarn dev references', function () {
     assert.match(ociPackScript, /^archive=\$\(npm pack --silent\)$/m)
     assert.match(ociPackScript, /^bun=\$\(node -e .*getBunBinary/m)
     assert.match(ociPackScript, /^tar -xOf "\$archive" package\/package\.json > packaging\/sources\/package\.json$/m)
+    assert.match(ociPackScript, /^npm pkg delete scripts\.prepare --prefix packaging\/sources$/m)
     assert.match(ociPackScript, /^cp bun\.lock packaging\/sources\/bun\.lock$/m)
     assert.match(
       ociPackScript,
-      /^"\$bun" --config="\$PWD\/bunfig\.toml" install --production --frozen-lockfile --ignore-scripts /m
+      /^"\$bun" --config="\$PWD\/bunfig\.toml" install --production --frozen-lockfile \\/m
     )
+    assert.doesNotMatch(ociPackScript, /--ignore-scripts/)
     assert.match(ociPackScript, /-C packaging\/sources\/node_modules\/dd-trace$/m)
     assert.doesNotMatch(ociPackScript, /^npm pack$/m)
     assert.doesNotMatch(ociPackScript, /^npm install --global/m)

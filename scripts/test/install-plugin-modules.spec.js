@@ -298,6 +298,9 @@ path.join = function join (...parts) {
   })
 })
 
+/**
+ * @returns {{ trustedDependencies: string[], overrides: Record<string, string> }}
+ */
 function readVersionsManifest () {
   return JSON.parse(fs.readFileSync(path.join(versionsDir, 'package.json'), 'utf8'))
 }
@@ -306,7 +309,7 @@ function readVersionsManifest () {
  * @param {string} plugin
  * @param {string} [binDirectory]
  * @param {string} [traceFile]
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {Record<string, string | undefined>} [env]
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
 function runInstall (plugin, binDirectory, traceFile, env) {
@@ -327,7 +330,7 @@ function runInstall (plugin, binDirectory, traceFile, env) {
 
 /**
  * @param {string} plugin
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {Record<string, string | undefined>} [env]
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
 function spawnInstall (plugin, env = {}) {

@@ -2,9 +2,41 @@
 
 const { existsSync, readFileSync } = require('node:fs')
 
+const { parse: parseJsonc, printParseErrorCode } = require('jsonc-parser')
+
 /**
  * @typedef {{ name: string, version: string }} LockedDependency
  */
+
+/**
+ * @typedef {object} LockManifest
+ * @property {Record<string, string>} [dependencies]
+ * @property {Record<string, string>} [optionalDependencies]
+ * @property {string[]} [optionalPeers]
+ * @property {Record<string, string>} [peerDependencies]
+ */
+
+/**
+ * @typedef {object} LockContext
+ * @property {string} packagePath
+ * @property {LockContext} [parent]
+ */
+
+/**
+ * @typedef {object} DependencyPattern
+ * @property {boolean} [allowMissing]
+ * @property {LockContext} [context]
+ * @property {string} name
+ */
+
+/**
+ * @typedef {object} BunLock
+ * @property {number} lockfileVersion
+ * @property {Record<string, unknown[]>} packages
+ * @property {Record<string, LockManifest>} workspaces
+ */
+
+const supportedLockfileVersions = new Set([0, 1, 2])
 
 /**
  * @param {string[]} packagePaths
@@ -27,7 +59,8 @@ function collectAliasMap (packagePaths) {
  * @param {Map<string, string>} aliases
  */
 function collectAliasesFromDependencies (dependencies, aliases) {
-  for (const [alias, spec] of Object.entries(dependencies ?? {})) {
+  if (!dependencies) return
+  for (const [alias, spec] of Object.entries(dependencies)) {
     if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
 
     const rawTarget = spec.slice('npm:'.length)
@@ -42,60 +75,113 @@ function collectAliasesFromDependencies (dependencies, aliases) {
  * @returns {LockedDependency[]}
  */
 function listBunLockDependencies (lockPath) {
-  const lock = parseBunLock(readFileSync(lockPath, 'utf8'))
-  const root = lock.workspaces?.['']
-  if (!root) return []
+  const lock = parseBunLock(lockPath)
+  const root = lock.workspaces['']
+  if (!isObject(root)) throw new Error(`${lockPath} does not contain a root workspace`)
 
   const dependencies = new Map()
   const visited = new Set()
-  const queue = [
-    ...Object.keys(root.dependencies ?? {}),
-    ...Object.keys(root.optionalDependencies ?? {}),
-  ]
+  /** @type {DependencyPattern[]} */
+  const patterns = []
+  addDependencyPatterns(patterns, root)
 
-  while (queue.length > 0) {
-    const key = queue.pop()
-    if (visited.has(key)) continue
-    visited.add(key)
+  for (let i = 0; i < patterns.length; i++) {
+    const { allowMissing, context, name } = patterns[i]
+    const packagePath = resolveBunLockKey(lock.packages, name, context)
+    if (packagePath === undefined) {
+      if (allowMissing) continue
+      throw new Error(`Missing ${lockPath} entry for ${name}`)
+    }
+    if (visited.has(packagePath)) continue
 
-    const entry = lock.packages?.[key]
-    if (!Array.isArray(entry)) continue
+    const entry = lock.packages[packagePath]
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
+      throw new TypeError(`Invalid ${lockPath} entry for ${packagePath}`)
+    }
+    visited.add(packagePath)
 
-    const spec = entry[0]
-    if (typeof spec === 'string') {
-      const dependency = splitBunPackageSpec(spec)
+    const dependency = splitBunPackageSpec(entry[0])
+    const childContext = { packagePath, parent: context }
+    if (dependency.version.startsWith('workspace:')) {
+      const workspace = lock.workspaces[dependency.version.slice('workspace:'.length)]
+      if (!isObject(workspace)) throw new Error(`Missing ${lockPath} workspace for ${packagePath}`)
+      addDependencyPatterns(patterns, workspace, childContext, true)
+      continue
+    }
+
+    if (!dependency.version.startsWith('link:')) {
       const dependencyKey = `${dependency.name}\0${dependency.version}`
       if (!dependencies.has(dependencyKey)) dependencies.set(dependencyKey, dependency)
     }
 
-    const meta = entry[2]
-    if (!meta || typeof meta !== 'object') continue
-
-    for (const child of Object.keys(meta.dependencies ?? {})) {
-      queue.push(resolveBunLockKey(lock, key, child))
-    }
-    for (const child of Object.keys(meta.optionalDependencies ?? {})) {
-      queue.push(resolveBunLockKey(lock, key, child))
-    }
-    // A production package's peers ship with it: `bun install --production` resolves them, so they land in the OCI
-    // package and need attribution like any other shipped dependency. `@openfeature/server-sdk` reaches the artifact
-    // exactly this way, as the peer of the `@datadog/openfeature-node-server` optional dependency, even though the
-    // range pinning it is declared under `devDependencies`. Walking the manifest's own sections instead would treat it
-    // as dev-only and leave it unattributed. A peer that is not installed has no `packages` entry and drops out at the
-    // `Array.isArray` check above.
-    for (const child of Object.keys(meta.peerDependencies ?? {})) {
-      queue.push(resolveBunLockKey(lock, key, child))
-    }
+    addDependencyPatterns(patterns, findEntryManifest(entry), childContext, true)
   }
 
   return [...dependencies.values()].sort(compareDependencies)
 }
 
 /**
- * @param {string} content
+ * @param {DependencyPattern[]} patterns
+ * @param {LockManifest | undefined} manifest
+ * @param {LockContext} [context]
+ * @param {boolean} [includePeers]
  */
-function parseBunLock (content) {
-  return JSON.parse(content.replaceAll(/,(\s*[}\]])/g, '$1'))
+function addDependencyPatterns (patterns, manifest, context, includePeers = false) {
+  if (manifest === undefined) return
+
+  if (manifest.dependencies) {
+    for (const name of Object.keys(manifest.dependencies)) patterns.push({ name, context })
+  }
+  if (manifest.optionalDependencies) {
+    for (const name of Object.keys(manifest.optionalDependencies)) patterns.push({ name, context })
+  }
+  if (!includePeers) return
+
+  if (!manifest.peerDependencies) return
+  for (const name of Object.keys(manifest.peerDependencies)) {
+    const pattern = { name, context }
+    if (manifest.optionalPeers?.includes(name)) pattern.allowMissing = true
+    patterns.push(pattern)
+  }
+}
+
+/**
+ * @param {unknown[]} entry
+ * @returns {LockManifest | undefined}
+ */
+function findEntryManifest (entry) {
+  for (let i = 1; i < entry.length; i++) {
+    if (isObject(entry[i])) return /** @type {LockManifest} */ (entry[i])
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isObject (value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * @param {string} lockPath
+ * @returns {BunLock}
+ */
+function parseBunLock (lockPath) {
+  /** @type {import('jsonc-parser').ParseError[]} */
+  const errors = []
+  const lock = parseJsonc(readFileSync(lockPath, 'utf8'), errors, { allowTrailingComma: true })
+  if (errors.length > 0) {
+    const { error, offset } = errors[0]
+    throw new Error(`Cannot parse ${lockPath}: ${printParseErrorCode(error)} at offset ${offset}`)
+  }
+  if (!isObject(lock)) throw new Error(`${lockPath} does not contain an object`)
+  if (!supportedLockfileVersions.has(lock.lockfileVersion)) {
+    throw new Error(`Unsupported lockfile version in ${lockPath}: ${lock.lockfileVersion}`)
+  }
+  if (!isObject(lock.packages)) throw new Error(`${lockPath} does not contain package metadata`)
+  if (!isObject(lock.workspaces)) throw new Error(`${lockPath} does not contain workspace metadata`)
+  return /** @type {BunLock} */ (lock)
 }
 
 /**
@@ -104,19 +190,24 @@ function parseBunLock (content) {
  */
 function splitBunPackageSpec (spec) {
   const versionStart = spec.indexOf('@', spec.startsWith('@') ? spec.indexOf('/') + 1 : 1)
-  return versionStart === -1
-    ? { name: spec, version: '' }
-    : { name: spec.slice(0, versionStart), version: spec.slice(versionStart + 1) }
+  if (versionStart <= 0 || versionStart === spec.length - 1) {
+    throw new Error(`Invalid Bun package resolution: ${spec}`)
+  }
+  return { name: spec.slice(0, versionStart), version: spec.slice(versionStart + 1) }
 }
 
 /**
- * @param {{ packages: Record<string, unknown[]> }} lock
- * @param {string} parentKey
- * @param {string} childName
+ * @param {Record<string, unknown[]>} packages
+ * @param {string} name
+ * @param {LockContext} [context]
+ * @returns {string | undefined}
  */
-function resolveBunLockKey (lock, parentKey, childName) {
-  const nestedKey = `${parentKey}/${childName}`
-  return lock.packages[nestedKey] ? nestedKey : childName
+function resolveBunLockKey (packages, name, context) {
+  for (let current = context; current !== undefined; current = current.parent) {
+    const packagePath = `${current.packagePath}/${name}`
+    if (Object.hasOwn(packages, packagePath)) return packagePath
+  }
+  if (Object.hasOwn(packages, name)) return name
 }
 
 /**

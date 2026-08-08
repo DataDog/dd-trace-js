@@ -24,6 +24,7 @@ describe('third-party dependency locks', () => {
 
   it('walks regular, optional, nested, and scoped Bun dependencies', () => {
     const lockPath = writeFixture('bun.lock', `{
+      "lockfileVersion": 1,
       "workspaces": {
         "": {
           "dependencies": {
@@ -40,11 +41,11 @@ describe('third-party dependency locks', () => {
             "nested": "3.0.0"
           },
           "optionalDependencies": {
-            "unversioned": "file:../unversioned"
+            "local": "file:../local"
           }
         }],
         "foo/nested": ["nested@3.0.0", "", {}],
-        "foo/unversioned": ["unversioned", "", {}],
+        "foo/local": ["local@file:../local", "", {}],
         "@scope/optional": ["@scope/optional@2.0.0", "", {}],
       },
     }`)
@@ -52,8 +53,8 @@ describe('third-party dependency locks', () => {
     assert.deepStrictEqual(listBunLockDependencies(lockPath), [
       { name: '@scope/optional', version: '2.0.0' },
       { name: 'foo', version: '1.0.0' },
+      { name: 'local', version: 'file:../local' },
       { name: 'nested', version: '3.0.0' },
-      { name: 'unversioned', version: '' },
     ])
   })
 
@@ -62,6 +63,7 @@ describe('third-party dependency locks', () => {
     // attribution even when the range pinning them is declared under `devDependencies` (recorded separately in the
     // lock and never read by this walk). An optional peer nobody installed has no `packages` entry and drops out.
     const lockPath = writeFixture('bun.lock', `{
+      "lockfileVersion": 1,
       "workspaces": {
         "": {
           "dependencies": {
@@ -77,7 +79,8 @@ describe('third-party dependency locks', () => {
           "peerDependencies": {
             "peer-sdk": ">=1.15.1",
             "absent-optional-peer": "^1.0.0"
-          }
+          },
+          "optionalPeers": ["absent-optional-peer"]
         }],
         "peer-sdk": ["peer-sdk@1.22.0", "", {
           "dependencies": {
@@ -120,7 +123,7 @@ describe('third-party dependency locks', () => {
     assert.deepStrictEqual(readVendoredDependencyNames(vendoredPath), ['vendored-one', 'vendored-two'])
   })
 
-  it('handles missing manifests, incomplete locks, and duplicate package names', () => {
+  it('handles missing manifests, empty locks, and duplicate package names', () => {
     const missingPath = path.join(fixtureDirectory, 'missing')
     const packagePath = writeFixture('edge-package.json', JSON.stringify({
       dependencies: {
@@ -130,16 +133,18 @@ describe('third-party dependency locks', () => {
         unversionedAlias: 'npm:upstream',
       },
     }))
-    const emptyLockPath = writeFixture('empty-bun.lock', '{"workspaces": {}, "packages": {}}')
+    const emptyLockPath = writeFixture(
+      'empty-bun.lock',
+      '{"lockfileVersion": 1, "workspaces": {"": {}}, "packages": {}}'
+    )
     const lockPath = writeFixture('edge-bun.lock', JSON.stringify({
+      lockfileVersion: 1,
       workspaces: {
         '': {
           dependencies: {
             alternate: '2.0.0',
             duplicate: '1.0.0',
             foo: '1.0.0',
-            invalid: '1.0.0',
-            missing: '1.0.0',
           },
         },
       },
@@ -154,11 +159,11 @@ describe('third-party dependency locks', () => {
             nested: '2.0.0',
           },
         }],
-        invalid: [42, '', undefined],
         nested: ['nested@2.0.0', '', {}],
       },
     }))
     const optionalOnlyLockPath = writeFixture('optional-only-bun.lock', JSON.stringify({
+      lockfileVersion: 1,
       workspaces: {
         '': {
           optionalDependencies: {
@@ -183,6 +188,95 @@ describe('third-party dependency locks', () => {
       { name: 'optional', version: '1.0.0' },
     ])
     assert.deepStrictEqual(readVendoredDependencyNames(missingPath), [])
+  })
+
+  it('resolves hoisted ancestors and traverses workspaces without attributing links', () => {
+    const lockPath = writeFixture('hoisted-bun.lock', JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: {
+        '': { dependencies: { parent: '1.0.0', shared: '9.0.0', local: 'workspace:packages/local' } },
+        'packages/local': { dependencies: { transitive: '1.0.0', linked: 'link:../linked' } },
+      },
+      packages: {
+        parent: ['parent@1.0.0', '', { dependencies: { child: '1.0.0' } }],
+        'parent/child': ['child@1.0.0', '', { dependencies: { shared: '2.0.0' } }],
+        'parent/shared': ['shared@2.0.0', '', {}],
+        shared: ['shared@9.0.0', '', {}],
+        local: ['local@workspace:packages/local'],
+        transitive: ['transitive@1.0.0', '', {}],
+        linked: ['linked@link:../linked'],
+      },
+    }))
+
+    assert.deepStrictEqual(listBunLockDependencies(lockPath), [
+      { name: 'child', version: '1.0.0' },
+      { name: 'parent', version: '1.0.0' },
+      { name: 'shared', version: '2.0.0' },
+      { name: 'shared', version: '9.0.0' },
+      { name: 'transitive', version: '1.0.0' },
+    ])
+  })
+
+  it('accepts supported lock versions and fails closed on incomplete locks', () => {
+    const empty = { workspaces: { '': {} }, packages: {} }
+    for (const lockfileVersion of [0, 1, 2]) {
+      const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
+        lockfileVersion,
+        ...empty,
+      }))
+      assert.deepStrictEqual(listBunLockDependencies(lockPath), [])
+    }
+    for (const lockfileVersion of [-1, 3, 1.5, '1', undefined]) {
+      const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
+        lockfileVersion,
+        ...empty,
+      }))
+      assert.throws(() => listBunLockDependencies(lockPath), /Unsupported lockfile version/)
+    }
+
+    const missingPath = writeFixture('missing.lock', JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: { '': { dependencies: { missing: '1.0.0' } } },
+      packages: {},
+    }))
+    assert.throws(() => listBunLockDependencies(missingPath), /Missing .* entry for missing/)
+
+    const invalidPath = writeFixture('invalid.lock', JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: { '': { dependencies: { invalid: '1.0.0' } } },
+      packages: { invalid: [42, '', {}] },
+    }))
+    assert.throws(() => listBunLockDependencies(invalidPath), /Invalid .* entry for invalid/)
+
+    for (const resolution of ['invalid', 'invalid@']) {
+      const resolutionPath = writeFixture(`resolution-${resolution.length}.lock`, JSON.stringify({
+        lockfileVersion: 1,
+        workspaces: { '': { dependencies: { invalid: '1.0.0' } } },
+        packages: { invalid: [resolution, '', {}] },
+      }))
+      assert.throws(() => listBunLockDependencies(resolutionPath), /Invalid Bun package resolution/)
+    }
+
+    const workspacePath = writeFixture('workspace.lock', JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: { '': { dependencies: { local: 'workspace:packages/local' } } },
+      packages: { local: ['local@workspace:packages/local'] },
+    }))
+    assert.throws(() => listBunLockDependencies(workspacePath), /Missing .* workspace for local/)
+  })
+
+  it('rejects unparseable and structurally invalid locks', () => {
+    const cases = [
+      ['broken.lock', '{ "lockfileVersion": 1, ', /Cannot parse .* at offset/],
+      ['array.lock', '[]', /does not contain an object/],
+      ['packages.lock', '{"lockfileVersion":1,"workspaces":{"":{}},"packages":[]}', /package metadata/],
+      ['workspaces.lock', '{"lockfileVersion":1,"packages":{}}', /workspace metadata/],
+      ['root.lock', '{"lockfileVersion":1,"workspaces":{"other":{}},"packages":{}}', /root workspace/],
+    ]
+    for (const [filename, content, expected] of cases) {
+      const lockPath = writeFixture(filename, content)
+      assert.throws(() => listBunLockDependencies(lockPath), expected)
+    }
   })
 
   /**

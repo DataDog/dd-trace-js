@@ -12,8 +12,9 @@ bun=$(node -e "process.stdout.write(require('./scripts/bun').getBunBinary())")
 mkdir -p packaging/sources
 
 tar -xOf "$archive" package/package.json > packaging/sources/package.json
+npm pkg delete scripts.prepare --prefix packaging/sources
 cp bun.lock packaging/sources/bun.lock
-"$bun" --config="$PWD/bunfig.toml" install --production --frozen-lockfile --ignore-scripts \
+"$bun" --config="$PWD/bunfig.toml" install --production --frozen-lockfile \
   --linker=hoisted --network-concurrency 8 --cwd packaging/sources
 
 rm packaging/sources/package.json packaging/sources/bun.lock
