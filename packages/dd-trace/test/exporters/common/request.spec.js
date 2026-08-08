@@ -111,6 +111,50 @@ describe('request', function () {
       })
   })
 
+  it('preserves a caller-supplied connection agent', (done) => {
+    const customAgent = new http.Agent()
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      agent: customAgent,
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'GET',
+    }, (error) => {
+      const callOptions = http.request.getCall(0).args[0]
+      sandbox.restore()
+      customAgent.destroy()
+      assert.strictEqual(callOptions.agent, customAgent)
+      done(error)
+    })
+  })
+
+  it('selects a new default agent when callers reuse options with another protocol', (done) => {
+    const options = {
+      url: new URL('http://test:123'),
+      path: '/path',
+      method: 'GET',
+    }
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (httpError) => {
+      if (httpError) return done(httpError)
+
+      assert.strictEqual(options.agent, undefined)
+      options.url = new URL('https://test:443')
+      nock('https://test:443').get('/path').reply(200, 'OK')
+
+      request(Buffer.from(''), options, (httpsError) => {
+        assert.strictEqual(options.agent, undefined)
+        done(httpsError)
+      })
+    })
+  })
+
   it('does not retry when retries are disabled', (done) => {
     maxAttempts = 5
     const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })

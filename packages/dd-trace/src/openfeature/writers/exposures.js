@@ -6,18 +6,21 @@ const {
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
 const {
+  EVP_EVENT_PLATFORM_SUBDOMAIN,
   EVP_PROXY_PATH_V2,
   EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_EVENT_PLATFORM_SUBDOMAIN,
 } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
-const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
-// Disabled-state cap. Drops invalidate experiment results because the provider's
-// exposure dedupe cache keeps masking dropped events after recovery. The first
-// drop emits a warning and `droppedEventCount` accumulates the cumulative loss.
-const PENDING_MAX_EVENTS = 1000
+/**
+ * @typedef {object} ExposureRoute
+ * @property {URL} url - Route base URL
+ * @property {string} basePath - EVP base path
+ * @property {object} [headers] - Route-specific headers
+ * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
+ * @property {ExposureRoute} [fallback] - Optional direct fallback route
+ */
 
 /**
  * @typedef {object} ExposureEvent
@@ -48,38 +51,42 @@ const PENDING_MAX_EVENTS = 1000
  */
 
 /**
- * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
+ * Sends exposure events through the selected local EVP proxy or direct intake route.
  */
 class ExposuresWriter extends BaseFFEWriter {
-  // Disabled until the agent strategy probe resolves.
+  // Disabled until route selection resolves.
   #enabled = false
 
-  /** @type {ExposureEvent[]} */
-  #pendingEvents = []
+  #routeResolved = false
+
+  /** @type {ReturnType<typeof setImmediate> | undefined} */
+  #startupFlushImmediate
 
   /** @type {ExposureContext} */
   #context
 
-  #dropWarned = false
-
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
-   * @param {{url: URL, basePath: string}} [route] - Caller-supplied local EVP route
+   * @param {ExposureRoute} [route] - Caller-supplied route
    */
   constructor (config, route) {
     route ??= { url: config.url, basePath: EVP_PROXY_PATH_V2 }
-    const fullEndpoint = joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT)
+    const headers = route.headers ?? {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+    }
 
     super({
       config,
       agentUrl: route.url,
-      endpoint: fullEndpoint,
+      endpoint: joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT),
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
-      headers: {
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
-      },
+      headers,
     })
+
+    if (route.agent || route.fallback) {
+      this.#setRoute({ ...route, headers })
+    }
 
     /** @type {ExposureContext} */
     const context = {
@@ -99,82 +106,104 @@ class ExposuresWriter extends BaseFFEWriter {
 
   /**
    * @param {boolean} enabled - Whether to enable the writer
-   * @param {{url: URL, basePath: string}} [route] - Discovered local EVP route
+   * @param {ExposureRoute} [route] - Selected EVP route
+   * @returns {void}
    */
   setEnabled (enabled, route) {
+    this.#routeResolved = true
+
     if (route) {
       this.#setRoute(route)
     }
 
     this.#enabled = enabled
 
-    if (enabled && this.#pendingEvents.length > 0) {
-      // Flush all pending events as a batch
-      super.append(this.#pendingEvents)
-      this.#pendingEvents = []
+    if (enabled) {
+      this.#scheduleStartupFlush()
+    } else {
+      this.#cancelStartupFlush()
+      this._buffer = []
+      this._bufferStart = 0
     }
   }
 
   /**
    * Applies caller-supplied route data without performing discovery.
    *
-   * @param {{url: URL, basePath: string}} route - Local EVP route
+   * @param {ExposureRoute} route - Selected EVP route
    * @returns {void}
    */
   #setRoute (route) {
-    const endpoint = joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT)
+    const fallbackRoute = route.fallback && {
+      url: route.fallback.url,
+      endpoint: joinEVPProxyPath(route.fallback.basePath, EXPOSURES_ENDPOINT),
+      headers: route.fallback.headers ?? {},
+      agent: route.fallback.agent,
+    }
+    const headers = route.headers ?? {
+      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+    }
 
-    this._baseUrl = route.url
-    this._endpoint = endpoint
-    this._requestOptions.url = route.url
-    this._requestOptions.path = endpoint
+    this._setRoutes({
+      url: route.url,
+      endpoint: joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT),
+      headers,
+      agent: route.agent,
+    }, fallbackRoute)
   }
 
   /**
-   * Appends exposure event(s) to the buffer
+   * Appends exposure event(s) to the buffer.
+   *
    * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
+   * @returns {void}
    */
   append (events) {
-    if (this.#enabled) {
-      super.append(events)
-      return
-    }
+    if (this.#routeResolved && !this.#enabled) return
 
-    const eventArray = Array.isArray(events) ? events : [events]
-    this.#pendingEvents.push(...eventArray)
-    if (this.#pendingEvents.length > PENDING_MAX_EVENTS) {
-      const dropped = this.#pendingEvents.length - PENDING_MAX_EVENTS
-      this.#pendingEvents.splice(0, dropped)
-      this._droppedEvents += dropped
-      if (!this.#dropWarned) {
-        this.#dropWarned = true
-        log.warn(
-          '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
-          this.constructor.name, PENDING_MAX_EVENTS)
-      }
-    }
+    super.append(events)
   }
 
   /**
-   * @returns {number} Cumulative number of exposure events dropped due to buffer overflow.
-   */
-  get droppedEventCount () {
-    return this._droppedEvents
-  }
-
-  /**
-   * Flushes buffered exposure events to the agent
+   * Flushes buffered exposure events through the selected route.
+   *
+   * @returns {void}
    */
   flush () {
-    if (!this.#enabled) {
-      return
-    }
+    if (!this.#enabled) return
+
+    this.#cancelStartupFlush()
     super.flush()
   }
 
   /**
+   * Flushes startup events after route selection completes.
+   *
+   * @returns {void}
+   */
+  #scheduleStartupFlush () {
+    if (this.#startupFlushImmediate || this._buffer.length === 0) return
+
+    this.#startupFlushImmediate = setImmediate(() => {
+      this.#startupFlushImmediate = undefined
+      this.flush()
+    })
+  }
+
+  /**
+   * Cancels a scheduled drain.
+   *
+   * @returns {void}
+   */
+  #cancelStartupFlush () {
+    if (!this.#startupFlushImmediate) return
+    clearImmediate(this.#startupFlushImmediate)
+    this.#startupFlushImmediate = undefined
+  }
+
+  /**
    * Formats exposure events with service context metadata
-   * @param {Array<ExposureEvent>} events - Array of exposure events
+   * @param {Array<ExposureEvent>} events - Array of exposure events to format
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {

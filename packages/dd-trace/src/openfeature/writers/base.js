@@ -11,14 +11,40 @@ const log = require('../../log')
  * @property {number} [timeout] - Request timeout in milliseconds
  * @property {object} config - Tracer configuration object
  * @property {string} endpoint - API endpoint path
- * @property {URL} [agentUrl] - Base URL for the agent
+ * @property {URL} [agentUrl] - Initial delivery URL
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
  * @property {object} [headers] - Additional HTTP headers
  */
 
 /**
- * BaseFFEWriter is the base class for sending Feature Flagging & Exposure Events payloads to the Datadog Agent.
+ * @typedef {object} WriterRoute
+ * @property {URL} url - Route base URL
+ * @property {string} endpoint - Route endpoint
+ * @property {object} headers - Route-specific headers
+ * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
+ */
+
+/**
+ * @typedef {object} ActiveWriterRoute
+ * @property {URL} url - Route base URL
+ * @property {string} endpoint - Route endpoint
+ * @property {object} requestOptions - HTTP request options
+ */
+
+/**
+ * Tests whether a local route definitively rejected an event batch.
+ *
+ * @param {Error | null} error - Request error
+ * @param {number | undefined} statusCode - HTTP response status
+ * @returns {boolean} Whether direct retry is safe
+ */
+function isDefinitiveRejection (error, statusCode) {
+  return error?.code === 'ECONNREFUSED' || statusCode === 403 || statusCode === 404 || statusCode === 405
+}
+
+/**
+ * Base writer for Feature Flagging and Experimentation event delivery.
  * @class BaseFFEWriter
  */
 class BaseFFEWriter {
@@ -32,7 +58,8 @@ class BaseFFEWriter {
 
     this._buffer = []
     this._bufferLimit = 1000
-    this._bufferSize = 0
+    this._bufferStart = 0
+    this._dropWarningLogged = false
 
     this._config = config
     this._endpoint = endpoint
@@ -40,6 +67,7 @@ class BaseFFEWriter {
     this._payloadSizeLimit = payloadSizeLimit
     this._eventSizeLimit = eventSizeLimit
     this._headers = headers || {}
+    this._fallbackRoute = undefined
 
     this._requestOptions = {
       headers: {
@@ -72,58 +100,87 @@ class BaseFFEWriter {
     const eventArray = Array.isArray(events) ? events : [events]
 
     for (const event of eventArray) {
-      if (this._buffer.length >= this._bufferLimit) {
-        log.warn('%s event buffer full (limit is %d), dropping event', this.constructor.name, this._bufferLimit)
+      if (this._buffer.length < this._bufferLimit) {
+        this._buffer.push(event)
+      } else {
+        this._buffer[this._bufferStart] = event
+        this._bufferStart = (this._bufferStart + 1) % this._bufferLimit
         this._droppedEvents++
-        continue
+
+        if (!this._dropWarningLogged) {
+          this._dropWarningLogged = true
+          log.warn(
+            '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
+            this.constructor.name,
+            this._bufferLimit
+          )
+        }
       }
-
-      const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
-
-      // Check individual event size limit if configured
-      if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
-        log.warn('%s event size %d bytes exceeds limit %d, dropping event',
-          this.constructor.name, eventSizeBytes, this._eventSizeLimit)
-        this._droppedEvents++
-        continue
-      }
-
-      // Check if adding this event would exceed payload size limit if configured
-      if (this._payloadSizeLimit && this._bufferSize + eventSizeBytes > this._payloadSizeLimit) {
-        log.debug('%s buffer size would exceed %d bytes, flushing first', this.constructor.name, this._payloadSizeLimit)
-        this.flush()
-      }
-
-      this._bufferSize += eventSizeBytes
-      this._buffer.push(event)
     }
   }
 
   /**
-   * Flushes all buffered events to the agent
+   * Sizes, batches, and flushes all buffered events.
    */
   flush () {
     if (this._buffer.length === 0) {
       return
     }
-    const events = this._buffer
+
+    const events = this._bufferStart === 0
+      ? this._buffer
+      : [...this._buffer.slice(this._bufferStart), ...this._buffer.slice(0, this._bufferStart)]
     this._buffer = []
-    this._bufferSize = 0
+    this._bufferStart = 0
 
-    const payload = this._encode(this.makePayload(events))
+    let batch = []
+    let batchSize = 0
 
-    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
-
-    request(payload, this._requestOptions, (err, resp, code) => {
-      if (err) {
-        log.error('Failed to send events to %s%s', this._baseUrl.href, this._endpoint, err)
-      } else if (code >= 200 && code < 300) {
-        log.debug('Successfully sent %d events', events.length)
-      } else {
-        log.warn('Events request returned status %d', code)
+    for (const event of events) {
+      let eventSize
+      try {
+        eventSize = Buffer.byteLength(JSON.stringify(event))
+      } catch (error) {
+        log.warn('%s could not serialize an event, dropping event: %s', this.constructor.name, error.message)
+        this._droppedEvents++
+        continue
       }
-    })
+
+      if (this._eventSizeLimit && eventSize > this._eventSizeLimit) {
+        log.warn(
+          '%s event size %d bytes exceeds limit %d, dropping event',
+          this.constructor.name,
+          eventSize,
+          this._eventSizeLimit
+        )
+        this._droppedEvents++
+        continue
+      }
+
+      if (this._payloadSizeLimit && eventSize > this._payloadSizeLimit) {
+        log.warn(
+          '%s event size %d bytes exceeds payload limit %d, dropping event',
+          this.constructor.name,
+          eventSize,
+          this._payloadSizeLimit
+        )
+        this._droppedEvents++
+        continue
+      }
+
+      if (batch.length > 0 && this._payloadSizeLimit && batchSize + eventSize > this._payloadSizeLimit) {
+        this.#send(batch)
+        batch = []
+        batchSize = 0
+      }
+
+      batch.push(event)
+      batchSize += eventSize
+    }
+
+    if (batch.length > 0) {
+      this.#send(batch)
+    }
   }
 
   /**
@@ -160,6 +217,129 @@ class BaseFFEWriter {
    */
   _encode (payload) {
     return JSON.stringify(payload)
+  }
+
+  /**
+   * Applies the active route and an optional direct fallback route.
+   *
+   * @param {WriterRoute} route - Active route
+   * @param {WriterRoute} [fallbackRoute] - Direct fallback route
+   * @returns {void}
+   */
+  _setRoutes (route, fallbackRoute) {
+    this.#activateRoute(this.#createRoute(route))
+    this._fallbackRoute = fallbackRoute ? this.#createRoute(fallbackRoute) : undefined
+  }
+
+  /**
+   * Sends one event batch.
+   *
+   * @param {Array<object>} events - Events in the batch
+   * @returns {void}
+   */
+  #send (events) {
+    let payload
+    try {
+      payload = this._encode(this.makePayload(events))
+    } catch (error) {
+      log.warn(
+        '%s could not encode %d event(s), dropping batch: %s',
+        this.constructor.name,
+        events.length,
+        error.message
+      )
+      this._droppedEvents += events.length
+      return
+    }
+
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
+
+    const route = this.#createActiveRoute()
+    this.#sendRequest(payload, events.length, route, this._fallbackRoute)
+  }
+
+  /**
+   * Creates request state for a configured writer route.
+   *
+   * @param {WriterRoute} route - Configured route
+   * @returns {ActiveWriterRoute} Active route state
+   */
+  #createRoute (route) {
+    return {
+      url: route.url,
+      endpoint: route.endpoint,
+      requestOptions: {
+        ...(route.agent && { agent: route.agent }),
+        headers: {
+          ...route.headers,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+        timeout: this._timeout,
+        url: route.url,
+        path: route.endpoint,
+      },
+    }
+  }
+
+  /**
+   * Captures the current route for one event batch.
+   *
+   * @returns {ActiveWriterRoute} Active route state
+   */
+  #createActiveRoute () {
+    return {
+      url: this._baseUrl,
+      endpoint: this._endpoint,
+      requestOptions: this._requestOptions,
+    }
+  }
+
+  /**
+   * Makes a route active for future event batches.
+   *
+   * @param {ActiveWriterRoute} route - Route state
+   * @returns {void}
+   */
+  #activateRoute (route) {
+    this._baseUrl = route.url
+    this._endpoint = route.endpoint
+    this._requestOptions = route.requestOptions
+  }
+
+  /**
+   * Sends an encoded batch and retries it directly only after definitive rejection.
+   *
+   * @param {string} payload - Encoded event batch
+   * @param {number} eventCount - Event count
+   * @param {ActiveWriterRoute} route - Selected route
+   * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
+   * @returns {void}
+   */
+  #sendRequest (payload, eventCount, route, fallbackRoute) {
+    request(payload, route.requestOptions, (error, response, statusCode) => {
+      if (fallbackRoute && isDefinitiveRejection(error, statusCode)) {
+        log.debug(
+          '%s switching from %s%s to direct intake after definitive rejection',
+          this.constructor.name,
+          route.url.href,
+          route.endpoint
+        )
+        this.#activateRoute(fallbackRoute)
+        this._fallbackRoute = undefined
+        this.#sendRequest(payload, eventCount, fallbackRoute)
+        return
+      }
+
+      if (error) {
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+      } else if (statusCode >= 200 && statusCode < 300) {
+        log.debug('Successfully sent %d events', eventCount)
+      } else {
+        log.warn('Events request returned status %d', statusCode)
+      }
+    })
   }
 }
 
