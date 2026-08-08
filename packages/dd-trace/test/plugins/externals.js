@@ -365,6 +365,7 @@ module.exports = {
     {
       name: 'mysql',
       dep: true,
+      versions: ['2.18.1'],
     },
     {
       name: 'mysql2',
@@ -707,6 +708,7 @@ module.exports = {
     {
       name: 'pg',
       dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',
