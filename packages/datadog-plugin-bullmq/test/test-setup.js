@@ -46,7 +46,7 @@ class BullmqTestSetup {
 
   async queueAddError () {
     await this.queue.add('error-job', { data: 'test' }, {
-      repeat: { pattern: 'invalid-cron-pattern' },
+      jobId: 'bad:id',
     })
   }
 

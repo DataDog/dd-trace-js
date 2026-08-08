@@ -103,6 +103,11 @@ module.exports = {
       name: 'redis',
       versions: ['>=4'],
     },
+    {
+      name: 'ioredis',
+      versions: ['>=5'],
+      dep: true,
+    },
   ],
   'body-parser': [
     {
