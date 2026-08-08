@@ -79,6 +79,21 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout, 'true\ntrue\n')
   })
 
+  it('does not eagerly load the rewriter when the compile wrapper is required', () => {
+    const loaderPath = join(testDirectory, '../../../src/helpers/rewriter/loader.js')
+    const rewriterPath = join(testDirectory, '../../../src/helpers/rewriter/index.js')
+    const result = spawnSync(process.execPath, ['--eval', `
+      const rewriterPath = require.resolve(${JSON.stringify(rewriterPath)})
+      require(${JSON.stringify(loaderPath)})
+      console.log(require.cache[rewriterPath] === undefined)
+    `], {
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, 'true\n')
+  })
+
   it('does not rewrite application modules', async () => {
     const result = await load('file:///app.mjs', { format: 'module' }, () => ({ format: 'module', source }))
 
@@ -175,6 +190,18 @@ describe('rewriter loader', () => {
     assertCommonJSRewritten(result.source)
     assertCommonJSRewritten(resultFromContext.source)
     assertCommonJSRewritten(resultFromConditions.source)
+  })
+
+  it('decodes percent-encoded file URLs before rewriting CommonJS', () => {
+    const url = createAiModuleUrlWithSpace()
+
+    const result = loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ format: 'commonjs', source: commonJSSource })
+    )
+
+    assertCommonJSRewritten(result.source)
   })
 
   it('marks rewritten CommonJS for the compiler to pass through', () => {
@@ -846,6 +873,17 @@ describe('rewriter loader', () => {
 function createAiModuleUrl () {
   const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-'))
   const packageDirectory = join(root, 'node_modules', 'ai')
+
+  mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+  writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0"}')
+
+  return pathToFileURL(join(packageDirectory, 'dist', 'index.mjs')).href
+}
+
+function createAiModuleUrlWithSpace () {
+  const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-'))
+  const spacedRoot = join(root, 'app name')
+  const packageDirectory = join(spacedRoot, 'node_modules', 'ai')
 
   mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
   writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0"}')
