@@ -364,6 +364,21 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(parsedPayload.context.service, 'test-service')
     })
 
+    it('should use a caller-supplied route without performing discovery', () => {
+      const url = new URL('http://custom-agent:9126')
+      writer.setEnabled(true, {
+        url,
+        basePath: '/evp_proxy/v2/',
+      })
+      writer.append(exposureEvent)
+
+      writer.flush()
+
+      const [, options] = request.getCall(0).args
+      assert.strictEqual(options.url, url)
+      assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/exposures')
+    })
+
     it('should empty buffer after flushing', () => {
       writer.append(exposureEvent)
       assert.strictEqual(writer._buffer?.length, 1)

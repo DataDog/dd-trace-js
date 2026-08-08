@@ -55,6 +55,48 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnce(setAgentStrategyStub)
     })
 
+    it('passes the discovered route to the writer', () => {
+      const route = {
+        url: new URL('http://localhost:8126'),
+        basePath: '/evp_proxy/v2',
+      }
+      setAgentStrategyStub.callsArgWith(1, true, route)
+
+      openfeatureModule.enable(config)
+
+      sinon.assert.calledOnceWithExactly(mockWriter.setEnabled, true, route)
+    })
+
+    it('ignores a discovery result for a replaced writer', () => {
+      const replacementWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy(),
+        destroy: sinon.spy(),
+        setEnabled: sinon.spy(),
+      }
+      const staleRoute = {
+        url: new URL('http://stale-agent:8126'),
+        basePath: '/evp_proxy/v2',
+      }
+      const currentRoute = {
+        url: new URL('http://current-agent:8126'),
+        basePath: '/evp_proxy/v2',
+      }
+      ExposuresWriterStub.onSecondCall().returns(replacementWriter)
+
+      openfeatureModule.enable(config)
+      const staleCallback = setAgentStrategyStub.firstCall.args[1]
+      openfeatureModule.disable()
+      openfeatureModule.enable(config)
+      const currentCallback = setAgentStrategyStub.secondCall.args[1]
+
+      staleCallback(true, staleRoute)
+      sinon.assert.notCalled(replacementWriter.setEnabled)
+
+      currentCallback(true, currentRoute)
+      sinon.assert.calledOnceWithExactly(replacementWriter.setEnabled, true, currentRoute)
+    })
+
     it('should handle multiple enable calls gracefully', () => {
       openfeatureModule.enable(config)
       openfeatureModule.enable(config)

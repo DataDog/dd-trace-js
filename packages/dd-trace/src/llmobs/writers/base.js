@@ -234,6 +234,7 @@ class BaseLLMObsWriter {
     if (this._agentless) {
       options.headers['DD-API-KEY'] = this._config.DD_API_KEY || ''
     } else {
+      // TODO: Migrate LLMObs EVP headers and subdomains to the shared utilities in src/evp_proxy.
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }
 
