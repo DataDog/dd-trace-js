@@ -369,11 +369,11 @@ describe('log', () => {
       it('should allow a message + Error', () => {
         log.error('this is an error', new Error('cause'))
 
-        sinon.assert.called(console.error)
+        sinon.assert.calledOnce(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+        assert.ok(console.error.firstCall.args[0].cause instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].cause.message, 'cause')
       })
 
       it('should allow a templated message', () => {
@@ -387,29 +387,11 @@ describe('log', () => {
       it('should allow a templated message + Error', () => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
 
-        sinon.assert.called(console.error)
+        sinon.assert.calledOnce(console.error)
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error of type: ERR code: 42')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
-      })
-
-      it('should allow a message + Error + LogConfig', () => {
-        log.error('this is an error with a log config', log.NO_TRANSMIT)
-
-        sinon.assert.called(console.error)
-        assert.ok(console.error.firstCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error with a log config')
-      })
-
-      it('should allow a message + NoTransmitError', () => {
-        log.error('this is an error without a log config', new log.NoTransmitError('bad underlying thing'))
-
-        sinon.assert.called(console.error)
-        assert.ok(console.error.firstCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error without a log config')
-        assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'bad underlying thing')
+        assert.ok(console.error.firstCall.args[0].cause instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].cause.message, 'cause')
       })
     })
 

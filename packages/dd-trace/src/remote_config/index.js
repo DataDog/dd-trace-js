@@ -228,7 +228,7 @@ class RemoteConfig {
       if (statusCode === 404) return cb()
 
       if (err) {
-        log.errorWithoutTelemetry('[RC] Error in request', err)
+        log.error('[RC] Error in request', err)
         return cb()
       }
 

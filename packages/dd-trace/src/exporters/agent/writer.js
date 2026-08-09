@@ -48,7 +48,7 @@ class AgentWriter extends BaseWriter {
       }
 
       if (err) {
-        log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
+        log.error('Error sending payload to the agent (status code: %s)', err.status, err)
         done()
         return
       }
