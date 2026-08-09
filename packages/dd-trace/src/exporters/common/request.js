@@ -93,7 +93,10 @@ function request (data, options, callback) {
 
   docker.inject(options.headers)
 
-  options.agent = isSecure ? httpsAgent : httpAgent
+  const connectionOptions = {
+    ...options,
+    agent: options.agent ?? (isSecure ? httpsAgent : httpAgent),
+  }
 
   /**
    * @param {import('node:http').IncomingMessage} res
@@ -218,7 +221,7 @@ function request (data, options, callback) {
         }
       }
 
-      const req = client.request(options, (res) => onResponse(res, complete, handleError))
+      const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
       req.once('timeout', finalize)
