@@ -6,6 +6,7 @@ module.exports = [
   ...require('./bullmq'),
   ...require('./claude-agent-sdk'),
   ...require('./graphql'),
+  ...require('./graphql-jit'),
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./mercurius'),

@@ -66,7 +66,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     // by query text for a string, by document identity for a pre-parsed AST.
     // Empty on the cold path — validate hasn't refined yet — where the request
     // span is refined from the parsed document instead.
-    const cached = getCachedRequestOperation(source, operationName)
+    const cached = getCachedRequestOperation(source, operationName, this.config.signature)
 
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),

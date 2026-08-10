@@ -25,15 +25,18 @@ const loadableModule = /** @type {LoadableModule} */ (Module)
 const graphqlRoot = path.dirname(require.resolve('graphql'))
 const visitor = require(path.join(graphqlRoot, 'language/visitor.js'))
 const printer = require(path.join(graphqlRoot, 'language/printer.js'))
+const utilities = require(path.join(graphqlRoot, 'utilities/index.js'))
+const separateOperationsSpy = sinon.spy(utilities.separateOperations)
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
 ddGlobal.graphql_visitor = visitor
 ddGlobal.graphql_printer = printer
-ddGlobal.graphql_utilities = require('graphql/utilities')
+ddGlobal.graphql_utilities = { ...utilities, separateOperations: separateOperationsSpy }
 
 const { parse } = require('graphql')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { defaultEngineReportingSignature } = require('../../src/tools/signature')
+const { getCachedRequestOperation, refineRequestSpan } = require('../../src/utils')
 
 describe('graphql signature memoization', () => {
   let visitSpy
@@ -90,6 +93,90 @@ describe('graphql signature memoization', () => {
 
     assert.equal(printSpy.callCount - printsBefore, 2)
     assert.notEqual(sigA, sigB)
+  })
+
+  it('does not separate every sibling operation to calculate one signature', () => {
+    const ast = parse('query A { a } query B { b } query C { c }')
+
+    const callsBefore = separateOperationsSpy.callCount
+    const signature = defaultEngineReportingSignature(ast, 'A')
+
+    assert.equal(signature, 'query A{a}')
+    assert.equal(separateOperationsSpy.callCount, callsBefore)
+  })
+
+  it('keeps the full document when the requested operation is missing', () => {
+    const ast = parse('query A { a } query B { b }')
+
+    assert.equal(defaultEngineReportingSignature(ast, 'Missing'), 'query A{a}query B{b}')
+  })
+
+  it('keeps only transitive fragments used by the selected operation', () => {
+    const ast = parse(`
+      query A { ...AFields ...SharedFields }
+      query B { ...BFields }
+      fragment AFields on Query { ...SharedFields }
+      fragment BFields on Query { b }
+      fragment SharedFields on Query { a }
+    `)
+
+    assert.equal(
+      defaultEngineReportingSignature(ast, 'A'),
+      'query A{...AFields...SharedFields}fragment AFields on Query{...SharedFields}fragment SharedFields on Query{a}'
+    )
+  })
+
+  it('calculates only the selected signature while refining a request', () => {
+    const source = 'query A { a } query B { b }'
+    const ast = parse(source)
+    const span = { setTag: sinon.spy() }
+
+    const printsBefore = printSpy.callCount
+    refineRequestSpan(span, ast, source, 'A', true, true)
+    assert.equal(printSpy.callCount - printsBefore, 1)
+
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'A', true), {
+      signature: 'query A{a}',
+      type: 'query',
+      name: 'A',
+    })
+    assert.equal(printSpy.callCount - printsBefore, 1)
+
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'B', true), {
+      signature: 'query B{b}',
+      type: 'query',
+      name: 'B',
+    })
+    assert.equal(printSpy.callCount - printsBefore, 2)
+
+    getCachedRequestOperation(source, 'B', true)
+    assert.equal(printSpy.callCount - printsBefore, 2)
+  })
+
+  it('does not retain an invalid document for sibling requests', () => {
+    const source = 'query InvalidA { a } query InvalidB { b }'
+    const ast = parse(source)
+    const span = { setTag: sinon.spy() }
+
+    refineRequestSpan(span, ast, source, 'InvalidA', true, false)
+
+    assert.equal(getCachedRequestOperation(source, 'InvalidB', true), undefined)
+  })
+
+  it('retains a later valid document for a pre-parsed source and derives a sibling lazily', () => {
+    const source = parse('query ObjectA { a } query ObjectB { b }')
+    const invalidDocument = parse('query ObjectA { a } query ObjectB { b }')
+    const validDocument = parse('query ObjectA { a } query ObjectB { b }')
+
+    refineRequestSpan({ setTag: sinon.spy() }, invalidDocument, source, 'ObjectA', true, false)
+    assert.equal(getCachedRequestOperation(source, 'ObjectB', true), undefined)
+
+    refineRequestSpan({ setTag: sinon.spy() }, validDocument, source, 'ObjectA', true, true)
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'ObjectB', true), {
+      signature: 'query ObjectB{b}',
+      type: 'query',
+      name: 'ObjectB',
+    })
   })
 
   it('recomputes for a different document instance even if the source is identical', () => {

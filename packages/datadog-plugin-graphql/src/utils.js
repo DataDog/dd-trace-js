@@ -26,15 +26,26 @@ const operationTypes = new Set(['query', 'mutation', 'subscription'])
 // safe separator that keeps the two parts from colliding.
 const requestOperationCache = new LRUCache({ max: 500 })
 
+// A validated document lets a later JIT-only sibling calculate only its requested signature.
+// Keep it weak so the tracer never extends its lifetime beyond mercurius's own cache.
+/** @type {import('lru-cache')<string, WeakRef<import('graphql').DocumentNode>>} */
+const requestDocumentCache = new LRUCache({ max: 500 })
+
 // Mercurius also accepts a pre-parsed document AST as the source, which reaches
 // the request boundary as an object rather than query text — so there is no
 // string to key the LRU by. Mercurius keys its own document LRU by that source
 // object's identity, and the same object reaches the boundary on the warm path,
-// so a WeakMap keyed by the caller-owned document recovers the metadata without
-// mutating the document and releases with it. The value carries the requested
-// operation name so a JIT-only sibling selection is not handed another
-// operation's metadata (same reason the string cache keys by operation name).
-/** @type {WeakMap<object, Map<string | undefined, RequestOperation>>} */
+// so a WeakMap keyed by the caller-owned document retains the validated clone
+// and lazily calculated operation metadata without mutating the source. It
+// releases with the source object.
+/**
+ * @typedef {{
+ *   document?: WeakRef<import('graphql').DocumentNode>,
+ *   operations: Map<string | undefined, RequestOperation>
+ * }} DocumentOperations
+ */
+
+/** @type {WeakMap<object, DocumentOperations>} */
 const documentOperationCache = new WeakMap()
 
 /**
@@ -51,14 +62,34 @@ function requestOperationKey (source, operationName) {
  *   document AST otherwise. Any other shape (mercurius rejects it before
  *   execute) has no cache entry and yields undefined.
  * @param {string | undefined} operationName - The requested operation name.
+ * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
  * @returns {RequestOperation | undefined}
  */
-function getCachedRequestOperation (source, operationName) {
+function getCachedRequestOperation (source, operationName, calculateSignature) {
   if (typeof source === 'string') {
-    return requestOperationCache.get(requestOperationKey(source, operationName))
+    const key = requestOperationKey(source, operationName)
+    let operation = requestOperationCache.get(key)
+    if (operation !== undefined) return operation
+
+    const document = requestDocumentCache.get(source)?.deref()
+    if (document === undefined) return
+
+    operation = getRequestOperation(document, operationName, calculateSignature)
+    requestOperationCache.set(key, operation)
+    return operation
   }
   if (source === null || typeof source !== 'object') return
-  return documentOperationCache.get(source)?.get(operationName)
+
+  const cached = documentOperationCache.get(source)
+  if (cached === undefined) return
+
+  let operation = cached.operations.get(operationName)
+  const document = cached.document?.deref()
+  if (operation !== undefined || document === undefined) return operation
+
+  operation = getRequestOperation(document, operationName, calculateSignature)
+  cached.operations.set(operationName, operation)
+  return operation
 }
 
 /**
@@ -94,6 +125,21 @@ function getOperation (document, operationName) {
 }
 
 /**
+ * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
+ * @param {string} signature
+ * @param {string | undefined} type
+ * @param {string | undefined} name
+ */
+function refineRequestSpanMetadata (requestSpan, signature, type, name) {
+  if (!requestSpan || requestSpan.ddRequestRefined) return
+  requestSpan.ddRequestRefined = true
+
+  if (signature) requestSpan.setTag('resource.name', signature)
+  if (type) requestSpan.setTag('graphql.operation.type', type)
+  if (name) requestSpan.setTag('graphql.operation.name', name)
+}
+
+/**
  * Refine the top-level graphql.request span (mercurius) from the parsed
  * document and cache the metadata so the JIT warm path — where no sub-span
  * fires — can recover the same tags at the request boundary.
@@ -103,12 +149,14 @@ function getOperation (document, operationName) {
  * across the later execute boundary via the `ddRequestRefined` flag, and a
  * no-op for graphql-js/apollo/yoga, which never open a request span.
  *
- * Every named operation in the document is cached, not just the selected one:
- * a multi-operation document parses once, and a later request may select a
- * sibling operation that mercurius then serves exclusively through its JIT path
- * (no execute span), so its metadata has to be ready before that happens.
+ * A successfully validated document is retained so a later request selecting
+ * a JIT-only sibling can derive only that sibling's metadata at the request
+ * boundary, without reparsing, revalidating, or eagerly signing every sibling.
  *
- * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
+ * @param {{
+ *   ddRequestRefined?: boolean,
+ *   setTag: (key: string, value: string) => unknown
+ * } | undefined} requestSpan
  * @param {import('graphql').DocumentNode | undefined} document
  * @param {unknown} requestSource - The raw source the request boundary saw:
  *   query text on the common path, a pre-parsed document AST otherwise. The
@@ -118,16 +166,15 @@ function getOperation (document, operationName) {
  *   cached (the warm path never reaches this span for it either).
  * @param {string | undefined} operationName - The requested operation name.
  * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
+ * @param {boolean} validated - Whether graphql validation completed without errors.
  */
-function refineRequestSpan (requestSpan, document, requestSource, operationName, calculateSignature) {
+function refineRequestSpan (requestSpan, document, requestSource, operationName, calculateSignature, validated) {
   /* istanbul ignore if: validate only refines after the request span and parsed document exist. */
   if (!requestSpan || requestSpan.ddRequestRefined || !document) return
   requestSpan.ddRequestRefined = true
 
-  const operation = getOperation(document, operationName)
-  const type = operation?.operation
-  const name = operation?.name?.value
-  const signature = getSignature(document, name, type, calculateSignature)
+  const operation = getRequestOperation(document, operationName, calculateSignature)
+  const { signature, type, name } = operation
 
   if (signature) requestSpan.setTag('resource.name', signature)
   if (type) requestSpan.setTag('graphql.operation.type', type)
@@ -135,23 +182,7 @@ function refineRequestSpan (requestSpan, document, requestSource, operationName,
 
   if (!isCacheableSource(requestSource)) return
 
-  // Cache the selected operation under the requested name (undefined selects
-  // the document's first operation, so it shares the entry with that name).
-  cacheRequestOperation(requestSource, operationName, { signature, type, name })
-
-  // Cache every named operation so a JIT-only sibling selection is labeled from
-  // this single parse instead of falling back to a bare operation name.
-  for (const definition of document.definitions) {
-    const definitionName = definition?.name?.value
-    if (definitionName === undefined || !operationTypes.has(definition.operation)) continue
-    if (definitionName === operationName) continue
-
-    cacheRequestOperation(requestSource, definitionName, {
-      signature: getSignature(document, definitionName, definition.operation, calculateSignature),
-      type: definition.operation,
-      name: definitionName,
-    })
-  }
+  cacheRequestOperation(requestSource, operationName, operation, validated ? document : undefined)
 }
 
 /**
@@ -159,19 +190,43 @@ function refineRequestSpan (requestSpan, document, requestSource, operationName,
  *   text LRU; a caller-owned document AST keys the WeakMap (never mutated).
  * @param {string | undefined} operationName - The requested operation name.
  * @param {RequestOperation} operation
+ * @param {import('graphql').DocumentNode | undefined} document - Retained only after successful validation.
  */
-function cacheRequestOperation (source, operationName, operation) {
+function cacheRequestOperation (source, operationName, operation, document) {
   if (typeof source === 'string') {
     requestOperationCache.set(requestOperationKey(source, operationName), operation)
+    if (document !== undefined) {
+      requestDocumentCache.set(source, new WeakRef(document))
+    }
     return
   }
 
-  let operations = documentOperationCache.get(source)
-  if (operations === undefined) {
-    operations = new Map()
-    documentOperationCache.set(source, operations)
+  let cached = documentOperationCache.get(source)
+  if (cached === undefined) {
+    cached = { operations: new Map() }
+    documentOperationCache.set(source, cached)
   }
-  operations.set(operationName, operation)
+  if (document !== undefined) {
+    cached.document = new WeakRef(document)
+  }
+  cached.operations.set(operationName, operation)
+}
+
+/**
+ * @param {import('graphql').DocumentNode} document
+ * @param {string | undefined} operationName
+ * @param {boolean} calculateSignature
+ * @returns {RequestOperation}
+ */
+function getRequestOperation (document, operationName, calculateSignature) {
+  const operation = getOperation(document, operationName)
+  const type = operation?.operation
+  const name = operation?.name?.value
+  return {
+    signature: getSignature(document, name, type, calculateSignature),
+    type,
+    name,
+  }
 }
 
 /**
@@ -304,4 +359,5 @@ module.exports = {
   isApolloHealthCheck,
   isApolloHealthCheckSource,
   refineRequestSpan,
+  refineRequestSpanMetadata,
 }
