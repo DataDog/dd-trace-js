@@ -689,7 +689,10 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       [['--inspect', '../fixture'], /integration id must contain only lowercase letters/],
     ]
 
-    assert.deepStrictEqual(underscore.registrations.workflows, ['.github/workflows/apm-integrations.yml:221'])
+    assert.deepStrictEqual(underscore.registrations.workflows, [
+      '.github/workflows/apm-integrations.yml:221',
+      '.github/workflows/instrumentation.yml:99',
+    ])
     for (const [args, expected] of cases) {
       const { status, stderr } = spawnSync(process.execPath, [verifierPath, ...args], { encoding: 'utf8' })
       assert.strictEqual(status, 1)
@@ -729,6 +732,7 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(missing.stdout, /^ {2}rewriter: missing$/m)
     assert.match(missing.stdout, /^ {2}plugin sources: 0$/m)
     assert.match(missing.stdout, /^ {2}new-plugin \(candidate\)$/m)
+    assert.match(missing.stdout, /^Instrumentation dependencies:\n {2}none$/m)
     assert.match(missing.stdout, /^Contract sources:\n {2}none$/m)
     assert.match(missing.stdout, /^ {2}packages\/dd-trace\/src\/plugins\/cache\.js$/m)
     assert.match(missing.stdout, /^Closest current reference: fixture$/m)
@@ -901,6 +905,47 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/ioredis.js'), true)
   })
 
+  it('routes current sync and composite references', () => {
+    const sync = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'sync'])
+    const composite = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'composite'])
+
+    assert.strictEqual(sync.reference.files.some((filename) => {
+      return readFileSync(join(repositoryDirectory, filename), 'utf8').includes("kind: 'Sync'")
+    }), true)
+    assert.strictEqual(
+      composite.references.includes('packages/dd-trace/src/plugins/composite.js'),
+      true
+    )
+  })
+
+  it('follows split instrumentation sources', () => {
+    const packet = inspect(runRepositoryTool, 'http')
+    const rendered = runRepositoryTool(['--inspect', 'http'])
+
+    assert.deepStrictEqual(packet.targets.instrumentationDependencies, [
+      'packages/datadog-instrumentations/src/http/client.js',
+      'packages/datadog-instrumentations/src/http/server.js',
+    ])
+    assert.strictEqual(rendered.status, 0, rendered.stderr)
+    assert.match(
+      rendered.stdout,
+      /^Instrumentation dependencies:\n {2}packages\/datadog-instrumentations\/src\/http\/client\.js$/m
+    )
+    assert.match(rendered.stdout, /^ {2}packages\/datadog-instrumentations\/src\/http\/server\.js$/m)
+    assert.strictEqual(
+      packet.evidence.channelAnchors.some(anchor => anchor.startsWith(
+        'packages/datadog-instrumentations/src/http/client.js:'
+      )),
+      true
+    )
+    assert.strictEqual(
+      packet.evidence.channelAnchors.some(anchor => anchor.startsWith(
+        'packages/datadog-instrumentations/src/http/server.js:'
+      )),
+      true
+    )
+  })
+
   it('keeps package linkage narrow when an instrumentation uses a shared plugin', () => {
     const packet = inspect(runRepositoryTool, 'webdriverio')
 
@@ -913,6 +958,20 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(packet.packages[2].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
     assert.strictEqual(packet.packages[3].plugin, undefined)
     assert.deepStrictEqual(packet.targets.plugins, ['packages/datadog-plugin-mocha/src/index.js'])
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-instrumentations/test/webdriverio.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.tests.includes('integration-tests/webdriverio/webdriverio.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.registrations.workflows.some(filename => filename.startsWith(
+        '.github/workflows/test-optimization.yml:'
+      )),
+      true
+    )
     assert.strictEqual(
       packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/ci_plugin.js'),
       true
@@ -973,6 +1032,53 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     const rendered = runRepositoryTool(['--inspect', 'google-cloud-pubsub', '--mode', 'serverless'])
     assert.strictEqual(rendered.status, 0)
     assert.match(rendered.stdout, /^ {2}packages\/datadog-plugin-http\/src\/index\.js$/m)
+  })
+
+  it('finds instrumentation tests and every owning workflow', () => {
+    const packet = inspect(runRepositoryTool, 'crypto')
+    const nested = inspect(runRepositoryTool, 'path-to-regexp')
+
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-instrumentations/test/crypto.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      nested.targets.tests.includes('packages/datadog-instrumentations/test/path-to-regexp/index.spec.js'),
+      true
+    )
+    assert.strictEqual(
+      packet.targets.tests.includes('packages/datadog-plugin-crypto/test/integration-test/client.spec.js'),
+      true
+    )
+    assert.deepStrictEqual(
+      packet.registrations.workflows.map(filename => filename.replace(/:\d+$/, '')),
+      [
+        '.github/workflows/apm-integrations.yml',
+        '.github/workflows/instrumentation.yml',
+      ]
+    )
+  })
+
+  it('uses a serverless integration as the closest serverless reference', () => {
+    const reference = inspect(runRepositoryTool, 'new-cloud', [
+      '--mode',
+      'serverless',
+      '--traits',
+      'server',
+    ]).reference
+
+    assert.strictEqual(
+      ['azure-durable-functions', 'azure-functions'].includes(reference.integration),
+      true
+    )
+    assert.strictEqual(
+      reference.files.some(filename => filename.endsWith('/test/fixtures/package.json')),
+      true
+    )
+    assert.strictEqual(
+      reference.registrations.some(filename => filename.startsWith('.github/workflows/serverless.yml:')),
+      true
+    )
   })
 
   it('routes router integrations through their actual contract sources', () => {
