@@ -89,7 +89,6 @@ const failures = []
 
 /**
  * @typedef {object} Arguments
- * @property {string} root
  * @property {string} [inspect]
  * @property {string} [packageName]
  * @property {'add' | 'review' | 'debug' | 'serverless'} mode
@@ -133,19 +132,18 @@ const failures = []
  * @property {string} source
  */
 
-/**
- * @typedef {object} StaticRequire
- * @property {string} request
- * @property {number} line
- */
-
 /** @typedef {import('estree').TemplateElement & { value: { cooked: string } }} StaticTemplateElement */
+
+/** @typedef {import('estree').Node & { range: [number, number] }} RangedNode */
+
+/** @typedef {{ request: string, node: import('estree').CallExpression }} StaticRequire */
 
 /**
  * @typedef {object} IntegrationRegistrations
  * @property {Map<string, string>} hooks
  * @property {Map<string, string>} plugins
  * @property {string[]} pluginDirectories
+ * @property {string[]} publicIds
  */
 
 /**
@@ -166,7 +164,6 @@ const failures = []
  * @returns {Arguments}
  */
 function parseArguments (arguments_) {
-  let rootArgument
   let inspect
   let packageName
   let mode = 'review'
@@ -197,20 +194,14 @@ function parseArguments (arguments_) {
       traits = [...new Set(parsedTraits)]
     } else if (argument === '--json') {
       json = true
-    } else if (argument === '--root') {
-      rootArgument = arguments_[++i]
-      if (!rootArgument) throw new Error('--root requires a directory')
     } else if (argument.startsWith('-')) {
       throw new Error(`unknown option: ${argument}`)
-    } else if (inspect === undefined && rootArgument === undefined) {
-      rootArgument = argument
     } else {
       throw new Error(`unexpected argument: ${argument}`)
     }
   }
 
   return {
-    root: path.resolve(rootArgument ?? process.cwd()),
     inspect,
     packageName,
     mode,
@@ -227,7 +218,7 @@ try {
   console.error(escapeControlCharacters(error.message))
   process.exit(1)
 }
-const root = options.root
+const root = process.cwd()
 
 /** @type {Map<string, RegistryRegistration> | undefined} */
 let hookRegistrations
@@ -235,34 +226,15 @@ let hookRegistrations
 /** @type {Map<string, RegistryRegistration> | undefined} */
 let pluginRegistrations
 
+/** @type {Map<string, import('eslint').SourceCode | undefined>} */
+const sourceCodes = new Map()
+
 /**
  * @param {string} filename
  * @returns {string}
  */
 function read (filename) {
   return readFileSync(path.join(root, filename), 'utf8')
-}
-
-/**
- * @param {string} directory
- * @returns {string[]}
- */
-function listMarkdownFiles (directory) {
-  const files = []
-  const absoluteDirectory = path.join(root, directory)
-
-  if (!existsSync(absoluteDirectory)) return files
-
-  for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
-    const filename = path.join(directory, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...listMarkdownFiles(filename))
-    } else if (entry.isFile() && entry.name.endsWith('.md')) {
-      files.push(filename.replaceAll(path.sep, '/'))
-    }
-  }
-
-  return files
 }
 
 /**
@@ -281,7 +253,7 @@ function verifyInventory () {
   const expected = [...SKILL_TOKEN_BUDGETS.keys()].sort()
   const actual = []
   for (const directory of SKILL_DIRECTORIES) {
-    actual.push(...listMarkdownFiles(directory))
+    actual.push(...listRelativeFiles(directory, ['.md']))
   }
   actual.sort()
 
@@ -456,11 +428,7 @@ function existingPath (filename) {
  * @returns {string[]}
  */
 function compactPaths (filenames) {
-  const paths = []
-  for (const filename of filenames) {
-    if (filename !== undefined) paths.push(filename)
-  }
-  return paths
+  return [...new Set(filenames.filter(filename => filename !== undefined))]
 }
 
 /**
@@ -482,27 +450,22 @@ function findLines (filename, values) {
 
 /**
  * @param {string} filename
- * @param {string[]} values
- * @returns {string | undefined}
+ * @param {string[]} integrations
+ * @returns {string[]}
  */
-function findLine (filename, values) {
-  return findLines(filename, values)[0]
-}
-
-/**
- * @param {string} filename
- * @param {string} integration
- * @returns {string | undefined}
- */
-function findWorkflowLine (filename, integration) {
+function findWorkflowLines (filename, integrations) {
   const absoluteFilename = path.join(root, filename)
-  if (!existsSync(absoluteFilename)) return
+  if (!existsSync(absoluteFilename)) return []
 
   const lines = readFileSync(absoluteFilename, 'utf8').split('\n')
+  const locations = []
   for (let i = 0; i < lines.length; i++) {
     const plugins = lines[i].match(/\bPLUGINS:\s*['"]?([a-z0-9_|-]+)/)?.[1]
-    if (plugins?.split('|').includes(integration)) return `${filename}:${i + 1}`
+    if (plugins?.split('|').some(plugin => integrations.includes(plugin))) {
+      locations.push(`${filename}:${i + 1}`)
+    }
   }
+  return locations
 }
 
 /**
@@ -516,19 +479,25 @@ function isFile (filename) {
 
 /**
  * @param {string} filename
- * @returns {import('estree').Program | undefined}
+ * @returns {import('eslint').SourceCode | undefined}
  */
 function parseJavaScript (filename) {
-  if (!isFile(filename)) return
+  if (sourceCodes.has(filename)) return sourceCodes.get(filename)
 
-  const linter = new Linter()
-  linter.verify(read(filename), {
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'commonjs',
-    },
-  }, filename)
-  return linter.getSourceCode()?.ast
+  let sourceCode
+  if (isFile(filename)) {
+    const linter = new Linter()
+    linter.verify(read(filename), {
+      languageOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'commonjs',
+      },
+    }, filename)
+    sourceCode = linter.getSourceCode()
+  }
+
+  sourceCodes.set(filename, sourceCode)
+  return sourceCode
 }
 
 /**
@@ -551,12 +520,14 @@ function findStaticString (node) {
 }
 
 /**
- * @param {import('estree').Property} property
+ * @param {import('estree').Property | import('estree').PropertyDefinition | import('estree').MethodDefinition |
+ *   import('estree').MemberExpression} property
  * @returns {string | undefined}
  */
 function findPropertyName (property) {
-  if (!property.computed && property.key.type === 'Identifier') return property.key.name
-  return findStaticString(property.key)
+  const key = property.type === 'MemberExpression' ? property.property : property.key
+  if (!property.computed && key.type === 'Identifier') return key.name
+  return findStaticString(key)
 }
 
 /**
@@ -596,56 +567,6 @@ function findExportedObject (program) {
 }
 
 /**
- * @param {import('estree').ObjectExpression} object
- * @param {string} name
- * @returns {import('estree').Property | undefined}
- */
-function findObjectProperty (object, name) {
-  for (const property of object.properties) {
-    if (property.type === 'Property' && findPropertyName(property) === name) return property
-  }
-}
-
-/**
- * @param {import('estree').Node} node
- * @returns {StaticRequire[]}
- */
-function findNodeRequires (node) {
-  const requires = []
-  const queue = [node]
-  const visited = new WeakSet(queue)
-
-  for (let i = 0; i < queue.length; i++) {
-    const current = queue[i]
-    if (current.type === 'CallExpression' && current.callee.type === 'Identifier' &&
-        current.callee.name === 'require' && current.arguments[0]?.type !== 'SpreadElement') {
-      const request = current.arguments[0] && findStaticString(current.arguments[0])
-      if (request !== undefined) {
-        const location = /** @type {import('estree').SourceLocation} */ (current.loc)
-        requires.push({ request, line: location.start.line })
-      }
-    }
-
-    for (const [key, value] of Object.entries(current)) {
-      if (key === 'parent') continue
-
-      if (Array.isArray(value)) {
-        for (const child of value) {
-          if (child !== null && typeof child === 'object' && typeof child.type === 'string' && !visited.has(child)) {
-            visited.add(child)
-            queue.push(child)
-          }
-        }
-      } else if (value !== null && typeof value === 'object' && typeof value.type === 'string' && !visited.has(value)) {
-        visited.add(value)
-        queue.push(value)
-      }
-    }
-  }
-  return requires
-}
-
-/**
  * @param {string} filename
  * @param {import('estree').Property} property
  * @returns {string}
@@ -656,15 +577,26 @@ function findPropertyLocation (filename, property) {
 }
 
 /**
- * @param {string} source
- * @returns {string[]}
+ * @param {import('eslint').SourceCode} sourceCode
+ * @param {import('estree').Node} [scope]
+ * @returns {StaticRequire[]}
  */
-function findRequireRequests (source) {
-  const requests = []
-  for (const match of source.matchAll(/\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g)) {
-    requests.push(match[2])
+function findStaticRequires (sourceCode, scope = sourceCode.ast) {
+  const requires = []
+  const [scopeStart, scopeEnd] = /** @type {RangedNode} */ (scope).range
+  for (const step of sourceCode.traverse()) {
+    if (step.type !== 'visit' || step.phase !== 1) continue
+
+    const node = step.target
+    const [start, end] = /** @type {RangedNode} */ (node).range
+    if (start < scopeStart || end > scopeEnd || node.type !== 'CallExpression' ||
+        node.callee.type !== 'Identifier' || node.callee.name !== 'require' ||
+        node.arguments[0]?.type === 'SpreadElement') continue
+
+    const request = node.arguments[0] && findStaticString(node.arguments[0])
+    if (request !== undefined) requires.push({ request, node })
   }
-  return requests
+  return requires
 }
 
 /**
@@ -695,7 +627,7 @@ function findHookRegistrations () {
 
   const filename = 'packages/datadog-instrumentations/src/helpers/hooks.js'
   const registry = parseJavaScript(filename)
-  const object = registry && findExportedObject(registry)
+  const object = registry && findExportedObject(registry.ast)
   hookRegistrations = new Map()
   if (!object) return hookRegistrations
 
@@ -704,12 +636,13 @@ function findHookRegistrations () {
 
     const packageName = findPropertyName(property)
     const loader = property.value.type === 'ObjectExpression'
-      ? findObjectProperty(property.value, 'fn')?.value
+      ? property.value.properties.find(property => property.type === 'Property' &&
+        findPropertyName(property) === 'fn')?.value
       : property.value
     if (!packageName || (loader?.type !== 'ArrowFunctionExpression' && loader?.type !== 'FunctionExpression')) continue
 
     hookRegistrations.set(packageName, {
-      requests: findNodeRequires(loader).map(({ request }) => request),
+      requests: findStaticRequires(registry, loader).map(({ request }) => request),
       source: findPropertyLocation(filename, property),
     })
   }
@@ -724,7 +657,7 @@ function findPluginRegistrations () {
 
   const filename = 'packages/dd-trace/src/plugins/index.js'
   const registry = parseJavaScript(filename)
-  const object = registry && findExportedObject(registry)
+  const object = registry && findExportedObject(registry.ast)
   pluginRegistrations = new Map()
   if (!object) return pluginRegistrations
 
@@ -735,7 +668,7 @@ function findPluginRegistrations () {
     if (!packageName) continue
 
     pluginRegistrations.set(packageName, {
-      requests: findNodeRequires(property.value).map(({ request }) => request),
+      requests: findStaticRequires(registry, property.value).map(({ request }) => request),
       source: findPropertyLocation(filename, property),
     })
   }
@@ -792,10 +725,13 @@ function findIntegrationRegistrations (integration) {
     pluginDirectories.add(directory)
   }
 
+  const directories = [...pluginDirectories].sort()
   return {
     hooks,
     plugins,
-    pluginDirectories: [...pluginDirectories].sort(),
+    pluginDirectories: directories,
+    publicIds: [...new Set([integration, ...directories.map(directory =>
+      path.basename(directory).slice('datadog-plugin-'.length))])],
   }
 }
 
@@ -806,14 +742,15 @@ function findIntegrationRegistrations (integration) {
 function findRewriterRegistrations (integration) {
   const filename = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js'
   const target = resolveLocalSource(filename, `./${integration}`)
-  const program = parseJavaScript(filename)
-  if (!target || !program) return []
+  const sourceCode = parseJavaScript(filename)
+  if (!target || !sourceCode) return []
 
   const registrations = []
-  for (const entry of findNodeRequires(program)) {
-    if (resolveLocalSource(filename, entry.request) === target) {
-      registrations.push(`${filename}:${entry.line}`)
-    }
+  for (const { request, node } of findStaticRequires(sourceCode)) {
+    if (resolveLocalSource(filename, request) !== target) continue
+
+    const location = /** @type {import('estree').SourceLocation} */ (node.loc)
+    registrations.push(`${filename}:${location.start.line}`)
   }
   return registrations
 }
@@ -828,7 +765,7 @@ function findLatestVersion (packageName) {
 
   const dependencies = JSON.parse(read(filename)).dependencies ?? {}
   const value = dependencies[packageName]
-  const source = findLine(filename, [`"${packageName}"`])
+  const source = findLines(filename, [`"${packageName}"`])[0]
   if (typeof value === 'string' && source) return { value, source }
 }
 
@@ -870,7 +807,10 @@ function findContractSources (sources, pluginDirectories) {
 
   for (let i = 0; i < queue.length; i++) {
     const source = queue[i]
-    for (const request of findRequireRequests(read(source))) {
+    const sourceCode = parseJavaScript(source)
+    if (!sourceCode) continue
+
+    for (const { request } of findStaticRequires(sourceCode)) {
       const dependency = resolveLocalSource(source, request)
       if (!dependency || visited.has(dependency)) continue
 
@@ -916,8 +856,11 @@ function findPluginDependents (pluginDirectories) {
     if (selectedDirectories.has(directory)) continue
 
     for (const filename of listRelativeFiles(`${directory}/src`, SOURCE_SUFFIXES)) {
-      const requests = findRequireRequests(read(filename))
-      if (requests.some(request => {
+      const sourceCode = parseJavaScript(filename)
+      if (!sourceCode) continue
+
+      const requires = findStaticRequires(sourceCode)
+      if (requires.some(({ request }) => {
         const source = resolveLocalSource(filename, request)
         return source && pluginDirectories.some(selected => source.startsWith(`${selected}/src/`))
       })) {
@@ -963,10 +906,10 @@ function findChannelAnchors (filenames) {
 }
 
 /**
- * @param {string} integration
+ * @param {string[]} integrations
  * @returns {string[]}
  */
-function findCodeownersCoverage (integration) {
+function findCodeownersCoverage (integrations) {
   const filename = '.github/CODEOWNERS'
   if (!isFile(filename)) return []
 
@@ -974,7 +917,8 @@ function findCodeownersCoverage (integration) {
   const lines = read(filename).split('\n')
   for (let i = 0; i < lines.length; i++) {
     const pattern = lines[i].trim().split(/\s+/, 1)[0]
-    if (pattern.includes(`datadog-plugin-${integration}/`) || pattern === '/packages/datadog-plugin-*/') {
+    if (integrations.some(integration => pattern.includes(`datadog-plugin-${integration}/`)) ||
+        pattern === '/packages/datadog-plugin-*/') {
       locations.push(`${filename}:${i + 1}`)
     }
   }
@@ -982,14 +926,95 @@ function findCodeownersCoverage (integration) {
 }
 
 /**
- * @param {string} directory
- * @param {string[]} values
+ * @param {string[]} ids
+ */
+function findRegistrationLedger (ids) {
+  return {
+    types: findLines('index.d.ts', ids.map(id => `"${id}"`)),
+    v5Types: findLines('index.d.v5.ts', ids.map(id => `"${id}"`)),
+    docs: findLines('docs/API.md', ids.flatMap(id => [`id="${id}"`, `[${id}]`])),
+    docsTest: findLines('docs/test.ts', ids.flatMap(id => [`use('${id}'`, `use("${id}"`])),
+    codeowners: findCodeownersCoverage(ids),
+    workflows: [
+      ...findWorkflowLines('.github/workflows/apm-integrations.yml', ids),
+      ...findWorkflowLines('.github/workflows/serverless.yml', ids),
+    ],
+  }
+}
+
+/**
+ * @param {string[]} filenames
+ * @param {string[]} publicIds
  * @returns {string[]}
  */
-function findDirectoryLines (directory, values) {
+function findSchemaRegistrations (filenames, publicIds) {
+  const types = new Set()
+  const kinds = new Set()
+  const ids = new Set(publicIds)
+  const operations = new Set()
+  const coordinates = new Map([['type', types], ['kind', kinds], ['id', ids], ['operation', operations]])
+
+  for (const filename of filenames) {
+    const sourceCode = parseJavaScript(filename)
+    if (!sourceCode) continue
+
+    for (const step of sourceCode.traverse()) {
+      if (step.type !== 'visit' || step.phase !== 1) continue
+
+      const node = step.target
+      let name
+      let value
+      if (node.type === 'PropertyDefinition' && node.static) {
+        name = findPropertyName(node)
+        value = node.value ? findStaticString(node.value) : undefined
+      } else if (node.type === 'MethodDefinition' && node.static && node.kind === 'get' &&
+          node.value.body.body.length === 1) {
+        const statement = node.value.body.body[0]
+        name = findPropertyName(node)
+        value = statement.type === 'ReturnStatement' && statement.argument
+          ? findStaticString(statement.argument)
+          : undefined
+      } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          (findPropertyName(node.callee) === 'operationName' || findPropertyName(node.callee) === 'serviceName') &&
+          node.arguments[0]?.type === 'ObjectExpression') {
+        for (const property of node.arguments[0].properties) {
+          if (property.type !== 'Property') continue
+
+          name = findPropertyName(property)
+          value = findStaticString(property.value)
+          if (name !== 'operation' && value !== undefined) coordinates.get(name)?.add(value)
+        }
+        continue
+      }
+
+      if (value !== undefined) coordinates.get(name)?.add(value)
+    }
+  }
+
+  const schemaIds = new Set(ids)
+  for (const id of ids) {
+    for (const operation of operations) schemaIds.add(`${id}.${operation}`)
+  }
+
   const locations = []
-  for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
-    locations.push(...findLines(filename, values))
+  for (const version of ['v0', 'v1']) {
+    for (const type of [...types].sort()) {
+      const filename = `packages/dd-trace/src/service-naming/schemas/${version}/${type}.js`
+      const sourceCode = parseJavaScript(filename)
+      const schema = sourceCode && findExportedObject(sourceCode.ast)
+      if (!schema) continue
+
+      for (const kindProperty of schema.properties) {
+        if (kindProperty.type !== 'Property' || kindProperty.value.type !== 'ObjectExpression' ||
+            !kinds.has(findPropertyName(kindProperty))) continue
+
+        for (const idProperty of kindProperty.value.properties) {
+          if (idProperty.type === 'Property' && schemaIds.has(findPropertyName(idProperty))) {
+            locations.push(findPropertyLocation(filename, idProperty))
+          }
+        }
+      }
+    }
   }
   return locations
 }
@@ -1028,23 +1053,31 @@ function findReferences (mode, traits, hasRewriter) {
 function findClosestReference (integration, traits) {
   if (traits.length === 0) return
 
-  const directory = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
+  const isShimmer = traits.includes('shimmer')
+  const directory = isShimmer
+    ? 'packages/datadog-instrumentations/src'
+    : 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
   const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
   const requestedSource = requestedBase ? findTraitSource(requestedBase) : undefined
   let closest
   let closestScore = 0
 
   for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
+    if (isShimmer && path.posix.dirname(filename) !== directory) continue
+
     const candidate = path.basename(filename, path.extname(filename))
     if (candidate === 'index' || candidate === integration) continue
-    if (findRewriterRegistrations(candidate).length === 0) continue
 
     const source = read(filename)
+    if (isShimmer
+      ? !source.includes('datadog-shimmer') || findHookPackages(candidate).size === 0
+      : findRewriterRegistrations(candidate).length === 0) continue
+
     const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
     const contractSources = findContractSources(pluginSources, registrations.pluginDirectories)
-    let score = traits.includes('orchestrion') ? 1 : 0
+    let score = isShimmer || traits.includes('orchestrion') ? 1 : 0
     if (requestedSource && contractSources.includes(requestedSource)) score += 8
     if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
@@ -1060,6 +1093,7 @@ function findClosestReference (integration, traits) {
       pluginSources.find(filename => path.basename(filename) === 'index.js')
     const integrationTest = existingPath(`packages/datadog-plugin-${candidate}/test/index.spec.js`) ??
       tests.find(filename => path.basename(filename) === 'index.spec.js')
+    const ledger = findRegistrationLedger(registrations.publicIds)
     closest = {
       integration: candidate,
       files: compactPaths([
@@ -1072,13 +1106,7 @@ function findClosestReference (integration, traits) {
         registrations.hooks.get(moduleName),
         registrations.plugins.get(moduleName),
         findLatestVersion(moduleName)?.source,
-        findLine('index.d.ts', [`"${candidate}"`]),
-        findLine('index.d.v5.ts', [`"${candidate}"`]),
-        findLine('docs/API.md', [`id="${candidate}"`, `[${candidate}]`]),
-        findLine('docs/test.ts', [`use('${candidate}'`, `use("${candidate}"`]),
-        findCodeownersCoverage(candidate)[0],
-        findWorkflowLine('.github/workflows/apm-integrations.yml', candidate),
-        findWorkflowLine('.github/workflows/serverless.yml', candidate),
+        ...Object.values(ledger).flat(),
       ]),
     }
   }
@@ -1107,6 +1135,8 @@ function inspectIntegration (integration, packageName, mode, traits) {
   const dependents = findPluginDependents(packageRegistrations.pluginDirectories)
   const tests = listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES)
   const contractSources = findContractSources(plugins, packageRegistrations.pluginDirectories)
+  const { publicIds } = packageRegistrations
+  const ledger = findRegistrationLedger(publicIds)
   const channelSources = compactPaths([
     instrumentation,
     rewriter,
@@ -1114,11 +1144,6 @@ function inspectIntegration (integration, packageName, mode, traits) {
     ...dependents,
     ...contractSources,
   ])
-  const workflows = compactPaths([
-    findWorkflowLine('.github/workflows/apm-integrations.yml', integration),
-    findWorkflowLine('.github/workflows/serverless.yml', integration),
-  ])
-
   return {
     integration,
     mode,
@@ -1137,16 +1162,8 @@ function inspectIntegration (integration, packageName, mode, traits) {
     },
     registrations: {
       rewriter: findRewriterRegistrations(integration),
-      types: findLines('index.d.ts', [`"${integration}"`]),
-      v5Types: findLines('index.d.v5.ts', [`"${integration}"`]),
-      docs: findLines('docs/API.md', [`id="${integration}"`, `[${integration}]`]),
-      docsTest: findLines('docs/test.ts', [`use('${integration}'`, `use("${integration}"`]),
-      codeowners: findCodeownersCoverage(integration),
-      workflows,
-      schemas: findDirectoryLines('packages/dd-trace/src/service-naming/schemas', [
-        `'${integration}'`,
-        `"${integration}"`,
-      ]),
+      ...ledger,
+      schemas: findSchemaRegistrations([...plugins, ...contractSources], publicIds),
     },
     reference: findClosestReference(integration, traits),
     references: findReferences(mode, traits, rewriter !== undefined),
