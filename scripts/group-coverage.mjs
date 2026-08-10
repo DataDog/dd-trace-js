@@ -1,28 +1,26 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import istanbulLibCoverage from 'istanbul-lib-coverage'
-
-// Merges one workflow run's downloaded per-cell `coverage-*` artifacts into a single lcov file and a
-// single istanbul JSON file under `coverage-upload/<run-id>/`, scoped to that run alone. All Green
-// calls this as soon as a sibling workflow finishes, instead of waiting for every workflow to
-// complete before merging and uploading anything — the goal is for each workflow's coverage to reach
-// Datadog and Codecov shortly after that workflow finishes, in parallel with the rest still running.
+// Merges one workflow run's downloaded per-cell `coverage-*` artifacts into a single lcov file under
+// `coverage-upload/<run-id>/`, scoped to that run alone. All Green calls this as soon as a sibling
+// workflow finishes, instead of waiting for every workflow to complete before merging and uploading
+// anything — the goal is for each workflow's coverage to reach Datadog and Codecov shortly after that
+// workflow finishes, in parallel with the rest still running.
 //
-// Codecov reads branch/function coverage from istanbul's JSON; Datadog only ingests the lcov — see
-// `upload-coverage.mjs`. Both formats need a real per-file merge, not concatenation: every matrix
-// cell in a workflow run (each Node.js version, each plugin partition) writes its own complete
-// report, so a shared source file's coverage shows up once per cell. Concatenating lcov's `SF:`
-// blocks produces a report with duplicate `SF:` sections per file, which downstream lcov consumers
-// resolve by keeping only the last block for that file rather than summing across blocks — silently
-// discarding most of the branch/function data every earlier cell had recorded. A naive object merge
-// of istanbul's JSON has the same failure mode. Uploading either format unmerged across sessions has
-// the same problem one level up: Codecov's own cross-session merge has been observed overwriting
-// rather than summing a shared file's coverage when more than one session reports it, so every
-// format is merged down to one report per run before upload instead of relying on the backend to
-// reconcile per-session duplicates. `mergeLcov` sums `DA:`/`FNDA:`/`BRDA:` hit counts per file across
-// cells (the way `lcov --add-tracefile` does), and `mergeCoverageJson` uses
-// `istanbul-lib-coverage`'s `merge` to do the same for the JSON report.
+// Both Datadog and Codecov ingest lcov only — istanbul JSON support (which Codecov used to read
+// branch/function coverage from) was dropped: it doubled the merge cost on runs with many cells
+// (`istanbul-lib-coverage`'s merge is far slower than `mergeLcov`) for coverage the lcov format
+// doesn't carry (branch/function hit counts) — an acceptable trade-off. Merging is still required,
+// not concatenation: every matrix cell in a workflow run (each Node.js version, each plugin
+// partition) writes its own complete report, so a shared source file's coverage shows up once per
+// cell. Concatenating lcov's `SF:` blocks produces a report with duplicate `SF:` sections per file,
+// which downstream lcov consumers resolve by keeping only the last block for that file rather than
+// summing across blocks — silently discarding most of the coverage every earlier cell had recorded.
+// Uploading unmerged across sessions has the same problem one level up: Codecov's own cross-session
+// merge has been observed overwriting rather than summing a shared file's coverage when more than one
+// session reports it, so lcov is merged down to one report per run before upload instead of relying
+// on the backend to reconcile per-session duplicates. `mergeLcov` sums `DA:`/`FNDA:`/`BRDA:` hit
+// counts per file across cells, the way `lcov --add-tracefile` does.
 //
 // Per-integration/per-area flags were dropped: `.codecov.yml` only gates the separate
 // `master-coverage` flag (attached to every upload regardless of grouping), so a finer-grained flag
@@ -35,7 +33,6 @@ const ARTIFACT_PREFIX = 'coverage-'
 
 const REPORTS = new Map([
   ['lcov.info', 'lcov'],
-  ['coverage-final.json', 'json'],
 ])
 
 /**
@@ -231,44 +228,21 @@ function mergeLcov (reportPaths) {
 }
 
 /**
- * Sum per-statement/branch/function hit counts across every cell's istanbul JSON report, so a
- * source file exercised by more than one cell keeps every cell's coverage instead of only the last
- * report merged for that file.
- *
- * @param {string[]} reportPaths
- * @returns {object}
- */
-function mergeCoverageJson (reportPaths) {
-  const map = istanbulLibCoverage.createCoverageMap({})
-  for (const reportPath of reportPaths) {
-    map.merge(JSON.parse(readFileSync(reportPath, 'utf8')))
-  }
-  return map.toJSON()
-}
-
-/**
- * Merge a single workflow run's downloaded coverage reports into one lcov file and one istanbul
- * JSON file for upload.
+ * Merge a single workflow run's downloaded coverage reports into one lcov file for upload.
  *
  * @param {string|number} runId
  * @param {string} [inputDir]
  * @param {string} [outputDir]
- * @param {boolean} [skipJson] Skip merging the istanbul JSON reports — only Codecov reads them
- *   (see `upload-coverage.mjs`), and `istanbul-lib-coverage`'s merge is far slower than `mergeLcov`
- *   on a run with many cells, so a run whose Codecov upload already succeeded in a previous job
- *   attempt can skip this merge entirely instead of paying for it only to discard the result.
- * @returns {{ lcovDir: string|null, jsonDir: string|null }} Directories containing the merged
- *   `lcov.info` and `coverage-final.json`, each null if the run produced no report in that format
- *   (or, for `jsonDir`, if `skipJson` was set).
+ * @returns {{ lcovDir: string|null }} Directory containing the merged `lcov.info`, null if the run
+ *   produced no coverage report.
  */
-function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR, skipJson = false) {
+function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) {
   const files = collectCoverageFiles(join(inputDir, String(runId)), [], { runId: String(runId) })
-  if (files.length === 0) return { lcovDir: null, jsonDir: null }
+  if (files.length === 0) return { lcovDir: null }
 
   const { reportsByArtifact, artifacts } = planCoverageGroups(files)
   const reports = artifacts.flatMap(artifact => reportsByArtifact.get(artifact))
   const lcovReportPaths = reports.filter(r => r.format === 'lcov').map(r => r.reportPath)
-  const jsonReportPaths = skipJson ? [] : reports.filter(r => r.format === 'json').map(r => r.reportPath)
 
   let lcovDir = null
   if (lcovReportPaths.length > 0) {
@@ -277,14 +251,7 @@ function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR, 
     writeFileSync(join(lcovDir, 'lcov.info'), mergeLcov(lcovReportPaths))
   }
 
-  let jsonDir = null
-  if (jsonReportPaths.length > 0) {
-    jsonDir = join(outputDir, String(runId), 'json')
-    mkdirSync(jsonDir, { recursive: true })
-    writeFileSync(join(jsonDir, 'coverage-final.json'), JSON.stringify(mergeCoverageJson(jsonReportPaths)))
-  }
-
-  return { lcovDir, jsonDir }
+  return { lcovDir }
 }
 
-export { OUTPUT_DIR, mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups }
+export { OUTPUT_DIR, mergeLcov, mergeRunCoverage, planCoverageGroups }

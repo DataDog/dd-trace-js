@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { mergeCoverageJson, mergeLcov, mergeRunCoverage, planCoverageGroups } from './group-coverage.mjs'
+import { mergeLcov, mergeRunCoverage, planCoverageGroups } from './group-coverage.mjs'
 
 /**
  * One cell's discovered report set: one `lcov` entry per Node.js version the cell ran.
@@ -138,32 +138,6 @@ describe('group-coverage', () => {
     })
   })
 
-  describe('mergeCoverageJson', () => {
-    let dir
-
-    beforeEach(() => {
-      dir = mkdtempSync(join(tmpdir(), 'group-coverage-json-'))
-    })
-
-    afterEach(() => {
-      rmSync(dir, { force: true, recursive: true })
-    })
-
-    it('sums statement hit counts for the same file across reports', () => {
-      const a = join(dir, 'a.json')
-      const b = join(dir, 'b.json')
-      const statementMap = { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } } }
-      writeFileSync(a, JSON.stringify({
-        'shared.js': { path: 'shared.js', statementMap, fnMap: {}, branchMap: {}, s: { 0: 1 }, f: {}, b: {} },
-      }))
-      writeFileSync(b, JSON.stringify({
-        'shared.js': { path: 'shared.js', statementMap, fnMap: {}, branchMap: {}, s: { 0: 2 }, f: {}, b: {} },
-      }))
-      const merged = mergeCoverageJson([a, b])
-      assert.equal(merged['shared.js'].s[0], 3)
-    })
-  })
-
   describe('mergeRunCoverage', () => {
     let dir
 
@@ -182,55 +156,22 @@ describe('group-coverage', () => {
       mkdirSync(cellDir, { recursive: true })
       writeFileSync(join(cellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
 
-      const { lcovDir, jsonDir } = mergeRunCoverage('42', input, output)
+      const { lcovDir } = mergeRunCoverage('42', input, output)
 
       assert.equal(lcovDir, join(output, '42', 'lcov'))
-      assert.equal(jsonDir, null)
       assert.equal(
         readFileSync(join(lcovDir, 'lcov.info'), 'utf8'),
         'SF:a.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n'
       )
     })
 
-    it('merges the given run\'s json cells into <output>/<runId>/json/coverage-final.json', () => {
-      const input = join(dir, 'coverage-results')
-      const output = join(dir, 'coverage-upload')
-      const cellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
-      mkdirSync(cellDir, { recursive: true })
-      const statementMap = { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } } }
-      writeFileSync(join(cellDir, 'coverage-final.json'), JSON.stringify({
-        'a.js': { path: 'a.js', statementMap, fnMap: {}, branchMap: {}, s: { 0: 1 }, f: {}, b: {} },
-      }))
-
-      const { lcovDir, jsonDir } = mergeRunCoverage('42', input, output)
-
-      assert.equal(lcovDir, null)
-      assert.equal(jsonDir, join(output, '42', 'json'))
-      assert.equal(JSON.parse(readFileSync(join(jsonDir, 'coverage-final.json'), 'utf8'))['a.js'].s[0], 1)
-    })
-
-    it('returns null for both directories when the run produced no coverage', () => {
+    it('returns null when the run produced no coverage', () => {
       const input = join(dir, 'coverage-results')
       mkdirSync(input, { recursive: true })
       assert.deepEqual(
         mergeRunCoverage('42', input, join(dir, 'coverage-upload')),
-        { lcovDir: null, jsonDir: null }
+        { lcovDir: null }
       )
-    })
-
-    it('skips the json merge when skipJson is set, but still merges lcov', () => {
-      const input = join(dir, 'coverage-results')
-      const output = join(dir, 'coverage-upload')
-      const cellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
-      mkdirSync(cellDir, { recursive: true })
-      writeFileSync(join(cellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
-      writeFileSync(join(cellDir, 'coverage-final.json'), JSON.stringify({}))
-
-      const { lcovDir, jsonDir } = mergeRunCoverage('42', input, output, true)
-
-      assert.equal(lcovDir, join(output, '42', 'lcov'))
-      assert.equal(jsonDir, null)
-      assert.equal(existsSync(join(output, '42', 'json')), false)
     })
 
     it('ignores other runs\' cells', () => {
@@ -241,7 +182,7 @@ describe('group-coverage', () => {
 
       assert.deepEqual(
         mergeRunCoverage('42', input, join(dir, 'coverage-upload')),
-        { lcovDir: null, jsonDir: null }
+        { lcovDir: null }
       )
       assert.equal(existsSync(join(dir, 'coverage-upload', '42')), false)
     })
