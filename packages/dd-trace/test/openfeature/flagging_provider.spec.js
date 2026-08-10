@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -10,6 +11,9 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 
 describe('FlaggingProvider', () => {
+  const fixtureRoot = path.join(__dirname, 'ffe-system-test-data')
+  const fixtureCaseDir = path.join(fixtureRoot, 'evaluation-cases')
+
   let FlaggingProvider
   let mockTracer
   let mockConfig
@@ -286,4 +290,135 @@ describe('FlaggingProvider', () => {
       )
     })
   })
+
+  describe('canonical FFE fixtures', () => {
+    const fixtureCases = loadFixtureCases()
+
+    for (const { fileName, index, testCase } of fixtureCases) {
+      it(`should evaluate ${fileName}[${index}]`, async () => {
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+        provider.setConfiguration(loadUfc())
+
+        const details = await evaluateDetails(provider, testCase)
+
+        assert.deepStrictEqual(details.value, testCase.result.value)
+        assert.strictEqual(details.reason, testCase.result.reason)
+        if ('variant' in testCase.result) {
+          assert.strictEqual(details.variant, testCase.result.variant)
+        }
+      })
+    }
+  })
+
+  it('returns PARSE_ERROR when a variant value violates the declared flag type', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
+
+    const details = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(details.value, 0)
+    assert.strictEqual(details.reason, 'ERROR')
+    assert.strictEqual(details.errorCode, 'PARSE_ERROR')
+    sinon.assert.notCalled(mockChannel.publish)
+  })
+
+  it('preserves TYPE_MISMATCH when the requested type differs from the flag type', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
+
+    const details = await provider.resolveStringEvaluation(
+      'invalid-integer-flag',
+      'fallback',
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(details.value, 'fallback')
+    assert.strictEqual(details.reason, 'ERROR')
+    assert.strictEqual(details.errorCode, 'TYPE_MISMATCH')
+  })
+
+  it('revalidates variant types when the configuration changes', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
+
+    const invalidDetails = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+    assert.strictEqual(invalidDetails.errorCode, 'PARSE_ERROR')
+
+    provider.setConfiguration(integerFlagConfiguration(1))
+    const validDetails = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(validDetails.value, 1)
+    assert.strictEqual(validDetails.reason, 'STATIC')
+    assert.strictEqual(validDetails.errorCode, undefined)
+  })
+
+  function loadUfc () {
+    return JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'ufc-config.json'), 'utf8'))
+  }
+
+  function loadFixtureCases () {
+    const fixtureFiles = fs.readdirSync(fixtureCaseDir).filter(file => file.endsWith('.json')).sort()
+    assert.ok(fixtureFiles.length > 0, 'FFE fixture submodule is missing or empty')
+    return fixtureFiles.flatMap(fileName => {
+      const testCases = JSON.parse(fs.readFileSync(path.join(fixtureCaseDir, fileName), 'utf8'))
+      return testCases.map((testCase, index) => ({ fileName, index, testCase }))
+    })
+  }
+
+  function integerFlagConfiguration (value) {
+    return {
+      flags: {
+        'invalid-integer-flag': {
+          key: 'invalid-integer-flag',
+          enabled: true,
+          variationType: 'INTEGER',
+          variations: {
+            on: { key: 'on', value },
+            off: { key: 'off', value: 0 },
+          },
+          allocations: [{
+            key: 'default-allocation',
+            rules: [],
+            splits: [{ variationKey: 'on', shards: [] }],
+            doLog: true,
+          }],
+        },
+      },
+    }
+  }
+
+  async function evaluateDetails (provider, testCase) {
+    const context = { targetingKey: testCase.targetingKey, ...testCase.attributes }
+    const logger = { error () {}, warn () {}, info () {}, debug () {} }
+
+    if (testCase.variationType === 'BOOLEAN') {
+      return provider.resolveBooleanEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'STRING') {
+      return provider.resolveStringEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'INTEGER' || testCase.variationType === 'NUMERIC') {
+      return provider.resolveNumberEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    if (testCase.variationType === 'JSON') {
+      return provider.resolveObjectEvaluation(testCase.flag, testCase.defaultValue, context, logger)
+    }
+    throw new Error(`Unsupported variation type: ${testCase.variationType}`)
+  }
 })
