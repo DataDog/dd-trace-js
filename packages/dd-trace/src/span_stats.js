@@ -14,8 +14,10 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+const id = require('./id')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
+const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -130,9 +132,6 @@ class SpanAggKey {
     } else {
       this.rpcStatusCode = ''
     }
-
-    this.parentId = span.parent_id
-    // peer_tags isn't aggregated in the legacy v0.6/stats export here either; mirror it in both once added.
   }
 
   toString () {
@@ -167,8 +166,9 @@ class SpanBuckets extends Map {
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
     const baseKey = aggKey.toString()
-    if (this.#includeTraceRoot && aggKey.parentId !== undefined && aggKey.parentId !== null) {
-      aggKey.isTraceRoot = aggKey.parentId.toString(10) === '0'
+    const parentId = span.parent_id
+    if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
+      aggKey.isTraceRoot = parentId.equals(ZERO_ID)
     }
     const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 

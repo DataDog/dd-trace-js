@@ -80,6 +80,15 @@ function initializeOpenTelemetryMetrics (config) {
   metrics.setGlobalMeterProvider(meterProvider)
 }
 
+/**
+ * @param {Record<string, unknown>} [tags]
+ * @param {object} [options]
+ * @param {boolean} [options.reportHostname]
+ * @param {string} [options.service]
+ * @param {string} [options.env]
+ * @param {string} [options.serviceVersion]
+ * @returns {import('@opentelemetry/api').Attributes}
+ */
 function buildResourceAttributes (tags, { reportHostname, service, env, serviceVersion } = {}) {
   const attrs = {
     'telemetry.sdk.name': 'datadog',
