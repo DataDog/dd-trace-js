@@ -491,7 +491,9 @@ function registerDdTraceHooks (
   }
 
   if (manualPlugin.detected) {
-    enableInteractiveRunEvents(config)
+    if (manualPlugin.afterRunHandler) {
+      enableInteractiveRunEvents(config)
+    }
     registerAfterSpecHandlers(on, userAfterSpecHandlers)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)

@@ -2065,6 +2065,40 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      it('does not enable interactive run events for a no-op manual plugin', () => {
+        const projectRoot = createProjectRoot()
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('task', taskHandler)
+            },
+          },
+        }
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents(() => {}, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+        assert.deepStrictEqual(warnings, [])
+      })
+
       for (const position of ['before', 'after']) {
         it(`finalizes with the original error from a handler registered ${position} Datadog`, async () => {
           const projectRoot = createProjectRoot()
@@ -2123,6 +2157,8 @@ if (requestedVersion === 'latest' &&
         const projectRoot = createProjectRoot()
         const userHandler = sinon.stub().returns({ path: 'updated.png' })
         const datadogHandler = sinon.stub()
+        const datadogAfterRunHandler = sinon.stub()
+        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
         const taskHandler = {
           'dd:testSuiteStart': sinon.stub(),
           'dd:beforeEach': sinon.stub(),
@@ -2138,6 +2174,7 @@ if (requestedVersion === 'latest' &&
             setupNodeEvents (on) {
               on('after:screenshot', userHandler)
               on('after:screenshot', datadogHandler)
+              on('after:run', datadogAfterRunHandler)
               on('task', taskHandler)
             },
           },
@@ -2175,6 +2212,7 @@ if (requestedVersion === 'latest' &&
 
         assert.strictEqual(userHandler.calledOnceWithExactly(details), true)
         assert.strictEqual(datadogHandler.calledOnceWithExactly({ path: 'updated.png' }), true)
+        sinon.assert.calledOnceWithExactly(datadogAfterRunHandler, {})
       })
     })
 
