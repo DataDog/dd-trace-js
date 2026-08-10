@@ -65,6 +65,7 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
 const runnerEndHandlers = new WeakMap()
+const runnerFailuresAdjusted = new WeakSet()
 const wrappedRunnerEndEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
@@ -294,10 +295,10 @@ function getOnStartHandler (frameworkVersion) {
 /**
  * @param {boolean} isParallel
  * @param {() => void} onDone
- * @returns {(frameworkError?: unknown) => void}
+ * @returns {(frameworkError?: unknown, onFrameworkErrorDone?: () => void) => void}
  */
 function getOnEndHandler (isParallel, onDone) {
-  return function (frameworkError) {
+  return function (frameworkError, onFrameworkErrorDone) {
     let status = 'pass'
     let error = frameworkError
     if (this.stats) {
@@ -307,17 +308,6 @@ function getOnEndHandler (isParallel, onDone) {
       }
     } else if (this.failures !== 0) {
       status = 'fail'
-    }
-
-    adjustRunnerFailuresForTestOptimization(this, config)
-
-    // Recompute status after EFD and quarantine adjustments have reduced failure counts
-    if (status === 'fail') {
-      if (this.stats) {
-        status = this.stats.failures === 0 ? 'pass' : 'fail'
-      } else {
-        status = this.failures === 0 ? 'pass' : 'fail'
-      }
     }
 
     if (frameworkError) {
@@ -368,7 +358,10 @@ function getOnEndHandler (isParallel, onDone) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
       isFrameworkError: !!frameworkError,
-    }, onDone)
+    }, () => {
+      onDone()
+      onFrameworkErrorDone?.()
+    })
 
     logTestOptimizationSummary({
       attemptToFixExecutions,
@@ -380,8 +373,21 @@ function getOnEndHandler (isParallel, onDone) {
 }
 
 /**
+ * Applies Test Optimization failure suppression once per runner execution.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function adjustRunnerFailuresOnce (runner) {
+  if (runnerFailuresAdjusted.has(runner)) return
+
+  runnerFailuresAdjusted.add(runner)
+  adjustRunnerFailuresForTestOptimization(runner, config)
+}
+
+/**
  * Runs Datadog's end handler after Mocha's listeners, even when a reporter throws,
- * and then preserves whichever error Mocha originally exposed.
+ * and then propagates whichever error Mocha originally exposed after finalization.
  *
  * @param {Function} Runner
  * @returns {void}
@@ -405,14 +411,29 @@ function wrapRunnerEndEmit (Runner) {
       frameworkError = error
     }
 
-    try {
-      endHandler.call(this, frameworkError)
-    } catch (finalizerError) {
-      if (!frameworkError) throw finalizerError
-      log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
+    adjustRunnerFailuresOnce(this)
+
+    if (frameworkError) {
+      let hasPropagatedFrameworkError = false
+      const propagateFrameworkError = () => {
+        if (hasPropagatedFrameworkError) return
+
+        hasPropagatedFrameworkError = true
+        process.removeListener('uncaughtException', this.uncaught)
+        process.nextTick(() => { throw frameworkError })
+      }
+
+      try {
+        endHandler.call(this, frameworkError, propagateFrameworkError)
+      } catch (finalizerError) {
+        log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
+        propagateFrameworkError()
+      }
+
+      return result
     }
 
-    if (frameworkError) throw frameworkError
+    endHandler.call(this)
     return result
   })
 }
@@ -760,7 +781,11 @@ addHook({
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
-    args[0] = onRunDone
+    runnerFailuresAdjusted.delete(this)
+    args[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      onRunDone(this.failures)
+    }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
@@ -778,6 +803,7 @@ addHook({
     let hasFinishedRun = false
     let endRunner
     let endError
+    let onFrameworkErrorDone
 
     function updateRootTestForFinalAttempt (test) {
       if (!test._retriedTest) return
@@ -795,7 +821,7 @@ addHook({
       if (hasFinishedRun) return
       if (hasEnded && pendingRootFinalizations === 0) {
         hasFinishedRun = true
-        onEnd.call(endRunner, endError)
+        onEnd.call(endRunner, endError, onFrameworkErrorDone)
       }
     }
 
@@ -878,10 +904,11 @@ addHook({
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
-    runnerEndHandlers.set(this, function (frameworkError) {
+    runnerEndHandlers.set(this, function (frameworkError, frameworkErrorDone) {
       hasEnded = true
       endRunner = this
       endError = frameworkError
+      onFrameworkErrorDone = frameworkErrorDone
       finishRunIfReady()
     })
 
@@ -1169,7 +1196,11 @@ addHook({
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
-    arguments[0] = onRunDone
+    runnerFailuresAdjusted.delete(this)
+    arguments[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      onRunDone(this.failures)
+    }
 
     this.once('start', getOnStartHandler(frameworkVersion))
     runnerEndHandlers.set(this, getOnEndHandler(true, onFlushDone))

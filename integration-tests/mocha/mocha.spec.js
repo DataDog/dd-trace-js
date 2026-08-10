@@ -246,6 +246,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         env: getCiVisAgentlessConfig(receiver.port),
       }
     )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
     const eventsPromise = receiver.gatherPayloadsUntilChildExit(
       childProcess,
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
@@ -262,10 +265,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       { hardTimeout: 20_000 }
     )
 
-    await Promise.all([
+    const [[exitCode]] = await Promise.all([
       once(childProcess, 'exit'),
       eventsPromise,
     ])
+    assert.match(testOutput, /custom Mocha reporter failed/)
+    assert.notStrictEqual(exitCode, 0, testOutput)
   })
 
   it('can run tests and report tests with the APM protocol (old agents)', (done) => {
