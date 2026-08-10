@@ -218,6 +218,21 @@ describe('group-coverage', () => {
       )
     })
 
+    it('skips the json merge when skipJson is set, but still merges lcov', () => {
+      const input = join(dir, 'coverage-results')
+      const output = join(dir, 'coverage-upload')
+      const cellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
+      mkdirSync(cellDir, { recursive: true })
+      writeFileSync(join(cellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
+      writeFileSync(join(cellDir, 'coverage-final.json'), JSON.stringify({}))
+
+      const { lcovDir, jsonDir } = mergeRunCoverage('42', input, output, true)
+
+      assert.equal(lcovDir, join(output, '42', 'lcov'))
+      assert.equal(jsonDir, null)
+      assert.equal(existsSync(join(output, '42', 'json')), false)
+    })
+
     it('ignores other runs\' cells', () => {
       const input = join(dir, 'coverage-results')
       const otherCellDir = join(input, '7', 'coverage-appsec-express__job-0', 'node-20-x')
