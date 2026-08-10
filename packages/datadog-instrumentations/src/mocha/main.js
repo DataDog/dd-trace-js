@@ -977,14 +977,13 @@ addHook({
       },
     }))
 
-    this.on('fail', getOnFailHandler(true, config))
-
-    this.on('fail', function (testOrHook) {
+    this.prependListener('fail', function (testOrHook) {
       if (testOrHook.type !== 'hook') return
       const test = testOrHook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
     })
+    this.prependListener('fail', getOnFailHandler(true, config))
 
     this.prependListener('pending', getOnPendingHandler())
 

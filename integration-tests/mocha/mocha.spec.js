@@ -233,11 +233,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  for (const reporterEvent of ['end', 'start', 'pass', 'pending', 'test end', 'hook end', 'suite end']) {
+  for (const reporterEvent of ['end', 'start', 'fail', 'pass', 'pending', 'test end', 'hook end', 'suite end']) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
       let reporterTestFile = './ci-visibility/mocha-plugin-tests/passing.js'
-      if (reporterEvent === 'hook end') {
+      if (reporterEvent === 'fail') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/failing.js'
+      } else if (reporterEvent === 'hook end') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
       } else if (reporterEvent === 'pending') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
@@ -273,6 +275,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+          }
+          if (reporterEvent === 'fail') {
+            const testEvent = events.find(event =>
+              event.type === 'test' && event.content.meta[TEST_NAME] === 'mocha-test-fail can fail'
+            )
+            assert.ok(testEvent, 'expected failed test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testEvent.content.error, 1)
+            assert.match(testEvent.content.meta[ERROR_MESSAGE], /Expected values to be strictly equal/)
+            assert.doesNotMatch(testEvent.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
           if (reporterEvent === 'test end' || reporterEvent === 'hook end' || reporterEvent === 'pending') {
             let expectedTestName = 'mocha-test-pass-two can pass'

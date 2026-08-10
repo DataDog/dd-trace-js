@@ -29,6 +29,14 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 let activeBufferSize = 0
 
 /**
+ * @param {AbortSignal} signal
+ * @returns {Error}
+ */
+function getAbortError (signal) {
+  return signal.reason || Object.assign(new Error('Request aborted'), { code: 'ABORT_ERR' })
+}
+
+/**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
@@ -38,6 +46,9 @@ function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
+
+  const { signal } = options
+  if (signal?.aborted) return callback(getAbortError(signal))
 
   if (options.url) {
     const url = parseUrl(options.url)
@@ -67,17 +78,40 @@ function request (data, options, callback) {
 
   if (data instanceof Readable) {
     const chunks = []
+    let settled = false
 
-    data
-      .on('data', (data) => {
-        chunks.push(data)
-      })
-      .on('end', () => {
-        request(Buffer.concat(chunks), options, callback)
-      })
-      .on('error', (err) => {
-        callback(err)
-      })
+    const cleanup = () => {
+      data.removeListener('data', onData)
+      data.removeListener('end', onEnd)
+      data.removeListener('error', onError)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const onData = chunk => chunks.push(chunk)
+    const onEnd = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      request(Buffer.concat(chunks), options, callback)
+    }
+    const onError = error => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback(error)
+    }
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      data.destroy()
+      callback(getAbortError(signal))
+    }
+
+    data.on('data', onData)
+    data.once('end', onEnd)
+    data.once('error', onError)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
 
     return
   }
@@ -176,9 +210,7 @@ function request (data, options, callback) {
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
-    if (options.signal?.aborted) {
-      return callback(options.signal.reason || Object.assign(new Error('Request aborted'), { code: 'ABORT_ERR' }))
-    }
+    if (signal?.aborted) return callback(getAbortError(signal))
 
     if (!request.writable) {
       if (options.deadline !== undefined && Date.now() < options.deadline) {

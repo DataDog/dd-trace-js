@@ -242,6 +242,63 @@ describe('request', function () {
     })
   })
 
+  it('does not buffer a readable body when its AbortSignal is already aborted', () => {
+    const abortController = new AbortController()
+    const error = new Error('final flush expired')
+    const body = new stream.PassThrough()
+    const callback = sinon.spy()
+    abortController.abort(error)
+
+    request(body, {
+      method: 'PUT',
+      path: '/path',
+      signal: abortController.signal,
+    }, callback)
+
+    sinon.assert.calledOnceWithExactly(callback, error)
+    assert.strictEqual(body.listenerCount('data'), 0)
+    assert.strictEqual(body.listenerCount('end'), 0)
+    assert.strictEqual(body.listenerCount('error'), 0)
+  })
+
+  it('stops buffering a readable body when its AbortSignal aborts', () => {
+    const abortController = new AbortController()
+    const error = new Error('final flush expired')
+    const body = new stream.PassThrough()
+    const callback = sinon.spy()
+
+    request(body, {
+      method: 'PUT',
+      path: '/path',
+      signal: abortController.signal,
+    }, callback)
+    body.write('partial body')
+    abortController.abort(error)
+
+    sinon.assert.calledOnceWithExactly(callback, error)
+    assert.strictEqual(body.destroyed, true)
+    assert.strictEqual(body.listenerCount('data'), 0)
+    assert.strictEqual(body.listenerCount('end'), 0)
+    assert.strictEqual(body.listenerCount('error'), 0)
+  })
+
+  it('preserves errors from a readable body while buffering it', () => {
+    const error = new Error('body stream failed')
+    const body = new stream.PassThrough()
+    const callback = sinon.spy()
+
+    request(body, {
+      method: 'PUT',
+      path: '/path',
+    }, callback)
+    body.emit('error', error)
+
+    sinon.assert.calledOnceWithExactly(callback, error)
+    assert.strictEqual(body.listenerCount('data'), 0)
+    assert.strictEqual(body.listenerCount('end'), 0)
+    assert.strictEqual(body.listenerCount('error'), 0)
+  })
+
   it('settles once when a response is truncated', async () => {
     /**
      * @param {import('node:http').IncomingMessage} incoming

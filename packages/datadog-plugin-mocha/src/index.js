@@ -541,6 +541,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
+      this._finishPendingTestSuiteSpans()
       this.tracer._exporter.flush(onDone)
     })
 
@@ -758,10 +759,7 @@ class MochaPlugin extends CiPlugin {
           }
         }
 
-        for (const { span, finishTime } of this._pendingTestSuiteSpans) {
-          span.finish(finishTime)
-        }
-        this._pendingTestSuiteSpans = []
+        this._finishPendingTestSuiteSpans()
 
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
@@ -828,6 +826,18 @@ class MochaPlugin extends CiPlugin {
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
+  }
+
+  /**
+   * Finishes suites retained for a later framework finalization event.
+   *
+   * @returns {void}
+   */
+  _finishPendingTestSuiteSpans () {
+    for (const { span, finishTime } of this._pendingTestSuiteSpans) {
+      span.finish(finishTime)
+    }
+    this._pendingTestSuiteSpans = []
   }
 
   /**
