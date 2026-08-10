@@ -6,6 +6,10 @@ const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
+  SPAN_KIND,
+  NAME,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
 } = require('./constants/tags')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
@@ -294,6 +298,76 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+// The `x-datadog-tags` tagset encoder rejects commas (the entry delimiter) and any byte
+// outside 0x20-0x7E, and a raise there drops the ENTIRE header (taking ml_app,
+// llmobs_trace_id, parent_id, sampling with it). An agent name is arbitrary user text, so it
+// must be skipped rather than sanitized when unsafe: only the digit-safe id then propagates and
+// the backend resolves the real name by span id. `=` is legal in tagset values (illegal only in
+// keys), so a name containing `=` is safe and must not be dropped.
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function agentNameWireSafe (name) {
+  // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
+  if (Buffer.byteLength(name, 'utf8') > 256) return false
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code < 0x20 || code > 0x7E || code === 0x2C /* comma */) return false
+  }
+  return true
+}
+
+/**
+ * Resolve the nearest agent that a *child* of `span` should be attributed to.
+ *
+ * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
+ * already resolved its own nearest agent at registration, so the child inherits that with a
+ * single lookup rather than walking the ancestor chain. An agent never attributes itself.
+ *
+ * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
+ * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
+ * @returns {{ name: string | undefined, spanId: string | undefined }}
+ */
+function resolveAgentAttribution (tags, span) {
+  if (!tags) return { name: undefined, spanId: undefined }
+  if (tags[SPAN_KIND] === 'agent') {
+    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+  }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
+}
+
+/**
+ * Removes all `key=value` entries for the given key from a comma-separated tagset string.
+ *
+ * @param {string} tags - Existing tagset string (may be empty).
+ * @param {string} key
+ * @returns {string}
+ */
+function stripTagsetEntry (tags, key) {
+  if (!tags.includes(key)) return tags
+  return tags.split(',').filter(entry => !entry.startsWith(`${key}=`)).join(',')
+}
+
+/**
+ * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
+ * truthy, passes the optional `safeguard` predicate, and fits within `maxTagSetLength`. Returns
+ * the original `tags` unchanged when the value is absent, unsafe, or would overflow the budget.
+ *
+ * @param {string} tags - Existing tagset string (may be empty).
+ * @param {string} key
+ * @param {string | undefined} value
+ * @param {((v: string) => boolean) | null} [safeguard]
+ * @param {number} [maxTagSetLength]
+ * @returns {string}
+ */
+function appendOptionalPropagatedTag (tags, key, value, safeguard, maxTagSetLength) {
+  if (!value || (safeguard && !safeguard(value))) return tags
+  const entry = `${tags ? ',' : ''}${key}=${value}`
+  if (maxTagSetLength != null && tags.length + entry.length > maxTagSetLength) return tags
+  return `${tags}${entry}`
+}
+
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -443,6 +517,8 @@ function formatAudioPart (data, mimeType) {
 }
 
 module.exports = {
+  agentNameWireSafe,
+  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -450,6 +526,8 @@ module.exports = {
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
   formatAudioPart,
+  resolveAgentAttribution,
+  stripTagsetEntry,
   validateCostTags,
   validateKind,
   getFunctionArguments,

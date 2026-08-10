@@ -54,6 +54,7 @@ const {
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
+  parseProvidedContextValue,
   setProvidedContext,
   getVitestTestProperties,
 } = require('./vitest-util')
@@ -1451,7 +1452,7 @@ function getMainProcessProvidedContext (ctx) {
     const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
 
     return {
-      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+      testPropertiesByFilepath: parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath) || {},
     }
   } catch {
     return {

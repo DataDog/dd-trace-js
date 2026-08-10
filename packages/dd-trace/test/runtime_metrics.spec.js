@@ -1090,12 +1090,12 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     createObservableUpDownCounter: makeFactory('updowncounter'),
     createObservableCounter: makeFactory('observable-counter'),
     createHistogram: makeFactory('histogram'),
-    addBatchObservableCallback (cb, observables) {
-      batchCallbacks.push({ cb, observables })
+    addBatchObservableCallback (observeBatch, observables) {
+      batchCallbacks.push({ observeBatch, observables })
     },
-    removeBatchObservableCallback (cb) {
-      const idx = batchCallbacks.findIndex(r => r.cb === cb)
-      if (idx !== -1) batchCallbacks.splice(idx, 1)
+    removeBatchObservableCallback (observeBatch) {
+      const index = batchCallbacks.findIndex(registration => registration.observeBatch === observeBatch)
+      if (index !== -1) batchCallbacks.splice(index, 1)
     },
   }
 
@@ -1129,9 +1129,9 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
 
   function fireBatchCallbacks () {
     const observed = new Map()
-    for (const { cb, observables } of batchCallbacks) {
+    for (const { observeBatch, observables } of batchCallbacks) {
       const allowed = new Set(observables)
-      cb({
+      observeBatch({
         observe: (instrument, value, attrs = {}) => {
           if (!allowed.has(instrument)) return
           if (!observed.has(instrument)) observed.set(instrument, [])
