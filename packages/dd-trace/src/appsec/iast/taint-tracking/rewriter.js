@@ -101,10 +101,9 @@ function getCompileMethodFn (compileMethod) {
       return compileMethod.apply(this, [content, filename])
     }
 
-    let contentToCompile = content
-
     // TODO when we have CJS support for orchestrion and taint-tracking, add
     // them here as appropriate
+    let rewrittenContent
     try {
       const rewritten = rewriter.rewrite(content, filename, ['iast'])
 
@@ -114,13 +113,11 @@ function getCompileMethodFn (compileMethod) {
         hardcodedSecretCh.publish(rewritten.literalsResult)
       }
 
-      if (rewritten?.content) {
-        contentToCompile = rewritten.content
-      }
+      rewrittenContent = rewritten?.content
     } catch (e) {
       log.error('Error rewriting file %s', filename, e)
     }
-    return compileMethod.apply(this, [contentToCompile, filename])
+    return compileMethod.apply(this, [rewrittenContent || content, filename])
   }
 
   const shim = function (...args) {
