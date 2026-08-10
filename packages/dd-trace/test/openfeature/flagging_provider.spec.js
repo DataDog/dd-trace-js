@@ -310,6 +310,41 @@ describe('FlaggingProvider', () => {
     }
   })
 
+  it('returns PARSE_ERROR when a variant value violates the declared flag type', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration({
+      flags: {
+        'invalid-integer-flag': {
+          key: 'invalid-integer-flag',
+          enabled: true,
+          variationType: 'INTEGER',
+          variations: {
+            on: { key: 'on', value: 'not-an-integer' },
+            off: { key: 'off', value: 0 },
+          },
+          allocations: [{
+            key: 'default-allocation',
+            rules: [],
+            splits: [{ variationKey: 'on', shards: [] }],
+            doLog: true,
+          }],
+        },
+      },
+    })
+
+    const details = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(details.value, 0)
+    assert.strictEqual(details.reason, 'ERROR')
+    assert.strictEqual(details.errorCode, 'PARSE_ERROR')
+    sinon.assert.notCalled(mockChannel.publish)
+  })
+
   function loadUfc () {
     return JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'ufc-config.json'), 'utf8'))
   }

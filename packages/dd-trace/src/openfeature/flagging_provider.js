@@ -72,6 +72,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<boolean>>}
    */
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
+    const parseError = this.#variantTypeMismatchResolution(flagKey, defaultValue, 'boolean')
+    if (parseError) return Promise.resolve(parseError)
+
     return super.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
       .then(result => this.#normalizeResolution(flagKey, result))
   }
@@ -86,6 +89,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<string>>}
    */
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
+    const parseError = this.#variantTypeMismatchResolution(flagKey, defaultValue, 'string')
+    if (parseError) return Promise.resolve(parseError)
+
     return super.resolveStringEvaluation(flagKey, defaultValue, context, logger)
       .then(result => this.#normalizeResolution(flagKey, result))
   }
@@ -100,6 +106,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<number>>}
    */
   resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
+    const parseError = this.#variantTypeMismatchResolution(flagKey, defaultValue, 'number')
+    if (parseError) return Promise.resolve(parseError)
+
     return super.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
       .then(result => this.#normalizeResolution(flagKey, result))
   }
@@ -115,6 +124,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<T>>}
    */
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
+    const parseError = this.#variantTypeMismatchResolution(flagKey, defaultValue, 'object')
+    if (parseError) return Promise.resolve(parseError)
+
     return super.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
       .then(result => this.#normalizeResolution(flagKey, result))
   }
@@ -158,6 +170,93 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
     return { ...result, reason }
+  }
+
+  /**
+   * Returns a parse error when the requested type matches a flag whose variant
+   * values violate its declared variation type.
+   *
+   * @template {import('@openfeature/server-sdk').FlagValue} T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {'boolean'|'string'|'number'|'object'} requestedType
+   * @returns {import('@openfeature/server-sdk').ResolutionDetails<T> | undefined}
+   */
+  #variantTypeMismatchResolution (flagKey, defaultValue, requestedType) {
+    const flag = this.#ffeConfig?.flags?.[flagKey]
+    if (!flag || flag.enabled === false || !this.#requestedTypeMatches(flag.variationType, requestedType)) {
+      return
+    }
+    if (!this.#hasVariantTypeMismatch(flagKey)) {
+      return
+    }
+
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Variant value does not match the declared variation type',
+    }
+  }
+
+  /**
+   * @param {string} variationType
+   * @param {'boolean'|'string'|'number'|'object'} requestedType
+   * @returns {boolean}
+   */
+  #requestedTypeMatches (variationType, requestedType) {
+    if (typeof variationType !== 'string') {
+      return false
+    }
+    if (requestedType === 'number') {
+      return variationType === 'INTEGER' || variationType === 'NUMERIC'
+    }
+    if (requestedType === 'object') {
+      return variationType === 'JSON'
+    }
+    return variationType.toLowerCase() === requestedType
+  }
+
+  /**
+   * Returns whether any variant value violates its flag's declared variation type.
+   *
+   * @param {string} flagKey
+   * @returns {boolean}
+   */
+  #hasVariantTypeMismatch (flagKey) {
+    const flag = this.#ffeConfig?.flags?.[flagKey]
+    if (!flag?.variations || typeof flag.variations !== 'object') {
+      return false
+    }
+
+    return Object.values(flag.variations).some(variation => {
+      if (!variation || typeof variation !== 'object' || !('value' in variation)) {
+        return false
+      }
+      return !this.#valueMatchesVariationType(flag.variationType, variation.value)
+    })
+  }
+
+  /**
+   * @param {string} variationType
+   * @param {unknown} value
+   * @returns {boolean}
+   */
+  #valueMatchesVariationType (variationType, value) {
+    switch (variationType) {
+      case 'BOOLEAN':
+        return typeof value === 'boolean'
+      case 'STRING':
+        return typeof value === 'string'
+      case 'INTEGER':
+        return Number.isInteger(value)
+      case 'NUMERIC':
+        return typeof value === 'number' && Number.isFinite(value)
+      case 'JSON':
+        return value !== undefined
+      default:
+        return true
+    }
   }
 
   /**
