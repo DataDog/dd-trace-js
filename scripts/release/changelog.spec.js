@@ -435,47 +435,47 @@ describe('release changelog', () => {
       {
         sha: 'abc001',
         subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)',
-        files: ['package.json', 'yarn.lock'],
+        files: ['package.json', 'bun.lock'],
       },
       {
         sha: 'abc002',
         subject: 'chore(deps): bump protobufjs from 8.4.2 to 8.6.0 in /vendor in the ' +
           'vendor-minor-and-patch-dependencies group across 1 directory (#8851)',
-        files: ['vendor/package.json', 'vendor/package-lock.json'],
+        files: ['vendor/package.json', 'vendor/bun.lock'],
       },
       {
         sha: 'abc003',
         subject: 'chore(deps): bump the runtime-minor-and-patch-dependencies group across 1 directory ' +
           'with 3 updates (#8920)',
-        files: ['package.json', 'yarn.lock'],
+        files: ['package.json', 'bun.lock'],
       },
       {
         sha: 'abc004',
         subject: 'chore(deps-dev): bump the dev-minor-and-patch-dependencies group across 1 directory ' +
           'with 4 updates (#8854)',
         contributors: [{ name: '@dependabot', login: 'dependabot' }],
-        files: ['package.json', 'yarn.lock'],
+        files: ['package.json', 'bun.lock'],
       },
       {
         sha: 'abc005',
         subject: 'chore(deps): bump @anthropic-ai/sdk from 0.101.0 to 0.102.0 in ' +
           '/packages/dd-trace/test/plugins/versions in the ai-and-llm group across 1 directory (#8852)',
-        files: ['packages/dd-trace/test/plugins/versions/package.json', 'yarn.lock'],
+        files: ['packages/dd-trace/test/plugins/versions/package.json'],
       },
       {
         sha: 'abc006',
         subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)',
-        files: ['integration-tests/serverless/package.json', 'yarn.lock'],
+        files: ['integration-tests/serverless/package.json', 'integration-tests/serverless/package-lock.json'],
       },
       {
         sha: 'abc007',
         subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)',
-        files: ['docs/package.json', 'yarn.lock'],
+        files: ['docs/package.json', 'docs/bun.lock'],
       },
       {
         sha: 'abc008',
         subject: 'chore(deps): refresh transitive dependencies (#8933)',
-        files: ['yarn.lock'],
+        files: ['bun.lock'],
       },
     ])
 
