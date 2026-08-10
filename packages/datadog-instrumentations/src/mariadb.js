@@ -279,6 +279,7 @@ function wrapPoolAcquireIdleMethod (acquireIdleConnection) {
     if (timing === undefined) {
       return acquireIdleConnection.apply(this, arguments)
     }
+    currentPoolAcquireTiming = undefined
 
     let completed = false
     let synchronous = true
@@ -395,12 +396,17 @@ function wrapPoolGetConnectionMethod (getConnection) {
       return getConnection.apply(pool, arguments)
     }
 
-    const previous = currentPoolAcquireTiming
+    const previousTiming = currentPoolAcquireTiming
+    const previousExplicitPoolAcquire = explicitPoolAcquire
     currentPoolAcquireTiming = ctx
+    if (previousExplicitPoolAcquire) explicitPoolAcquire = false
     try {
-      return getConnection.apply(pool, arguments)
+      return poolQueryAcquire
+        ? runOutsidePoolQueryAcquire(getConnection, pool, arguments)
+        : getConnection.apply(pool, arguments)
     } finally {
-      currentPoolAcquireTiming = previous
+      currentPoolAcquireTiming = previousTiming
+      if (previousExplicitPoolAcquire) explicitPoolAcquire = true
     }
   }
 }

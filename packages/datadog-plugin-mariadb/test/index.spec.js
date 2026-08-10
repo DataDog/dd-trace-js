@@ -973,6 +973,70 @@ describe('Plugin', () => {
               }
             })
 
+            describe('when sibling pool operations are reentrant', () => {
+              let batchPool
+
+              beforeEach(async () => {
+                batchPool = mariadb.createPool({
+                  connectionLimit: 1,
+                  database: 'db',
+                  host: 'localhost',
+                  minDelayValidation: Number.MAX_SAFE_INTEGER,
+                  user: 'root',
+                })
+                await batchPool.query('CREATE TEMPORARY TABLE dd_reentrant_batch_probe (value INT)')
+              })
+
+              afterEach(async () => {
+                await batchPool.end()
+              })
+
+              it('does not classify a sibling batch as an explicit acquire', async () => {
+                const acquireStart = sinon.spy()
+                const acquireFinish = sinon.spy()
+                const acquireStartChannel = dc.channel('apm:mariadb:pool:acquire:start')
+                const acquireFinishChannel = dc.channel('apm:mariadb:pool:acquire:finish')
+                acquireStartChannel.subscribe(acquireStart)
+                acquireFinishChannel.subscribe(acquireFinish)
+
+                try {
+                  let nestedBatch
+                  batchPool.once('acquire', () => {
+                    nestedBatch = batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                  })
+
+                  const connection = await batchPool.getConnection()
+                  await connection.release()
+                  assert.ok(nestedBatch, 'nested batch did not start')
+                  await nestedBatch
+
+                  assert.strictEqual(acquireStart.callCount, 1)
+                  assert.strictEqual(acquireFinish.callCount, 1)
+                } finally {
+                  acquireStartChannel.unsubscribe(acquireStart)
+                  acquireFinishChannel.unsubscribe(acquireFinish)
+                }
+              })
+
+              it('does not time a sibling batch as a pool query acquire', async () => {
+                let nestedBatch
+                batchPool.once('acquire', () => {
+                  nestedBatch = batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                })
+                const nowStub = sinon.stub(performance, 'now').returns(100)
+
+                try {
+                  await batchPool.query('SELECT 15 AS reentrant_batch_probe')
+                  assert.ok(nestedBatch, 'nested batch did not start')
+                  await nestedBatch
+
+                  sinon.assert.notCalled(nowStub)
+                } finally {
+                  nowStub.restore()
+                }
+              })
+            })
+
             it('forwards pool operations without subscribers', async () => {
               tracer.use('mariadb', false)
               try {
@@ -1036,6 +1100,47 @@ describe('Plugin', () => {
               } finally {
                 acquireStartChannel.unsubscribe(acquireStart)
                 acquireFinishChannel.unsubscribe(acquireFinish)
+              }
+            })
+
+            it('does not classify a nested explicit acquire as a pool query', async () => {
+              const nestedPool = mariadb.createPool({
+                connectionLimit: 1,
+                host: 'localhost',
+                minDelayValidation: Number.MAX_SAFE_INTEGER,
+                user: 'root',
+              })
+
+              try {
+                await nestedPool.query('SELECT 1')
+
+                const parent = tracer.startSpan('nested-explicit-acquire-parent')
+
+                await Promise.all([
+                  agent.assertSomeTraces(traces => {
+                    const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+                    const querySpan = traces[0].find(span => span.resource === 'SELECT 14 AS nested_explicit_acquire')
+
+                    assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                    assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+                  }, { spanResourceMatch: /^nested-explicit-acquire-parent$/ }),
+                  tracer.scope().activate(parent, async () => {
+                    try {
+                      let nestedAcquire
+                      nestedPool.once('acquire', () => {
+                        nestedAcquire = nestedPool.getConnection()
+                      })
+
+                      await nestedPool.query('SELECT 14 AS nested_explicit_acquire')
+                      const connection = await nestedAcquire
+                      await connection.release()
+                    } finally {
+                      parent.finish()
+                    }
+                  }),
+                ])
+              } finally {
+                await nestedPool.end()
               }
             })
 
