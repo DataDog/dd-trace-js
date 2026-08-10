@@ -467,6 +467,7 @@ module.exports = {
   [dynamicName]: () => require('../fixture'),
   ['fixture-' + dynamicName]: () => require('../fixture'),
   [\`fixture-\${dynamicName}\`]: () => require('../fixture'),
+  'object-without-loader': { file: '../fixture' },
   ...{},
 }
 globalThis.registryWasParsed = true
@@ -901,9 +902,14 @@ module.exports = plugins
 
     assert.strictEqual(status, 0, stderr)
     const packet = JSON.parse(stdout)
-    assert.deepStrictEqual(packet.packages.map(({ name }) => name), ['@wdio/cli', '@wdio/local-runner'])
+    assert.deepStrictEqual(
+      packet.packages.map(({ name }) => name),
+      ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils']
+    )
     assert.strictEqual(packet.packages[0].plugin, undefined)
     assert.match(packet.packages[1].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+    assert.match(packet.packages[2].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
+    assert.strictEqual(packet.packages[3].plugin, undefined)
     assert.deepStrictEqual(packet.targets.plugins, ['packages/datadog-plugin-mocha/src/index.js'])
     assert.strictEqual(
       packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/ci_plugin.js'),
