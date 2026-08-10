@@ -103,6 +103,7 @@ const version = process.env.CUCUMBER_VERSION || 'latest'
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
+const rejectsFormatterErrorsIt = version === '7.0.0' ? it : it.skip
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary ' +
@@ -293,6 +294,36 @@ describe(`cucumber@${version} commonJS`, () => {
       once(childProcess, 'exit'),
       telemetryPromise,
     ])
+  })
+
+  rejectsFormatterErrorsIt('marks completed suites failed when a custom formatter throws', async () => {
+    childProcess = exec(
+      './node_modules/.bin/cucumber-js ci-visibility/features/greetings.feature ' +
+      '--format ./ci-visibility/cucumber-formatter-throws.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.error, 1, `${eventType} should contain the formatter error`)
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Cucumber formatter failed/)
+        }
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.notStrictEqual(exitCode, 0)
   })
 
   it('forwards telemetry from parallel workers', async () => {

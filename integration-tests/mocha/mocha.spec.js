@@ -234,7 +234,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   const reporterEvents = [
-    'end', 'start', 'fail', 'pass', 'pending', 'test', 'test end', 'hook end', 'suite end',
+    'end', 'start', 'fail', 'pass', 'pending', 'retry', 'suite', 'test', 'test end', 'hook end', 'suite end',
   ]
   for (const reporterEvent of reporterEvents) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
@@ -246,6 +246,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
       } else if (reporterEvent === 'pending') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
+      } else if (reporterEvent === 'retry') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/retries.js'
       } else if (reporterEvent === 'test') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-test-start.js'
       }
@@ -307,6 +309,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             )
             assert.strictEqual(testEvent.content.meta[TEST_FRAMEWORK], 'mocha')
             assert.strictEqual(testEvent.content.meta[TEST_TYPE], 'test')
+          }
+          if (reporterEvent === 'retry') {
+            const testEvent = events.find(event =>
+              event.type === 'test' && event.content.meta[TEST_NAME] === 'mocha-test-retries will be retried and pass'
+            )
+            assert.ok(testEvent, 'expected retried test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testEvent.content.error, 1)
+            assert.match(testEvent.content.meta[ERROR_MESSAGE], /Expected values to be strictly equal/)
+            assert.doesNotMatch(testEvent.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
           if (reporterEvent === 'test') {
             const testEvent = events.find(event => event.type === 'test')

@@ -140,6 +140,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PW_BASE_URL: `http://localhost:${webAppPort}`,
             PLAYWRIGHT_THROWING_REPORTER: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
           },
         }
       )
@@ -148,9 +149,17 @@ versions.forEach((version) => {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end')
-          assert.ok(testSession)
-          assert.strictEqual(testSession.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail', `${eventType} should fail`)
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter failed/)
+          }
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'expected completed test event')
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
         }
       )
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])

@@ -8,6 +8,8 @@ const { channel } = require('dc-polyfill')
 require('dd-trace/init')
 require('@playwright/test')
 
+channel('dd-trace:instrumentation:load').publish({ name: 'playwright' })
+
 const suitePath = path.join(process.cwd(), 'pending-upload-test.js')
 const screenshotPath = path.join(process.cwd(), 'test-failed-1.png')
 fs.copyFileSync(

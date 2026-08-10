@@ -985,7 +985,7 @@ addHook({
       },
     }))
 
-    this.on('retry', getOnTestRetryHandler(config))
+    this.prependListener('retry', getOnTestRetryHandler(config))
 
     this.prependListener('hook end', function (hook) {
       const test = hook.ctx?.currentTest
@@ -1012,7 +1012,7 @@ addHook({
 
     this.prependListener('pending', getOnPendingHandler())
 
-    this.on('suite', function (suite) {
+    this.prependListener('suite', function (suite) {
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be

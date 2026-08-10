@@ -45,6 +45,7 @@ const testSkipCh = channel('ci:playwright:test:skip')
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
+const reporterErrorCh = channel('ci:playwright:reporter:error')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -81,6 +82,7 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 
 let applyRepeatEachIndex = null
+let reporterError
 
 let startedSuites = []
 
@@ -134,6 +136,8 @@ const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
+const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
+const kDdPlaywrightReporterInstrumented = Symbol('ddPlaywrightReporterInstrumented')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
@@ -1252,6 +1256,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    reporterError = undefined
+    if (satisfies(playwrightVersion, '>=1.60.0') && config?.config && !config.config[kDdPlaywrightReporterConfigured]) {
+      Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
+      config.config.reporter.unshift([require.resolve('./playwright-reporter')])
+    }
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1382,6 +1391,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       } catch (finalizationError) {
         log.error('Playwright test session finalization error: %s', finalizationError)
       }
+      reporterError = undefined
       throw error
     }
 
@@ -1438,12 +1448,21 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
 
+    const finalizationError = reporterError
+    const finalStatus = finalizationError
+      ? 'fail'
+      : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     await getChannelPromise(testSessionFinishCh, {
-      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
+      status: finalStatus,
+      error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
     })
+    if (finalizationError) {
+      if (typeof runAllTestsReturn === 'string') runAllTestsReturn = 'failed'
+      else runAllTestsReturn.status = 'failed'
+    }
 
     startedSuites = []
     remainingTestsByFile = {}
@@ -1460,11 +1479,39 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     ddPropertiesByTestId.clear()
     ddPropertiesRequestsByTestId.clear()
     disabledTestIds.clear()
+    reporterError = undefined
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
   }
+}
+
+/**
+ * Records errors thrown or rejected by Playwright reporters before Playwright converts them into run status.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reportersHook (reportersPackage) {
+  return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
+    const reporters = await createReporters.apply(this, arguments)
+    for (const reporter of reporters) {
+      if (reporter[kDdPlaywrightReporterInstrumented] || typeof reporter.onEnd !== 'function') continue
+
+      Object.defineProperty(reporter, kDdPlaywrightReporterInstrumented, { value: true })
+      const onEnd = reporter.onEnd
+      reporter.onEnd = async function () {
+        try {
+          return await onEnd.apply(this, arguments)
+        } catch (error) {
+          reporterError ||= error
+          throw error
+        }
+      }
+    }
+    return reporters
+  }, { replaceGetter: true })
 }
 
 function runnerHook (runnerExport, playwrightVersion) {
@@ -1566,6 +1613,14 @@ pageGotoCh.subscribe({
   },
 })
 
+reporterErrorCh.subscribe((error) => {
+  if (reporterError) return
+
+  reporterError = new Error(error.message || error.value)
+  reporterError.name = error.name || reporterError.name
+  reporterError.stack = error.stack || reporterError.stack
+})
+
 /**
  * Records a path created by Playwright's automatic screenshot recorder.
  *
@@ -1632,6 +1687,12 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, runnerHook)
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/reporters.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, reportersHook)
 
 addHook({
   name: 'playwright',

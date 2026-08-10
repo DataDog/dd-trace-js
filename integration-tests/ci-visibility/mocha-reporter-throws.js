@@ -5,6 +5,7 @@ module.exports = function ThrowingReporter (runner) {
 
   runner.on(event, runnable => {
     if ((event === 'pass' || event === 'test end') && runnable.parent.title !== 'mocha-test-pass-two') return
+    if (event === 'suite' && (runnable.root || runnable.title !== 'mocha-test-pass')) return
     if (event === 'suite end' && runnable.title !== 'mocha-test-pass-two') return
 
     throw new Error('custom Mocha reporter failed')

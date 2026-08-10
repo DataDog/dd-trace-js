@@ -136,6 +136,10 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       if (error) {
         this.#isFinalizingAfterError = true
+        for (const testSuiteSpan of this._testSuiteSpansByTestSuiteAbsolutePath.values()) {
+          testSuiteSpan.setTag(TEST_STATUS, 'fail')
+          testSuiteSpan.setTag('error', error)
+        }
         for (const [finishTest, abortController] of this.#pendingTestFinishCallbacks) {
           finishTest()
           abortController.abort()
@@ -250,6 +254,7 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedSuites++
       }
 
+      this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
