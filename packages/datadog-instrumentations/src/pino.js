@@ -38,7 +38,7 @@ function wrapPinoInstance (instance, asJsonSymbol, writeSymbol, hooksSymbol) {
   const hooks = hooksSymbol === undefined ? undefined : instance[hooksSymbol]
   const streamWrite = hooks?.streamWrite
   const hasStreamWrite = typeof streamWrite === 'function'
-  const submitLogs = jsonCh.hasSubscribers && logSubmissionCh.hasSubscribers
+  const submitLogs = logSubmissionCh.hasSubscribers
   const messages = submitLogs ? [] : undefined
 
   if (hooksSymbol !== undefined && hasStreamWrite && submitLogs) {
@@ -65,14 +65,8 @@ function wrapPinoInstance (instance, asJsonSymbol, writeSymbol, hooksSymbol) {
       value: wrapWrite(instance[writeSymbol], messages),
     })
   } else if (messages !== undefined) {
-    for (const methodName of legacyLogMethods) {
-      Object.defineProperty(instance, methodName, {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: wrapWrite(instance[methodName], messages),
-      })
-    }
+    wrapLegacyLogMethods(instance, messages)
+    wrapLegacyLevel(instance, messages)
   }
 
   const child = instance.child
@@ -93,6 +87,45 @@ function wrapPinoInstance (instance, asJsonSymbol, writeSymbol, hooksSymbol) {
 }
 
 /**
+ * @param {object} instance
+ * @param {(string | undefined)[]} messages
+ * @returns {void}
+ */
+function wrapLegacyLogMethods (instance, messages) {
+  const activeMethodCount = legacyLogMethods.indexOf(instance.level) + 1
+  for (let index = 0; index < activeMethodCount; index++) {
+    const methodName = legacyLogMethods[index]
+    Object.defineProperty(instance, methodName, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: wrapWrite(instance[methodName], messages),
+    })
+  }
+}
+
+/**
+ * @param {object} instance
+ * @param {(string | undefined)[]} messages
+ * @returns {void}
+ */
+function wrapLegacyLevel (instance, messages) {
+  const levelDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(instance), 'level')
+  Object.defineProperty(instance, 'level', {
+    configurable: true,
+    enumerable: levelDescriptor.enumerable,
+    get: levelDescriptor.get,
+    set: function levelWithLogSubmission (level) {
+      for (const methodName of legacyLogMethods) {
+        delete this[methodName]
+      }
+      levelDescriptor.set.call(this, level)
+      wrapLegacyLogMethods(this, messages)
+    },
+  })
+}
+
+/**
  * @param {Function} streamWrite
  * @param {(string | undefined)[]} messages
  * @returns {Function}
@@ -103,7 +136,12 @@ function wrapStreamWrite (streamWrite, messages) {
    */
   return function streamWriteWithLogSubmission (line) {
     const message = streamWrite.apply(this, arguments)
-    messages[messages.length - 1] = message
+    try {
+      JSON.parse(message)
+      messages[messages.length - 1] = message
+    } catch {
+      messages[messages.length - 1] = undefined
+    }
     return message
   }
 }

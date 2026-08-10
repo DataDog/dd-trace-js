@@ -175,6 +175,60 @@ describe('Plugin', () => {
             })
           })
 
+          it('should submit from logger instances created while the plugin is disabled', () => {
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+
+            tracer.use('pino', false)
+            logSubmissionCh.subscribe(onLogSubmission)
+            setupTest()
+            tracer.use('pino', { enabled: true, logInjection: true })
+
+            tracer.scope().activate(span, () => {
+              try {
+                logger.info('message')
+              } finally {
+                tracer.use('pino', false)
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+            })
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            assertObjectContains(record.dd, {
+              trace_id: span.context().toTraceId(true),
+              span_id: span.context().toSpanId(),
+            })
+            assert.strictEqual(submittedLog.source, 'pino')
+            assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+          })
+
+          if (version === '2.0.0') {
+            it('should submit records after changing the level on legacy logger instances', () => {
+              let submittedLog
+              const onLogSubmission = payload => {
+                submittedLog = payload
+              }
+              logSubmissionCh.subscribe(onLogSubmission)
+              setupTest()
+
+              logger.level = 'debug'
+              try {
+                logger.debug('message')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.strictEqual(record.msg, 'message')
+              assert.strictEqual(submittedLog.source, 'pino')
+              assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+            })
+          }
+
           it('should submit records from child logger instances', () => {
             let submittedLog
             const onLogSubmission = payload => {
@@ -332,6 +386,34 @@ describe('Plugin', () => {
 
               assert.strictEqual(record.msg, '[Redacted]')
               assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+            })
+
+            it('should not submit non-JSON streamWrite output', () => {
+              const submittedLogs = []
+              const onLogSubmission = payload => {
+                submittedLogs.push(payload)
+              }
+              logSubmissionCh.subscribe(onLogSubmission)
+
+              setupTest({
+                hooks: {
+                  /** @param {string} line */
+                  streamWrite (line) {
+                    return line.includes('invalid') ? `prefix ${line}` : line
+                  },
+                },
+              })
+
+              try {
+                logger.info('invalid')
+                logger.info('valid')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+
+              assert.match(stream.write.firstCall.args[0].toString(), /^prefix /)
+              assert.strictEqual(submittedLogs.length, 1)
+              assert.strictEqual(JSON.parse(submittedLogs[0].message).msg, 'valid')
             })
 
             it('should not submit transformed records when the destination throws', () => {
