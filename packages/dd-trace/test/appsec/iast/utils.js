@@ -120,6 +120,22 @@ function copyFileToTmp (src) {
   return dest
 }
 
+/**
+ * @param {string} command
+ */
+function invokeCommandInjectionSink (command) {
+  const childProcess = require('node:child_process')
+
+  // The tracing start hook runs before Node rejects cwd, avoiding a child process.
+  assert.throws(
+    () => childProcess.execSync(command, { cwd: '\0' }),
+    {
+      code: 'ERR_INVALID_ARG_VALUE',
+      message: /without null bytes/,
+    }
+  )
+}
+
 function beforeEachIastTest (iastConfig) {
   iastConfig = iastConfig || {
     enabled: true,
@@ -530,6 +546,7 @@ module.exports = {
   testOutsideRequestHasVulnerability,
   testInRequest,
   copyFileToTmp,
+  invokeCommandInjectionSink,
   prepareTestServerForIast,
   prepareTestServerForIastInExpress,
   prepareTestServerForIastInFastify,
