@@ -12,6 +12,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 const { setup, withAwsSdkVersions } = require('./spec_helpers')
+
+const LOCALSTACK_TIMEOUT_MS = 5000
+
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
@@ -168,7 +171,7 @@ describe('Plugin', () => {
                 'aws.request.body.Item.name': 'redacted',
                 'aws.request.body.Item.data.S': 'test-data',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             const operation = () => promisify(dynamo.putItem)({
               TableName: oneKeyTableName,
@@ -193,7 +196,7 @@ describe('Plugin', () => {
                 'aws.request.body.Key.name.S': 'test-name',
                 'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             const operation = () => promisify(dynamo.updateItem)({
               TableName: oneKeyTableName,
@@ -222,7 +225,7 @@ describe('Plugin', () => {
                 'aws.request.body.TableName': oneKeyTableName,
                 'aws.request.body.Key.name.S': 'test-name',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             const operation = () => promisify(dynamo.deleteItem)({
               TableName: oneKeyTableName,
@@ -259,7 +262,7 @@ describe('Plugin', () => {
                 'aws.response.body.Item.name.S': 'test-get-name',
                 'aws.response.body.Item.data': 'redacted',
               },
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             const operation = () => promisify(dynamo.getItem)({
               TableName: oneKeyTableName,
@@ -312,7 +315,7 @@ describe('Plugin', () => {
                   })
                 }
               }
-            })
+            }, { timeoutMs: LOCALSTACK_TIMEOUT_MS })
 
             DynamoDb.dynamoPrimaryKeyConfig = null
 

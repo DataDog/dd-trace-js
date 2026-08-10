@@ -28,7 +28,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @nats-io/nats-core,nats,3.0.0,3.4.0,True
 @nats-io/transport-node,nats,3.0.0,3.4.0,True
 @node-redis/client,redis,1.0.0,1.0.6,True
-@openai/agents,openai-agents,0.7.0,0.13.5,True
+@openai/agents,openai-agents,0.7.0,0.14.1,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,6.1.0,True
@@ -72,7 +72,7 @@ jest-worker,jest,28.0.0,30.4.1,True
 kafkajs,kafkajs,1.4.0,2.2.4,True
 koa,koa,2.0.0,3.2.1,True
 koa-router,koa,7.0.0,14.0.0,True
-mariadb,mariadb,2.0.4,3.4.5,True
+mariadb,mariadb,2.0.4,3.5.2,True
 memcached,memcached,2.2.0,2.2.2,True
 mercurius,graphql,13.0.0,16.10.0,True
 microgateway-core,microgateway-core,2.1.0,3.3.7,True
