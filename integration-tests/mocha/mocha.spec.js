@@ -233,48 +233,51 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  it('finalizes a failed hierarchy when a custom reporter throws during runner end', async function () {
-    this.timeout(20_000)
-    childProcess = exec(
-      [
-        'node node_modules/mocha/bin/mocha',
-        './ci-visibility/mocha-plugin-tests/passing.js',
-        '--reporter ./ci-visibility/mocha-reporter-throws.js',
-      ].join(' '),
-      {
-        cwd,
-        env: {
-          ...getCiVisAgentlessConfig(receiver.port),
-          DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
-        },
-      }
-    )
-    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-
-    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-      childProcess,
-      ({ url }) => url.endsWith('/api/v2/citestcycle'),
-      (payloads) => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-          const event = events.find(event => event.type === eventType)
-          assert.ok(event, `expected ${eventType} event`)
-          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(event.content.error, 1)
-          assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+  for (const reporterEvent of ['end', 'pass', 'suite end']) {
+    it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        [
+          'node node_modules/mocha/bin/mocha',
+          './ci-visibility/mocha-plugin-tests/passing.js',
+          '--reporter ./ci-visibility/mocha-reporter-throws.js',
+        ].join(' '),
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+            MOCHA_REPORTER_THROW_EVENT: reporterEvent,
+          },
         }
-      },
-      { hardTimeout: 20_000 }
-    )
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-    const [[exitCode]] = await Promise.all([
-      once(childProcess, 'exit'),
-      eventsPromise,
-    ])
-    assert.match(testOutput, /custom Mocha reporter failed/)
-    assert.notStrictEqual(exitCode, 0, testOutput)
-  })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+          }
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.match(testOutput, /custom Mocha reporter failed/)
+      assert.notStrictEqual(exitCode, 0, testOutput)
+    })
+  }
 
   it('can run tests and report tests with the APM protocol (old agents)', (done) => {
     receiver.setInfoResponse({ endpoints: [] })

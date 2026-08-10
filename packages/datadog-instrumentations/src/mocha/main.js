@@ -66,7 +66,9 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 const patched = new WeakSet()
 const runnerEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
-const wrappedRunnerEndEmitPrototypes = new WeakSet()
+const runnerFrameworkErrors = new WeakMap()
+const runnerStarted = new WeakSet()
+const wrappedRunnerEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -386,30 +388,51 @@ function adjustRunnerFailuresOnce (runner) {
 }
 
 /**
- * Runs Datadog's end handler after Mocha's listeners, even when a reporter throws,
- * and then propagates whichever error Mocha originally exposed after finalization.
+ * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
+ * runs Datadog's end handler and propagates the original error after finalization.
  *
  * @param {Function} Runner
  * @returns {void}
  */
-function wrapRunnerEndEmit (Runner) {
-  if (wrappedRunnerEndEmitPrototypes.has(Runner.prototype)) return
+function wrapRunnerEmit (Runner) {
+  if (wrappedRunnerEmitPrototypes.has(Runner.prototype)) return
 
-  wrappedRunnerEndEmitPrototypes.add(Runner.prototype)
+  wrappedRunnerEmitPrototypes.add(Runner.prototype)
   shimmer.wrap(Runner.prototype, 'emit', emit => function (event) {
-    if (event !== 'end') return emit.apply(this, arguments)
-
     const endHandler = runnerEndHandlers.get(this)
     if (!endHandler) return emit.apply(this, arguments)
 
+    if (event === 'start') {
+      const result = emit.apply(this, arguments)
+      runnerStarted.add(this)
+      return result
+    }
+
+    if (!runnerStarted.has(this)) return emit.apply(this, arguments)
+
+    const pendingFrameworkError = runnerFrameworkErrors.get(this)
+    if (event !== 'end') {
+      try {
+        return emit.apply(this, arguments)
+      } catch (error) {
+        if (!pendingFrameworkError) {
+          runnerFrameworkErrors.set(this, error)
+          this.abort()
+        }
+        return
+      }
+    }
+
     runnerEndHandlers.delete(this)
+    runnerStarted.delete(this)
     let result
-    let frameworkError
+    let frameworkError = pendingFrameworkError
     try {
       result = emit.apply(this, arguments)
     } catch (error) {
-      frameworkError = error
+      frameworkError ||= error
     }
+    runnerFrameworkErrors.delete(this)
 
     adjustRunnerFailuresOnce(this)
 
@@ -771,7 +794,7 @@ addHook({
   if (patched.has(Runner)) return Runner
 
   patched.add(Runner)
-  wrapRunnerEndEmit(Runner)
+  wrapRunnerEmit(Runner)
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
@@ -782,8 +805,11 @@ addHook({
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
     runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
     args[0] = () => {
       adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
       onRunDone(this.failures)
     }
 
@@ -1013,7 +1039,8 @@ addHook({
       }
     })
 
-    this.on('suite end', function (suite) {
+    // Reporters are registered before Runner#run, so this must run first when one throws.
+    this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
         // listeners via finishRootSuiteForFile. Two edge cases remain here:
@@ -1188,7 +1215,7 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  wrapRunnerEndEmit(ParallelBufferedRunner)
+  wrapRunnerEmit(ParallelBufferedRunner)
 
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
@@ -1197,8 +1224,11 @@ addHook({
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
     runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
     arguments[0] = () => {
       adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
       onRunDone(this.failures)
     }
 
