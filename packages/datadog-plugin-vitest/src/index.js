@@ -2,20 +2,20 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 
 const {
   TEST_STATUS,
   TEST_TYPE,
   VITEST_POOL,
+  addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
   getTestLevelsMetadataTags,
   getTestSessionName,
-  getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
-  TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
   TEST_COMMAND,
   TEST_LEVELS_METADATA,
@@ -41,11 +41,21 @@ const {
   TEST_BROWSER_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_PARAMETERS,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const id = require('../../dd-trace/src/id')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_CODE_COVERAGE_STARTED,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
@@ -95,19 +105,6 @@ class VitestPlugin extends CiPlugin {
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
       })
-    })
-
-    this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
-      knownTests,
-      testFilepaths,
-      onDone,
-    }) => {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
-        testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
-        knownTests,
-        this.libraryConfig.earlyFlakeDetectionFaultyThreshold
-      )
-      onDone(isFaulty)
     })
 
     this.addBind('ci:vitest:test:start', (ctx) => {
@@ -343,7 +340,9 @@ class VitestPlugin extends CiPlugin {
       testName,
       testSuiteAbsolutePath,
       isNew,
+      isAttemptToFix,
       isDisabled,
+      isQuarantined,
       isRumActive,
       isTestFrameworkWorker,
       requestErrorTags,
@@ -362,7 +361,9 @@ class VitestPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testStartLine || 1,
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
+        ...(isAttemptToFix ? { [TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]: 'true' } : {}),
         ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
+        ...(isQuarantined ? { [TEST_MANAGEMENT_IS_QUARANTINED]: 'true' } : {}),
         ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         ...(isRumActive ? { [TEST_IS_RUM_ACTIVE]: 'true' } : {}),
         ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
@@ -393,10 +394,16 @@ class VitestPlugin extends CiPlugin {
         frameworkVersion,
         isTestFrameworkWorker,
         isVitestNoWorkerInitActive,
+        disableTestImpactAnalysis,
         isBrowserMode,
         browserDriver,
         browserName,
         browserProjectName,
+        isCodeCoverageEnabled,
+        coverageLibrary,
+        itrCorrelationId,
+        isUnskippable,
+        isForcedToRun,
       } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
@@ -404,18 +411,20 @@ class VitestPlugin extends CiPlugin {
       this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
-      const testSessionSpanContext = testSessionId && testModuleId
-        ? this.tracer.extract('text_map', {
-          'x-datadog-trace-id': testSessionId,
-          'x-datadog-parent-id': testModuleId,
-        })
-        : undefined
+      let testSessionSpanContext
+      if (testSessionId && testModuleId) {
+        const carrier = /** @type {Record<string, unknown>} */ ({})
+        writeDatadogTraceId(carrier, testSessionId)
+        writeDatadogParentId(carrier, testModuleId)
+        testSessionSpanContext = this.tracer.extract('text_map', carrier)
+      }
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
         const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, {
+          disableTestImpactAnalysis,
           isVitestNoWorkerInitActive,
         })
         this.tracer._exporter.addMetadataTags({
@@ -443,6 +452,20 @@ class VitestPlugin extends CiPlugin {
       }
       if (isTestFrameworkWorker) {
         testSuiteMetadata[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+      }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      }
+      if (isCodeCoverageEnabled) {
+        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: coverageLibrary })
       }
       setBrowserTags(testSuiteMetadata, {
         browserDriver,
@@ -473,9 +496,33 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onDone }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({
+      testSuiteSpan,
+      status,
+      coverageFiles,
+      coverageLibrary,
+      testSuiteAbsolutePath,
+      deferFlush,
+      onDone,
+    }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
+        if (coverageFiles) {
+          if (!coverageFiles.length) {
+            this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
+          const files = new Set(coverageFiles)
+          files.add(testSuiteAbsolutePath)
+          const relativeFiles = [...files].map(filename => getTestSuitePath(filename, this.repositoryRoot))
+          const { _traceId, _spanId } = testSuiteSpan.context()
+          this.tracer._exporter.exportCoverage({
+            sessionId: _traceId,
+            suiteId: _spanId,
+            files: relativeFiles,
+          })
+          this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
+          this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
+        }
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -487,6 +534,17 @@ class VitestPlugin extends CiPlugin {
       this.tracer._exporter.flush(onDone)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
+      }
+    })
+
+    this.addSub('ci:vitest:worker-report:coverage', data => {
+      const formattedCoverages = JSON.parse(data).map(coverage => ({
+        sessionId: id(coverage.sessionId),
+        suiteId: id(coverage.suiteId),
+        files: coverage.files,
+      }))
+      for (const formattedCoverage of formattedCoverages) {
+        this.tracer._exporter.exportCoverage(formattedCoverage)
       }
     })
 
@@ -512,12 +570,18 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
       onDone,
     }) => {
-      for (const [tag, value] of Object.entries(requestErrorTags || {})) {
+      for (const [tag, value] of Object.entries(requestErrorTags)) {
         this.testSessionSpan.setTag(tag, value)
         this.testModuleSpan.setTag(tag, value)
       }
@@ -527,10 +591,20 @@ class VitestPlugin extends CiPlugin {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
-      if (testCodeCoverageLinesTotal !== undefined) {
-        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
-        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
-      }
+      addIntelligentTestRunnerSpanTags(
+        this.testSessionSpan,
+        this.testModuleSpan,
+        {
+          isSuitesSkipped,
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
+          skippingType: 'suite',
+          skippingCount: numSkippedSuites,
+          hasUnskippableSuites,
+          hasForcedToRunSuites,
+        }
+      )
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
@@ -566,12 +640,14 @@ class VitestPlugin extends CiPlugin {
    * Returns Vitest library capability metadata tags.
    * @param {string} frameworkVersion - The Vitest version.
    * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.disableTestImpactAnalysis] - Whether TIA is unsupported for this run.
    * @param {boolean} [ctx.isVitestNoWorkerInitActive] - Whether no-worker init is active for this run.
    * @returns {Record<string, string|undefined>}
    */
   getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
     return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion, {
       omitFailedTestReplay: ctx.isVitestNoWorkerInitActive,
+      omitTestImpactAnalysis: ctx.disableTestImpactAnalysis || ctx.isVitestNoWorkerInitActive,
     })
   }
 

@@ -21,6 +21,15 @@ tracer.use('pg', {
 })
 ```
 
+The `langchain` and `modelcontextprotocol-sdk` integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:
+
+```javascript
+// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.
+tracer.use('modelcontextprotocol-sdk', {
+  llmobs: false
+})
+```
+
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
@@ -522,6 +531,10 @@ Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to ove
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
+The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
+are disabled, quarantined, or run in Attempt to Fix mode.
 
 <h3 id="custom-logging">Custom Logging</h3>
 

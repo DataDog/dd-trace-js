@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
 const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const {
@@ -12,6 +13,7 @@ const {
 const { getGeneratedCommand } = require('./runner-command')
 const { frameworkOutDir } = require('./scenarios/helpers')
 const { getObservedTestCount } = require('./test-output')
+const { getValidationBlockerEvidence } = require('./validation-blocker')
 
 const GENERATED_SCENARIO_BY_FEATURE = {
   efd: 'basic-pass',
@@ -103,15 +105,16 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
     return { ok: true }
   } catch (error) {
     cleanupGeneratedRuntimeFiles(framework)
+    const blockerEvidence = getValidationBlockerEvidence(error)
     return {
       ok: false,
       failure: {
         frameworkId: framework.id,
         scenario: 'generated-test-verification',
-        status: 'error',
+        status: blockerEvidence ? 'blocked' : 'error',
         diagnosis: 'The validator could not run the temporary validation test as expected. No advanced-feature ' +
           `conclusion was reached: ${error.message || error}`,
-        evidence,
+        evidence: { ...evidence, ...blockerEvidence },
         artifacts,
       },
     }
@@ -153,14 +156,12 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, resul
   const commandFailure = getCommandBlocker(result, {
     browserRequired: framework.browserRequired,
     framework: framework.framework,
+    packageJson: framework.project.packageJson,
     testsRan: Number.isInteger(observedTestCount) && observedTestCount > 0,
   })
   if (commandFailure) {
-    const domain = commandFailure.blockedByExecutionEnvironment
-      ? 'execution_environment'
-      : commandFailure.localRuntimeBlocked
-        ? 'local_runtime'
-        : 'project_setup'
+    const blockerCategory = commandFailure.blockerCategory
+    const domain = getBlockerDomain(blockerCategory)
     return {
       ok: false,
       failure: {
@@ -168,7 +169,7 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, resul
         scenario: 'generated-test-verification',
         status: 'blocked',
         diagnosis: `${commandFailure.summary} Advanced-feature validation could not start reliably.`,
-        evidence: { ...evidence, commandFailure, domain, validationIncomplete: true },
+        evidence: { ...evidence, blockerCategory, commandFailure, domain, validationIncomplete: true },
         artifacts,
       },
     }
@@ -189,7 +190,11 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, resul
       scenario: 'generated-test-verification',
       status: 'error',
       diagnosis: `Temporary validation test "${scenario.id}" ${reason}. No advanced-feature conclusion was reached.`,
-      evidence,
+      evidence: {
+        ...evidence,
+        blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+        validationIncomplete: true,
+      },
       artifacts,
     },
   }
@@ -204,14 +209,16 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, resul
 function getGeneratedRuntimeFileStatus (strategy) {
   const generatedFiles = new Set((strategy.files || []).map(file => path.resolve(file.path)))
   let expectsRuntimeFile = false
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const filename = path.resolve(cleanupPath)
-    if (generatedFiles.has(filename)) continue
-    expectsRuntimeFile = true
-    try {
-      const stat = fs.lstatSync(filename)
-      if (!stat.isSymbolicLink() && stat.isFile()) return true
-    } catch {}
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const filename = path.resolve(cleanupPath)
+      if (generatedFiles.has(filename)) continue
+      expectsRuntimeFile = true
+      try {
+        const stat = fs.lstatSync(filename)
+        if (!stat.isSymbolicLink() && stat.isFile()) return true
+      } catch {}
+    }
   }
   return expectsRuntimeFile ? false : undefined
 }

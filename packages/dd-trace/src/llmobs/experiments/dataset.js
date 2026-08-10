@@ -1,7 +1,5 @@
 'use strict'
 
-const { API_BASE_PATH } = require('./client')
-
 // Dataset record: { input, expectedOutput?, metadata?, id? }.
 // `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
@@ -13,22 +11,8 @@ class DatasetRecord {
   }
 }
 
-function createdRecordsFromResponse (response) {
-  if (Array.isArray(response?.records)) return response.records
-  if (Array.isArray(response?.data)) return response.data
-  return []
-}
-
 function recordIdFromCreatedRecord (record) {
-  return String(record?.id ?? record?.attributes?.id ?? '')
-}
-
-function versionFromCreatedRecords (records) {
-  const versions = records
-    .map(record => Number(record?.attributes?.valid_from_version ?? record?.attributes?.version))
-    .filter(Number.isFinite)
-  if (versions.length === 0) return null
-  return Math.max(...versions)
+  return String(record?.id ?? '')
 }
 
 // A local buffer of dataset records, created remotely and pushed on first run
@@ -84,6 +68,10 @@ class Dataset {
     return this.#name
   }
 
+  description () {
+    return this.#description
+  }
+
   records () {
     return [...this.#records]
   }
@@ -127,19 +115,17 @@ class Dataset {
     if (this.#id === null) {
       let response
       try {
-        response = await this.#client.request('POST', `${API_BASE_PATH}/${projectId}/datasets`, {
-          data: { type: 'datasets', attributes: { name: this.#name, description: this.#description } },
-        })
+        response = await this.#client.createDataset(projectId, { name: this.#name, description: this.#description })
       } catch (err) {
         throw new Error(`Failed to create dataset '${this.#name}': ${err.message}`)
       }
-      this.#id = response?.data?.id ?? null
+      this.#id = response?.id() ?? null
       if (this.#id === null) {
         throw new Error(`Failed to create dataset '${this.#name}': backend response is missing dataset id`)
       }
       this.#projectId = projectId
-      this.#version = response?.data?.attributes?.current_version ?? this.#version
-      this.#latestVersion = response?.data?.attributes?.current_version ?? this.#latestVersion
+      this.#version = response.version() ?? this.#version
+      this.#latestVersion = response.latestVersion() ?? this.#latestVersion
     }
 
     if (this.#pushedCount >= this.#records.length) return { pushedCount: 0, totalCount: 0 }
@@ -161,27 +147,21 @@ class Dataset {
 
     let response
     try {
-      response = await this.#client.request(
-        'POST',
-        `${API_BASE_PATH}/${projectId}/datasets/${this.#id}/records`,
-        { data: { type: 'datasets', attributes: { records } } }
-      )
+      response = await this.#client.appendDatasetRecords(projectId, this.#id, records)
     } catch (err) {
       throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
     }
 
-    // The append-records response has used both a top-level `records` array
-    // and JSON:API `data` resources. Accept either so generated/custom record
-    // ids are preserved for experiment row tagging.
-    const created = createdRecordsFromResponse(response)
-    const pushedVersion = versionFromCreatedRecords(created)
-    if (pushedVersion === null) {
-      // The dataset contents changed, but the backend did not report the new
-      // version. Avoid pinning later experiments to the pre-append create version.
-      this.#version = null
-    } else {
+    const created = response
+    const latestVersion = Number(this.#latestVersion)
+    if (Number.isFinite(latestVersion)) {
+      const pushedVersion = latestVersion + 1
       this.#version = pushedVersion
-      this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
+      this.#latestVersion = pushedVersion
+    } else {
+      // The dataset contents changed, but without a known latest version we
+      // cannot safely pin later experiments to a concrete version.
+      this.#version = null
     }
 
     let pushedCount = 0

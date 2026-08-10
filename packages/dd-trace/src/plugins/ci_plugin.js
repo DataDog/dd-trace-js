@@ -169,7 +169,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
 }
 
 /**
- * Keeps non-TIA settings while disabling suite skipping and coverage collection.
+ * Keeps non-TIA settings while disabling suite skipping and per-suite coverage collection.
  *
  * @param {object} libraryConfig
  * @returns {object}
@@ -178,7 +178,6 @@ function disableTestImpactAnalysis (libraryConfig) {
   return Object.freeze({
     ...libraryConfig,
     isCodeCoverageEnabled: false,
-    isCoverageReportUploadEnabled: false,
     isItrEnabled: false,
     isSuitesSkippingEnabled: false,
   })
@@ -260,6 +259,7 @@ module.exports = class CiPlugin extends Plugin {
         {
           ...this.testConfiguration,
           isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
+          isLineCoverageSupported: this.constructor.id !== 'vitest',
         },
         (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
           if (err) {
@@ -461,12 +461,28 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
       }
     })
+
+    this.addSub(`ci:${this.constructor.id}:worker-report:telemetry`, data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
+      }
+    })
   }
 
   get telemetry () {
     const testFramework = this.testFramework || this.constructor.id
     const exporter = this.tracer?._exporter
-    // TODO: only jest worker supported yet
     const isSupportedWorker = exporter && typeof exporter.exportTelemetry === 'function'
     const ciProviderName = this.ciProviderName
 
@@ -1157,11 +1173,11 @@ module.exports = class CiPlugin extends Plugin {
         return
       }
 
-      const { filePath, format } = coverageReports[reportIndex]
+      const { filePath, fileDevice, fileInode, format } = coverageReports[reportIndex]
       reportIndex++
 
       this.tracer._exporter.uploadCoverageReport(
-        { filePath, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
+        { filePath, fileDevice, fileInode, format, testEnvironmentMetadata: this.testEnvironmentMetadata },
         (err) => {
           if (err) {
             failedCount++

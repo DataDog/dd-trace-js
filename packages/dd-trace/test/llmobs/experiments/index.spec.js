@@ -1,12 +1,27 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
 const { createExperiments } = require('../../../src/llmobs/experiments')
+const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
+
+const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
+
+class VcrExperimentsClient extends ExperimentsClient {
+  constructor (options) {
+    super(options)
+    this.apiBase = EXPERIMENTS_VCR_API_BASE
+  }
+}
+
+const { createExperiments: createVcrExperiments } = proxyquire('../../../src/llmobs/experiments', {
+  './client': { ExperimentsClient: VcrExperimentsClient },
+})
 
 const enabledConfig = (overrides = {}) => ({
   site: 'datadoghq.com',
@@ -17,26 +32,76 @@ const enabledConfig = (overrides = {}) => ({
 })
 
 describe('LLMObs Experiments facade', () => {
-  let fetchHandler
-  let fetchStub
-  let originalFetch
+  const backendDatasets = []
 
-  beforeEach(() => {
-    originalFetch = global.fetch
-    fetchHandler = async (url) => {
-      throw new Error(`Unexpected fetch ${url}`)
+  afterEach(async () => {
+    if (backendDatasets.length > 0) {
+      const client = backendClient()
+      for (const dataset of backendDatasets.splice(0).reverse()) {
+        const projectId = dataset.projectId()
+        const datasetId = dataset.id()
+        if (projectId !== null && datasetId !== null) await client.deleteDataset(projectId, datasetId)
+      }
     }
-    fetchStub = sinon.stub().callsFake((...args) => fetchHandler(...args))
-    global.fetch = fetchStub
-  })
-
-  afterEach(() => {
-    global.fetch = originalFetch
     sinon.restore()
   })
 
-  const resolveFetchWith = (handler) => {
-    fetchHandler = handler
+  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
+  const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
+    `dd-trace-js-experiments-${backendTestId}`
+  const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
+  const backendExperimentName = `${backendProjectName}-experiment`
+  const backendRichExperimentDatasetName = `${backendProjectName}-rich-experiment-dataset`
+  const backendRichExperimentName = `${backendProjectName}-rich-experiment`
+
+  function backendClientOptions () {
+    return {
+      apiKey: process.env.DD_API_KEY ?? 'test-api-key',
+      appKey: process.env.DD_APP_KEY ?? 'test-app-key',
+      site: process.env.DD_SITE ?? 'datadoghq.com',
+      projectName: backendProjectName,
+    }
+  }
+
+  function backendClient () {
+    const client = new ExperimentsClient(backendClientOptions())
+    client.apiBase = EXPERIMENTS_VCR_API_BASE
+    return client
+  }
+
+  function backendExperiments () {
+    const options = backendClientOptions()
+    return createVcrExperiments(enabledConfig({
+      site: options.site,
+      DD_API_KEY: options.apiKey,
+      DD_APP_KEY: options.appKey,
+      llmobs: {
+        DD_LLMOBS_ENABLED: true,
+        mlApp: options.projectName,
+      },
+    }))
+  }
+
+  function trackBackendDataset (dataset) {
+    backendDatasets.push(dataset)
+    return dataset
+  }
+
+  function datasetResource ({ name = 'remote-dataset', id = 'ds', description = 'desc', latestVersion = 3 } = {}) {
+    return {
+      name: () => name,
+      id: () => id,
+      description: () => description,
+      latestVersion: () => latestVersion,
+    }
+  }
+
+  function stubPullDatasetClient ({ projectId = 'proj', datasets = [], pages = [] } = {}) {
+    sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves(projectId)
+    sinon.stub(ExperimentsClient.prototype, 'listDatasets').resolves(datasets)
+    const listDatasetRecords = sinon.stub(ExperimentsClient.prototype, 'listDatasetRecords')
+    for (let i = 0; i < pages.length; i++) listDatasetRecords.onCall(i).resolves(pages[i])
+    return { listDatasetRecords }
   }
 
   describe('createExperiments gating', () => {
@@ -69,6 +134,12 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('returns a working facade when service is used as the project name fallback', () => {
+      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
+      const dataset = exp.createDataset('d')
+      assert.equal(typeof dataset.push, 'function')
+    })
+
     it('rejects duplicate custom record ids', () => {
       assert.throws(
         () => createExperiments(enabledConfig()).createDataset('d', {
@@ -78,19 +149,13 @@ describe('LLMObs Experiments facade', () => {
       )
     })
 
-    it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
-      resolveFetchWith(async () => ({
-        ok: true,
-        status: 200,
-        text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })),
-      }))
-
-      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
-      await exp.createDataset('d').push()
-
-      const [url, opts] = fetchStub.getCall(0).args
-      assert.equal(new URL(url).pathname, '/api/v2/llm-obs/v1/projects')
-      assert.equal(JSON.parse(opts.body).data.attributes.name, 'my-service')
+    it('rejects invalid custom record ids', () => {
+      assert.throws(
+        () => createExperiments(enabledConfig()).createDataset('d', {
+          records: [{ id: '', inputData: 'a' }],
+        }),
+        /record id must be a non-empty string/
+      )
     })
 
     it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
@@ -109,7 +174,8 @@ describe('LLMObs Experiments facade', () => {
       const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
-      const dataset = exp.createDataset('d')
+      const dataset = exp.createDataset('d', 'desc')
+      assert.equal(dataset.description(), 'desc')
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
       assert.equal(dataset.url(), null)
 
@@ -127,9 +193,11 @@ describe('LLMObs Experiments facade', () => {
       const exp = new NoopExperiments()
 
       const ignoredDescriptionDataset = exp.createDataset('legacy description', 'ignored')
+      assert.equal(ignoredDescriptionDataset.description(), 'ignored')
       assert.deepEqual(ignoredDescriptionDataset.records(), [])
 
       const dataset = exp.createDataset('d', {
+        description: 'desc',
         records: [{
           id: 'r1',
           inputData: { question: 'q' },
@@ -140,6 +208,7 @@ describe('LLMObs Experiments facade', () => {
       dataset.addRecord('input only')
 
       assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.description(), 'desc')
       assert.equal(dataset.id(), null)
       assert.equal(dataset.projectId(), null)
       assert.equal(dataset.version(), null)
@@ -159,6 +228,7 @@ describe('LLMObs Experiments facade', () => {
 
       const pulled = await exp.pullDataset('pulled')
       assert.equal(pulled.name(), 'pulled')
+      assert.equal(pulled.description(), '')
 
       const experiment = exp.experiment()
       assert.equal(experiment.name(), '')
@@ -170,174 +240,166 @@ describe('LLMObs Experiments facade', () => {
   })
 
   describe('pullDataset', () => {
-    const resolveRoutes = (recordsResponses) => {
-      let recordsCall = 0
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          payload = recordsResponses[Math.min(recordsCall++, recordsResponses.length - 1)]
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-    }
-
-    it('finds a dataset by name and reads records nested under attributes', async () => {
-      resolveRoutes([{
-        data: [
-          { id: 'r1', attributes: { input: { q: '2+2' }, expected_output: '4', metadata: { a: 1 } } },
-          { id: 'r2', attributes: { input: 'i2' } },
+    it('pulls records from the backend client with pagination and an explicit version', async () => {
+      const firstRecord = { id: 'r1', input: { value: 1 }, expectedOutput: 'one', metadata: { page: 1 } }
+      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
+      const { listDatasetRecords } = stubPullDatasetClient({
+        datasets: [datasetResource({ name: 'remote-dataset', id: 'ds', description: 'desc', latestVersion: 4 })],
+        pages: [
+          { records: [firstRecord], after: 'next-page' },
+          { records: [secondRecord], after: '' },
         ],
-      }])
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.equal(ds.id(), 'ds9')
-      assert.equal(ds.projectId(), 'proj')
-      assert.equal(ds.records().length, 2)
-      assert.deepEqual(ds.records()[0].input, { q: '2+2' })
-      assert.equal(ds.records()[0].expectedOutput, '4')
-      assert.deepEqual(ds.records()[0].metadata, { a: 1 })
-      assert.equal(ds.records()[0].id, 'r1')
-      assert.equal(ds.records()[1].id, 'r2')
-    })
-
-    it('passes explicit dataset version when reading records', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          assert.equal(u.searchParams.get('filter[version]'), '3')
-          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
       })
 
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
-      assert.equal(ds.version(), 3)
-      assert.equal(ds.latestVersion(), 7)
-    })
-
-    it('pins the current version when pulling latest records', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          assert.equal(u.searchParams.get('filter[version]'), '7')
-          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-      })
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.equal(ds.version(), 7)
-      assert.equal(ds.records().length, 1)
-    })
-
-    it('waits (backoff) until the expected record count is readable', async () => {
-      const one = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
-      const two = { data: [{ id: 'r1', attributes: { input: 'i1' } }, { id: 'r2', attributes: { input: 'i2' } }] }
-      resolveRoutes([one, two])
-
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', {
+      const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', {
         expectedRecordCount: 2,
-        maxWaitMs: 5000,
+        maxWaitMs: 0,
+        version: 2,
       })
-      assert.equal(ds.records().length, 2)
+
+      assert.equal(dataset.name(), 'remote-dataset')
+      assert.equal(dataset.description(), 'desc')
+      assert.equal(dataset.id(), 'ds')
+      assert.equal(dataset.projectId(), 'proj')
+      assert.equal(dataset.version(), 2)
+      assert.equal(dataset.latestVersion(), 4)
+      assert.deepEqual(dataset.records(), [firstRecord, secondRecord])
+      assert.deepEqual(dataset.recordIds(), ['r1', ''])
+      sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
+      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
     })
 
-    it('throws when the dataset is absent (no wait)', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        const payload = u.pathname === '/api/v2/llm-obs/v1/projects' ? { data: { id: 'proj' } } : { data: [] }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+    it('uses the latest dataset version when no version is requested', async () => {
+      const { listDatasetRecords } = stubPullDatasetClient({
+        datasets: [datasetResource({ name: 'remote-dataset', latestVersion: 5 })],
+        pages: [{ records: [], after: '' }],
       })
+
+      const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 })
+
+      assert.equal(dataset.version(), 5)
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 5 }])
+    })
+
+    it('surfaces list failures from the backend client', async () => {
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves('proj')
+      sinon.stub(ExperimentsClient.prototype, 'listDatasets').rejects(new Error('list failed'))
+
       await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('ghost', { maxWaitMs: 0 }),
-        /not found/
+        () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
+        /Failed to list datasets in project 'my-app': list failed/
       )
     })
 
-    it('throws with the underlying error when listing datasets fails', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
-        }
-        return { ok: false, status: 500, text: sinon.stub().resolves('server error') }
+    it('surfaces a not-found dataset after the wait budget is exhausted', async () => {
+      stubPullDatasetClient({ datasets: [] })
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
+        /Dataset 'missing-dataset' not found in project 'my-app'/
+      )
+    })
+
+    it('surfaces record fetch failures from the backend client', async () => {
+      stubPullDatasetClient({ datasets: [datasetResource()] })
+      ExperimentsClient.prototype.listDatasetRecords.rejects(new Error('records failed'))
+
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Failed to fetch records for dataset 'remote-dataset' in project 'my-app': records failed/
+      )
+    })
+
+    it('surfaces an expected record count miss after the wait budget is exhausted', async () => {
+      stubPullDatasetClient({
+        datasets: [datasetResource()],
+        pages: [{ records: [], after: '' }],
       })
+
       await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
-        /Failed to list datasets/
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', {
+          expectedRecordCount: 1,
+          maxWaitMs: 0,
+        }),
+        /Dataset 'remote-dataset' has 0 record\(s\) after 0ms, expected 1/
       )
     })
+  })
 
-    it('throws when the expected record count never arrives within the budget', async () => {
-      resolveRoutes([{ data: [{ id: 'r1', attributes: { input: 'i1' } }] }]) // only ever 1 record
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { expectedRecordCount: 3, maxWaitMs: 0 }),
-        /expected 3.*backend may not have finished ingesting/
-      )
-    })
+  describe('experiment run', () => {
+    it('runs a multi-row experiment and returns rows, ids, metric values, and dashboard URLs', async function () {
+      const exp = backendExperiments()
+      const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
+        description: 'created by a dd-trace-js experiments rich VCR test',
+        records: [
+          { inputData: { q: 'apple' }, expectedOutput: 'APPLE', metadata: { row: 0 } },
+          { inputData: { q: 'car' }, expectedOutput: 'CAR', metadata: { row: 1 } },
+        ],
+      }))
 
-    it('throws the underlying error when fetching records fails, even without expectedRecordCount', async () => {
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
-        }
-        if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          const payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
-        }
-        return { ok: false, status: 504, text: sinon.stub().resolves('gateway timeout') }
-      })
-      await assert.rejects(
-        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
-        /Failed to fetch records for dataset 'wanted'/
-      )
-    })
+      const result = await exp.experiment({
+        name: backendRichExperimentName,
+        description: 'created by a dd-trace-js experiments rich VCR test',
+        dataset,
+        task: (input) => ({ answer: input.q.toUpperCase() }),
+        evaluators: {
+          nonempty: (_input, output) => output.answer.length > 0,
+          len: (_input, output) => output.answer.length,
+          label: (_input, output, expected) => (output.answer === expected ? 'match' : 'miss'),
+          details: (_input, output, expected) => ({ actual: output.answer, expected }),
+        },
+        config: { temperature: 0 },
+        tags: { source: 'rich-vcr-test' },
+      }).run()
 
-    it('follows the meta.after / page[cursor] pagination across multiple pages', async () => {
-      const pages = {
-        '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
-        cursor1: { data: [{ id: 'r2', attributes: { input: 'i2' } }], meta: { after: '' } },
+      assert.match(result.experimentId, /\S+/)
+      assert.match(result.url, /^https:\/\//)
+      assert.equal(result.rows.length, 2)
+      assert.equal(result.runs.length, 1)
+      assert.equal(result.runs[0].rows, result.rows)
+      assert.match(dataset.id(), /\S+/)
+      assert.match(dataset.url(), /^https:\/\//)
+      assert.equal(dataset.recordIds().length, 2)
+      for (const row of result.rows) {
+        assert.match(row.spanId, /^[a-f0-9]{16}$/)
+        assert.match(row.traceId, /^[a-f0-9]{32}$/)
       }
-      resolveFetchWith(async (url) => {
-        const u = new URL(url)
-        let payload
-        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
-          payload = { data: { id: 'proj' } }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
-          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
-        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
-          payload = pages[u.searchParams.get('page[cursor]') ?? '']
-        } else {
-          payload = {}
-        }
-        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      assert.deepEqual(result.rows.map(row => row.output), [{ answer: 'APPLE' }, { answer: 'CAR' }])
+      assert.deepEqual(result.rows[0].evaluations, {
+        nonempty: true,
+        len: 5,
+        label: 'match',
+        details: { actual: 'APPLE', expected: 'APPLE' },
       })
+      assert.deepEqual(result.rows[1].evaluations, {
+        nonempty: true,
+        len: 3,
+        label: 'match',
+        details: { actual: 'CAR', expected: 'CAR' },
+      })
+    })
 
-      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
-      assert.deepEqual(ds.records().map((r) => r.input), ['i1', 'i2'])
-      assert.deepEqual(ds.recordIds(), ['r1', 'r2'])
+    it('creates an experiment, submits row events, and marks the experiment completed', async function () {
+      const exp = backendExperiments()
+      const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
+        description: 'created by a dd-trace-js experiments VCR test',
+        records: [{ inputData: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'backend-test' } }],
+      }))
+
+      const result = await exp.experiment({
+        name: backendExperimentName,
+        dataset,
+        task: (input) => ({ value: input.value + 1 }),
+        evaluators: {
+          exact: (_input, output, expected) => output.value === expected.value,
+        },
+      }).run()
+
+      assert.match(result.experimentId, /\S+/)
+      assert.match(result.url, /^https:\/\//)
+      assert.equal(result.rows.length, 1)
+      assert.deepEqual(result.rows[0].evaluations, { exact: true })
     })
   })
 })

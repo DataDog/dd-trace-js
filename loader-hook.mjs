@@ -16,7 +16,6 @@ const require = Module.createRequire(import.meta.url)
 const isInitializeMainThread = isMainThread && import.meta.url.endsWith('?initialize')
 let syncImportInTheMiddleHook
 
-let getValueFromEnvSources
 let regexpEscape
 
 // Substrings of resolved URLs that import-in-the-middle must never wrap: re-export
@@ -32,13 +31,12 @@ const includeModuleNames = new Set()
 let moduleNameAlternation = ''
 
 if (!isInitializeMainThread) {
+  require('./packages/dd-trace/src/guardrails/apply-pm2-env.js')
   const regexpEscapeModule = require('./vendor/dist/escape-string-regexp/index.js')
   const hooks = require('./packages/datadog-instrumentations/src/helpers/hooks.js')
-  const configHelper = require('./packages/dd-trace/src/config/helper.js')
   const { isRelativeRequire } = require('./packages/datadog-instrumentations/src/helpers/shared-utils.js')
 
   regexpEscape = regexpEscapeModule.default
-  getValueFromEnvSources = configHelper.getValueFromEnvSources
 
   for (const moduleName of Object.keys(hooks)) {
     // Relative hooks resolve outside node_modules and are not instrumented here.
@@ -63,7 +61,11 @@ function prepareImportInTheMiddleOptions (data = {}) {
   // A consumer-owned shouldInclude predicate takes over the wrapping decision, so
   // iitm ignores the include/exclude arrays. Building the matcher here keeps the
   // synchronous and asynchronous loaders on one matching implementation.
-  data.shouldInclude = createShouldInclude(getValueFromEnvSources('DD_IAST_SECURITY_CONTROLS_CONFIGURATION'))
+  // Lazily required and read without its registered default so a loader worker
+  // never loads the configuration defaults table. The default is unset regardless.
+  const { getValueFromEnvSources } = require('./packages/dd-trace/src/config/helper.js')
+
+  data.shouldInclude = createShouldInclude(getValueFromEnvSources('DD_IAST_SECURITY_CONTROLS_CONFIGURATION', true))
 
   return data
 }

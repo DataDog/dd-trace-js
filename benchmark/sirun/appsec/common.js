@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  port: 3231 + parseInt(process.env.CPU_AFFINITY || '0'),
+  port: 3231 + parseInt(process.env.CPU_AFFINITY || '0', 10),
   // Requests per iteration, sized per variant in meta.json (REQS). A higher count
   // dilutes the fixed startup (node boot + tracer/AppSec init), which is otherwise
   // a large, run-to-run-variable share of a short run and dominates stddev (control

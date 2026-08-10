@@ -198,8 +198,21 @@ versions.forEach((version) => {
             ? '/api/v2/citestcycle'
             : '/evp_proxy/v2/api/v2/citestcycle'
 
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                DD_TEST_SESSION_NAME: 'my-test-session',
+                DD_SERVICE: undefined,
+              },
+            }
+          )
           const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url === reportUrl, payloads => {
               const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
               metadataDicts.forEach(metadata => {
@@ -324,22 +337,9 @@ versions.forEach((version) => {
                 },
               })
               assert.ok(!('test.invalid' in annotatedTest.content.meta))
-            })
+            }, { hardTimeout: 60000 })
 
-          const proc = run(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_TEST_SESSION_NAME: 'my-test-session',
-                DD_SERVICE: undefined,
-              },
-            }
-          )
-          await Promise.all([eventsPromise, once(proc, 'exit')])
+          await eventsPromise
         })
       })
     })

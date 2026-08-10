@@ -58,7 +58,7 @@ describe('Plugin (ESM)', () => {
           await axios.post(`${proc.url}/graphql`, {
             query,
           })
-        } catch (error) {
+        } catch {
           // Server might not respond correctly, but we care about tracing
         }
 
@@ -96,7 +96,7 @@ describe('Plugin (ESM)', () => {
             await axios.post(`${proc.url}/graphql`, {
               query,
             })
-          } catch (error) {
+          } catch {
             // Server might not respond correctly, but we care about tracing
           }
 
@@ -131,7 +131,7 @@ describe('Plugin (ESM)', () => {
                 accept: 'text/event-stream',
               },
             })
-          } catch (error) {
+          } catch {
             // Server might not respond correctly, but we care about tracing
           }
 

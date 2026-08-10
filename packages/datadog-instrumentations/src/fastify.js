@@ -25,6 +25,8 @@ const bodyPublished = new WeakSet()
 let lastPublishedError
 let lastPublishedReq
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
@@ -81,7 +83,7 @@ function wrapAddHook (addHook) {
  * @param {string} name Lifecycle phase the hook was registered against.
  * @param {Function} fn User-supplied hook.
  * @param {unknown} thisArg `this` Fastify passes to the hook.
- * @param {ArrayLike<unknown>} args Fastify's positional args; the dispatcher always
+ * @param {ArgumentsLike} args Fastify's positional args; the dispatcher always
  *   places `done` as the trailing positional (see fastify/lib/hooks.js hookIterator,
  *   onSendHookRunner, preParsingHookRunner, onRequestAbortHookRunner).
  */
