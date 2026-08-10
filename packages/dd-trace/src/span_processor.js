@@ -57,14 +57,18 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      let serviceBySpanId
       if (this._stats) {
-        let serviceBySpanId = servicesByTrace.get(trace)
+        serviceBySpanId = servicesByTrace.get(trace)
         if (!serviceBySpanId) {
           serviceBySpanId = new WeakMap()
           servicesByTrace.set(trace, serviceBySpanId)
         }
-        for (const startedSpan of started) {
-          const context = startedSpan.context()
+      }
+
+      for (const span of started) {
+        if (serviceBySpanId) {
+          const context = span.context()
           const service = context.getTag('service.name')
           const parentService = serviceBySpanId.get(context._parentId)
           if (service !== undefined && parentService !== undefined && service !== parentService) {
@@ -72,9 +76,6 @@ class SpanProcessor {
           }
           if (context._spanId !== undefined && service !== undefined) serviceBySpanId.set(context._spanId, service)
         }
-      }
-
-      for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {

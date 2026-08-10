@@ -96,7 +96,7 @@ describe('OtlpStatsTransformer', () => {
 
     it('maps span dimensions to OTel and dd.* data-point attributes', () => {
       const span = makeSpan({
-        parent_id: { toString: () => '0' },
+        parent_id: { equals: () => true },
         meta: {
           [HTTP_STATUS_CODE]: 404,
           [HTTP_METHOD]: 'POST',
@@ -175,8 +175,8 @@ describe('OtlpStatsTransformer', () => {
 
     it('keeps root and non-root distributions separate when datadog.is_trace_root is exported', () => {
       const spans = [
-        makeSpan({ parent_id: { toString: () => '0' } }),
-        makeSpan({ parent_id: { toString: () => '1' } }),
+        makeSpan({ parent_id: { equals: () => true } }),
+        makeSpan({ parent_id: { equals: () => false } }),
       ]
       const payload = JSON.parse(transformer.transform(
         makeDrained(12340000000000, spans, { includeTraceRoot: true }),
