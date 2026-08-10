@@ -60,7 +60,7 @@ class SpanProcessor {
       if (this._stats) {
         let serviceBySpanId = servicesByTrace.get(trace)
         if (!serviceBySpanId) {
-          serviceBySpanId = new Map()
+          serviceBySpanId = new WeakMap()
           servicesByTrace.set(trace, serviceBySpanId)
         }
         for (const startedSpan of started) {
