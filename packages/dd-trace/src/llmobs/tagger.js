@@ -23,7 +23,11 @@ const {
   OUTPUT_MESSAGES,
   TAGS,
   NAME,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
   PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_NAME_KEY,
   ROOT_PARENT_ID,
   CACHE_READ_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
@@ -57,6 +61,7 @@ const {
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
+  resolveAgentAttribution,
   validateCostTags,
   writeBridgeTags,
   validateToolDefinitions,
@@ -173,6 +178,7 @@ class LLMObsTagger {
     this._setTag(span, PARENT_ID_KEY, parentId)
 
     this.#tagSamplingDecision(span, parent)
+    this.#tagAgentAttribution(span, parent)
 
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
@@ -227,6 +233,34 @@ class LLMObsTagger {
 
     if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
     if (samplingDecision != null) this._setTag(span, SAMPLING_DECISION, samplingDecision)
+  }
+
+  /**
+   * Store the nearest agent ancestor on the span so it can be surfaced as
+   * `meta.agent_attribution` at finish. Resolved once here, at registration, so downstream
+   * children inherit it with a single lookup rather than walking the ancestor chain.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {import('../opentracing/span')} [parent] the LLMObs parent span, if any
+   */
+  // TODO: spans whose kind changes after registration (e.g. claude-agent-sdk tools promoted to
+  // sub-agents) will not retroactively update already-finished children's attribution. Follow up.
+  #tagAgentAttribution (span, parent) {
+    let name, spanId
+    if (registry.has(parent)) {
+      // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
+      ({ name, spanId } = resolveAgentAttribution(registry.get(parent), parent))
+    } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
+      // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
+      // name may be absent when the upstream hop ran an older SDK or its name was not
+      // wire-safe; the id-only case is expected and the backend resolves the name by span id.
+      const traceTags = span.context()._trace.tags
+      name = traceTags[PROPAGATED_PARENT_AGENT_NAME_KEY]
+      spanId = traceTags[PROPAGATED_PARENT_AGENT_ID_KEY]
+    }
+
+    if (name != null) this._setTag(span, PARENT_AGENT_NAME, name)
+    if (spanId != null) this._setTag(span, PARENT_AGENT_SPAN_ID, spanId)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -696,6 +730,59 @@ class LLMObsTagger {
     return filteredAudioParts
   }
 
+  // Image counterpart of #filterAudioParts, with the same wire shape and validation.
+  #filterImageParts (imageParts) {
+    if (!Array.isArray(imageParts)) {
+      imageParts = [imageParts]
+    }
+
+    const filteredImageParts = []
+    for (const imagePart of imageParts) {
+      if (imagePart == null || typeof imagePart !== 'object') {
+        this.#handleFailure('Image part must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { mimeType, content, attachmentKey } = imagePart
+
+      if (typeof mimeType !== 'string' || !mimeType) {
+        this.#handleFailure('Image part mimeType must be a non-empty string.', 'invalid_io_messages')
+        continue
+      }
+
+      if (content == null && attachmentKey == null) {
+        this.#handleFailure("Image part must have either 'content' or 'attachmentKey'.", 'invalid_io_messages')
+        continue
+      }
+
+      if (content != null && attachmentKey != null) {
+        this.#handleFailure(
+          "Image part must have only one of 'content' or 'attachmentKey', not both.", 'invalid_io_messages'
+        )
+        continue
+      }
+
+      const imagePartObj = { mime_type: mimeType }
+
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Image part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        imagePartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Image part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        imagePartObj.content = content
+      }
+
+      filteredImageParts.push(imagePartObj)
+    }
+    return filteredImageParts
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -723,6 +810,7 @@ class LLMObsTagger {
         toolResults,
         toolId,
         audioParts,
+        imageParts,
       } = message
       const messageObj = {}
 
@@ -761,6 +849,14 @@ class LLMObsTagger {
 
         if (filteredAudioParts.length) {
           messageObj.audio_parts = filteredAudioParts
+        }
+      }
+
+      if (imageParts != null) {
+        const filteredImageParts = this.#filterImageParts(imageParts)
+
+        if (filteredImageParts.length) {
+          messageObj.image_parts = filteredImageParts
         }
       }
 

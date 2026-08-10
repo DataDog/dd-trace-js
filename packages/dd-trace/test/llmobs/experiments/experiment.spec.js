@@ -8,84 +8,51 @@ const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experi
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
-function defaultAppendRecordAttributes (_record, index) {
-  return { id: `rec-${index}`, valid_from_version: 2 }
-}
-
-function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes, createDatasetError } = {}) {
-  const requests = []
-  return {
-    appBase: 'https://app.datadoghq.com',
-    requests,
-    ensureProjectId: async () => 'proj',
-    request: async (method, requestPath, body) => {
-      requests.push({ method, path: requestPath, body })
-      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
-        if (createDatasetError) throw createDatasetError
-        return { data: { id: 'ds', attributes: { current_version: 1 } } }
-      }
-      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets/ds/records`) {
-        return {
-          data: body.data.attributes.records.map((record, index) => ({
-            id: record.id ?? `rec-${index}`,
-            attributes: appendRecordAttributes(record, index),
-          })),
-        }
-      }
-      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments`) {
-        return { data: { id: 'exp' } }
-      }
-      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments/exp/events`) return {}
-      if (method === 'PATCH' && requestPath === `${API_BASE_PATH}/experiments/exp`) return {}
-      throw new Error(`Unexpected request ${method} ${requestPath}`)
-    },
-  }
-}
-
-describe('LLMObs Experiments — dataset + experiment run', () => {
-  const client = () => new ExperimentsClient({
+function client () {
+  return new ExperimentsClient({
     apiKey: 'k',
     appKey: 'a',
     site: 'datadoghq.com',
     projectName: 'my-app',
   })
+}
 
-  it('runs an experiment and returns rows, ids and dashboard URLs', async () => {
-    const c = stubClient()
-    const dataset = new Dataset(c, 'demo', 'desc')
-      .addRecord({ q: 'apple' }, 'true', { row: 0 })
-      .addRecord({ q: 'car' }, 'false', { row: 1 })
+function clientWithMockBackend ({ createDatasetError } = {}) {
+  const c = client()
+  const requests = []
 
-    const result = await new Experiment(c, {
-      name: 'exp-demo',
-      description: 'desc exp',
-      dataset,
-      task: (input) => ({ answer: input.q.toUpperCase() }),
-      evaluators: {
-        nonempty: (_input, output) => output.answer.length > 0,
-        len: (_input, output) => output.answer.length,
-        label: (_input, output) => (output.answer === 'APPLE' ? 'match' : 'miss'),
-      },
-      config: { temperature: 0 },
-      tags: { env: 'test' },
-    }).run()
+  c.ensureProjectId = async () => 'proj'
+  c.createDataset = async (projectId, attributes) => {
+    requests.push({ method: 'createDataset', projectId, attributes })
+    if (createDatasetError) throw createDatasetError
+    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 1, 1)
+  }
+  c.appendDatasetRecords = async (projectId, datasetId, records) => {
+    requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
+    return records.map((record, index) => new DatasetRecord(
+      record.input,
+      record.expected_output,
+      record.metadata,
+      record.id ?? `rec-${index}`
+    ))
+  }
+  c.createExperiment = async (attributes) => {
+    requests.push({ method: 'createExperiment', attributes })
+    return { experimentId: 'exp', rows: [], url: `${c.appBase}/llm/experiments/exp` }
+  }
+  c.postExperimentEvents = async (experimentId, attributes) => {
+    requests.push({ method: 'postExperimentEvents', experimentId, attributes })
+  }
+  c.updateExperiment = async (experimentId, attributes) => {
+    requests.push({ method: 'updateExperiment', experimentId, attributes })
+  }
 
-    assert.equal(result.experimentId, 'exp')
-    assert.equal(result.url, 'https://app.datadoghq.com/llm/experiments/exp')
-    assert.equal(result.rows.length, 2)
-    assert.deepEqual(result.rows[0].output, { answer: 'APPLE' })
-    assert.equal(result.rows[0].evaluations.nonempty, true)
-    assert.equal(result.rows[0].evaluations.len, 5)
-    assert.equal(result.rows[0].evaluations.label, 'match')
-    assert.equal(result.runs.length, 1)
-    assert.equal(dataset.id(), 'ds')
-    assert.equal(dataset.version(), 2)
-    assert.deepEqual(dataset.recordIds(), ['rec-0', 'rec-1'])
-    assert.equal(dataset.url(), 'https://app.datadoghq.com/llm/datasets/ds')
-  })
+  return { client: c, requests }
+}
 
+describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
-    const c = stubClient()
+    const { client: c } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
     const callsToLlmobs = []
     const llmobs = {
@@ -115,22 +82,9 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
   })
 
-  it('submits custom record ids with append responses', async () => {
-    const dataset = new Dataset(stubClient(), 'demo')
-      .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
-      .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
-
-    const result = await dataset.push()
-
-    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
-    assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
-    assert.deepEqual(dataset.records().map(record => record.id), ['custom-a', 'custom-b'])
-    assert.equal(dataset.version(), 2)
-    assert.equal(dataset.latestVersion(), 2)
-  })
-
   it('surfaces backend failures', async () => {
-    const c = stubClient({ createDatasetError: new Error('HTTP 500 boom') })
+    const createDatasetError = new Error(`POST ${API_BASE_PATH}/proj/datasets failed: HTTP 500 boom`)
+    const { client: c } = clientWithMockBackend({ createDatasetError })
     const dataset = new Dataset(c, 'demo').addRecord('a')
 
     await assert.rejects(
@@ -139,18 +93,18 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
-  it('clears the pinned dataset version when append responses omit a new version', async () => {
-    const c = stubClient({ appendRecordAttributes: () => ({}) })
-    const dataset = new Dataset(c, 'demo').addRecord('a')
+  it('advances appended dataset versions from the current latest version', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [], [], 2, 5).addRecord('a')
 
     await dataset.push()
 
-    assert.equal(dataset.version(), null)
-    assert.equal(dataset.latestVersion(), 1)
+    assert.equal(dataset.version(), 6)
+    assert.equal(dataset.latestVersion(), 6)
   })
 
   it('keeps evaluator results aligned for summary evaluators when rows fail', async () => {
-    const c = stubClient()
+    const { client: c } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo')
       .addRecord('good', 'good')
       .addRecord('eval-bad', 'eval-bad')
@@ -189,7 +143,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('throws task and evaluator errors when throwOnErrors is true', async () => {
-    const taskClient = stubClient()
+    const { client: taskClient } = clientWithMockBackend()
     await assert.rejects(
       () => new Experiment(taskClient, {
         name: 'exp-demo',
@@ -199,7 +153,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       /task-fail/
     )
 
-    const evaluatorClient = stubClient()
+    const { client: evaluatorClient } = clientWithMockBackend()
     await assert.rejects(
       () => new Experiment(evaluatorClient, {
         name: 'exp-demo',
@@ -212,7 +166,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('normalizes fallback JSON evaluator metrics', async () => {
-    const c = stubClient()
+    const { client: c, requests } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord('x')
     await new Experiment(c, {
       name: 'exp-demo',
@@ -227,8 +181,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       },
     }).run()
 
-    const metrics = c.requests.find(request => request.path.endsWith('/experiments/exp/events'))
-      .body.data.attributes.metrics
+    const metrics = requests.find(request => request.method === 'postExperimentEvents')
+      .attributes.metrics
     const byLabel = (label) => metrics.find(metric => metric.label === label)
 
     assert.deepEqual(byLabel('obj').json_value, { x: 1 })
@@ -266,15 +220,18 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
     const dataset = new Dataset(client(), 'my-name', 'desc')
-      .addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }, 'rec'))
       .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
     assert.equal(dataset.name(), 'my-name')
+    assert.equal(dataset.description(), 'desc')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
     const record = dataset.records()[0]
     assert.equal(record.input, 'in')
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
+    assert.equal(record.id, 'rec')
+    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })

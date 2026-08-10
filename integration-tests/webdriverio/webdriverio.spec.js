@@ -59,24 +59,6 @@ const disabledSettings = {
   coverage_report_upload_enabled: false,
 }
 
-const enabledSettings = {
-  code_coverage: true,
-  tests_skipping: true,
-  itr_enabled: true,
-  require_git: false,
-  early_flake_detection: {
-    enabled: true,
-  },
-  flaky_test_retries_enabled: true,
-  di_enabled: true,
-  known_tests_enabled: true,
-  test_management: {
-    enabled: true,
-  },
-  impacted_tests_enabled: true,
-  coverage_report_upload_enabled: true,
-}
-
 const advancedRequestPaths = [
   '/api/v2/ci/libraries/tests',
   '/api/v2/ci/tests/skippable',
@@ -189,7 +171,7 @@ function assertOneTestPerSuiteExecution (suites, tests) {
 }
 
 /**
- * Extracts events and verifies the WebdriverIO run stayed in reporting-only mode.
+ * Extracts events and verifies the WebdriverIO run kept TIA disabled.
  *
  * @param {object[]} payloads
  * @param {string} requestedVersion
@@ -209,7 +191,7 @@ function getReportingEvents (payloads, requestedVersion, frameworkAdapter) {
   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
   assert.strictEqual(settingsRequests.length, 1)
-  assert.strictEqual(advancedRequests.length, 0)
+  assert.strictEqual(advancedRequests.length, 0, JSON.stringify(advancedRequests.map(({ url }) => url)))
   assert.strictEqual(sessions.length, 1, JSON.stringify({
     events: events.map(event => ({
       name: event.content?.name,
@@ -228,23 +210,13 @@ function getReportingEvents (payloads, requestedVersion, frameworkAdapter) {
   assert.ok(metadata.length > 0)
   for (const metadataEntry of metadata) {
     assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-    if (frameworkAdapter === 'jasmine') {
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], undefined)
-    } else {
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-      assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
-    }
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+    assert.strictEqual(metadataEntry.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
   }
 
   for (const event of [sessions[0], modules[0], ...suites, ...tests]) {
@@ -383,9 +355,7 @@ for (const version of versions) {
       })
     })
 
-    it('reports parallel Jasmine workers as one basic-reporting session', async () => {
-      receiver.setSettings(enabledSettings)
-
+    it('reports parallel Jasmine workers as one session', async () => {
       await runScenario('parallel', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
         assert.strictEqual(tests.length, 2)
@@ -404,8 +374,6 @@ for (const version of versions) {
     })
 
     it('reports Jasmine pass, fail, and skip statuses', async () => {
-      receiver.setSettings(enabledSettings)
-
       await runScenario('jasmineStatuses', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)

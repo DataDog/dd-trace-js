@@ -1941,6 +1941,18 @@ declare namespace tracer {
     interface Instrumentation extends Integration, Analyzable {}
 
     /** @hidden */
+    interface LLMObsIntegration extends Integration {
+      /**
+       * Whether to capture LLM Observability spans for this integration. When set to `false`,
+       * the integration keeps emitting APM spans and propagating trace context, but no LLM
+       * Observability spans are produced. Useful when another integration already captures the
+       * same operation and the payloads would otherwise be stored twice.
+       * @default true
+       */
+      llmobs?: boolean;
+    }
+
+    /** @hidden */
     interface DatabaseInstrumentation extends Instrumentation {
       /**
        * Truncate the resource name (e.g. the query) to the given length.
@@ -2804,7 +2816,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langchain](https://js.langchain.com/) module
      */
-    interface langchain extends Instrumentation {}
+    interface langchain extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2846,7 +2858,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
-    interface modelcontextprotocol_sdk extends Instrumentation {}
+    interface modelcontextprotocol_sdk extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -3714,6 +3726,13 @@ declare namespace tracer {
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
+      /**
+       * Submits end-user feedback for a span, trace, session, or customer-defined entity.
+       * Exactly one target must be provided in the options.
+       * @param options An object containing the label, metric type, value, submitter and target of the feedback.
+       */
+      submitFeedback (options: llmobs.FeedbackOptions): void
+
 
       /**
        * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
@@ -3857,6 +3876,7 @@ declare namespace tracer {
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
+      description (): string
       id (): string | null
       projectId (): string | null
       version (): number | null
@@ -3960,6 +3980,93 @@ declare namespace tracer {
       metadata?: { [key: string]: any }
     }
 
+    interface FeedbackSubmitter {
+      /**
+       * The identifier of the end user who submitted the feedback.
+       */
+      id: string,
+
+      /**
+       * The type of submitter, e.g. 'user'.
+       */
+      type?: string
+    }
+
+    interface FeedbackOptions {
+      /**
+       * The name of the feedback metric
+       */
+      label: string,
+
+      /**
+       * The type of feedback metric, one of 'categorical', 'score', 'boolean', 'json' or 'text'
+       */
+      metricType: 'categorical' | 'score' | 'boolean' | 'json' | 'text',
+
+      /**
+       * The value of the feedback metric.
+       * Must be string for 'categorical' and 'text' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
+       */
+      value: string | number | boolean | { [key: string]: any },
+
+      /**
+       * Who submitted the feedback.
+       */
+      submitter: llmobs.FeedbackSubmitter,
+
+      /**
+       * The span context of the span to attach the feedback to, as returned by `llmobs.exportSpan()`.
+       * Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` must be provided.
+       */
+      span?: llmobs.ExportedLLMObsSpan,
+
+      /**
+       * The ID of the span to attach the feedback to.
+       */
+      spanId?: string,
+
+      /**
+       * The ID of the trace to attach the feedback to.
+       */
+      traceId?: string,
+
+      /**
+       * The ID of the session to attach the feedback to.
+       */
+      sessionId?: string,
+
+      /**
+       * A customer-defined key to attach the feedback to.
+       */
+      feedbackJoinKey?: string,
+
+      /**
+       * An object of string key-value pairs to tag the feedback with.
+       * A `null` or `undefined` value is sent as the string `"null"` or `"undefined"`.
+       */
+      tags?: { [key: string]: string | null | undefined },
+
+      /**
+       * The name of the ML application
+       */
+      mlApp?: string,
+
+      /**
+       * The timestamp in milliseconds when the feedback was generated.
+       */
+      timestampMs?: number,
+
+      /**
+       * Reasoning for the feedback.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the feedback passed or failed. Valid values are pass and fail.
+       */
+      assessment?: 'pass' | 'fail'
+    }
+
     interface Document {
       /**
        * Document text
@@ -4005,6 +4112,11 @@ declare namespace tracer {
        * Audio segments attached to the message (e.g. speech input/output)
        */
       audioParts?: AudioPart[],
+
+      /**
+       * Images attached to the message (e.g. vision input, generated output)
+       */
+      imageParts?: ImagePart[],
     }
 
     /**
@@ -4020,6 +4132,43 @@ declare namespace tracer {
        * The audio content as a base64-encoded string
        */
       content: string,
+    }
+
+    /**
+     * Represents an image attached to an LLM chat model message, carrying exactly
+     * one of inline `content` or an `attachmentKey`. Supplying neither or both is
+     * rejected by the tagger, and the union keeps both shapes from type-checking.
+     */
+    type ImagePart = {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The image content as a base64-encoded string
+       */
+      content: string,
+
+      /**
+       * Explicitly excluded when inline content is present to maintain type safety.
+       */
+      attachmentKey?: never,
+    } | {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * Key of an already-uploaded image, in place of inline content
+       */
+      attachmentKey: string,
+
+      /**
+       * Explicitly excluded when an attachment key is present to maintain type safety.
+       */
+      content?: never,
     }
 
     /**

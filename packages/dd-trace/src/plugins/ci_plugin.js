@@ -483,7 +483,6 @@ module.exports = class CiPlugin extends Plugin {
   get telemetry () {
     const testFramework = this.testFramework || this.constructor.id
     const exporter = this.tracer?._exporter
-    // TODO: only jest worker supported yet
     const isSupportedWorker = exporter && typeof exporter.exportTelemetry === 'function'
     const ciProviderName = this.ciProviderName
 

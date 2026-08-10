@@ -73,6 +73,14 @@ const SKIPPABLE_RESPONSE_WITH_COVERAGE = {
   },
 }
 
+const SKIPPABLE_RESPONSE_WITH_NULL_COVERAGE = {
+  ...SKIPPABLE_RESPONSE,
+  meta: {
+    ...SKIPPABLE_RESPONSE.meta,
+    coverage: null,
+  },
+}
+
 const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
   data: [
     {
@@ -187,6 +195,20 @@ describe('get-skippable-suites', () => {
         'src/file1.js': 'gA==',
         'src/file2.js': 'IA==',
       })
+      done()
+    })
+  })
+
+  it('should accept null coverage metadata when coverage report upload is disabled', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_NULL_COVERAGE))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId, coverage) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      assert.deepStrictEqual(coverage, {})
       done()
     })
   })
@@ -448,6 +470,13 @@ describe('parseSkippableSuitesResponse', () => {
         { validateRequiredFields: true }
       ),
       /Invalid skippable tests response: data entry suite must be a string/
+    )
+    assert.throws(
+      () => parseSkippableSuitesResponse(
+        JSON.stringify({ data: [], meta: { coverage: [] } }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid skippable tests response: meta.coverage must be an object/
     )
   })
 })

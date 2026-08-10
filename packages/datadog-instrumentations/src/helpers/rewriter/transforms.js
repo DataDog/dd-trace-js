@@ -14,7 +14,89 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-module.exports = { waitForAsyncEnd }
+const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
+const identifierPattern = /^[$A-Z_a-z][$\w]*$/
+
+module.exports = { awaitContextCallback, waitForAsyncEnd }
+
+/**
+ * Awaits an optional context callback before continuing through a matched conditional branch.
+ *
+ * The branch condition is checked again after the callback settles so the
+ * original body does not run against state that changed while awaiting.
+ *
+ * @param {{
+ *   transformOptions?: {
+ *     callbackArgumentNames?: string[],
+ *     callbackName?: string
+ *   }
+ * }} state
+ * @param {import('estree').IfStatement} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ * @returns {void}
+ */
+function awaitContextCallback (state, node, _parent, ancestry) {
+  assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
+    'awaitContextCallback: expected an if statement with a block body')
+
+  const { callbackArgumentNames = [], callbackName } = state.transformOptions ?? {}
+
+  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
+  assert(callbackArgumentNames.every(name => identifierPattern.test(name)),
+    'awaitContextCallback: callbackArgumentNames must be identifiers')
+
+  let enclosingFunction
+  let hasTraceWrapper = false
+  for (const ancestor of ancestry) {
+    if (!functionTypes.has(ancestor.type)) continue
+
+    enclosingFunction ??= ancestor
+    if (ancestor.body?.type !== 'BlockStatement') continue
+
+    let hasContextBinding = false
+    let hasTracedBinding = false
+    for (const statement of ancestor.body.body) {
+      if (statement.type !== 'VariableDeclaration') continue
+
+      for (const declaration of statement.declarations) {
+        hasContextBinding ||= declaration.id?.name === '__apm$ctx'
+        hasTracedBinding ||= declaration.id?.name === '__apm$traced'
+      }
+    }
+    hasTraceWrapper ||= hasContextBinding && hasTracedBinding
+  }
+
+  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
+  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
+
+  const callbackVariable = `__apm$${callbackName}`
+  if (query(node, `[id.name="${callbackVariable}"]`).length > 0) {
+    return
+  }
+
+  const originalStatements = node.consequent.body
+  const callbackStatements = parse(`
+    async function wrapper () {
+      const ${callbackVariable} = __apm$ctx.${callbackName};
+      if (typeof ${callbackVariable} === 'function') {
+        try {
+          await ${callbackVariable}(${callbackArgumentNames.join(', ')});
+        } catch {}
+        if (true) {}
+      } else {
+      }
+    }
+  `).body[0].body.body
+
+  const callbackBranch = callbackStatements[1]
+  const recheckedBranch = callbackBranch.consequent.body[1]
+  recheckedBranch.test = clone(node.test)
+  recheckedBranch.consequent.body.push(...clone(originalStatements))
+  recheckedBranch.alternate = clone(node.alternate)
+  callbackBranch.alternate.body.push(...originalStatements)
+  node.consequent.body = callbackStatements
+}
 
 /**
  * Injects settlement-specific asyncEnd waits into a generated `tracePromise`
