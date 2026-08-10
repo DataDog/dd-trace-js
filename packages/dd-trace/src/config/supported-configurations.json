@@ -3009,6 +3009,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_SERVER_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "500-599",
+        "aliases": [
+          "DD_HTTP_SERVER_ERROR_STATUSES"
+        ]
+      }
+    ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
       {
         "implementation": "A",

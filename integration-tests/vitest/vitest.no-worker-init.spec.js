@@ -455,6 +455,10 @@ describe('vitest no-worker init instrumentation selection', () => {
         configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
 
         assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
+        assert.strictEqual(
+          typeof project.options.browser.commands.__dd_vitest_efd_suite_admission,
+          'function'
+        )
       })
     }
 
@@ -834,6 +838,7 @@ describe('vitest no-worker init instrumentation selection', () => {
 
 SUPPORTED_VERSIONS.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
+    const latestVitestIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     let cwd, receiver, childProcess, testOutput
 
     useSandbox([
@@ -1747,6 +1752,44 @@ describe('impacted test', () => {
         runVitest({
           TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
           POOL_CONFIG: 'forks',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    latestVitestIt('uses legacy EFD faultiness detection in no-worker mode', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+          },
+          faulty_session_threshold: 1,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+        assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.meta[TEST_SUITE])).size, 2)
+        for (const test of tests) {
+          assert.ok(!(TEST_IS_NEW in test.meta))
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        }
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-*',
+          POOL_CONFIG: 'threads',
         }),
         payloadsPromise,
       ]).then(([exitCode]) => exitCode)

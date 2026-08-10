@@ -10,7 +10,6 @@ const {
 } = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
-const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
@@ -33,6 +32,7 @@ const {
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
   isModifiedTest,
+  isMarkedAsUnskippable,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
