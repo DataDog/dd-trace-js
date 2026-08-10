@@ -1,6 +1,7 @@
 'use strict'
 
 const { performance } = require('node:perf_hooks')
+const dateNow = Date.now
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
@@ -173,6 +174,15 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
+    this._pendingTestSuiteSpans = []
+    this._timeOrigin = dateNow()
+    this._perfOrigin = performance.now()
+
+    this.addSub('ci:mocha:session:start', () => {
+      this._pendingTestSuiteSpans = []
+      this._timeOrigin = dateNow()
+      this._perfOrigin = performance.now()
+    })
 
     this.addSub('ci:mocha:worker:configuration', ({
       libraryConfig,
@@ -472,7 +482,10 @@ class MochaPlugin extends CiPlugin {
         if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
-        testSuiteSpan.finish()
+        this._pendingTestSuiteSpans.push({
+          span: testSuiteSpan,
+          finishTime: this._now(),
+        })
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     })
@@ -739,6 +752,11 @@ class MochaPlugin extends CiPlugin {
           }
         }
 
+        for (const { span, finishTime } of this._pendingTestSuiteSpans) {
+          span.finish(finishTime)
+        }
+        this._pendingTestSuiteSpans = []
+
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
         }
@@ -795,6 +813,15 @@ class MochaPlugin extends CiPlugin {
     this.addBind('ci:mocha:global:run', (ctx) => {
       return ctx.currentStore
     })
+  }
+
+  /**
+   * Returns the current time in the coordinate system used by spans.
+   *
+   * @returns {number}
+   */
+  _now () {
+    return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
   /**

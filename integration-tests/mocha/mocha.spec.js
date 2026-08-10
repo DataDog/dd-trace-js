@@ -243,7 +243,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ].join(' '),
       {
         cwd,
-        env: getCiVisAgentlessConfig(receiver.port),
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+        },
       }
     )
     childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
