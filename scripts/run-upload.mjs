@@ -17,7 +17,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
  *
  * @param {string} command
  * @param {string[]} args
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {Record<string, string>} [env]
  * @returns {Promise<UploadResult>}
  */
 function spawnUpload (command, args, env) {
@@ -44,7 +44,7 @@ function spawnUpload (command, args, env) {
  *
  * @param {string} command
  * @param {string[]} args
- * @param {NodeJS.ProcessEnv} [env] Extra environment variables to overlay onto the child's
+ * @param {Record<string, string>} [env] Extra environment variables to overlay onto the child's
  *   environment, on top of (not instead of) this process's own.
  * @returns {Promise<UploadResult>}
  */
