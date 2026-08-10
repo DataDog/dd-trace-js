@@ -19,6 +19,7 @@ const {
 } = require('./helpers/terminal')
 const { createReleaseChangelog } = require('./changelog')
 const { checkAll } = require('./helpers/requirements')
+const { hydrateReleaseEntries } = require('./metadata')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
@@ -113,20 +114,24 @@ try {
   // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n')
-  const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
   for (const sha of notesShas) {
     if (!sha) continue
+    const subject = capture(`git show -s --format=%s ${sha}`)
+    const match = subject.match(pullRequestNumberPattern)
     notesEntries.push({
-      sha,
-      subject: capture(`git show -s --format=%s ${sha}`),
-      author: contributorBySha.get(sha),
+      commitRef: sha,
+      pullRequestNumber: match ? Number.parseInt(match[1], 10) : undefined,
+      subject,
     })
   }
   const breakingEntries = isPreRelease
     ? getBreakingPullRequestEntries(releaseLine, upperBoundRef)
     : []
-  const notes = createReleaseChangelog(notesEntries, breakingEntries)
+  const notes = createReleaseChangelog(
+    hydrateReleaseEntries(notesEntries),
+    hydrateReleaseEntries(breakingEntries)
+  )
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
@@ -308,36 +313,6 @@ try {
 }
 
 /**
- * Map each release commit SHA to its GitHub contributor handle (`@login`), or
- * the git author name when the commit author is not a GitHub user. Bot accounts
- * (dependabot, github-actions) are skipped so the Contributors list stays human.
- *
- * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
- * @param {string} head Upper-bound commit the proposal is capped at.
- */
-function getContributorsBySha (base, head) {
-  const contributors = new Map()
-  const jq = '.commits[] | [.sha, (.author.login // ""), (.author.type // ""), .commit.author.name] | @tsv'
-
-  let output
-  try {
-    output = capture(`gh api "repos/DataDog/dd-trace-js/compare/${base}...${head}" --paginate --jq '${jq}'`)
-  } catch {
-    log('Warning: unable to fetch contributors from GitHub; skipping the Contributors section.')
-    return contributors
-  }
-
-  for (const line of output.split('\n')) {
-    if (!line) continue
-    const [sha, login, type, name] = line.split('\t')
-    if (type === 'Bot') continue
-    contributors.set(sha, login ? `@${login}` : name)
-  }
-
-  return contributors
-}
-
-/**
  * Semver-major changes are commonly guarded by version checks and backported to
  * stable branches. Branch comparisons can miss them because the commits exist
  * on both the previous and next release lines, so the vN.0.0 promotion lists
@@ -359,7 +334,7 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
       'gh pr list --repo DataDog/dd-trace-js --state merged --limit 1000' +
       ` --label=${label}` +
       ` --search "base:${main} merged:>=${mergedAfter} merged:<=${mergedBefore}"` +
-      ' --json number,title,mergeCommit,author'
+      ' --json number,title,mergeCommit'
     ))
 
     for (const pullRequest of pullRequests) {
@@ -371,9 +346,9 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
 
   return [...pullRequestsByNumber.values()].map(pullRequest => {
     return {
-      sha: pullRequest.mergeCommit?.oid || `pull-request-${pullRequest.number}`,
+      commitRef: pullRequest.mergeCommit?.oid,
+      pullRequestNumber: pullRequest.number,
       subject: `${pullRequest.title} (#${pullRequest.number})`,
-      author: pullRequest.author?.login ? `@${pullRequest.author.login}` : undefined,
     }
   })
 }
