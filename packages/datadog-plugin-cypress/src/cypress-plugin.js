@@ -585,7 +585,7 @@ class CypressPlugin {
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
-    this.pendingTestSuiteSpans = []
+    this.finishedTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -1269,14 +1269,13 @@ class CypressPlugin {
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
-      for (const { span, finishTime } of this.pendingTestSuiteSpans) {
+      for (const span of this.finishedTestSuiteSpans) {
         if (error) {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', error)
         }
-        span.finish(finishTime)
       }
-      this.pendingTestSuiteSpans = []
+      this.finishedTestSuiteSpans = []
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
@@ -1609,10 +1608,10 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
-        this.pendingTestSuiteSpans.push({
-          span: this.testSuiteSpan,
-          finishTime: this._now(),
-        })
+        const exporter = this.tracer._tracer._exporter
+        if (exporter.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
+        this.testSuiteSpan.finish(this._now())
+        this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
@@ -1629,15 +1628,21 @@ class CypressPlugin {
     finishSuite()
 
     const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
       if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      } else {
+        afterSpecPromise = testSpansPromise
       }
-      return testSpansPromise
     }
 
-    return screenshotUploadsPromise
+    if (!error) return afterSpecPromise
+
+    const exporter = this.tracer._tracer._exporter
+    if (!exporter?.flush) return afterSpecPromise
+    return Promise.resolve(afterSpecPromise).then(() => new Promise(resolve => exporter.flush(() => resolve(null))))
   }
 
   /**

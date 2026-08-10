@@ -108,8 +108,10 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       if (initializationAborted) {
         this.resetUncodedTraces()
+        this.resetDeferredTestSuiteSpans()
         return
       }
+      if (!isEvpCompatible) this.resetDeferredTestSuiteSpans()
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     }, initializationOptions)

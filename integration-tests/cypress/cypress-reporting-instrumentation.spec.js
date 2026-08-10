@@ -522,6 +522,57 @@ moduleTypes.forEach(({
       assert.notStrictEqual(exitCode, 0)
     })
 
+    over10It('reports a completed suite when after:spec prevents after:run finalization', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+      const startedAt = Date.now()
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_AFTER_SPEC: '1',
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suiteEvents.length, 1)
+          assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(suiteEvents[0].content.error, 1)
+          assert.match(suiteEvents[0].content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+
+          const testEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assert.ok(testEvent, 'expected completed test event')
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        },
+        { hardTimeout: 60000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+      assert.ok(Date.now() - startedAt < 20_000, 'final writer flush should remain bounded')
+    })
+
     // Tests the old manual API: dd-trace/ci/cypress/after-run and after-spec
     // used alongside the manual plugin, without NODE_OPTIONS auto-instrumentation.
     over10It('works if after:run and after:spec are explicitly used with the manual plugin', async () => {
@@ -2099,14 +2150,21 @@ if (requestedVersion === 'latest' &&
         assert.deepStrictEqual(warnings, [])
       })
 
-      for (const position of ['before', 'after']) {
-        it(`finalizes with the original error from a handler registered ${position} Datadog`, async () => {
+      for (const { position, finalization } of [
+        { position: 'before', finalization: 'rejects' },
+        { position: 'before', finalization: 'throws' },
+        { position: 'after' },
+      ]) {
+        const finalizationDescription = finalization ? ` when finalization ${finalization}` : ''
+        const testName =
+          `finalizes with the original error from a handler registered ${position} Datadog${finalizationDescription}`
+        it(testName, async () => {
           const projectRoot = createProjectRoot()
           const userError = new Error(`user handler ${position} Datadog failed`)
           const userHandler = sinon.stub().rejects(userError)
           const finalizationError = new Error('Datadog finalization failed')
-          const datadogHandler = position === 'before'
-            ? sinon.stub().rejects(finalizationError)
+          const datadogHandler = finalization
+            ? sinon.stub()[finalization](finalizationError)
             : sinon.stub()
           datadogHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
           const taskHandler = {
@@ -2144,7 +2202,7 @@ if (requestedVersion === 'latest' &&
           })
           sinon.assert.calledOnceWithExactly(userHandler, results)
           sinon.assert.calledOnceWithExactly(datadogHandler, results, userError)
-          if (position === 'before') {
+          if (finalization) {
             assert.strictEqual(errors.length, 1)
             assert.match(errors[0], /Datadog finalization failed/)
           } else {

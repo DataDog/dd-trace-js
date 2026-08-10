@@ -482,10 +482,16 @@ class MochaPlugin extends CiPlugin {
         if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
-        this._pendingTestSuiteSpans.push({
-          span: testSuiteSpan,
-          finishTime: this._now(),
-        })
+        const exporter = this.tracer._exporter
+        if (exporter.deferTestSuiteSpan) {
+          exporter.deferTestSuiteSpan(testSuiteSpan)
+          testSuiteSpan.finish(this._now())
+        } else {
+          this._pendingTestSuiteSpans.push({
+            span: testSuiteSpan,
+            finishTime: this._now(),
+          })
+        }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     })

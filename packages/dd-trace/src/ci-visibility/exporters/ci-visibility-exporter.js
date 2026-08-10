@@ -16,6 +16,7 @@ const { uploadCoverageReport: uploadCoverageReportRequest } = require('../reques
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const spanFormat = require('../../span_format')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -99,6 +100,7 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
+  #deferredTestSuiteSpans = new Map()
 
   constructor (config, options = {}) {
     super(config)
@@ -403,6 +405,42 @@ class CiVisibilityExporter extends BufferingExporter {
   export (trace) {
     this.#resetFinalFlush()
 
+    if (this.#deferredTestSuiteSpans.size === 0) {
+      this.#exportTrace(trace)
+      return
+    }
+
+    let hasDeferredTestSuiteSpan = false
+    let immediateTrace
+    for (let index = 0; index < trace.length; index++) {
+      const formattedSpan = trace[index]
+      const spanId = formattedSpan.span_id?.toString()
+      const deferredTestSuiteSpan = this.#deferredTestSuiteSpans.get(spanId)
+      if (deferredTestSuiteSpan) {
+        if (!hasDeferredTestSuiteSpan && index > 0) immediateTrace = trace.slice(0, index)
+        hasDeferredTestSuiteSpan = true
+        if (this._isInitialized && !this.canReportSessionTraces()) {
+          this.#deferredTestSuiteSpans.delete(spanId)
+        } else {
+          deferredTestSuiteSpan.formattedSpan = formattedSpan
+        }
+      } else if (hasDeferredTestSuiteSpan) {
+        immediateTrace ??= []
+        immediateTrace.push(formattedSpan)
+      }
+    }
+
+    if (!hasDeferredTestSuiteSpan) this.#exportTrace(trace)
+    else if (immediateTrace) this.#exportTrace(immediateTrace)
+  }
+
+  /**
+   * Exports spans that are not retained for late hierarchy updates.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
       this._traceBuffer.push(trace)
@@ -412,6 +450,28 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
     this._export(trace, undefined, undefined, getIsTestSessionTrace(trace))
+  }
+
+  /**
+   * Retains a completed suite until finalization so a later framework error can still update it.
+   *
+   * @param {import('../../opentracing/span')} testSuiteSpan
+   * @returns {void}
+   */
+  deferTestSuiteSpan (testSuiteSpan) {
+    this.#deferredTestSuiteSpans.set(testSuiteSpan.context()._spanId.toString(), {
+      span: testSuiteSpan,
+      formattedSpan: undefined,
+    })
+  }
+
+  /**
+   * Discards completed suites that the selected transport cannot deliver.
+   *
+   * @returns {void}
+   */
+  resetDeferredTestSuiteSpans () {
+    this.#deferredTestSuiteSpans.clear()
   }
 
   exportCoverage (formattedCoverage) {
@@ -481,7 +541,8 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     if (isFinalFlush && !this._isInitialized &&
-      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0) {
+      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
+      this.#deferredTestSuiteSpans.size === 0) {
       onDone()
       return
     }
@@ -524,6 +585,18 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     const flushWriters = () => {
+      if (isFinalFlush && this._writer && this.canReportSessionTraces()) {
+        for (const { span, formattedSpan } of this.#deferredTestSuiteSpans.values()) {
+          if (!formattedSpan) continue
+          const updatedSpan = spanFormat(span)
+          formattedSpan.error = updatedSpan.error
+          Object.assign(formattedSpan.meta, updatedSpan.meta)
+          Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+          this._writer.append([formattedSpan])
+        }
+        this.#deferredTestSuiteSpans.clear()
+      }
+
       const writers = [
         this._writer,
         this._coverageWriter,

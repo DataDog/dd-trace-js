@@ -46,6 +46,7 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getLibraryCapabilitiesTags,
+  finishAllTraceSpans,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
@@ -66,6 +67,25 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('finishAllTraceSpans', () => {
+  it('does not finish completed spans twice', () => {
+    const completedSpan = { _finished: true, finish: sinon.spy() }
+    const activeSpan = { _finished: false, finish: sinon.spy() }
+    const rootSpan = {
+      context: () => ({
+        _trace: {
+          started: [rootSpan, completedSpan, activeSpan],
+        },
+      }),
+    }
+
+    finishAllTraceSpans(rootSpan)
+
+    sinon.assert.notCalled(completedSpan.finish)
+    sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
 
 describe('library capabilities', () => {
   it('advertises TIA for Vitest unless the execution mode does not support it', () => {

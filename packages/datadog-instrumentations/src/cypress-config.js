@@ -472,7 +472,7 @@ function registerDdTraceHooks (
 
       return chain.then(
         () => datadogHandler(results),
-        userError => Promise.resolve(datadogHandler(results, userError)).then(
+        userError => Promise.resolve().then(() => datadogHandler(results, userError)).then(
           () => { throw userError },
           finalizationError => {
             log.error('Datadog Cypress finalizer failed after a user handler error', finalizationError)

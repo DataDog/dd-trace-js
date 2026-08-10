@@ -986,7 +986,7 @@ addHook({
       finishRootSuiteAfterFinalAttempt(test)
     })
 
-    this.on('pending', getOnPendingHandler())
+    this.prependListener('pending', getOnPendingHandler())
 
     this.on('suite', function (suite) {
       if (suite.root || !suite.tests.length) {

@@ -20,16 +20,19 @@ const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-p
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
+const actualSpanFormat = require('../../../src/span_format')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
+let formatSpan = actualSpanFormat
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
     },
   },
+  '../../span_format': (...args) => formatSpan(...args),
 })
 
 // The real tracer Config always carries a `testOptimization` namespace object.
@@ -53,6 +56,7 @@ describe('CI Visibility Exporter', () => {
     config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
+    formatSpan = actualSpanFormat
   })
 
   afterEach(() => {
@@ -884,6 +888,60 @@ describe('CI Visibility Exporter', () => {
         sinon.assert.calledOnce(writer.flush)
         assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
       })
+
+      it('retains a completed suite until final flush and applies later span tags', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const spanId = { toString: () => 'suite-span-id' }
+        const testSuiteSpan = {
+          context: () => ({ _spanId: spanId }),
+        }
+        const testEvent = { type: 'test' }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: spanId,
+          error: 0,
+          meta: { 'test.status': 'pass' },
+          metrics: {},
+        }
+        formatSpan = sinon.stub().returns({
+          error: 1,
+          meta: {
+            'error.message': 'late reporter error',
+            'test.status': 'fail',
+          },
+          metrics: {},
+        })
+
+        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+        ciVisibilityExporter.export([testEvent, suiteEvent])
+
+        sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
+        ciVisibilityExporter.flush()
+        sinon.assert.calledOnce(writer.append)
+
+        const done = sinon.spy()
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledTwice(writer.append)
+        assert.deepStrictEqual(writer.append.secondCall.args[0], [{
+          ...suiteEvent,
+          error: 1,
+          meta: {
+            'error.message': 'late reporter error',
+            'test.status': 'fail',
+          },
+        }])
+        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
+        sinon.assert.calledOnceWithExactly(done, undefined)
+      })
     })
   })
 
@@ -902,6 +960,42 @@ describe('CI Visibility Exporter', () => {
       } finally {
         clock.restore()
       }
+    })
+
+    it('waits for initialization when a completed suite is deferred', async () => {
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => done()),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      const spanId = { toString: () => 'suite-span-id' }
+      const testSuiteSpan = {
+        context: () => ({ _spanId: spanId }),
+      }
+      const suiteEvent = {
+        type: 'test_suite_end',
+        span_id: spanId,
+        error: 0,
+        meta: {},
+        metrics: {},
+      }
+      formatSpan = sinon.stub().returns(suiteEvent)
+      const done = sinon.spy()
+
+      ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+      ciVisibilityExporter.export([suiteEvent])
+      ciVisibilityExporter.flush(done)
+      sinon.assert.notCalled(done)
+
+      ciVisibilityExporter._writer = writer
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      await Promise.resolve()
+
+      sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnceWithExactly(done, undefined)
     })
 
     for (const [payloadType, writerProperty, exportPayload] of [

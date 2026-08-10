@@ -233,12 +233,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  for (const reporterEvent of ['end', 'start', 'pass', 'test end', 'hook end', 'suite end']) {
+  for (const reporterEvent of ['end', 'start', 'pass', 'pending', 'test end', 'hook end', 'suite end']) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
-      const reporterTestFile = reporterEvent === 'hook end'
-        ? './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
-        : './ci-visibility/mocha-plugin-tests/passing.js'
+      let reporterTestFile = './ci-visibility/mocha-plugin-tests/passing.js'
+      if (reporterEvent === 'hook end') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
+      } else if (reporterEvent === 'pending') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
+      }
       childProcess = exec(
         [
           'node node_modules/mocha/bin/mocha',
@@ -271,21 +274,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
           }
-          if (reporterEvent === 'test end' || reporterEvent === 'hook end') {
-            const expectedTestName = reporterEvent === 'hook end'
-              ? 'mocha-reporter-hook-end can pass'
-              : 'mocha-test-pass-two can pass'
+          if (reporterEvent === 'test end' || reporterEvent === 'hook end' || reporterEvent === 'pending') {
+            let expectedTestName = 'mocha-test-pass-two can pass'
+            if (reporterEvent === 'hook end') expectedTestName = 'mocha-reporter-hook-end can pass'
+            else if (reporterEvent === 'pending') expectedTestName = 'mocha-test-skip can skip'
             const testEvent = events.find(event =>
               event.type === 'test' && event.content.meta[TEST_NAME] === expectedTestName
             )
             assert.ok(testEvent, 'expected completed test event')
-            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], reporterEvent === 'pending' ? 'skip' : 'pass')
             assert.strictEqual(testEvent.content.error, 0)
             assert.strictEqual(
               testEvent.content.meta[TEST_SUITE],
-              reporterEvent === 'hook end'
-                ? 'ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
-                : 'ci-visibility/mocha-plugin-tests/passing.js'
+              reporterTestFile.slice(2)
             )
             assert.strictEqual(testEvent.content.meta[TEST_FRAMEWORK], 'mocha')
             assert.strictEqual(testEvent.content.meta[TEST_TYPE], 'test')
@@ -302,6 +303,55 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.notStrictEqual(exitCode, 0, testOutput)
     })
   }
+
+  it('reports a completed suite when the process exits before session finalization', async function () {
+    this.timeout(20_000)
+    const startedAt = Date.now()
+    childProcess = exec(
+      [
+        'node node_modules/mocha/bin/mocha',
+        './ci-visibility/mocha-plugin-tests/passing.js',
+        '--reporter ./ci-visibility/mocha-reporter-exits-after-suite.js',
+      ].join(' '),
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+        },
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const suiteEvents = events.filter(event =>
+          event.type === 'test_suite_end' &&
+          event.content.meta[TEST_SUITE] === 'ci-visibility/mocha-plugin-tests/passing.js'
+        )
+        assert.strictEqual(suiteEvents.length, 1)
+        assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suiteEvents[0].content.error, 0)
+
+        const testEvent = events.find(event =>
+          event.type === 'test' && event.content.meta[TEST_NAME] === 'mocha-test-pass-two can pass'
+        )
+        assert.ok(testEvent, 'expected completed test event')
+        assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0)
+    assert.ok(Date.now() - startedAt < 12_000, 'final writer flush should remain bounded')
+  })
 
   it('can run tests and report tests with the APM protocol (old agents)', (done) => {
     receiver.setInfoResponse({ endpoints: [] })
