@@ -19,21 +19,44 @@ describe('retry', () => {
     let clock
 
     beforeEach(() => {
-      clock = sinon.useFakeTimers({ now: 1_000_000 })
+      clock = sinon.useFakeTimers({ now: 1_700_000_000_000 })
     })
 
     afterEach(() => {
       clock.restore()
     })
 
-    it('uses the absolute rate-limit reset timestamp', () => {
+    it('uses the rate-limit reset duration in seconds', () => {
       const { getRateLimitResetDelay } = require(RETRY_PATH)
 
-      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 5000)
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '5' }), 5000)
+    })
+
+    it('supports legacy absolute rate-limit reset timestamps', () => {
+      const { getRateLimitResetDelay } = require(RETRY_PATH)
+      const resetTimestamp = Date.now() / 1000 + 5
+
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': `${resetTimestamp}` }), 5000)
       clock.tick(4999)
-      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 1)
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': `${resetTimestamp}` }), 1)
       clock.tick(1)
-      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': '1005' }), 0)
+      assert.strictEqual(getRateLimitResetDelay({ 'x-ratelimit-reset': `${resetTimestamp}` }), 0)
+    })
+
+    it('prefers Retry-After delay seconds', () => {
+      const { getRateLimitResetDelay } = require(RETRY_PATH)
+
+      assert.strictEqual(getRateLimitResetDelay({
+        'retry-after': '3',
+        'x-ratelimit-reset': '5',
+      }), 3000)
+    })
+
+    it('supports Retry-After HTTP dates', () => {
+      const { getRateLimitResetDelay } = require(RETRY_PATH)
+      const resetDate = new Date(Date.now() + 5000).toUTCString()
+
+      assert.strictEqual(getRateLimitResetDelay({ 'retry-after': resetDate }), 5000)
     })
 
     it('reports missing and invalid reset timestamps', () => {

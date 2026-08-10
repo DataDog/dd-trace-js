@@ -233,13 +233,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  for (const reporterEvent of ['end', 'start', 'pass', 'suite end']) {
+  for (const reporterEvent of ['end', 'start', 'pass', 'test end', 'hook end', 'suite end']) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
+      const reporterTestFile = reporterEvent === 'hook end'
+        ? './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
+        : './ci-visibility/mocha-plugin-tests/passing.js'
       childProcess = exec(
         [
           'node node_modules/mocha/bin/mocha',
-          './ci-visibility/mocha-plugin-tests/passing.js',
+          reporterTestFile,
           '--reporter ./ci-visibility/mocha-reporter-throws.js',
         ].join(' '),
         {
@@ -267,6 +270,25 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+          }
+          if (reporterEvent === 'test end' || reporterEvent === 'hook end') {
+            const expectedTestName = reporterEvent === 'hook end'
+              ? 'mocha-reporter-hook-end can pass'
+              : 'mocha-test-pass-two can pass'
+            const testEvent = events.find(event =>
+              event.type === 'test' && event.content.meta[TEST_NAME] === expectedTestName
+            )
+            assert.ok(testEvent, 'expected completed test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testEvent.content.error, 0)
+            assert.strictEqual(
+              testEvent.content.meta[TEST_SUITE],
+              reporterEvent === 'hook end'
+                ? 'ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
+                : 'ci-visibility/mocha-plugin-tests/passing.js'
+            )
+            assert.strictEqual(testEvent.content.meta[TEST_FRAMEWORK], 'mocha')
+            assert.strictEqual(testEvent.content.meta[TEST_TYPE], 'test')
           }
         },
         { hardTimeout: 20_000 }

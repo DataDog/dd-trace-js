@@ -243,12 +243,21 @@ function request (data, options, callback) {
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             (isRetriableNetworkError(error) || isRetriableHttpError)) {
+          let delay = retryDelay ?? getRetryDelay(options, attemptIndex)
+          if (options.deadline !== undefined && retryDelay === undefined) {
+            const remaining = options.deadline - Date.now()
+            if (remaining <= 0) {
+              complete(error, null, statusCode, headers)
+              return
+            }
+            delay = Math.min(delay, Math.max(0, remaining - timeout))
+          }
           settled = true
           finalize()
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, retryDelay ?? getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          setTimeout(attempt, delay, attemptIndex + 1).unref?.()
         } else {
           complete(error, null, statusCode, headers)
         }

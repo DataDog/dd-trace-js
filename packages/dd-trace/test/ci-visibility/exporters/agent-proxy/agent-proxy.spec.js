@@ -7,6 +7,7 @@ const { describe, it, beforeEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
+const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
@@ -38,6 +39,48 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const queryDelay = 50
   const tags = {}
 
+  function createControlledExporter () {
+    const writers = []
+    let finishAgentInfo
+    let requestOptions
+
+    class Writer {
+      constructor () {
+        this.append = sinon.spy()
+        this.flush = sinon.spy(done => done())
+        writers.push(this)
+      }
+    }
+
+    const ControlledExporterBase = proxyquire('../../../../src/ci-visibility/exporters/agent-proxy', {
+      '../../../agent/info': {
+        fetchAgentInfo (agentUrl, callback, options) {
+          finishAgentInfo = callback
+          requestOptions = options
+        },
+      },
+      '../agentless/writer': Writer,
+      '../agentless/coverage-writer': Writer,
+    })
+    class ControlledExporter extends ControlledExporterBase {
+      constructor (config) {
+        super({ testOptimization: {}, ...config })
+      }
+    }
+
+    const exporter = new ControlledExporter({ url, tags })
+    return {
+      exporter,
+      finishAgentInfo (...args) {
+        finishAgentInfo(...args)
+      },
+      getRequestOptions () {
+        return requestOptions
+      },
+      writers,
+    }
+  }
+
   it('should query /info right when it is instantiated', async () => {
     const scope = nock(url)
       .get('/info')
@@ -50,6 +93,62 @@ describe('AgentProxyCiVisibilityExporter', () => {
     assert.notStrictEqual(agentProxyCiVisibilityExporter, null)
     await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
     assert.strictEqual(scope.isDone(), true)
+  })
+
+  it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const trace = [{ type: 'test' }]
+      const done = sinon.spy()
+
+      controlled.exporter.export(trace)
+      controlled.exporter.flush(done)
+
+      const requestOptions = controlled.getRequestOptions()
+      assert.strictEqual(requestOptions.signal.aborted, false)
+      assert.strictEqual(requestOptions.deadline, Date.now() + 10_000)
+
+      controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+      await Promise.resolve()
+
+      assert.strictEqual(controlled.writers.length, 2)
+      sinon.assert.calledOnceWithExactly(controlled.writers[0].append, trace)
+      for (const writer of controlled.writers) {
+        sinon.assert.calledOnce(writer.flush)
+        assert.strictEqual(writer.flush.firstCall.args[1].deadline, requestOptions.deadline)
+      }
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('aborts initialization and completes once at the final deadline', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const done = sinon.spy()
+
+      controlled.exporter.export([{ type: 'test' }])
+      controlled.exporter.flush(done)
+      const { signal } = controlled.getRequestOptions()
+
+      clock.tick(10_000)
+
+      assert.strictEqual(signal.aborted, true)
+      assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      sinon.assert.calledOnceWithExactly(done, signal.reason)
+
+      controlled.finishAgentInfo(signal.reason)
+      await Promise.resolve()
+      clock.tick(100)
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(controlled.writers.length, 0)
+    } finally {
+      clock.restore()
+    }
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', async () => {

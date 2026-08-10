@@ -950,7 +950,9 @@ addHook({
 
     this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler(config, {
+    // Reporters are registered before this run wrapper. Prepend terminal handlers
+    // so a reporter error cannot strand a test span that Mocha already completed.
+    this.prependListener('test end', getOnTestEndHandler(config, {
       onStart: incrementPendingRootFinalization,
       onFinish: function (test) {
         finishRootSuiteAfterFinalAttempt(test)
@@ -960,20 +962,20 @@ addHook({
 
     this.on('retry', getOnTestRetryHandler(config))
 
-    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler(config, {
+    this.prependListener('hook end', function (hook) {
+      const test = hook.ctx?.currentTest
+      if (!test) return
+      finishRootSuiteAfterFinalAttempt(test)
+    })
+
+    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted.
+    this.prependListener('hook end', getOnHookEndHandler(config, {
       onStart: incrementPendingRootFinalization,
       onFinish: function (test) {
         finishRootSuiteAfterFinalAttempt(test)
         decrementPendingRootFinalization(test)
       },
     }))
-
-    this.on('hook end', function (hook) {
-      const test = hook.ctx?.currentTest
-      if (!test) return
-      finishRootSuiteAfterFinalAttempt(test)
-    })
 
     this.on('fail', getOnFailHandler(true, config))
 

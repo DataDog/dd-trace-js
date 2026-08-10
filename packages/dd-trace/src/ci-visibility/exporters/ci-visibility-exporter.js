@@ -60,6 +60,15 @@ const MAX_COVERAGE_REPORT_FLAGS = 32
 const FINAL_FLUSH_TIMEOUT = 10_000
 const FINAL_FLUSH_FALLBACK_DELAY = 100
 
+/**
+ * @returns {Error}
+ */
+function createFinalFlushTimeoutError () {
+  const error = new Error('Timed out waiting for Test Optimization to flush')
+  error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+  return error
+}
+
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
     tags.push(`${key}:${value}`)
@@ -488,12 +497,11 @@ class CiVisibilityExporter extends BufferingExporter {
 
     const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
     let hasCompleted = false
+    let initializationTimeoutId
 
     const fallbackTimeoutId = isFinalFlush
       ? setTimeout(() => {
-        const error = new Error('Timed out waiting for Test Optimization to flush')
-        error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-        complete(error)
+        complete(createFinalFlushTimeoutError())
       }, FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
       : undefined
 
@@ -501,6 +509,7 @@ class CiVisibilityExporter extends BufferingExporter {
       if (hasCompleted) return
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
+      clearTimeout(initializationTimeoutId)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
         onDone(error)
@@ -539,6 +548,16 @@ class CiVisibilityExporter extends BufferingExporter {
       for (const writer of writers) writer.flush(onFlushComplete, options)
     }
 
+    if (isFinalFlush && this._initializationRequest) {
+      const { controller, options } = this._initializationRequest
+      options.deadline = deadline
+      initializationTimeoutId = setTimeout(() => {
+        const error = createFinalFlushTimeoutError()
+        controller.abort(error)
+        complete(error)
+      }, Math.max(0, deadline - Date.now()))
+    }
+
     if (!isFinalFlush) {
       if (this._isInitialized) flushWriters()
       else complete()
@@ -551,6 +570,7 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     this._canUseCiVisProtocolPromise.then(() => {
+      clearTimeout(initializationTimeoutId)
       if (!hasCompleted) flushWriters()
     })
   }

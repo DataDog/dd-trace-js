@@ -43,7 +43,20 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       testOptimization,
     } = config
 
+    const initializationController = new AbortController()
+    const initializationOptions = { signal: initializationController.signal }
+    this._initializationRequest = {
+      controller: initializationController,
+      options: initializationOptions,
+    }
+
     fetchAgentInfo(this._url, (err, agentInfo) => {
+      this._initializationRequest = undefined
+      if (initializationController.signal.aborted) {
+        this._resolveCanUseCiVisProtocol(false)
+        return
+      }
+
       this._isInitialized = true
       let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
@@ -97,7 +110,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
-    })
+    }, initializationOptions)
   }
 
   setUrl (url, coverageUrl) {

@@ -1,6 +1,7 @@
 'use strict'
 
 const RATE_LIMIT_MAX_WAIT_MS = 30_000
+const EPOCH_SECONDS_THRESHOLD = 1_000_000_000
 
 const SINGLE_RETRY_BASE_MS = 5000
 const SINGLE_RETRY_JITTER_MS = 2500
@@ -53,11 +54,29 @@ function singleJitteredDelay () {
  * @returns {number}
  */
 function getRateLimitResetDelay (headers) {
-  const resetHeader = headers?.['x-ratelimit-reset']
-  const resetTimestamp = resetHeader === null || resetHeader === undefined
-    ? NaN
-    : Number.parseInt(resetHeader, 10)
-  return Number.isFinite(resetTimestamp) ? Math.max(0, resetTimestamp * 1000 - Date.now()) : NaN
+  let retryAfter = headers?.['retry-after']
+  if (Array.isArray(retryAfter)) retryAfter = retryAfter[0]
+  if (typeof retryAfter === 'string' && retryAfter.trim() !== '') {
+    const delaySeconds = Number(retryAfter)
+    if (Number.isFinite(delaySeconds)) return Math.max(0, delaySeconds * 1000)
+
+    const resetTimestamp = Date.parse(retryAfter)
+    if (Number.isFinite(resetTimestamp)) return Math.max(0, resetTimestamp - Date.now())
+  }
+
+  let reset = headers?.['x-ratelimit-reset']
+  if (Array.isArray(reset)) reset = reset[0]
+  if (typeof reset !== 'string' || reset.trim() === '') return NaN
+
+  const resetSeconds = Number(reset)
+  if (!Number.isFinite(resetSeconds)) return NaN
+
+  // Datadog defines this header as delay seconds. Preserve compatibility with
+  // realistic Unix timestamps without confusing ordinary durations with epochs.
+  if (resetSeconds >= EPOCH_SECONDS_THRESHOLD) {
+    return Math.max(0, resetSeconds * 1000 - Date.now())
+  }
+  return Math.max(0, resetSeconds * 1000)
 }
 
 /**

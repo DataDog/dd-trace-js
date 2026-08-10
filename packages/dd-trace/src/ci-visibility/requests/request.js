@@ -19,7 +19,7 @@ const legacyStorage = storage('legacy')
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
- * Retries: 429 (with X-ratelimit-reset, max 30s wait),
+ * Retries: 429 (with Retry-After or X-RateLimit-Reset, max 30s wait),
  * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.

@@ -122,7 +122,7 @@ describe('request', function () {
     maxAttempts = 2
     retryStubs = {
       getRateLimitResetDelay: sinon.stub().returns(NaN),
-      getRetryDelay: sinon.fake.returns(0),
+      getRetryDelay: sinon.stub().returns(0),
       getMaxAttempts: sinon.fake(() => maxAttempts),
       markEndpointReached: sinon.fake(),
     }
@@ -546,6 +546,102 @@ describe('request', function () {
       assert.strictEqual(res, null)
       assert.strictEqual(statusCode, 429)
       sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  it('shortens an ordinary retry delay to fit the remaining final flush budget', (done) => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    retryStubs.getRetryDelay.returns(5000)
+    const realSetTimeout = setTimeout
+    const retryTimer = { unref: sinon.spy() }
+    const setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 1000) return realSetTimeout(callback, delay, ...args)
+      queueMicrotask(() => callback(...args))
+      return retryTimer
+    })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(() => {
+        clock.tick(7000)
+        return [500]
+      })
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 10_000,
+      retryOnHttpError: true,
+    }, (err, res) => {
+      setTimeoutStub.restore()
+      clock.restore()
+      assert.strictEqual(res, 'OK')
+      sinon.assert.calledOnce(retryStubs.getRetryDelay)
+      sinon.assert.calledOnce(retryTimer.unref)
+      done(err)
+    })
+  })
+
+  it('shortens a network retry delay to fit the remaining final flush budget', (done) => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    retryStubs.getRetryDelay.callsFake(() => {
+      clock.tick(7000)
+      return 5000
+    })
+    const realSetTimeout = setTimeout
+    const retryTimer = { unref: sinon.spy() }
+    const setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 1000) return realSetTimeout(callback, delay, ...args)
+      queueMicrotask(() => callback(...args))
+      return retryTimer
+    })
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError(error)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 10_000,
+    }, (err, res) => {
+      setTimeoutStub.restore()
+      clock.restore()
+      assert.strictEqual(res, 'OK')
+      sinon.assert.calledOnce(retryStubs.getRetryDelay)
+      sinon.assert.calledOnce(retryTimer.unref)
+      done(err)
+    })
+  })
+
+  it('fails promptly when an ordinary retry reaches the final flush deadline', (done) => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    retryStubs.getRetryDelay.callsFake(() => {
+      clock.tick(10_000)
+      return 5000
+    })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(500)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      deadline: Date.now() + 10_000,
+      retryOnHttpError: true,
+    }, (err, res, statusCode) => {
+      clock.restore()
+      assert.strictEqual(err.status, 500)
+      assert.strictEqual(res, null)
+      assert.strictEqual(statusCode, 500)
+      sinon.assert.calledOnce(retryStubs.getRetryDelay)
       done()
     })
   })
