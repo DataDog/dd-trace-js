@@ -9,30 +9,64 @@ const {
 const logSubmissionCh = channel('ci:log-submission:log')
 
 /**
- * @param {string} symbol
- * @param {(original: Function) => Function} wrapper
+ * @param {string | symbol} asJsonSymbol
  * @param {Function} pino
+ * @param {symbol} [hooksSymbol]
  */
-function wrapPino (symbol, wrapper, pino) {
+function wrapPino (asJsonSymbol, pino, hooksSymbol) {
   /**
    * @param {unknown[]} args
    * @returns {unknown}
    */
   return function pinoWithTrace (...args) {
     const instance = pino.apply(this, args)
+    const hooks = hooksSymbol === undefined ? undefined : instance[hooksSymbol]
+    const streamWrite = hooks?.streamWrite
+    const hasStreamWrite = typeof streamWrite === 'function'
 
-    Object.defineProperty(instance, symbol, {
+    if (hooksSymbol !== undefined && hasStreamWrite && logSubmissionCh.hasSubscribers) {
+      Object.defineProperty(instance, hooksSymbol, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: { ...hooks, streamWrite: wrapStreamWrite(streamWrite) },
+      })
+    }
+
+    Object.defineProperty(instance, asJsonSymbol, {
       configurable: true,
       enumerable: true,
       writable: true,
-      value: wrapper(instance[symbol]),
+      value: wrapAsJson(instance[asJsonSymbol], !hasStreamWrite),
     })
 
     return instance
   }
 }
 
-function wrapAsJson (asJson) {
+/**
+ * @param {Function} streamWrite
+ * @returns {Function}
+ */
+function wrapStreamWrite (streamWrite) {
+  /**
+   * @param {string} line
+   */
+  return function streamWriteWithLogSubmission (line) {
+    const message = streamWrite.apply(this, arguments)
+    if (logSubmissionCh.hasSubscribers) {
+      logSubmissionCh.publish({ source: 'pino', message })
+    }
+    return message
+  }
+}
+
+/**
+ * @param {Function} asJson
+ * @param {boolean} submitLog
+ * @returns {Function}
+ */
+function wrapAsJson (asJson, submitLog) {
   const jsonCh = channel('apm:pino:log:json')
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
@@ -47,7 +81,7 @@ function wrapAsJson (asJson) {
       line = payload.line
     }
 
-    if (logSubmissionCh.hasSubscribers) {
+    if (submitLog && logSubmissionCh.hasSubscribers) {
       logSubmissionCh.publish({ source: 'pino', message: line })
     }
 
@@ -83,19 +117,20 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=5 <6.8.0'], patchDefault: true }, (pino) => {
   const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino.default || pino))
 })
 
 addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {
   const asJsonSym = pino.symbols.asJsonSym
+  const hooksSym = Number.parseInt(pino.version, 10) >= 9 ? pino.symbols.hooksSym : undefined
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino, hooksSym))
   wrapped.pino = wrapped
   wrapped.default = wrapped
 

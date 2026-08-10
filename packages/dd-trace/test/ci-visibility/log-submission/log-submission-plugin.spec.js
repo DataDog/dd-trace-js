@@ -11,9 +11,9 @@ require('../../setup/core')
 
 const configureCh = channel('ci:log-submission:winston:configure')
 const addTransportCh = channel('ci:log-submission:winston:add-transport')
+const flushCh = channel('ci:agentless:flush')
 const logSubmissionCh = channel('ci:log-submission:log')
 const playwrightTestFinishCh = channel('ci:playwright:test:finish')
-const playwrightWorkerFinishCh = channel('ci:playwright:worker:finish')
 const batchFlushInterval = 1000
 const maxBatchBytes = 5 * 1024 * 1024
 const maxBatchLogs = 1000
@@ -184,7 +184,7 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(beforeExitHandlers.has(beforeExitHandler), false)
   })
 
-  it('batches across Playwright tests and waits for submission when the worker finishes', async () => {
+  it('batches across Playwright tests and waits for lifecycle flush', async () => {
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
       Promise.resolve().then(() => callback(null))
@@ -196,7 +196,7 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.notCalled(request)
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
 
-    playwrightWorkerFinishCh.publish({
+    flushCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -213,7 +213,7 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(hasCompleted, true)
   })
 
-  it('waits for batches already in flight when a Playwright worker finishes', () => {
+  it('waits for batches already in flight at lifecycle flush', () => {
     const finishRequests = []
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
@@ -224,7 +224,7 @@ describe('LogSubmissionPlugin', () => {
     clock.tick(batchFlushInterval)
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
 
-    playwrightWorkerFinishCh.publish({
+    flushCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -240,7 +240,7 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(hasCompleted, true)
   })
 
-  it('completes a Playwright worker when log submission fails', async () => {
+  it('completes lifecycle flush when log submission fails', async () => {
     const error = new Error('boom')
     let hasCompleted = false
     request.callsFake((data, options, callback) => {
@@ -248,7 +248,7 @@ describe('LogSubmissionPlugin', () => {
     })
     logSubmissionCh.publish({ source: 'bunyan', message: { msg: 'hello' } })
 
-    playwrightWorkerFinishCh.publish({
+    flushCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -261,13 +261,13 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.calledWithExactly(errorLog, 'Error submitting %s logs', 'bunyan', error)
   })
 
-  it('completes a Playwright worker when starting log submission throws', () => {
+  it('completes lifecycle flush when starting log submission throws', () => {
     const error = new Error('boom')
     let hasCompleted = false
     request.throws(error)
     logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
 
-    playwrightWorkerFinishCh.publish({
+    flushCh.publish({
       registerCompletion: () => () => {
         hasCompleted = true
       },
@@ -380,8 +380,8 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=pino&service=my-service')
   })
 
-  it('uses the configured intake host and port for winston', () => {
-    class HttpTransport {
+  it('routes winston through the common request security boundary', () => {
+    class StreamTransport {
       constructor (options) {
         this.options = options
       }
@@ -389,20 +389,26 @@ describe('LogSubmissionPlugin', () => {
 
     plugin.configure({
       enabled: true,
-      DD_AGENTLESS_LOG_SUBMISSION_URL: 'http://localhost:8126',
+      DD_AGENTLESS_LOG_SUBMISSION_URL: 'http://example.com:8126',
       DD_API_KEY: 'api-key',
       service: 'my-service',
       site: 'datadoghq.com',
     })
 
     const logger = { add: sinon.spy() }
-    configureCh.publish(HttpTransport)
+    configureCh.publish(StreamTransport)
     addTransportCh.publish(logger)
 
     const [{ options }] = logger.add.firstCall.args
-    assert.strictEqual(options.host, 'localhost')
-    assert.strictEqual(options.port, '8126')
-    assert.strictEqual(options.ssl, false)
+    assert.strictEqual(options.host, undefined)
+    assert.strictEqual(options.headers, undefined)
+
+    options.stream.write({ level: 'info', message: 'hello' })
+    clock.tick(batchFlushInterval)
+
+    sinon.assert.calledOnce(request)
+    assert.strictEqual(request.firstCall.args[1].url.href, 'http://example.com:8126/')
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=winston&service=my-service')
   })
 
   it('falls back to the site intake when the configured URL is invalid', () => {
@@ -490,31 +496,29 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(errorLog.firstCall.args[2].message, error.message)
   })
 
-  it('preserves winston HTTP transport submission', () => {
-    class HttpTransport {
+  it('preserves winston transport submission', () => {
+    class StreamTransport {
       constructor (options) {
         this.options = options
       }
     }
 
     const logger = { add: sinon.spy() }
-    configureCh.publish(HttpTransport)
+    configureCh.publish(StreamTransport)
     addTransportCh.publish(logger)
 
     sinon.assert.calledOnce(logger.add)
     const [{ options }] = logger.add.firstCall.args
-    assert.deepStrictEqual(options, {
-      host: 'http-intake.logs.datadoghq.com',
-      path: '/api/v2/logs?ddsource=winston&service=my-service',
-      ssl: true,
-      headers: {
-        'DD-API-KEY': 'api-key',
-      },
-    })
+    options.stream.write({ level: 'info', message: 'hello' })
+    clock.tick(batchFlushInterval)
+
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), [{ level: 'info', message: 'hello' }])
+    assert.strictEqual(request.firstCall.args[1].url.href, 'https://http-intake.logs.datadoghq.com/')
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=winston&service=my-service')
   })
 
   it('encodes service names in winston transport paths', () => {
-    class HttpTransport {
+    class StreamTransport {
       constructor (options) {
         this.options = options
       }
@@ -528,10 +532,13 @@ describe('LogSubmissionPlugin', () => {
     })
 
     const logger = { add: sinon.spy() }
-    configureCh.publish(HttpTransport)
+    configureCh.publish(StreamTransport)
     addTransportCh.publish(logger)
 
     const [{ options }] = logger.add.firstCall.args
-    assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service%26prod')
+    options.stream.write({ level: 'info', message: 'hello' })
+    clock.tick(batchFlushInterval)
+
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/logs?ddsource=winston&service=my+service%26prod')
   })
 })

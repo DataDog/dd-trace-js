@@ -56,7 +56,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
-const workerFinishCh = channel('ci:playwright:worker:finish')
+const agentlessFlushCh = channel('ci:agentless:flush')
 const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
@@ -2251,7 +2251,7 @@ function instrumentWorkerMainMethods (workerMain) {
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
     if (event === 'done') {
-      publishWithCompletionBarrier(workerFinishCh, {}, () => dispatchEvent.apply(this, arguments))
+      publishWithCompletionBarrier(agentlessFlushCh, {}, () => dispatchEvent.apply(this, arguments))
       return
     } else if (event === 'testBegin' || event === 'testEnd') {
       automaticFailureScreenshotPaths.clear()

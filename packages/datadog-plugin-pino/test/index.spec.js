@@ -210,6 +210,52 @@ describe('Plugin', () => {
             })
           })
 
+          if (semver.intersects(version, '>=9')) {
+            it('should not wrap streamWrite hooks without a log submission subscriber', () => {
+              const pino = getExport()
+              const streamWrite = sinon.spy(line => line.replace('sensitive-api-key', '[Redacted]'))
+
+              setupTest({ hooks: { streamWrite } })
+              logger.info('sensitive-api-key')
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.strictEqual(logger[pino.symbols.hooksSym].streamWrite, streamWrite)
+              assert.strictEqual(record.msg, '[Redacted]')
+            })
+
+            it('should submit the final record after streamWrite hooks', () => {
+              let submittedLog
+              /** @param {{ source: string, message: string }} payload */
+              const onLogSubmission = payload => {
+                submittedLog = payload
+              }
+              logSubmissionCh.subscribe(onLogSubmission)
+
+              setupTest({
+                hooks: {
+                  /** @param {string} line */
+                  streamWrite (line) {
+                    return line.replace('sensitive-api-key', '[Redacted]')
+                  },
+                },
+              })
+
+              tracer.scope().activate(span, () => {
+                try {
+                  logger.info('sensitive-api-key')
+                } finally {
+                  logSubmissionCh.unsubscribe(onLogSubmission)
+                }
+              })
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.strictEqual(record.msg, '[Redacted]')
+              assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+            })
+          }
+
           it('should not inject trace_id or span_id without an active span', () => {
             logger.info('message')
 

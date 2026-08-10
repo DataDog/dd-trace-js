@@ -1,5 +1,7 @@
 'use strict'
 
+const { Writable } = require('node:stream')
+
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const Plugin = require('../../plugins/plugin')
@@ -53,28 +55,6 @@ function getLogSubmissionPath (source, service) {
 }
 
 /**
- * @param {import('../../config/config-base')} config
- * @param {URL} url
- * @returns {object}
- */
-function getWinstonLogSubmissionParameters (config, url) {
-  const parameters = {
-    host: url.hostname,
-    path: getLogSubmissionPath('winston', config.service),
-    ssl: url.protocol === 'https:',
-    headers: {
-      'DD-API-KEY': config.DD_API_KEY,
-    },
-  }
-
-  if (url.port) {
-    parameters.port = url.port
-  }
-
-  return parameters
-}
-
-/**
  * @param {string | Record<string, unknown>} message
  * @returns {string | undefined}
  */
@@ -107,22 +87,43 @@ class LogSubmissionPlugin extends Plugin {
   #requestCompletions = []
   #pendingRequests = 0
   #timer
+  #winstonStreamClass
 
   constructor (...args) {
     super(...args)
 
-    this.addSub('ci:log-submission:winston:configure', (httpClass) => {
-      this.HttpClass = httpClass
+    this.addSub('ci:log-submission:winston:configure', (streamClass) => {
+      this.#winstonStreamClass = streamClass
     })
 
     this.addSub('ci:log-submission:winston:add-transport', (logger) => {
-      logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config, this.#logSubmissionUrl)))
+      this.#addWinstonTransport(logger)
     })
 
     this.addSub('ci:log-submission:log', (payload) => this.#enqueueLog(payload))
-    this.addSub('ci:playwright:worker:finish', ({ registerCompletion } = {}) => {
+    this.addSub('ci:agentless:flush', ({ registerCompletion } = {}) => {
       this.#flush(registerCompletion)
     })
+  }
+
+  /**
+   * @param {{ add: (transport: object) => void }} logger
+   * @returns {void}
+   */
+  #addWinstonTransport (logger) {
+    const stream = new Writable({
+      objectMode: true,
+      /**
+       * @param {Record<string, unknown>} message
+       * @param {string} encoding
+       * @param {(error?: Error | null) => void} callback
+       */
+      write: (message, encoding, callback) => {
+        this.#enqueueLog({ source: 'winston', message })
+        callback()
+      },
+    })
+    logger.add(new this.#winstonStreamClass({ stream }))
   }
 
   /**

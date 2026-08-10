@@ -17,10 +17,12 @@ addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
         logCh.publish(payload)
         rec = arguments[0] = payload.message
       }
-      if (logSubmissionCh.hasSubscribers) {
-        logSubmissionCh.publish({ source: 'bunyan', message: rec })
+
+      const line = emit.apply(this, arguments)
+      if (logSubmissionCh.hasSubscribers && !arguments[1]) {
+        logSubmissionCh.publish({ source: 'bunyan', message: line ?? rec })
       }
-      return emit.apply(this, arguments)
+      return line
     }
   })
   return Logger

@@ -99,10 +99,80 @@ describe('Plugin', () => {
 
             assert.strictEqual(submittedLogs.length, 1)
             const [submittedLog] = submittedLogs
+            const submittedRecord = JSON.parse(submittedLog.message)
             assert.strictEqual(submittedLog.source, 'bunyan')
-            assert.strictEqual(submittedLog.message.msg, 'message')
-            assertObjectContains(submittedLog.message.dd, record.dd)
+            assert.strictEqual(submittedRecord.msg, 'message')
+            assertObjectContains(submittedRecord.dd, record.dd)
           })
+        })
+
+        it('should submit the exact serialized record', () => {
+          let submittedLog
+          let calls = 0
+          const onLogSubmission = payload => {
+            submittedLog = payload
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            logger.info({
+              value: {
+                toJSON () {
+                  return ++calls
+                },
+              },
+            }, 'message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          const line = stream.write.firstCall.args[0].toString()
+
+          assert.strictEqual(submittedLog.message, line)
+          assert.strictEqual(JSON.parse(line).value, 1)
+          assert.strictEqual(calls, 1)
+        })
+
+        it('should submit the record for raw-only streams', () => {
+          const bunyan = require(`../../../versions/bunyan@${version}`).get()
+          const rawStream = new Writable({ objectMode: true, write (_chunk, _encoding, callback) { callback() } })
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          sinon.spy(rawStream, 'write')
+          logger = bunyan.createLogger({ name: 'test', streams: [{ type: 'raw', stream: rawStream }] })
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            logger.info('message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          const record = rawStream.write.firstCall.args[0]
+
+          assert.strictEqual(submittedLogs.length, 1)
+          assert.strictEqual(submittedLogs[0].message, record)
+          assert.strictEqual(record.msg, 'message')
+        })
+
+        it('should not submit records when Bunyan skips emission', () => {
+          const submittedLogs = []
+          /** @param {{ source: string, message: Record<string, unknown> }} payload */
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            logger._emit({ level: 20, msg: 'filtered message' }, true)
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          sinon.assert.notCalled(stream.write)
+          assert.strictEqual(submittedLogs.length, 0)
         })
 
         it('should submit a caller-supplied dd field without overwriting it', () => {
@@ -123,11 +193,32 @@ describe('Plugin', () => {
           sinon.assert.called(stream.write)
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
+          const submittedRecord = JSON.parse(submittedLog.message)
 
           assert.deepStrictEqual(record.dd, { custom: 'value' })
           assert.strictEqual(submittedLog.source, 'bunyan')
-          assert.strictEqual(submittedLog.message.msg, 'message')
-          assert.deepStrictEqual(submittedLog.message.dd, { custom: 'value' })
+          assert.strictEqual(submittedRecord.msg, 'message')
+          assert.deepStrictEqual(submittedRecord.dd, { custom: 'value' })
+        })
+
+        it('should not submit records when emission throws', () => {
+          const bunyan = require(`../../../versions/bunyan@${version}`).get()
+          const failingStream = new Writable()
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          sinon.stub(failingStream, 'write').throws(new Error('boom'))
+          logger = bunyan.createLogger({ name: 'test', stream: failingStream })
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            assert.throws(() => logger.info('message'), { message: 'boom' })
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          assert.strictEqual(submittedLogs.length, 0)
         })
 
         it('should not mutate the original record', () => {

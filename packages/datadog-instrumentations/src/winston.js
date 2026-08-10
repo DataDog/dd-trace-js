@@ -14,7 +14,7 @@ const addTransport = channel('ci:log-submission:winston:add-transport')
 
 addHook({ name: 'winston', file: 'lib/winston/transports/index.js', versions: ['>=3'] }, transportsPackage => {
   if (configureCh.hasSubscribers) {
-    configureCh.publish(transportsPackage.Http)
+    configureCh.publish(transportsPackage.Stream)
   }
 
   return transportsPackage
