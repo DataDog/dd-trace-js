@@ -13,6 +13,9 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 
+// Channel debug patching (loaded via require side-effect when DD_TEST_CHANNEL_DEBUG is set)
+if (process.env.DD_TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
+
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
 // `datadog-instrumentations/*` and `plugin_manager.js` stay cached so RITM
