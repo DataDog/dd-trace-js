@@ -192,7 +192,7 @@ describe('Plugin', () => {
         it('traces pools, acquired connections, and connection-event wrappers', async () => {
           const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
           const eventQuery = new Promise((resolve, reject) => {
-            pool.once('connection', eventConnection => {
+            pool.prependOnceListener('connection', eventConnection => {
               eventConnection.query('SELECT 4 AS event_query').then(resolve, reject)
             })
           })
@@ -370,10 +370,37 @@ describe('Plugin', () => {
           await assertion
         })
 
+        it('replaces explicit empty callback slots', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const assertion = assertTraceResources('bundle.callback.empty_callbacks', [
+            'SELECT 18 AS callback_empty_query',
+            'IMPORT FILE',
+            'START TRANSACTION',
+            'SELECT 19 AS callback_empty_pool_query',
+            'SELECT 20 AS callback_empty_pool_barrier',
+          ])
+
+          try {
+            await tracer.trace('bundle.callback.empty_callbacks', async () => {
+              connection.query('SELECT 18 AS callback_empty_query', [], undefined)
+              connection.importFile({ file: importFilePath }, null)
+              connection.beginTransaction(undefined)
+              await callbackResult(callback => connection.ping(callback))
+
+              pool.query('SELECT 19 AS callback_empty_pool_query', [], undefined)
+              await callbackResult(callback => pool.query('SELECT 20 AS callback_empty_pool_barrier', callback))
+            })
+
+            await assertion
+          } finally {
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
         it('traces pools, acquired connections, and connection-event wrappers', async () => {
           const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
           const eventQuery = new Promise((resolve, reject) => {
-            pool.once('connection', eventConnection => {
+            pool.prependOnceListener('connection', eventConnection => {
               eventConnection.query('SELECT 13 AS callback_event_query', error => error ? reject(error) : resolve())
             })
           })

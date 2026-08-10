@@ -164,10 +164,13 @@ function createWrapPromiseCommand (options, preparedSql, commandOwner) {
  * @param {object} options
  * @param {unknown} [preparedSql]
  * @param {object} [commandOwner]
+ * @param {number} [commandArity] Original arity when command is wrapped by a variadic forwarding function.
  * @returns {(command: Function) => Function}
  */
-function createWrapCallbackCommand (options, preparedSql, commandOwner) {
+function createWrapCallbackCommand (options, preparedSql, commandOwner, commandArity) {
   return function wrapCommand (command) {
+    const callbackIndex = (commandArity ?? command.length) - 1
+
     return function (sql) {
       if (!startCh.hasSubscribers) return command.apply(this, arguments)
 
@@ -184,8 +187,10 @@ function createWrapCallbackCommand (options, preparedSql, commandOwner) {
 
       if (typeof callback === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapCallback(callback, wrapper)
+      } else if (callbackIndex >= 0 && arguments.length > callbackIndex && arguments[callbackIndex] == null) {
+        arguments[callbackIndex] = wrapper()
       } else {
-        arguments.length = Math.max(arguments.length + 1, command.length)
+        arguments.length = Math.max(arguments.length + 1, callbackIndex + 1)
         arguments[arguments.length - 1] = wrapper()
       }
 
@@ -272,7 +277,8 @@ function wrapClientCommands (client, wrapper) {
  *
  * @param {object} client
  * @param {object} options
- * @param {(options: object, sql: string) => (command: Function) => Function} createWrapper
+ * @param {(options: object, sql: string, owner?: object, commandArity?: number) =>
+ *   (command: Function) => Function} createWrapper
  * @returns {void}
  */
 function wrapTransactionMethods (client, options, createWrapper) {
@@ -286,12 +292,13 @@ function wrapTransactionMethods (client, options, createWrapper) {
  *
  * @param {object} options
  * @param {string} sql
- * @param {(options: object, sql: string) => (command: Function) => Function} createWrapper
+ * @param {(options: object, sql: string, owner?: object, commandArity?: number) =>
+ *   (command: Function) => Function} createWrapper
  * @returns {(transaction: Function) => Function}
  */
 function createWrapTransaction (options, sql, createWrapper) {
   return function wrapTransaction (transaction) {
-    const tracedTransaction = createWrapper(options, sql)(function () {
+    const tracedTransaction = createWrapper(options, sql, undefined, transaction.length)(function () {
       return skipCh.runStores({}, transaction, this, ...arguments)
     })
 
@@ -434,13 +441,14 @@ function createWrapCallbackPreparedExecute (options, sql, connection) {
  * Runs bundled pool internals in the skip store while tracing the public command.
  *
  * @param {object} options
- * @param {(options: object, sql?: unknown) => (command: Function) => Function} createWrapper
+ * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number) =>
+ *   (command: Function) => Function} createWrapper
  * @param {unknown} [preparedSql]
  * @returns {(command: Function) => Function}
  */
 function createWrapPoolCommand (options, createWrapper, preparedSql) {
   return function wrapPoolCommand (command) {
-    return createWrapper(options, preparedSql)(function () {
+    return createWrapper(options, preparedSql, undefined, command.length)(function () {
       return skipCh.runStores({}, command, this, ...arguments)
     })
   }
@@ -525,16 +533,10 @@ function createWrapCallbackGetConnection (options) {
  * @returns {void}
  */
 function wrapPoolConnectionEvent (pool, options, wrapConnection) {
-  const onConnection = connection => wrapConnection(connection, options)
-
-  pool.prependListener('connection', onConnection)
-  shimmer.wrap(pool, 'emit', emit => function (event) {
+  shimmer.wrap(pool, 'emit', emit => function (event, connection) {
     if (event !== 'connection') return emit.apply(this, arguments)
+    wrapConnection(connection, options)
     return connectionFinishCh.runStores(emptyConnectionContext, emit, this, ...arguments)
-  })
-  shimmer.wrap(pool, 'end', end => function () {
-    pool.removeListener('connection', onConnection)
-    return end.apply(this, arguments)
   })
 }
 
