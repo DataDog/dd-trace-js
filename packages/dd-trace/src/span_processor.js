@@ -6,7 +6,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -56,6 +56,15 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      let serviceBySpanId
+      if (this._stats) {
+        serviceBySpanId = new Map()
+        for (const startedSpan of started) {
+          const context = startedSpan.context()
+          const spanId = context._spanId?.toString(10)
+          if (spanId !== undefined) serviceBySpanId.set(spanId, context.getTag('service.name'))
+        }
+      }
 
       for (const span of started) {
         if (span._duration === undefined) {
@@ -64,6 +73,13 @@ class SpanProcessor {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          }
+          if (serviceBySpanId && !formattedSpan.metrics[TOP_LEVEL_KEY]) {
+            const parentService = serviceBySpanId.get(formattedSpan.parent_id?.toString(10))
+            const service = span.context().getTag('service.name')
+            if (service !== undefined && parentService !== undefined && service !== parentService) {
+              formattedSpan.metrics[TOP_LEVEL_KEY] = 1
+            }
           }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so

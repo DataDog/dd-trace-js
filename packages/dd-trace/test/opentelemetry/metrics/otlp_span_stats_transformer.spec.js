@@ -218,13 +218,19 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'UNAVAILABLE')
     })
 
-    it('omits optional HTTP attributes when not present on the span', () => {
+    it('omits optional dimensions when not present on the span', () => {
       const payload = JSON.parse(
-        transformer.transform(makeDrained(12340000000000, [makeSpan({ meta: {} })]), BUCKET_SIZE_NS)
+        transformer.transform(makeDrained(12340000000000, [makeSpan({ type: '', meta: {} })]), BUCKET_SIZE_NS)
       )
       const attrs = attrMapOf(dataPointsOf(payload)[0])
 
-      for (const key of ['http.response.status_code', 'http.request.method', 'http.route']) {
+      for (const key of [
+        'http.response.status_code',
+        'http.request.method',
+        'http.route',
+        'datadog.span.type',
+        'datadog.svc_src',
+      ]) {
         assert.ok(!(key in attrs), `${key} should be omitted`)
       }
       assert.strictEqual(attrs['span.kind'], 'SPAN_KIND_INTERNAL')
