@@ -32,7 +32,7 @@ const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
 // compatibility layer synthesizes 'request' from that same stream, so the
 // 'request' branch consults this set to avoid creating a second span.
 const tracedStreams = new WeakSet()
-const streamResponseContexts = new WeakMap()
+const responseContexts = new WeakMap()
 const wrappedStreamPrototypes = new WeakSet()
 
 addHook({ name: 'http2' }, http2 => {
@@ -135,6 +135,11 @@ function wrapEmit (originalEmit) {
       // the finish `hooks.request` expect, so hand them to the existing
       // stream-backed context rather than leaving it on the throwaway adapter.
       if (tracedStreams.has(req.stream)) {
+        const ctx = responseContexts.get(req.stream)
+        if (ctx) {
+          ctx.res = res
+          responseContexts.set(res, ctx)
+        }
         adoptServerCh.publish({ req, res })
       } else {
         const ctx = { req, res }
@@ -185,7 +190,7 @@ function wrapWriteHead (writeHead) {
     const headers = typeof args[1] === 'string' ? args[2] : args[1]
     const responseHeaders = addResponseHeaders(this.getHeaders(), headers)
     startWriteHeadCh.publish({
-      req: this.req,
+      req: getResponseRequest(this),
       res: this,
       abortController,
       statusCode: args[0],
@@ -216,7 +221,7 @@ function wrapWrite (write) {
 
     const abortController = new AbortController()
     startWriteHeadCh.publish({
-      req: this.req,
+      req: getResponseRequest(this),
       res: this,
       abortController,
       statusCode: this.statusCode,
@@ -239,7 +244,7 @@ function wrapEnd (end) {
 
     const abortController = new AbortController()
     startWriteHeadCh.publish({
-      req: this.req,
+      req: getResponseRequest(this),
       res: this,
       abortController,
       statusCode: this.statusCode,
@@ -266,7 +271,7 @@ function instrumentStreamResponse (stream, ctx) {
     shimmer.wrap(prototype, 'end', wrapStreamEnd)
     shimmer.wrap(prototype, 'write', wrapStreamWrite)
   }
-  streamResponseContexts.set(stream, ctx)
+  responseContexts.set(stream, ctx)
 }
 
 /**
@@ -275,7 +280,7 @@ function instrumentStreamResponse (stream, ctx) {
  */
 function wrapStreamRespond (respond) {
   return function (...args) {
-    const ctx = streamResponseContexts.get(this)
+    const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, args)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
@@ -300,7 +305,7 @@ function wrapStreamRespond (respond) {
  */
 function wrapStreamRespondWithFD (respond) {
   return function (...args) {
-    const ctx = streamResponseContexts.get(this)
+    const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, args)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
@@ -338,7 +343,7 @@ function wrapStreamRespondWithFD (respond) {
  */
 function wrapStreamRespondWithFile (respond) {
   return function (...args) {
-    const ctx = streamResponseContexts.get(this)
+    const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(respond, this, args)
     if (ctx.responseBlocked) return this
     if (this.headersSent || (!startWriteHeadCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers)) {
@@ -389,7 +394,7 @@ function wrapStreamStatCheck (statCheck, ctx, stream) {
  */
 function wrapStreamWrite (write) {
   return function (...args) {
-    const ctx = streamResponseContexts.get(this)
+    const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(write, this, args)
     if (ctx.responseBlocked) return true
     if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
@@ -406,7 +411,7 @@ function wrapStreamWrite (write) {
  */
 function wrapStreamEnd (end) {
   return function (...args) {
-    const ctx = streamResponseContexts.get(this)
+    const ctx = responseContexts.get(this)
     if (!ctx) return Reflect.apply(end, this, args)
     if (ctx.responseBlocked) return this
     if (this.headersSent || !startWriteHeadCh.hasSubscribers) {
@@ -469,6 +474,14 @@ function publishImplicitStreamResponse (ctx, stream) {
 
   ctx.responseBlocked = true
   return true
+}
+
+/**
+ * @param {import('node:http2').Http2ServerResponse} res
+ * @returns {object}
+ */
+function getResponseRequest (res) {
+  return responseContexts.get(res)?.req ?? res.req
 }
 
 /**

@@ -12,7 +12,7 @@ const { handleResults } = require('../blocking')
 const Reporter = require('../reporter')
 const { getActiveRequest } = require('../store')
 const waf = require('../waf')
-const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
+const { storedResponseHeaders, copyHeadersOmitting, getCanonicalRequest } = require('./http-shared')
 
 const analyzedBodies = new WeakSet()
 const analyzedCookies = new WeakSet()
@@ -33,6 +33,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (!req) {
     req = getActiveRequest()
   }
+  req = getCanonicalRequest(req)
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -59,6 +60,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
 
+  req = getCanonicalRequest(req)
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -187,6 +189,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!req) {
     req = getActiveRequest()
   }
+  req = getCanonicalRequest(req)
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -203,6 +206,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 }
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
+  req = getCanonicalRequest(req)
   const rootSpan = web.root(req)
   if (!rootSpan) return
 

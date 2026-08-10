@@ -25,6 +25,7 @@ module.exports = {
   httpClientRequestStart: dc.channel('apm:http:client:request:start'),
   httpClientResponseStart: dc.channel('apm:http:client:response:start'),
   httpClientResponseFinish: dc.channel('apm:http:client:response:finish'),
+  http2ServerRequestAdopt: dc.channel('apm:http2:server:request:adopt'),
   informationalResponse: dc.channel('datadog:http:server:informational-response:start'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
