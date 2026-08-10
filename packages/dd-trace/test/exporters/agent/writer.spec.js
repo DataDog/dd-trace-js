@@ -188,6 +188,23 @@ function describeWriter (protocolVersion) {
       }, { deadline })
     })
 
+    it('should wait for Test Optimization requests already in flight during a bounded final flush', () => {
+      request.resetBehavior()
+      writer = new Writer({ url, prioritySampler, protocolVersion, isTestOptimization: true })
+      encoder.count.onFirstCall().returns(1).returns(0)
+      writer.flush()
+
+      const done = sinon.spy()
+      const deadline = Date.now() + 10_000
+      writer.flush(done, { deadline })
+
+      sinon.assert.notCalled(done)
+      assert.strictEqual(request.firstCall.args[1].deadline, deadline)
+      assert.strictEqual(request.firstCall.args[1].retryOnHttpError, true)
+      request.firstCall.args[2](null, response, 200)
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
+
     it('should update sampling rates', (done) => {
       encoder.count.returns(1)
       writer.flush(() => {

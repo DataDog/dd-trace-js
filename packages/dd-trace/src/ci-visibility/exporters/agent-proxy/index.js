@@ -89,6 +89,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           lookup,
           protocolVersion,
           headers,
+          isTestOptimization: true,
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []

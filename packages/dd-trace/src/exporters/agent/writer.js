@@ -15,12 +15,14 @@ const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class AgentWriter extends BaseWriter {
+  #requestTracker
+
   constructor (...args) {
     super({
       ...args[0],
       beforeFirstFlush: () => firstFlushChannel.publish(),
     })
-    const { prioritySampler, lookup, protocolVersion, headers } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers, isTestOptimization } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
@@ -28,13 +30,32 @@ class AgentWriter extends BaseWriter {
     this._protocolVersion = protocolVersion
     this._headers = headers
     this._encoder = new AgentEncoder(this)
+    if (isTestOptimization) {
+      const TestOptimizationRequestTracker = require('../../ci-visibility/exporters/agentless/request-tracker')
+      this.#requestTracker = new TestOptimizationRequestTracker(this)
+    }
+  }
+
+  /**
+   * Flushes payloads, including requests already in flight during Test Optimization finalization.
+   *
+   * @param {(error?: Error) => void} [done]
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  flush (done, options) {
+    if (this.#requestTracker) {
+      this.#requestTracker.flush(done, options)
+      return
+    }
+    super.flush(done, options)
   }
 
   _sendPayload (data, count, done, flushOptions) {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, flushOptions, (err, res, status, headers) => {
+    const onResponse = (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -74,7 +95,18 @@ class AgentWriter extends BaseWriter {
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
       done()
-    })
+    }
+    makeRequest(
+      _protocolVersion,
+      data,
+      count,
+      _url,
+      _headers,
+      _lookup,
+      flushOptions,
+      this.#requestTracker,
+      onResponse
+    )
   }
 }
 
@@ -84,7 +116,7 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, flushOptions, cb) {
+function makeRequest (version, data, count, url, headers, lookup, flushOptions, requestTracker, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -107,13 +139,15 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
 
   log.debug('Request to the agent: %j', options)
 
-  request(data, options, (err, res, status, headers) => {
+  const onResponse = (err, res, status, headers) => {
     logIntegrations()
     if (status !== 404 && status !== 200 && err) {
       logAgentError({ status, message: err.message ?? inspect(err) })
     }
     cb(err, res, status, headers)
-  })
+  }
+  if (requestTracker) requestTracker.send(request, data, options, onResponse)
+  else request(data, options, onResponse)
 }
 
 module.exports = AgentWriter
