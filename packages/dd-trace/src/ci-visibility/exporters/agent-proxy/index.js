@@ -52,13 +52,11 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
       this._initializationRequest = undefined
-      if (initializationController.signal.aborted) {
-        this._resolveCanUseCiVisProtocol(false)
-        return
-      }
+      const initializationAborted = initializationController.signal.aborted
+      const agentInfoError = err || (initializationAborted ? initializationController.signal.reason : undefined)
 
       this._isInitialized = true
-      let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
+      let latestEvpProxyVersion = getLatestEvpProxyVersion(agentInfoError, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
       this._isGzipCompatible = latestEvpProxyVersion >= 4
 
@@ -85,7 +83,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         // path with evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestScreenshot).
         this._testScreenshotUploadUrl = this._url
         if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
-          const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
+          const canFowardLogs = getCanForwardDebuggerLogs(agentInfoError, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
@@ -108,6 +106,10 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this._coverageBuffer = []
       }
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
+      if (initializationAborted) {
+        this.resetUncodedTraces()
+        return
+      }
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     }, initializationOptions)

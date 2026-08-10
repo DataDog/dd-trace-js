@@ -59,6 +59,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           requestOptions = options
         },
       },
+      '../../../exporters/agent/writer': Writer,
       '../agentless/writer': Writer,
       '../agentless/coverage-writer': Writer,
     })
@@ -124,28 +125,43 @@ describe('AgentProxyCiVisibilityExporter', () => {
     }
   })
 
-  it('aborts initialization and completes once at the final deadline', async () => {
+  it('aborts initialization and uses the fallback writer for later sessions', async () => {
     const clock = sinon.useFakeTimers()
     try {
       const controlled = createControlledExporter()
-      const done = sinon.spy()
+      const firstDone = sinon.spy()
+      const firstTrace = [{ type: 'test' }]
+      const firstCoverage = { traceId: '1', spanId: '1', files: [] }
 
-      controlled.exporter.export([{ type: 'test' }])
-      controlled.exporter.flush(done)
+      controlled.exporter.export(firstTrace)
+      controlled.exporter.exportCoverage(firstCoverage)
+      controlled.exporter.flush(firstDone)
       const { signal } = controlled.getRequestOptions()
 
       clock.tick(10_000)
 
       assert.strictEqual(signal.aborted, true)
       assert.strictEqual(signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-      sinon.assert.calledOnceWithExactly(done, signal.reason)
+      sinon.assert.calledOnceWithExactly(firstDone, signal.reason)
 
       controlled.finishAgentInfo(signal.reason)
       await Promise.resolve()
       clock.tick(100)
 
-      sinon.assert.calledOnce(done)
-      assert.strictEqual(controlled.writers.length, 0)
+      sinon.assert.calledOnce(firstDone)
+      assert.strictEqual(controlled.writers.length, 1)
+      sinon.assert.notCalled(controlled.writers[0].append)
+      assert.deepStrictEqual(controlled.exporter.getUncodedTraces(), [])
+      assert.deepStrictEqual(controlled.exporter._coverageBuffer, [])
+
+      const secondDone = sinon.spy()
+      const secondTrace = [{ type: 'test' }]
+      controlled.exporter.export(secondTrace)
+      controlled.exporter.flush(secondDone)
+
+      sinon.assert.calledOnceWithExactly(controlled.writers[0].append, secondTrace)
+      sinon.assert.calledOnce(controlled.writers[0].flush)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
     } finally {
       clock.restore()
     }
