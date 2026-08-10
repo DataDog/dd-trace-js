@@ -25,6 +25,24 @@ describe('SpanProcessor', () => {
   let SpanSampler
   let sample
 
+  function makeSpan (spanId, parentSpanId, service, duration) {
+    const tags = { 'service.name': service }
+    const context = {
+      _trace: trace,
+      _spanId: spanId,
+      _parentId: parentSpanId,
+      _sampling: {},
+      getTag: (key) => tags[key],
+      getTags: () => tags,
+      setTag: (key, value) => { tags[key] = value },
+    }
+    return {
+      _duration: duration,
+      tracer: sinon.stub().returns(tracer),
+      context: sinon.stub().returns(context),
+    }
+  }
+
   before(() => {
     require('../src/process-tags').initialize()
   })
@@ -302,23 +320,6 @@ describe('SpanProcessor', () => {
     const sameServiceChildId = { toString }
     const differentServiceChildId = { toString }
     const parentId = { toString }
-    const makeSpan = (spanId, parentSpanId, service, duration) => {
-      const tags = { 'service.name': service }
-      const context = {
-        _trace: trace,
-        _spanId: spanId,
-        _parentId: parentSpanId,
-        _sampling: {},
-        getTag: (key) => tags[key],
-        getTags: () => tags,
-        setTag: (key, value) => { tags[key] = value },
-      }
-      return {
-        _duration: duration,
-        tracer: sinon.stub().returns(tracer),
-        context: sinon.stub().returns(context),
-      }
-    }
     const root = makeSpan(rootId, parentId, 'web', 100)
     const sameServiceChild = makeSpan(sameServiceChildId, rootId, 'web')
     const differentServiceChild = makeSpan(differentServiceChildId, rootId, 'postgres')
@@ -351,6 +352,33 @@ describe('SpanProcessor', () => {
     const differentServiceChildFormatted = spanFormat.getCall(2).returnValue
     assert.ok(!Object.hasOwn(sameServiceChildFormatted.metrics, TOP_LEVEL_KEY))
     assert.strictEqual(differentServiceChildFormatted.metrics[TOP_LEVEL_KEY], 1)
+  })
+
+  it('should mark a different-service child created after its parent is partially flushed', () => {
+    const rootId = {}
+    const activeId = {}
+    const childId = {}
+    const parentId = {}
+    const root = makeSpan(rootId, parentId, 'web', 100)
+    const active = makeSpan(activeId, rootId, 'web')
+    spanFormat.callsFake(span => {
+      const context = span.context()
+      const topLevel = context.getTag(TOP_LEVEL_KEY)
+      return { metrics: topLevel === undefined ? {} : { [TOP_LEVEL_KEY]: topLevel } }
+    })
+    processor._stats = { onSpanFinished: sinon.stub() }
+    config.flushMinSpans = 1
+    trace.started = [root, active]
+    trace.finished = [root]
+
+    processor.process(root)
+
+    const child = makeSpan(childId, rootId, 'postgres', 100)
+    trace.started.push(child)
+    trace.finished = [child]
+    processor.process(child)
+
+    assert.strictEqual(spanFormat.secondCall.returnValue.metrics[TOP_LEVEL_KEY], 1)
   })
 
   describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {

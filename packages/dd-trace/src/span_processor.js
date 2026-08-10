@@ -10,6 +10,7 @@ const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
+const servicesByTrace = new WeakMap()
 
 class SpanProcessor {
   constructor (exporter, prioritySampler, config, otlpStatsExporter) {
@@ -57,16 +58,19 @@ class SpanProcessor {
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
       if (this._stats) {
-        const contextBySpanId = new Map()
+        let serviceBySpanId = servicesByTrace.get(trace)
+        if (!serviceBySpanId) {
+          serviceBySpanId = new Map()
+          servicesByTrace.set(trace, serviceBySpanId)
+        }
         for (const startedSpan of started) {
           const context = startedSpan.context()
-          const parentContext = contextBySpanId.get(context._parentId)
           const service = context.getTag('service.name')
-          const parentService = parentContext?.getTag('service.name')
+          const parentService = serviceBySpanId.get(context._parentId)
           if (service !== undefined && parentService !== undefined && service !== parentService) {
             context.setTag(TOP_LEVEL_KEY, 1)
           }
-          if (context._spanId !== undefined) contextBySpanId.set(context._spanId, context)
+          if (context._spanId !== undefined && service !== undefined) serviceBySpanId.set(context._spanId, service)
         }
       }
 
