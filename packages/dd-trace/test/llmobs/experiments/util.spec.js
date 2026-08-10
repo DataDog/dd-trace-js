@@ -7,9 +7,11 @@ const sinon = require('sinon')
 const log = require('../../../src/log')
 
 const {
+  durationNs,
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  timestampMs,
   validateEvaluatorName,
 } = require('../../../src/llmobs/experiments/util')
 
@@ -61,6 +63,28 @@ describe('LLMObs Experiments util', () => {
     assert.equal(inferMetricType('label'), 'categorical')
     assert.equal(inferMetricType(true), 'boolean')
     assert.equal(inferMetricType(0.5), 'score')
+  })
+
+  it('normalizes timestamps to milliseconds with fallback for invalid values', () => {
+    const fallback = Date.UTC(2026, 0, 1)
+
+    assert.equal(timestampMs(new Date('2026-01-01T00:00:01.000Z'), fallback), Date.UTC(2026, 0, 1, 0, 0, 1))
+    assert.equal(timestampMs('2026-01-01T00:00:02.000Z', fallback), Date.UTC(2026, 0, 1, 0, 0, 2))
+    assert.equal(timestampMs(1234, fallback), 1234)
+    assert.equal(timestampMs(new Date('invalid'), fallback), fallback)
+    assert.equal(timestampMs(Number.NaN, fallback), fallback)
+    assert.equal(timestampMs(null, fallback), fallback)
+  })
+
+  it('normalizes durations to nanoseconds with non-negative fallbacks', () => {
+    const startMs = Date.UTC(2026, 0, 1)
+
+    assert.equal(durationNs({ durationMs: 1.5 }, startMs), 1_500_000)
+    assert.equal(durationNs({ durationMs: -1 }, startMs), 0)
+    assert.equal(durationNs({ completedAt: '2026-01-01T00:00:02.000Z' }, startMs), 2_000_000_000)
+    assert.equal(durationNs({ completedAt: new Date('2025-12-31T23:59:59.000Z') }, startMs), 0)
+    assert.equal(durationNs({ completedAt: new Date('invalid') }, startMs), 0)
+    assert.equal(durationNs({}, startMs), 0)
   })
 
   it('normalizes JSON metric values into backend-safe objects', () => {

@@ -8,12 +8,14 @@ const {
   buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  durationNs,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
   sleep,
   stringify,
+  timestampMs,
   validateEvaluatorName,
 } = require('./util')
 
@@ -100,30 +102,6 @@ function createFallbackSpanContext (startNs) {
   const spanId = spanIdentifier.toString(16).padStart(16, '0')
   const traceId = spanIdentifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
   return { spanId, traceId }
-}
-
-function timestampMs (value, fallback = Date.now()) {
-  if (value === null || value === undefined) return fallback
-  if (value instanceof Date) {
-    const timestamp = value.getTime()
-    return Number.isFinite(timestamp) ? timestamp : fallback
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const parsed = Date.parse(String(value))
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
-function durationNs (row, startMs) {
-  if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
-    return Math.max(0, Math.round(row.durationMs * 1e6))
-  }
-
-  if (row.completedAt !== undefined) {
-    const completedMs = timestampMs(row.completedAt, startMs)
-    return Math.max(0, Math.round((completedMs - startMs) * 1e6))
-  }
-
-  return 0
 }
 
 function normalizeError (error) {

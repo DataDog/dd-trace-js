@@ -196,6 +196,40 @@ function sleep (ms) {
 }
 
 /**
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
+function timestampMs (value, fallback = Date.now()) {
+  if (value === null || value === undefined) return fallback
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    return Number.isFinite(timestamp) ? timestamp : fallback
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Date.parse(String(value))
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+/**
+ * @param {{ durationMs?: unknown, completedAt?: unknown }} row
+ * @param {number} startMs
+ * @returns {number}
+ */
+function durationNs (row, startMs) {
+  if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
+    return Math.max(0, Math.round(row.durationMs * 1e6))
+  }
+
+  if (row.completedAt !== undefined) {
+    const completedMs = timestampMs(row.completedAt, startMs)
+    return Math.max(0, Math.round((completedMs - startMs) * 1e6))
+  }
+
+  return 0
+}
+
+/**
  * @param {Record<string, unknown> | undefined} recordMetadata
  * @param {Record<string, unknown>} config
  * @returns {Record<string, unknown>}
@@ -210,11 +244,13 @@ module.exports = {
   buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
+  durationNs,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
   sleep,
   stringify,
+  timestampMs,
   validateEvaluatorName,
 }
