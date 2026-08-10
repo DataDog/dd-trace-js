@@ -83,41 +83,25 @@ export function hasCodecovCommit () {
 }
 
 /**
- * Merge one workflow run's coverage and upload it to Codecov, if it produced any. Codecov reads
- * branch/function coverage from the istanbul JSON report, since its own cross-session merge for a
- * shared file has been observed overwriting rather than summing when more than one session reports
- * it — see `group-coverage.mjs`. The upload carries a flag derived from the workflow's name (see
- * `flagOf`) so Codecov's per-flag breakdown reflects each sibling workflow separately instead of
- * every upload sharing one flag; that per-run flag is also why this stays one upload per workflow
- * run instead of batching like the Datadog upload does (see `uploadAllCoverageToDatadog`) — merging
- * lcov files that came from cells with the same content is safe, but merging Codecov uploads that
- * each need a different flag isn't.
- *
- * The lcov merge always runs, even when `skipUpload` is set, since it also feeds the Datadog batch
- * upload, which has no per-run cache of its own — see `all-green.mjs`. The json merge is skipped
- * along with the upload, since only Codecov reads it and it's the slow half of the merge on a run
- * with many cells.
+ * Merge one workflow run's coverage and upload it to Codecov, if it produced any. The upload carries
+ * a flag derived from the workflow's name (see `flagOf`) so Codecov's per-flag breakdown reflects
+ * each sibling workflow separately instead of every upload sharing one flag; that per-run flag is
+ * also why this stays one upload per workflow run instead of batching like the Datadog upload does
+ * (see `uploadAllCoverageToDatadog`) — merging lcov files that came from cells with the same content
+ * is safe, but merging Codecov uploads that each need a different flag isn't.
  *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
- * @param {boolean} [skipUpload] Skip merging the json report and the `codecovcli do-upload` call —
- *   set when a previous All Green job attempt already uploaded this run's coverage to Codecov
- *   successfully.
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
-export async function uploadCoverage (run, options, skipUpload = false) {
-  if (skipUpload) {
-    mergeRunCoverage(run.id, undefined, undefined, true)
-    return []
-  }
-
-  const { jsonDir } = mergeRunCoverage(run.id)
-  if (!jsonDir) return []
+export async function uploadCoverage (run, options) {
+  const { lcovDir } = mergeRunCoverage(run.id)
+  if (!lcovDir) return []
 
   const commitReady = await ensureCodecovCommit(options)
   if (!commitReady) return []
 
-  const result = await runUploadWithRetry('codecovcli', codecovUploadArgs(jsonDir, flagOf(run.name), options))
+  const result = await runUploadWithRetry('codecovcli', codecovUploadArgs(lcovDir, flagOf(run.name), options))
   return [result]
 }
 
