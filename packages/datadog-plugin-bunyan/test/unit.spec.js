@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { after, before, describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 
@@ -24,12 +24,19 @@ const tracer = new Tracer(getConfig({
 const plugin = new BunyanPlugin({
   _tracer: tracer,
 })
-plugin.configure({
-  logInjection: true,
-  enabled: true,
-})
 
 describe('BunyanPlugin', () => {
+  before(() => {
+    plugin.configure({
+      logInjection: true,
+      enabled: true,
+    })
+  })
+
+  after(() => {
+    plugin.configure(false)
+  })
+
   it('injects dd onto the record bunyan passes through _emit', () => {
     const record = { foo: 'bar', msg: 'hello' }
     logCh.publish({ message: record })

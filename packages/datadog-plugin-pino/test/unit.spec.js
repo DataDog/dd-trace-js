@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { after, before, describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 
@@ -25,12 +25,19 @@ const tracer = new Tracer(getConfig({
 const plugin = new PinoPlugin({
   _tracer: tracer,
 })
-plugin.configure({
-  logInjection: true,
-  enabled: true,
-})
 
 describe('PinoPlugin', () => {
+  before(() => {
+    plugin.configure({
+      logInjection: true,
+      enabled: true,
+    })
+  })
+
+  after(() => {
+    plugin.configure(false)
+  })
+
   it('splices trace correlation into pino JSON output', () => {
     const data = { line: '{"level":30,"msg":"hello"}' }
     jsonCh.publish(data)
