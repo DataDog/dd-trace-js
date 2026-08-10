@@ -31,11 +31,11 @@ const {
   TEST_HAS_DYNAMIC_NAME,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 function shouldTestsRun (type) {
@@ -76,7 +76,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
@@ -98,9 +98,7 @@ moduleTypes.forEach(({
     this.timeout(80_000)
     let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin.
-    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       this.timeout(180_000)
@@ -126,7 +124,7 @@ moduleTypes.forEach(({
     })
 
     context('flaky test retries', () => {
-      it('retries flaky tests', async () => {
+      it('retries flaky tests with object Cypress retries', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -225,6 +223,64 @@ moduleTypes.forEach(({
               // Verify "flaky test retry always passes" comes last
               assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
               assert.equal(testExecutionOrder[9].isRetry, false)
+            }, { hardTimeout: 30000 })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      over12It('retries flaky tests', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/numeric-retries.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES_AS_NUMBER: '0',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(testSuites.length, 1)
+              assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'pass')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 3)
+
+              const resource = 'cypress/e2e/numeric-retries.cy.js.numeric Cypress retries eventually passes'
+              assert.deepStrictEqual(tests.map(test => test.resource), [resource, resource, resource])
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[1].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[2].meta[TEST_STATUS], 'pass')
+              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(tests[2].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              assert.strictEqual(tests[2].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
             }, { hardTimeout: 30000 })
 
         await Promise.all([
@@ -467,7 +523,7 @@ moduleTypes.forEach(({
           : ''
         command = `../../node_modules/.bin/cypress run ${commandSuffix}`
       } else {
-        command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
+        command = 'node ../../cypress-esm-config.mjs'
       }
 
       const envVars = getCiVisAgentlessConfig(receiver.port)

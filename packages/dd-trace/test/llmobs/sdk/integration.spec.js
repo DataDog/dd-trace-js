@@ -61,6 +61,8 @@ describe('end to end sdk integration tests', () => {
       name: 'myWorkflow',
       inputValue: 'world',
       outputValue: 'hello',
+      // The workflow sits under the agent, so it is attributed to it.
+      agentAttribution: { pagent_name: 'agent', pagent_span_id: llmobsSpans[0].span_id },
     })
   })
 
@@ -166,19 +168,17 @@ describe('end to end sdk integration tests', () => {
 
   describe('otel correlation bridge tags', () => {
     it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
-      let workflowSpanCtx
       llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
-        workflowSpanCtx = { traceId: span.context().toTraceId(true), spanId: span.context().toSpanId() }
         llmobs.trace({ kind: 'task', name: 'inner' }, () => {})
       })
 
-      const { apmSpans } = await getEvents(2)
+      const { apmSpans, llmobsSpans } = await getEvents(2)
       assert.equal(apmSpans.length, 2)
 
       // The first span in the chunk carries _trace.tags, including the bridge tags.
       const firstSpan = apmSpans[0]
-      assert.equal(firstSpan.meta.llmobs_trace_id, workflowSpanCtx.traceId)
-      assert.equal(firstSpan.meta.llmobs_parent_id, workflowSpanCtx.spanId)
+      assert.equal(firstSpan.meta.llmobs_trace_id, llmobsSpans[0].trace_id)
+      assert.equal(firstSpan.meta.llmobs_parent_id, llmobsSpans[0].span_id)
 
       // Every SDK-tagged apm span carries the submitted marker.
       for (const apmSpan of apmSpans) {
@@ -224,6 +224,52 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
       assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
+      assert.equal(llmobsSpans[0].trace_id, llmobsSpans[1].trace_id)
+      assert.match(llmobsSpans[0].trace_id, /^[0-9a-f]{32}$/)
+    })
+
+    it('propagates agent attribution across a distributed boundary', async () => {
+      const carrier = {}
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'upstream_agent' }, agentSpan => {
+        agentId = agentSpan.context().toSpanId()
+        tracer.inject(agentSpan, 'text_map', carrier)
+      })
+
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
+      assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
+        pagent_name: 'upstream_agent',
+        pagent_span_id: agentId,
+      })
+    })
+
+    it('propagates only the id across a boundary when the upstream agent name is unsafe', async () => {
+      const carrier = {}
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, agentSpan => {
+        agentId = agentSpan.context().toSpanId()
+        tracer.inject(agentSpan, 'text_map', carrier)
+      })
+
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
+      // The comma-bearing name was skipped on the wire, so only the id survives; the name is
+      // emitted as explicit null (matching dd-trace-py) and the backend resolves it from the id.
+      assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
+        pagent_name: null,
+        pagent_span_id: agentId,
+      })
     })
 
     it('injects the local mlApp', async () => {

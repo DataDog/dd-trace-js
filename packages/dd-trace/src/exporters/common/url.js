@@ -1,6 +1,20 @@
 'use strict'
 
+const net = require('node:net')
+
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
+
+/**
+ * @param {string} hostname
+ * @returns {boolean}
+ */
+function isLoopbackHost (hostname) {
+  // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
+  return hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    (hostname.startsWith('127.') && net.isIPv4(hostname))
+}
 
 /**
  * Convert an agent/intake URL into Node http(s) request options.
@@ -18,11 +32,9 @@ function parseUrl (urlObjOrString) {
   // `urlToHttpOptions` returns `pathname` at runtime, but @types/node narrows it
   // to `ClientRequestArgs`, which omits it; cast so the named-pipe fold below can
   // read and rewrite it.
-  const url = /** @type {import('node:http').ClientRequestArgs & { pathname: string }} */ (
-    urlObjOrString !== null && typeof urlObjOrString === 'object'
-      ? urlToHttpOptions(urlObjOrString)
-      : urlToHttpOptions(new URL(urlObjOrString))
-  )
+  const url = /** @type {import('node:http').ClientRequestArgs & { pathname: string }} */ (urlToHttpOptions(
+    urlObjOrString !== null && typeof urlObjOrString === 'object' ? urlObjOrString : new URL(urlObjOrString)
+  ))
 
   if (url.protocol === 'unix:' && url.hostname === '.') {
     url.path = url.pathname = `//.${url.pathname}`
@@ -31,4 +43,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { parseUrl }
+module.exports = { isLoopbackHost, parseUrl }

@@ -8,7 +8,7 @@ const { capture, run } = require('./helpers/terminal')
 
 const version = pkg.version
 const tag = `v${version}`
-const major = version.split('.')[0]
+const major = version.split('.', 1)[0]
 const body = capture(`gh pr view ${tag}-proposal --json body --jq '.body'`)
 const args = process.argv.slice(2)
 const flags = []

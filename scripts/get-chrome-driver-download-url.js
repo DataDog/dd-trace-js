@@ -11,13 +11,13 @@ async function getChromeDriverDownloadURL (chromePlatform = 'linux64') {
     throw new Error('CHROME_VERSION is not set')
   }
 
-  const majorMinorPatch = chromeVersion.split(' ')[2].split('.').slice(0, 3).join('.').trim()
+  const majorMinorPatch = chromeVersion.split(' ', 3)[2].split('.').slice(0, 3).join('.').trim()
   const res = await fetch(url)
   const json = await res.json()
 
   const versions = json.versions.filter(({ version }) => version.includes(majorMinorPatch))
 
-  const latest = versions[versions.length - 1]
+  const latest = versions.at(-1)
 
   // eslint-disable-next-line no-console
   console.log(latest.downloads.chromedriver.find(({ platform }) => platform === chromePlatform).url)

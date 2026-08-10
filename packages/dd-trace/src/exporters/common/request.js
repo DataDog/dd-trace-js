@@ -6,12 +6,11 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const net = require('net')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { parseUrl } = require('./url')
+const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
@@ -28,20 +27,10 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 let activeBufferSize = 0
 
 /**
- * @param {string} hostname Host as resolved by {@link parseUrl}; IPv6 is unbracketed (`::1`).
- */
-function isLoopbackHost (hostname) {
-  // The 127.0.0.0/8 block is loopback, but only when the host is an actual IPv4 literal: a
-  // hostname like `127.evil.com` shares the prefix yet resolves anywhere, so net.isIPv4 gates it.
-  return hostname === 'localhost' ||
-    hostname === '::1' ||
-    (hostname.startsWith('127.') && net.isIPv4(hostname))
-}
-
-/**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
- * @param {(error: Error|null, result: string, statusCode: number) => void} callback
+ * @param {(error: Error|null, result?: string|null, statusCode?: number,
+ *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -106,34 +95,50 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = (res, finalize) => {
+  /**
+   * @param {import('node:http').IncomingMessage} res
+   * @param {(error: Error|null, result?: string|null, statusCode?: number,
+   *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
+   * @param {(error: Error) => void} handleError
+   */
+  const onResponse = (res, complete, handleError) => {
     markEndpointReached(options)
 
     const chunks = []
 
     res.setTimeout(timeout)
 
+    res.once('aborted', () => {
+      handleError(Object.assign(new Error('Response aborted'), { code: 'ECONNRESET' }))
+    })
+    res.once('error', handleError)
+    res.once('timeout', () => {
+      const error = Object.assign(new Error('Response timed out'), { code: 'ETIMEDOUT' })
+      res.destroy(error)
+      handleError(error)
+    })
+
     res.on('data', chunk => {
       chunks.push(chunk)
     })
 
     res.once('end', () => {
-      finalize()
       const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
-        const isGzip = res.headers['content-encoding'] === 'gzip'
+        const contentEncoding = res.headers['content-encoding']
+        const isGzip = typeof contentEncoding === 'string' && contentEncoding.toLowerCase() === 'gzip'
         if (isGzip) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error('Could not gunzip response: %s', err.message)
-              callback(null, '', res.statusCode, res.headers)
+              complete(null, '', res.statusCode, res.headers)
             } else {
-              callback(null, result.toString(), res.statusCode, res.headers)
+              complete(null, result.toString(), res.statusCode, res.headers)
             }
           })
         } else {
-          callback(null, buffer.toString(), res.statusCode, res.headers)
+          complete(null, buffer.toString(), res.statusCode, res.headers)
         }
       } else {
         let errorMessage = ''
@@ -154,7 +159,7 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        callback(error, null, res.statusCode, res.headers)
+        complete(error, null, res.statusCode, res.headers)
       }
     })
   }
@@ -162,6 +167,7 @@ function request (data, options, callback) {
   // Retries always run via setTimeout so the AsyncLocalStorage store survives
   // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
+  /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
@@ -172,28 +178,51 @@ function request (data, options, callback) {
 
     legacyStorage.run({ noop: true }, () => {
       let finished = false
+      let settled = false
       const finalize = () => {
         if (finished) return
         finished = true
         activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
-      const req = client.request(options, (res) => onResponse(res, finalize))
-
-      req.once('close', finalize)
-      req.once('timeout', finalize)
-
-      req.once('error', error => {
+      /**
+       * @param {Error | null} error
+       * @param {string | null} [result]
+       * @param {number} [statusCode]
+       * @param {import('node:http').IncomingHttpHeaders} [headers]
+       */
+      const complete = (error, result, statusCode, headers) => {
+        if (settled) return
+        settled = true
         finalize()
-        if (attemptIndex < getMaxAttempts(options) && isRetriableNetworkError(error)) {
+        callback(error, result, statusCode, headers)
+      }
+
+      /**
+       * @param {Error} error
+       */
+      const handleError = (error) => {
+        if (settled) return
+
+        if (options.retry !== false &&
+            attemptIndex < getMaxAttempts(options) &&
+            isRetriableNetworkError(error)) {
+          settled = true
+          finalize()
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
           setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
         } else {
-          callback(error)
+          complete(error)
         }
-      })
+      }
+
+      const req = client.request(options, (res) => onResponse(res, complete, handleError))
+
+      req.once('close', finalize)
+      req.once('timeout', finalize)
+      req.once('error', handleError)
 
       req.setTimeout(timeout, () => {
         try {

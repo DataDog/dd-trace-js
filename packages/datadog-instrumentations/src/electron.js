@@ -149,6 +149,7 @@ function wrapBrowserWindow (electron) {
 
       // BrowserWindow doesn't support subclassing because it's all native code
       // so we return an instance of it instead of the subclass.
+      // eslint-disable-next-line no-constructor-return
       return win
     }
   }

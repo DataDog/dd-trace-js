@@ -32,18 +32,26 @@ const parseErrors = new Map()
  * @param {string} source - The source of the value.
  * @param {string} baseMessage - The base message to use for the warning.
  * @param {Error} [error] - An error that was thrown while parsing the value.
+ * @param {string} [outcome] - The outcome after the invalid value is rejected.
  */
-function warnInvalidValue (value, optionName, source, baseMessage, error) {
-  const canonicalName = (optionsTable[optionName]?.canonicalName ?? optionName) + source
+function warnInvalidValue (value, optionName, source, baseMessage, error, outcome = 'picked default') {
+  const canonicalName = optionsTable[optionName]?.canonicalName ?? optionName
+  const telemetryKey = canonicalName + source
+  const telemetryEntry = configWithOrigin.get(telemetryKey)
   // Lazy load log module to avoid circular dependency
-  if (!parseErrors.has(canonicalName)) {
-    // TODO: Rephrase: It will fallback to former source (or default if not set)
-    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source}), picked default`
+  if (!parseErrors.has(telemetryKey) && !telemetryEntry?.error) {
+    // TODO: Report the prior source when an invalid value does not use the default.
+    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source})`
+    if (outcome) message += `, ${outcome}`
     if (error) {
       error.stack = error.toString()
       message += `\n\n${util.inspect(error)}`
     }
-    parseErrors.set(canonicalName, { message })
+    if (telemetryEntry) {
+      telemetryEntry.error = { message }
+    } else {
+      parseErrors.set(telemetryKey, { message })
+    }
     log ??= require('../log')
     const logLevel = error ? 'error' : 'warn'
     log[logLevel](message)

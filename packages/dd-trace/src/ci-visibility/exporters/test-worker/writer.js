@@ -2,6 +2,10 @@
 const { JSONEncoder } = require('../../encode/json-encoder')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
+const {
+  createWebdriverioWorkerMessage,
+  WEBDRIVERIO_WORKER_ENV,
+} = require('./webdriverio')
 
 function getVitestWorkerPort () {
   const port = globalThis.__vitest_worker__?.ctx?.port
@@ -13,6 +17,7 @@ class Writer {
     this._encoder = new JSONEncoder()
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
+    this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
   }
 
   /**
@@ -43,9 +48,12 @@ class Writer {
     // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
     // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
     const isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
-    const payload = isVitestWorkerOld
+    let payload = isVitestWorkerOld
       ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
       : [this._interprocessCode, data]
+    if (this._isWebdriverioWorker) {
+      payload = createWebdriverioWorkerMessage(payload)
+    }
 
     const vitestWorkerPort = getVitestWorkerPort()
     if (vitestWorkerPort) {

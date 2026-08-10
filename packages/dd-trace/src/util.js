@@ -77,6 +77,46 @@ function globMatch (pattern, subject) {
   return true
 }
 
+/**
+ * Return the segment at {index} when splitting {string} on {separator}, without
+ * allocating the intermediate array. Equivalent to
+ * `string.split(separator, index + 1)[index]`, but `split` with a limit forces
+ * V8 off its constant-limit fast path (per-call ToUint32 plus an array
+ * allocation), making it 60-170% slower than this scan for the small inputs
+ * tracer code splits (paths, request lines, version strings).
+ *
+ * @param {string} string
+ * @param {string} separator
+ * @param {number} index
+ * @param {string} [fallback] returned when fewer than {index} + 1 segments exist
+ * @returns {string | undefined}
+ */
+function getSegment (string, separator, index, fallback) {
+  let start = 0
+  for (let i = 0; i < index; i++) {
+    const next = string.indexOf(separator, start)
+    if (next === -1) return fallback
+    start = next + separator.length
+  }
+  const end = string.indexOf(separator, start)
+  return end === -1 ? string.slice(start) : string.slice(start, end)
+}
+
+/**
+ * Return the path portion of a request target, dropping any query string and fragment.
+ * The two scans avoid the array and substring a `split(/[?#]/)` allocates per call.
+ *
+ * @param {string} target
+ */
+function stripQueryAndFragment (target) {
+  let cut = target.indexOf('?')
+  const fragment = target.indexOf('#')
+  if (cut === -1 || (fragment !== -1 && fragment < cut)) {
+    cut = fragment
+  }
+  return cut === -1 ? target : target.slice(0, cut)
+}
+
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
@@ -110,6 +150,8 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
+  getSegment,
+  stripQueryAndFragment,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
   formatKnuthRate,

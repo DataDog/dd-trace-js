@@ -222,7 +222,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     for (let i = 0; i < jobs.length; i++) {
       const job = jobs[i]
       if (!job) continue
-      job.opts = job.opts || {}
+      job.opts ||= {}
       cache[i] = this._injectIntoOpts(span, job.opts)
     }
     ctx._ddMetadata = cache
@@ -274,7 +274,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
   injectTraceContext (span, ctx) {
     const flow = ctx.arguments?.[0]
     if (!flow) return
-    flow.opts = flow.opts || {}
+    flow.opts ||= {}
     ctx._ddMetadata = this._injectIntoOpts(span, flow.opts)
   }
 
@@ -283,7 +283,7 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
     if (!flow) {
       return { queueName: 'bullmq', payloadSize: 0, optsTarget: undefined }
     }
-    flow.opts = flow.opts || {}
+    flow.opts ||= {}
     return {
       queueName: flow.queueName || 'bullmq',
       payloadSize: flow.data ? getMessageSize(flow.data) : 0,

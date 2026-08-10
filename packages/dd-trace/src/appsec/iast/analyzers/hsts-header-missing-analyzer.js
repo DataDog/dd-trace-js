@@ -31,7 +31,7 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
       semicolonIndex === -1 ? headerValue.length : semicolonIndex
     )
 
-    const timestamp = Number.parseInt(timestampString)
+    const timestamp = Number.parseInt(timestampString, 10)
     // eslint-disable-next-line eqeqeq
     return timestamp > 0 && timestamp == timestampString
   }

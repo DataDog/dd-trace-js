@@ -6,6 +6,9 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('path')
 const { inspect } = require('node:util')
+
+const satisfies = require('semifies')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -79,6 +82,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -118,6 +122,8 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+// Mocha 8.0 through 8.2 use workerpool 6.0.x, which cannot start process workers on supported Node versions.
+const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
 
 describe('mocha failed test replay helpers', () => {
   describe('finishDeferredHookEnd', () => {
@@ -312,10 +318,95 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     ])
   })
 
+  parallelIt('forwards telemetry from parallel workers', async () => {
+    receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+    const telemetryPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+        const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+        const testFinishedMetric = telemetryMetrics.find(({ metric, tags }) =>
+          metric === 'event_finished' && tags.includes('event_type:test')
+        )
+
+        assert.ok(testFinishedMetric, 'test event telemetry from a worker should be sent')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TRACE_AGENT_PORT: String(receiver.port),
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+          RUN_IN_PARALLEL: '1',
+        },
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      telemetryPromise,
+    ])
+  })
+
+  /**
+   * @param {boolean} runInParallel
+   * @returns {Promise<void>}
+   */
+  async function assertProgrammaticRunWaitsForFinalPayload (runInParallel) {
+    const completionOrder = []
+    const completedMessage = 'programmatic Mocha run completed'
+    receiver.setWaitingTime(500)
+
+    const intakePromise = (async () => {
+      await receiver.payloadReceived(({ url, payload }) => (
+        url === '/api/v2/citestcycle' &&
+        payload.events.some(event => event.type === 'test_session_end')
+      ))
+      completionOrder.push('intake')
+    })()
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          REPORT_RUN_CALLBACK: '1',
+          ...(runInParallel && { RUN_IN_PARALLEL: '1' }),
+        },
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      const output = chunk.toString()
+      testOutput += output
+      if (output.includes(completedMessage)) completionOrder.push('run')
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      intakePromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.deepStrictEqual(completionOrder, ['intake', 'run'], testOutput)
+  }
+
+  for (const runInParallel of [false, true]) {
+    const mode = runInParallel ? 'parallel' : 'serial'
+    onlyLatestIt(`waits for the final payload before invoking the programmatic run callback (${mode})`, async () => {
+      await assertProgrammaticRunWaitsForFinalPayload(runInParallel)
+    })
+  }
+
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
-    let envVars = /** @type {NodeJS.ProcessEnv} */ ({})
+    let envVars = /** @type {typeof process.env} */ ({})
     context(`(${reportingOption}) can run and report`, () => {
       beforeEach(() => {
         if (reportingOption === 'agentless') {
@@ -2229,12 +2320,201 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: getCiVisAgentlessConfig(receiver.port),
         }
       )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
       const [, [exitCode]] = await Promise.all([
         eventsPromise,
-        once(childProcess, 'exit'),
+        once(childProcess, 'close'),
       ])
       assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
     })
+
+    it('does not say TIA skipped all tests when a root-level test still runs', async () => {
+      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: suiteFile },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_NAME], 'top-level passing test')
+        })
+
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
+    })
+
+    it('says TIA skipped all tests when grep excludes the remaining root-level test', async () => {
+      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: suiteFile },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./${suiteFile} --grep 'nested passing test'`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
+    })
+
+    it('says TIA skipped all tests when it skips the exclusive suite', async () => {
+      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed-only.js'
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: suiteFile },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const [, [exitCode]] = await Promise.all([
+        eventsPromise,
+        once(childProcess, 'close'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.strictEqual(
+        testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+        1,
+        testOutput
+      )
+    })
+
+    for (const { name, grepArgument, expectedMessageCount } of [
+      {
+        name: 'says TIA skipped all tests in parallel mode without grep',
+        grepArgument: '',
+        expectedMessageCount: 1,
+      },
+      {
+        name: 'does not say TIA skipped all tests in parallel mode when grep selects no tests',
+        grepArgument: " --grep 'does not match'",
+        expectedMessageCount: 0,
+      },
+    ]) {
+      onlyLatestIt(name, async () => {
+        const suiteFiles = [
+          'ci-visibility/test/ci-visibility-test.js',
+          'ci-visibility/test/ci-visibility-test-2.js',
+        ]
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: false,
+          tests_skipping: true,
+        })
+        receiver.setSuitesToSkip(suiteFiles.map(suite => ({
+          type: 'suite',
+          attributes: { suite },
+        })))
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test')
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(tests.length, 0)
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+          grepArgument +
+          ` ./${suiteFiles[0]} ./${suiteFiles[1]}`,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const [, [exitCode]] = await Promise.all([
+          eventsPromise,
+          once(childProcess, 'close'),
+        ])
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.strictEqual(
+          testOutput.split(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE).length - 1,
+          expectedMessageCount,
+          testOutput
+        )
+      })
+    }
 
     it('does not skip tests if git metadata upload fails', (done) => {
       receiver.setSuitesToSkip([{
@@ -2926,6 +3206,66 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext
           )
           assert.strictEqual(externalRetries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/fails-first-then-passes.js',
+            ]),
+            MOCHA_RETRIES: '2',
+            SET_RETRIES_INSIDE_TEST: '1',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+    })
+
+    onlyLatestIt('preserves manual Mocha retries when the EFD retry budget is zero', async () => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 0,
+            '10s': 0,
+            '30s': 0,
+            '5m': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const tests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test =>
+              test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/fails-first-then-passes.js'
+            )
+            .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+          assert.strictEqual(tests.length, 2)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+          assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+          assert.strictEqual(tests[1].meta[TEST_STATUS], 'pass')
+          assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
         })
 
       childProcess = exec(
@@ -4541,6 +4881,129 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    onlyLatestIt('reinstalls a probe for a later failure from the same location', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const testNamesWithDebugInfo = new Set()
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 4)
+          for (const retriedTest of retriedTests) {
+            if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+              testNamesWithDebugInfo.add(retriedTest.meta[TEST_NAME])
+            }
+          }
+          assert.strictEqual(testNamesWithDebugInfo.size, 2)
+          assert.ok(testNamesWithDebugInfo.has(
+            'dynamic-instrumentation exhausts retries for the first failure with DI'
+          ))
+          assert.ok(testNamesWithDebugInfo.has(
+            'dynamic-instrumentation retries a later failure from the same location with DI'
+          ))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-reinstall-probe',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    onlyLatestIt('cancels a queued probe while a prior removal is pending', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      let retriedTests = []
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r ./ci-visibility/dynamic-instrumentation/hold-probe-removal -r dd-trace/ci/init',
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-cancel-pending-probe',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TRACE_DEBUG: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.strictEqual(testOutput.includes('Unknown probe id'), false)
+      assert.strictEqual(retriedTests.length, 2)
+      for (const retriedTest of retriedTests) {
+        assert.strictEqual(retriedTest.meta[TEST_STATUS], 'fail')
+      }
+    })
+
     onlyLatestIt('drains in-flight dynamic instrumentation hits before the next retry', async () => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
@@ -5694,11 +6157,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
 
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              assert.match(stdout, /Disabled: 1 test skipped\./)
               assert.strictEqual(exitCode, 0)
             } else {
               assert.match(stdout, /I am running/)
@@ -5821,12 +6288,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.stdout?.on('data', (data) => {
           stdout += data
         })
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data
+        })
 
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             // it runs regardless of the quarantine status
             assert.match(stdout, /I am running when quarantined/)
             if (isQuarantining) {
+              assert.match(
+                stdout,
+                /Quarantined: 1 test run; 1 failure did not affect the test session\./
+              )
               assert.strictEqual(exitCode, 0)
             } else {
               assert.strictEqual(exitCode, 1)

@@ -22,15 +22,24 @@ function parseJsonResponse (rawJson) {
 
 function parseSkippableSuitesResponse (
   rawJson,
-  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
+  {
+    testLevel = 'suite',
+    isCoverageReportUploadEnabled = false,
+    isLineCoverageSupported = true,
+    validateRequiredFields = false,
+    validationMode = false,
+  } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (validateRequiredFields) {
-    validateSkippableTestsResponse(parsedResponse)
+    validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
   const coverage = {}
-  for (const [filename, bitmap] of Object.entries(parsedResponse.meta?.coverage || {})) {
-    coverage[filename.replaceAll('\\', '/')] = bitmap
+  const coverageByFilename = parsedResponse.meta?.coverage
+  if (coverageByFilename) {
+    for (const [filename, bitmap] of Object.entries(coverageByFilename)) {
+      coverage[filename.replaceAll('\\', '/')] = bitmap
+    }
   }
 
   const skippableItems = parsedResponse
@@ -46,7 +55,7 @@ function parseSkippableSuitesResponse (
     },
   } of skippableItems) {
     // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
-    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) {
+    if (isCoverageReportUploadEnabled && isLineCoverageSupported && isMissingLineCodeCoverage) {
       numExcludedByMissingLineCoverage++
       continue
     }
@@ -73,10 +82,11 @@ function parseSkippableSuitesResponse (
  *   numExcludedByMissingLineCoverage?: number
  * }} result - Parsed skippable response.
  * @param {'suite'|'test'} testLevel - Test optimization skipping level.
+ * @param {boolean} shouldConsiderLineCoverage - Whether line coverage can affect suite skipping.
  * @returns {void}
  */
-function logSkippableSuitesResponse (result, testLevel) {
-  if (result.numReceivedSkippableItems === undefined) {
+function logSkippableSuitesResponse (result, testLevel, shouldConsiderLineCoverage) {
+  if (!shouldConsiderLineCoverage || result.numReceivedSkippableItems === undefined) {
     log.debug('Number of received skippable %ss: %d', testLevel, result.skippableSuites.length)
     return
   }
@@ -117,10 +127,12 @@ function getSkippableSuites ({
   custom,
   testLevel = 'suite',
   isCoverageReportUploadEnabled = false,
+  isLineCoverageSupported = true,
 }, done) {
+  const shouldConsiderLineCoverage = isCoverageReportUploadEnabled && isLineCoverageSupported
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, custom, isCoverageReportUploadEnabled,
+    runtimeName, runtimeVersion, testLevel, custom, shouldConsiderLineCoverage,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
@@ -141,11 +153,16 @@ function getSkippableSuites ({
       custom,
       testLevel,
       isCoverageReportUploadEnabled,
+      isLineCoverageSupported,
       cacheKey: activeCacheKey,
     }, cb)
   }, (err, data) => {
     if (err) return done(err)
-    logSkippableSuitesResponse(data, testLevel)
+    logSkippableSuitesResponse(
+      data,
+      testLevel,
+      shouldConsiderLineCoverage
+    )
     done(null, data.skippableSuites, data.correlationId, data.coverage)
   })
 }
@@ -170,6 +187,7 @@ function getSkippableSuites ({
  * @param {object} [params.custom]
  * @param {string} [params.testLevel]
  * @param {boolean} [params.isCoverageReportUploadEnabled]
+ * @param {boolean} [params.isLineCoverageSupported]
  * @param {string | null} params.cacheKey
  * @param {Function} done
  */
@@ -190,6 +208,7 @@ function fetchFromApi ({
   custom,
   testLevel,
   isCoverageReportUploadEnabled,
+  isLineCoverageSupported,
   cacheKey,
 }, done) {
   const options = {
@@ -253,6 +272,7 @@ function fetchFromApi ({
         const result = parseSkippableSuitesResponse(parsedResponse, {
           testLevel,
           isCoverageReportUploadEnabled,
+          isLineCoverageSupported,
           validateRequiredFields: true,
         })
         const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)

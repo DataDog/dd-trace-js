@@ -170,7 +170,7 @@ function generateTestCaseName (ast, dataOrSuffix, expected) {
 function serialize (value) {
   try {
     return JSON.stringify(value)
-  } catch (e) {
+  } catch {
     // Some values are not serializable to JSON, so we fall back to stringification
     return String(value)
   }

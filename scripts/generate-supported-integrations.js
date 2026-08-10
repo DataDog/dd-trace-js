@@ -108,9 +108,11 @@ function readInstrumentationRanges (engines) {
  */
 function lowestVersion (ranges) {
   let lowest
-  for (const range of ranges ?? []) {
-    const candidate = semver.minVersion(range)
-    if (candidate && (!lowest || semver.lt(candidate, lowest))) lowest = candidate
+  if ((ranges) != null) {
+    for (const range of ranges) {
+      const candidate = semver.minVersion(range)
+      if (candidate && (!lowest || semver.lt(candidate, lowest))) lowest = candidate
+    }
   }
   return lowest?.version ?? ''
 }

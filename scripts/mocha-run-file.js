@@ -67,11 +67,13 @@ async function main () {
     reporterOptions: config.reporterOptions,
   })
 
-  for (const req of config.require ?? []) {
-    // Resolve relative to repo root (cwd), matching Mocha CLI behavior.
-    const mod = require(path.resolve(req))
-    if (mod?.mochaHooks) {
-      mocha.rootHooks(mod.mochaHooks)
+  if ((config.require) != null) {
+    for (const req of config.require) {
+      // Resolve relative to repo root (cwd), matching Mocha CLI behavior.
+      const mod = require(path.resolve(req))
+      if (mod?.mochaHooks) {
+        mocha.rootHooks(mod.mochaHooks)
+      }
     }
   }
 

@@ -63,6 +63,10 @@ const complexTypes = ['object', 'array', 'map', 'set']
 
 /**
  * Generate a complex nested object that requires a lot of async CDP calls to traverse
+ *
+ * @param {number} depth
+ * @param {number} breath
+ * @returns {Record<string, unknown>}
  */
 function generateObject (depth, breath) {
   const obj = {}

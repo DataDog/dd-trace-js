@@ -45,7 +45,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
         try {
           fs.unlinkSync(tmpFilePath)
-        } catch (e) {
+        } catch {
           // ignore the error
         }
         fs.copyFileSync(src, tmpFilePath)

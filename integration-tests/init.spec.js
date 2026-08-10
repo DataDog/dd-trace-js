@@ -41,7 +41,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
-      useEnv({ NODE_OPTIONS })
+      useEnv({ DD_TEST_TRACER_ROOT: path.join(__dirname, '..'), NODE_OPTIONS })
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
@@ -62,6 +62,11 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
 
         it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+
+        if (arg === 'import') {
+          it('does not load loader internals after deferring to the app copy', () =>
+            testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
+        }
       })
     })
 
@@ -93,11 +98,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  const skipRuntimeVersionChecks = filename === 'initialize.mjs' &&
-    ['22.0.0', '24.0.0'].includes(process.versions.node)
-  const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
-
-  runtimeVersionContext('runtime version check', () => {
+  context('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
@@ -272,6 +273,56 @@ describe('init.js', () => {
 
   testInjectionScenarios('require', 'init.js', false)
   testRuntimeVersionChecks('require', 'init.js')
+
+  describe('PM2 cluster mode', () => {
+    useEnv({ NODE_OPTIONS: '--require dd-trace/init' })
+
+    afterEach(() => {
+      delete process.env.pm2_env
+    })
+
+    function checkEnv (expectedValues) {
+      return testFile('init/pm2-env.js', out => {
+        const env = JSON.parse(out.trim())
+        for (const [key, value] of Object.entries(expectedValues)) {
+          assert.strictEqual(env[key], value, `expected env.${key} to equal ${value}`)
+        }
+      }, [], '')
+    }
+
+    it('applies all env vars from pm2_env blob to process.env', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+      return checkEnv({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+    })
+
+    it('coerces non-string values to strings', () => {
+      process.env.pm2_env = JSON.stringify({ DD_TRACE_SAMPLE_RATE: 0.5 })
+      return checkEnv({ DD_TRACE_SAMPLE_RATE: '0.5' })
+    })
+
+    it('coerces null values to strings', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
+      return checkEnv({ DD_SERVICE: 'null' })
+    })
+
+    it('does not crash on malformed pm2_env JSON', () => {
+      process.env.pm2_env = 'not-valid-json'
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    it('does nothing when pm2_env is absent', () => {
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    describe('when env vars are already set', () => {
+      useEnv({ DD_SERVICE: 'original-service', MY_APP_VAR: 'original' })
+
+      it('overwrites existing env vars with pm2_env values', () => {
+        process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+        return checkEnv({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+      })
+    })
+  })
 })
 
 // ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
@@ -288,6 +339,22 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testInjectionScenarios('loader', 'initialize.mjs',
         process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
+
+      // Only off-thread loaders install the matcher; see initialize.mjs.
+      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
+        context('import-in-the-middle include matcher', () => {
+          useEnv({
+            NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs',
+            pm2_env: JSON.stringify({
+              DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+                'SANITIZER:*:init/security-control-module.mjs:sanitize',
+            }),
+          })
+
+          it('wraps instrumented and PM2 security control modules and nothing else', () =>
+            testFile('init/loader-matcher.mjs', 'true\n', [], ''))
+        })
+      }
     })
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
