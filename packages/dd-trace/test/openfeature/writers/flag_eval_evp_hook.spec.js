@@ -12,10 +12,15 @@ const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_
 describe('FlagEvalEVPHook', () => {
   let writer
   let hook
+  let getConsent
 
   beforeEach(() => {
     writer = { enqueue: sinon.spy() }
-    hook = new FlagEvalEVPHook(writer)
+    // Existing extraction tests cover the consent-on wire shape (raw
+    // targeting_key + captured context). Consent-off behavior gets its own
+    // describe block below.
+    getConsent = sinon.stub().returns(true)
+    hook = new FlagEvalEVPHook(writer, getConsent)
   })
 
   const lastEnqueued = () => writer.enqueue.firstCall.args[0]
@@ -137,6 +142,67 @@ describe('FlagEvalEVPHook', () => {
       const event = lastEnqueued()
       assert.strictEqual(event.targetingKey, 'user-1')
       assert.strictEqual(event.attrs, context)
+    })
+  })
+
+  describe('observeFullEvaluationData consent', () => {
+    it('reads consent from getConsent once per finally', () => {
+      hook.finally({ flagKey: 'f' }, { variant: 'on' })
+      sinon.assert.calledOnce(getConsent)
+    })
+
+    it('passes observeFullEvaluationData=true to the writer when consent is on', () => {
+      getConsent.returns(true)
+      hook.finally({ flagKey: 'f' }, { variant: 'on' })
+      assert.strictEqual(lastEnqueued().observeFullEvaluationData, true)
+    })
+
+    it('passes observeFullEvaluationData=false to the writer when consent is off', () => {
+      getConsent.returns(false)
+      hook.finally({ flagKey: 'f' }, { variant: 'on' })
+      assert.strictEqual(lastEnqueued().observeFullEvaluationData, false)
+    })
+
+    it('skips context capture entirely when consent is off', () => {
+      getConsent.returns(false)
+      const context = { targetingKey: 'user-1', plan: 'premium', email: 'x@y.z' }
+      hook.finally({ flagKey: 'f', context }, { variant: 'on' })
+
+      const event = lastEnqueued()
+      assert.deepStrictEqual(event.attrs, {},
+        'consent-off hooks MUST NOT pass PII attrs to the writer')
+      // targetingKey is still captured — the writer hashes it later.
+      assert.strictEqual(event.targetingKey, 'user-1')
+    })
+
+    it('captures context normally when consent is on', () => {
+      getConsent.returns(true)
+      const context = { targetingKey: 'user-1', plan: 'premium' }
+      hook.finally({ flagKey: 'f', context }, { variant: 'on' })
+
+      assert.strictEqual(lastEnqueued().attrs, context)
+    })
+
+    it('fails closed to observeFullEvaluationData=false when getConsent is not provided', () => {
+      const noAccessorHook = new FlagEvalEVPHook(writer)
+      const context = { targetingKey: 'user-1', plan: 'premium' }
+      noAccessorHook.finally({ flagKey: 'f', context }, { variant: 'on' })
+
+      const event = lastEnqueued()
+      assert.strictEqual(event.observeFullEvaluationData, false)
+      assert.deepStrictEqual(event.attrs, {})
+    })
+
+    it('coerces non-boolean consent return values to false (strict === true)', () => {
+      // Defense in depth: the provider snapshot already coerces, but a
+      // misconfigured accessor must not leak PII.
+      for (const value of [1, 'true', {}, [], null, undefined]) {
+        getConsent.returns(value)
+        writer.enqueue.resetHistory()
+        hook.finally({ flagKey: 'f', context: { plan: 'premium' } }, { variant: 'on' })
+        assert.strictEqual(lastEnqueued().observeFullEvaluationData, false,
+          `value ${JSON.stringify(value)} must coerce to false`)
+      }
     })
   })
 })

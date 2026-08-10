@@ -249,6 +249,130 @@ describe('FlaggingProvider', () => {
     })
   })
 
+  describe('observeFullEvaluationData snapshot', () => {
+    it('passes a getConsent accessor to the EVP hook, not to the OTel/span hooks', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      // The EVP hook is the only consumer of consent. Any other hook receiving
+      // an accessor would be a channel bypassing the intended path.
+      sinon.assert.calledOnce(mockFlagEvalEVPHookClass)
+      const evpArgs = mockFlagEvalEVPHookClass.firstCall.args
+      assert.strictEqual(evpArgs[0], mockFlagEvalWriter)
+      assert.strictEqual(typeof evpArgs[1], 'function', 'EVP hook must receive a getConsent function')
+
+      // OTel hook takes only config.
+      sinon.assert.calledOnce(mockFlagEvalMetricsHookClass)
+      sinon.assert.calledWith(mockFlagEvalMetricsHookClass, mockConfig)
+    })
+
+    it('starts with observeFullEvaluationData=false before any setConfiguration call', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      assert.strictEqual(getConsent(), false, 'default snapshot must be consent-off')
+    })
+
+    it('reflects setConfiguration({ observeFullEvaluationData: true }) atomically', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      provider.setConfiguration({
+        createdAt: '2026-01-01T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'test' },
+        flags: {},
+        observeFullEvaluationData: true,
+      })
+
+      assert.strictEqual(getConsent(), true)
+    })
+
+    it('coerces observeFullEvaluationData to false for non-boolean values (fail-closed)', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      for (const value of [undefined, null, 1, 0, 'true', 'false', {}, []]) {
+        provider.setConfiguration({
+          createdAt: '2026-01-01T00:00:00Z',
+          format: 'SERVER',
+          environment: { name: 'test' },
+          flags: {},
+          observeFullEvaluationData: value,
+        })
+        assert.strictEqual(getConsent(), false,
+          `value ${JSON.stringify(value)} must coerce to false (strict === true)`)
+      }
+    })
+
+    it('ignores observeFullEvaluationData nested inside environment (FFL-2784 placement drift)', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      provider.setConfiguration({
+        createdAt: '2026-01-01T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'test', observeFullEvaluationData: true },
+        flags: {},
+      })
+
+      assert.strictEqual(getConsent(), false,
+        'consent nested inside environment MUST NOT be read; the field lives at UFC root')
+    })
+
+    it('resets to observeFullEvaluationData=false when configuration is unset', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      provider.setConfiguration({
+        createdAt: '2026-01-01T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'test' },
+        flags: {},
+        observeFullEvaluationData: true,
+      })
+      assert.strictEqual(getConsent(), true)
+
+      provider.setConfiguration(undefined)
+      assert.strictEqual(getConsent(), false, 'unsetting configuration must revert consent to false')
+    })
+
+    it('swaps consent atomically — a reader sees either the old or the new snapshot, never a torn pair', () => {
+      // The snapshot is Object.frozen. There is no observable intermediate state.
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const getConsent = mockFlagEvalEVPHookClass.firstCall.args[1]
+
+      provider.setConfiguration({
+        createdAt: '2026-01-01T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'e1' },
+        flags: {},
+        observeFullEvaluationData: false,
+      })
+      const before = getConsent()
+
+      provider.setConfiguration({
+        createdAt: '2026-01-02T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'e2' },
+        flags: {},
+        observeFullEvaluationData: true,
+      })
+      const after = getConsent()
+
+      assert.strictEqual(before, false)
+      assert.strictEqual(after, true)
+    })
+
+    it('does not expose a public consent accessor on the provider', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      // No public getter / method / property leaks consent.
+      assert.strictEqual(typeof provider.getConsent, 'undefined')
+      assert.strictEqual(typeof provider.observeFullEvaluationData, 'undefined')
+      assert.strictEqual(typeof provider.isObserveFullEvaluationDataEnabled, 'undefined')
+    })
+  })
+
   describe('inheritance', () => {
     it('should extend DatadogNodeServerProvider', () => {
       const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
