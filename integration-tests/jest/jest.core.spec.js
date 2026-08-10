@@ -1950,6 +1950,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
+          CONFIG_TEST_MATCH: '**/ci-visibility/test/ci-visibility-test.js',
           JEST_THROWING_REPORTER: '1',
         },
       }
@@ -1960,10 +1961,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        const testSession = events.find(event => event.type === 'test_session_end')
+        const testSession = events.find(event => event.type === 'test_session_end')?.content
+        const testModule = events.find(event => event.type === 'test_module_end')?.content
+        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
         assert.ok(testSession)
-        assert.strictEqual(testSession.content.meta[TEST_STATUS], 'fail')
-        assert.match(testSession.content.meta[ERROR_MESSAGE], /custom reporter failed/)
+        assert.ok(testModule)
+        assert.strictEqual(testSuites.length, 1)
+        assert.strictEqual(tests.length, 1)
+
+        const [testSuite] = testSuites
+        for (const event of [testSession, testModule, testSuite]) {
+          assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.error, 1)
+          assert.match(event.meta[ERROR_MESSAGE], /custom reporter failed/)
+        }
+        assert.strictEqual(testSuite.test_session_id.toString(), testSession.test_session_id.toString())
+        assert.strictEqual(testSuite.test_module_id.toString(), testModule.test_module_id.toString())
+        assert.strictEqual(tests[0].test_suite_id.toString(), testSuite.test_suite_id.toString())
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
       }
     )
 

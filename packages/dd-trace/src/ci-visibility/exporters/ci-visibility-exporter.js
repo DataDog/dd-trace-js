@@ -20,6 +20,7 @@ const spanFormat = require('../../span_format')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
+const { TEST_STATUS } = require('../../plugins/util/test')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
@@ -467,6 +468,44 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
+   * Retains formatted test suite events received from test framework workers until finalization.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  exportTraceWithDeferredTestSuite (trace) {
+    for (const formattedSpan of trace) {
+      if (formattedSpan.type !== 'test_suite_end') continue
+
+      this.#deferredTestSuiteSpans.set(formattedSpan.span_id.toString(), {
+        span: undefined,
+        formattedSpan,
+        emitted: false,
+      })
+    }
+    this.export(trace)
+  }
+
+  /**
+   * Applies a late framework error to every completed suite retained by the current finalization boundary.
+   *
+   * @param {Error} error
+   * @returns {void}
+   */
+  setDeferredTestSuiteError (error) {
+    for (const { span, formattedSpan, emitted } of this.#deferredTestSuiteSpans.values()) {
+      if (emitted) continue
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag('error', error)
+      } else if (formattedSpan) {
+        formattedSpan.meta[TEST_STATUS] = 'fail'
+        spanFormat.addError(formattedSpan, error)
+      }
+    }
+  }
+
+  /**
    * Discards completed suites that the selected transport cannot deliver.
    *
    * @returns {void}
@@ -590,11 +629,14 @@ class CiVisibilityExporter extends BufferingExporter {
         for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
           const { span, formattedSpan, emitted } = deferredTestSuiteSpan
           if (emitted) continue
-          const updatedSpan = spanFormat(span)
-          if (formattedSpan) {
+          const updatedSpan = span && spanFormat(span)
+          if (span && formattedSpan) {
             formattedSpan.error = updatedSpan.error
             Object.assign(formattedSpan.meta, updatedSpan.meta)
             Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+            this._writer.append([formattedSpan])
+            this.#deferredTestSuiteSpans.delete(spanId)
+          } else if (formattedSpan) {
             this._writer.append([formattedSpan])
             this.#deferredTestSuiteSpans.delete(spanId)
           } else {

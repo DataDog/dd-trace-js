@@ -26,13 +26,15 @@ const { uploadCoverageReport: actualUploadCoverageReportRequest } =
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let formatSpan = actualSpanFormat
+const formatSpanStub = (...args) => formatSpan(...args)
+formatSpanStub.addError = actualSpanFormat.addError
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
     },
   },
-  '../../span_format': (...args) => formatSpan(...args),
+  '../../span_format': formatSpanStub,
 })
 
 // The real tracer Config always carries a `testOptimization` namespace object.
@@ -940,6 +942,44 @@ describe('CI Visibility Exporter', () => {
           },
         }])
         sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
+        sinon.assert.calledOnceWithExactly(done, undefined)
+      })
+
+      it('retains a formatted worker suite and applies a later reporter error', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const spanId = { toString: () => 'suite-span-id' }
+        const testEvent = { type: 'test' }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: spanId,
+          error: 0,
+          meta: { 'test.status': 'pass' },
+          metrics: {},
+        }
+        const error = new Error('late reporter error')
+
+        ciVisibilityExporter.exportTraceWithDeferredTestSuite([testEvent, suiteEvent])
+        ciVisibilityExporter.setDeferredTestSuiteError(error)
+
+        sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
+        const done = sinon.spy()
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledTwice(writer.append)
+        assert.strictEqual(writer.append.secondCall.args[0][0], suiteEvent)
+        assert.strictEqual(suiteEvent.error, 1)
+        assert.strictEqual(suiteEvent.meta['test.status'], 'fail')
+        assert.strictEqual(suiteEvent.meta['error.message'], error.message)
+        assert.strictEqual(suiteEvent.meta['error.type'], error.name)
+        assert.strictEqual(suiteEvent.meta['error.stack'], error.stack)
         sinon.assert.calledOnceWithExactly(done, undefined)
       })
 

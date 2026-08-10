@@ -523,6 +523,7 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
+        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -588,6 +589,7 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {
+        this.tracer._exporter.setDeferredTestSuiteError?.(error)
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }

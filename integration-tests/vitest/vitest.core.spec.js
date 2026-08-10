@@ -167,13 +167,18 @@ versions.forEach((version) => {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const { testSession, testModule } = assertCompleteEventHierarchy(events, testOutput)
+          const { testSession, testModule, testSuite, tests } = assertCompleteEventHierarchy(events, testOutput)
 
-          for (const event of [testSession, testModule]) {
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule, testSuite]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
+          assert.deepStrictEqual(
+            [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
+            ['pass', 'skip']
+          )
         },
         { hardTimeout: 20_000 }
       )

@@ -123,6 +123,7 @@ class JestPlugin extends CiPlugin {
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
         if (error) {
+          this.tracer._exporter.setDeferredTestSuiteError?.(error)
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
         }
@@ -329,6 +330,7 @@ class JestPlugin extends CiPlugin {
       this.pendingTestSuiteFinishes.add(pendingFinish)
 
       const finish = () => {
+        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,
