@@ -3,6 +3,7 @@ import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
+import { loadProcessedRunIds, saveProcessedRunIds } from './processed-runs.mjs'
 import { logUploads } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
 import {
@@ -10,6 +11,15 @@ import {
 } from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
+
+// Persisted across All Green job attempts for the same commit (see all-green.yml's cache step).
+// Only the Codecov upload is worth caching — it's the slow part (a `codecovcli` child process per
+// run) and is confirmable per-run, immediately. The Datadog junit/coverage batch uploads are cheap
+// and can only be confirmed as one call covering every currently-downloaded run, so they're always
+// redone in full every attempt; caching them would risk silently dropping a run's data if the batch
+// call failed after that run had been skipped from download.
+const PROCESSED_RUNS_CACHE_PATH = '.all-green-processed-runs.json'
+const cachedRunIds = loadProcessedRunIds(PROCESSED_RUNS_CACHE_PATH)
 
 const {
   BASE_REF,
@@ -104,18 +114,19 @@ async function getRuns () {
   }
 }
 
-// Runs whose reports have already been downloaded/merged, and the resulting promises — each
-// sibling workflow's reports are downloaded and its Codecov upload goes out as soon as that
-// workflow reaches a final state, instead of waiting for every workflow to finish, so a fast
-// workflow's Codecov coverage lands while slower ones are still running. The junit and Datadog
-// coverage uploads don't have Codecov's per-workflow flag constraint, so they're batched into one
-// call each after every run is done instead — see `uploadAllJunit`/`uploadAllCoverageToDatadog`.
-const processedRunIds = new Set()
+// Runs already dispatched to `processRun` this attempt, so a run settling across more than one
+// `scheduleProcessing` call (e.g. after a retry) isn't downloaded/uploaded twice.
+const dispatchedRunIds = new Set()
 const processingPromises = []
+// Runs whose Codecov upload has succeeded, either in a previous job attempt (seeded from
+// `cachedRunIds`) or this one. Persisted to disk the moment a new run succeeds — see `processRun`
+// — so a mid-run cancellation or crash still leaves that progress on disk for the next attempt,
+// instead of only ever saving once at the very end.
+const codecovDoneRunIds = new Set(cachedRunIds)
 
 /**
  * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
- * the coverage merge to Codecov.
+ * the coverage merge to Codecov unless a previous job attempt already did.
  *
  * @param {{ id: number, name: string }} run
  * @returns {Promise<void>}
@@ -123,15 +134,21 @@ const processingPromises = []
 async function processRun (run) {
   const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
 
+  const alreadyOnCodecov = cachedRunIds.has(run.id)
   const coverageResults = await uploadCoverage(run, {
     sha: HEAD_SHA,
     branch: HEAD_BRANCH,
     prNumber: PR_NUMBER,
     eventName: GITHUB_EVENT_NAME,
     baseRef: BASE_REF,
-  })
+  }, alreadyOnCodecov)
   const downloadSummary = failed > 0 ? `${downloaded} artifact(s), ${failed} failed` : `${downloaded} artifact(s)`
   logUploads(`${run.name} (${downloadSummary})`, coverageResults)
+
+  if (!alreadyOnCodecov && failed === 0 && coverageResults.every(result => result.code === 0)) {
+    codecovDoneRunIds.add(run.id)
+    saveProcessedRunIds(PROCESSED_RUNS_CACHE_PATH, codecovDoneRunIds)
+  }
 }
 
 /**
@@ -147,11 +164,11 @@ function scheduleProcessing (runs) {
   const settled = runs.filter(r =>
     r.status === 'completed' &&
     (!pollingRetryConclusions.has(r.conclusion) || retriedRunIds.has(r.id)) &&
-    !processedRunIds.has(r.id)
+    !dispatchedRunIds.has(r.id)
   )
 
   for (const run of settled) {
-    processedRunIds.add(run.id)
+    dispatchedRunIds.add(run.id)
     processingPromises.push(
       processRun(run).catch(err => {
         console.error(`Failed to process workflow run ${run.id} (${run.name}): ${err.message}`)
