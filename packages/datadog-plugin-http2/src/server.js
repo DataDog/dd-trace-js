@@ -100,7 +100,8 @@ class Http2ServerPlugin extends ServerPlugin {
     if (!context || !context.res) return // Not created by a http.Server instance.
 
     if (incomingHttpRequestEnd.hasSubscribers) {
-      incomingHttpRequestEnd.publish({ req: context.req, res: context.res })
+      if (req !== context.req) copyRequestData(req, context.req)
+      incomingHttpRequestEnd.publish({ req, res: context.res })
     }
 
     web.finishAll(context)
@@ -115,6 +116,17 @@ class Http2ServerPlugin extends ServerPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+/**
+ * @param {object} target
+ * @param {object} source
+ * @returns {void}
+ */
+function copyRequestData (target, source) {
+  if (source.body !== undefined) target.body = source.body
+  if (source.cookies !== undefined) target.cookies = source.cookies
+  if (source.query !== undefined) target.query = source.query
 }
 
 // The core stream API has no `res.writeHead`; CORS preflight tagging only

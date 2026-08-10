@@ -9,6 +9,12 @@ const { after, afterEach, before, describe, it } = require('mocha')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const { FOREIGN_HTTP2_SERVER } = require('../../src/constants')
 const appsec = require('../../src/appsec')
+const {
+  bodyParser,
+  cookieParser,
+  expressProcessParams,
+  queryParser,
+} = require('../../src/appsec/channels')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
@@ -108,6 +114,28 @@ describe('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(headers['after-block'], undefined)
     assert.strictEqual(body, blockedTemplateJson)
+  })
+
+  it('keeps request-start data available when a mixed compatibility request ends', async () => {
+    await listen(() => {
+      const mixedServer = http2.createServer((req, res) => {
+        req.body = { value: 'mixed-context-body' }
+        bodyParser.publish({ req, res, body: req.body })
+        cookieParser.publish({ req, res, cookies: { value: 'mixed-context-cookie' } })
+        queryParser.publish({ req, res, query: { value: 'mixed-context-query' } })
+        expressProcessParams.publish({ req, res, params: { value: 'mixed-context-param' } })
+        res.end()
+      })
+      mixedServer.on('stream', () => {})
+      return mixedServer
+    })
+
+    const traceAsserted = agent.assertFirstTraceSpan(span => {
+      const { triggers } = JSON.parse(span.meta['_dd.appsec.json'])
+      assert.ok(triggers.some(trigger => trigger.rule.id === 'mixed-http2-context'))
+    })
+
+    await Promise.all([traceAsserted, request('/mixed-context')])
   })
 
   it('blocks core stream responses and suppresses subsequent writes', async () => {
