@@ -424,14 +424,19 @@ describe('IAST Rewriter', () => {
     it('should compile a module body only once when its first execution throws', () => {
       realRewriter.enable(iastEnabledConfig)
 
-      const filename = '/tmp/node_modules/graphql/index.js'
       const source = "Object.defineProperty(exports, 'BREAK', { enumerable: true, get () { return {} } })\n" +
         "throw new Error('original module error')\n"
-
-      const module = new RealModule(filename, null)
-      module.filename = filename
-
-      assert.throws(() => module._compile(source, filename), /original module error/)
+      for (const filename of [
+        '/tmp/node_modules/graphql/index.js',
+        '/tmp/app/index.js',
+      ]) {
+        const module = new RealModule(filename)
+        module.filename = filename
+        assert.throws(
+          () => module._compile(source, filename),
+          { message: 'original module error' }
+        )
+      }
     })
   })
 })
