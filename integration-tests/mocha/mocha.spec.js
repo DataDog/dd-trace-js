@@ -233,7 +233,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  for (const reporterEvent of ['end', 'pass', 'suite end']) {
+  for (const reporterEvent of ['end', 'start', 'pass', 'suite end']) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
       childProcess = exec(
@@ -259,7 +259,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const hierarchyEventTypes = ['test_session_end', 'test_module_end']
+          if (reporterEvent !== 'start') hierarchyEventTypes.push('test_suite_end')
+          for (const eventType of hierarchyEventTypes) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')

@@ -402,11 +402,7 @@ function wrapRunnerEmit (Runner) {
     const endHandler = runnerEndHandlers.get(this)
     if (!endHandler) return emit.apply(this, arguments)
 
-    if (event === 'start') {
-      const result = emit.apply(this, arguments)
-      runnerStarted.add(this)
-      return result
-    }
+    if (event === 'start') runnerStarted.add(this)
 
     if (!runnerStarted.has(this)) return emit.apply(this, arguments)
 
@@ -928,7 +924,7 @@ addHook({
 
     const onEnd = getOnEndHandler(false, onFlushDone)
 
-    this.once('start', getOnStartHandler(frameworkVersion))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
 
     runnerEndHandlers.set(this, function (frameworkError, frameworkErrorDone) {
       hasEnded = true
@@ -1232,7 +1228,7 @@ addHook({
       onRunDone(this.failures)
     }
 
-    this.once('start', getOnStartHandler(frameworkVersion))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
     runnerEndHandlers.set(this, getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
