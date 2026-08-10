@@ -388,6 +388,29 @@ function adjustRunnerFailuresOnce (runner) {
 }
 
 /**
+ * Prevents Mocha from entering hooks or the test body after a test-start reporter error.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function stopCurrentTest (runner, test) {
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+
+  test.pending = true
+  test._ddReporterStartFailed = true
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
  * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
  * runs Datadog's end handler and propagates the original error after finalization.
  *
@@ -414,6 +437,7 @@ function wrapRunnerEmit (Runner) {
         if (!pendingFrameworkError) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
+          if (event === 'test') stopCurrentTest(this, arguments[1])
         }
         return
       }
@@ -940,15 +964,16 @@ addHook({
     // instead of suiteA -> suiteB -> testA -> ... -> testB)
     // when the suite has tests that are in the top level
     // (no describe(...))
-    this.on('test', function (test) {
+    this.prependListener('test', getOnTestHandler(true))
+    // Reporters are registered before Runner#run, so prepend this after the test handler
+    // to start the suite first and preserve the test event if a reporter throws.
+    this.prependListener('test', function (test) {
       const ctx = testFileToSuiteCtx.get(test.file)
       if (ctx?._pendingRootStart) {
         ctx._pendingRootStart = false
         testSuiteStartCh.runStores(ctx, () => {})
       }
     })
-
-    this.on('test', getOnTestHandler(true))
 
     // Reporters are registered before this run wrapper. Prepend terminal handlers
     // so a reporter error cannot strand a test span that Mocha already completed.

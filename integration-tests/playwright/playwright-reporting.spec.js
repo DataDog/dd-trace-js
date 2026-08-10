@@ -157,6 +157,52 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
+    contextNewVersions('failure screenshots', () => {
+      it('bounds reporter error finalization while a screenshot upload is pending', async (receiver, run) => {
+        receiver.setMediaResponsesPending()
+        let testOutput = ''
+        const startedAt = Date.now()
+        const proc = run(
+          'node ./ci-visibility/playwright-pending-upload-finalization.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end', 'test']) {
+              const event = events.find(event => event.type === eventType)
+              assert.ok(event, `expected ${eventType} event\n${testOutput}`)
+              assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            }
+            for (const eventType of ['test_session_end', 'test_module_end']) {
+              const event = events.find(event => event.type === eventType)
+              assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter failed/)
+            }
+          },
+          { hardTimeout: 15_000 }
+        ).catch((error) => {
+          error.message += `\nPlaywright output:\n${testOutput}`
+          throw error
+        })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.notStrictEqual(exitCode, 0)
+        assert.match(testOutput, /custom Playwright reporter failed/)
+        assert.ok(Date.now() - startedAt < 15_000, `Playwright finalization exceeded its deadline\n${testOutput}`)
+      })
+    })
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {

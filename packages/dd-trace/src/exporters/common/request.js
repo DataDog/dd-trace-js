@@ -80,10 +80,10 @@ function request (data, options, callback) {
     const chunks = []
     let settled = false
 
-    const cleanup = () => {
+    const cleanup = (keepErrorListener = false) => {
       data.removeListener('data', onData)
       data.removeListener('end', onEnd)
-      data.removeListener('error', onError)
+      if (!keepErrorListener) data.removeListener('error', onError)
       signal?.removeEventListener('abort', onAbort)
     }
     const onData = chunk => chunks.push(chunk)
@@ -102,7 +102,8 @@ function request (data, options, callback) {
     const onAbort = () => {
       if (settled) return
       settled = true
-      cleanup()
+      cleanup(true)
+      data.once('close', () => data.removeListener('error', onError))
       data.destroy()
       callback(getAbortError(signal))
     }

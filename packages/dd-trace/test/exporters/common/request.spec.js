@@ -261,7 +261,7 @@ describe('request', function () {
     assert.strictEqual(body.listenerCount('error'), 0)
   })
 
-  it('stops buffering a readable body when its AbortSignal aborts', () => {
+  it('stops buffering a readable body when its AbortSignal aborts', async () => {
     const abortController = new AbortController()
     const error = new Error('final flush expired')
     const body = new stream.PassThrough()
@@ -273,12 +273,39 @@ describe('request', function () {
       signal: abortController.signal,
     }, callback)
     body.write('partial body')
+    const closed = new Promise(resolve => body.once('close', resolve))
     abortController.abort(error)
+    await closed
 
     sinon.assert.calledOnceWithExactly(callback, error)
     assert.strictEqual(body.destroyed, true)
     assert.strictEqual(body.listenerCount('data'), 0)
     assert.strictEqual(body.listenerCount('end'), 0)
+    assert.strictEqual(body.listenerCount('error'), 0)
+  })
+
+  it('absorbs an asynchronous readable destruction error after abort', async () => {
+    const abortController = new AbortController()
+    const abortError = new Error('final flush expired')
+    const destroyError = new Error('body destruction failed')
+    const callback = sinon.spy()
+    const body = new stream.Readable({
+      read () {},
+      destroy (error, onDone) {
+        setImmediate(onDone, destroyError)
+      },
+    })
+    const closed = new Promise(resolve => body.once('close', resolve))
+
+    request(body, {
+      method: 'PUT',
+      path: '/path',
+      signal: abortController.signal,
+    }, callback)
+    abortController.abort(abortError)
+    await closed
+
+    sinon.assert.calledOnceWithExactly(callback, abortError)
     assert.strictEqual(body.listenerCount('error'), 0)
   })
 

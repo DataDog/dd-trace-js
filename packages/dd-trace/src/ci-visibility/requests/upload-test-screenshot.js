@@ -74,10 +74,11 @@ function toIdempotencyQueryValue (idempotencyKey) {
  * @param {URL} options.url - The base URL for the screenshot upload
  * @param {boolean} [options.isEvpProxy] - Whether to upload through the Agent's evp_proxy
  * @param {string} [options.evpProxyPrefix] - The evp_proxy path prefix (e.g. '/evp_proxy/v4')
+ * @param {AbortSignal} [options.signal] - Signal used to cancel the upload
  * @param {Function} callback - Callback function (err)
  */
 function uploadTestScreenshot (
-  { filePath, traceId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix },
+  { filePath, traceId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix, signal },
   callback
 ) {
   const { DD_API_KEY } = getConfig()
@@ -125,6 +126,7 @@ function uploadTestScreenshot (
     path: `${basePath}?${query}`,
     timeout: UPLOAD_TIMEOUT_MS,
     url,
+    signal,
   }
 
   if (isEvpProxy) {

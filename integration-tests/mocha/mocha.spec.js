@@ -233,7 +233,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
-  for (const reporterEvent of ['end', 'start', 'fail', 'pass', 'pending', 'test end', 'hook end', 'suite end']) {
+  const reporterEvents = [
+    'end', 'start', 'fail', 'pass', 'pending', 'test', 'test end', 'hook end', 'suite end',
+  ]
+  for (const reporterEvent of reporterEvents) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
       let reporterTestFile = './ci-visibility/mocha-plugin-tests/passing.js'
@@ -243,6 +246,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
       } else if (reporterEvent === 'pending') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
+      } else if (reporterEvent === 'test') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-test-start.js'
       }
       childProcess = exec(
         [
@@ -303,6 +308,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testEvent.content.meta[TEST_FRAMEWORK], 'mocha')
             assert.strictEqual(testEvent.content.meta[TEST_TYPE], 'test')
           }
+          if (reporterEvent === 'test') {
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'expected aborted test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
+          }
         },
         { hardTimeout: 20_000 }
       )
@@ -312,6 +322,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         eventsPromise,
       ])
       assert.match(testOutput, /custom Mocha reporter failed/)
+      if (reporterEvent === 'test') {
+        assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
+      }
       assert.notStrictEqual(exitCode, 0, testOutput)
     })
   }

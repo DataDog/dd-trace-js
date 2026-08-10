@@ -703,7 +703,11 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
-    const shouldFinishTest = ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))
+    const shouldFinishTest = ctx && (
+      test._ddReporterStartFailed ||
+      !getAfterEachHooks(test).length ||
+      (test._ddIsDisabled && !test._ddIsAttemptToFix)
+    )
     let testFinishInfo
     let isFinalAttempt = false
 
