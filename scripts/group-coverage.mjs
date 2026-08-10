@@ -253,17 +253,22 @@ function mergeCoverageJson (reportPaths) {
  * @param {string|number} runId
  * @param {string} [inputDir]
  * @param {string} [outputDir]
+ * @param {boolean} [skipJson] Skip merging the istanbul JSON reports — only Codecov reads them
+ *   (see `upload-coverage.mjs`), and `istanbul-lib-coverage`'s merge is far slower than `mergeLcov`
+ *   on a run with many cells, so a run whose Codecov upload already succeeded in a previous job
+ *   attempt can skip this merge entirely instead of paying for it only to discard the result.
  * @returns {{ lcovDir: string|null, jsonDir: string|null }} Directories containing the merged
- *   `lcov.info` and `coverage-final.json`, each null if the run produced no report in that format.
+ *   `lcov.info` and `coverage-final.json`, each null if the run produced no report in that format
+ *   (or, for `jsonDir`, if `skipJson` was set).
  */
-function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) {
+function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR, skipJson = false) {
   const files = collectCoverageFiles(join(inputDir, String(runId)), [], { runId: String(runId) })
   if (files.length === 0) return { lcovDir: null, jsonDir: null }
 
   const { reportsByArtifact, artifacts } = planCoverageGroups(files)
   const reports = artifacts.flatMap(artifact => reportsByArtifact.get(artifact))
   const lcovReportPaths = reports.filter(r => r.format === 'lcov').map(r => r.reportPath)
-  const jsonReportPaths = reports.filter(r => r.format === 'json').map(r => r.reportPath)
+  const jsonReportPaths = skipJson ? [] : reports.filter(r => r.format === 'json').map(r => r.reportPath)
 
   let lcovDir = null
   if (lcovReportPaths.length > 0) {
