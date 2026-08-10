@@ -492,6 +492,7 @@ moduleTypes.forEach(({
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_REJECT_AFTER_RUN: '1',
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -624,6 +625,50 @@ moduleTypes.forEach(({
 
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
       assert.match(testOutput, /\[custom:after:spec:manual\]/)
+    })
+
+    over10It('reports a failed hierarchy when a handler after the manual plugin rejects', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN: '1',
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /manual after:run failed after Datadog/)
+          }
+        },
+        { hardTimeout: 60000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
     })
 
     over10It(
@@ -1662,6 +1707,7 @@ if (requestedVersion === 'latest' &&
           randomUUID: randomUUID || (() => `uuid-${++uuid}`),
         },
         '../../dd-trace/src/log': {
+          error: (...args) => errors.push(format(...args)),
           warn: (...args) => warnings.push(format(...args)),
         },
         './helpers/instrument': {
@@ -1774,6 +1820,39 @@ if (requestedVersion === 'latest' &&
         assert.deepStrictEqual(warnings, [
           'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
         ])
+      })
+
+      it('keeps generated support files until exit across interactive runs', async () => {
+        const projectRoot = createProjectRoot()
+        const exitListenersBefore = process.listeners('exit')
+        const { cypressConfig } = loadCypressConfig(undefined, undefined, (payload) => {
+          payload.registered = true
+          payload.on('after:run', payload.cleanupWrapper)
+        })
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+        const { handlers } = injectSupportFile(cypressConfig, resolvedConfig)
+        const exitCleanup = process.listeners('exit').find(listener => !exitListenersBefore.includes(listener))
+
+        try {
+          await handlers['after:run']({})
+          assert.strictEqual(fs.existsSync(resolvedConfig.supportFile), true)
+          assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+
+          await handlers['after:run']({})
+          assert.strictEqual(fs.existsSync(resolvedConfig.supportFile), true)
+          assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+
+          assert.ok(exitCleanup)
+          exitCleanup()
+          assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+        } finally {
+          if (exitCleanup) process.removeListener('exit', exitCleanup)
+        }
       })
 
       it('falls back to the project root when the support directory is not writable', async () => {
@@ -1986,6 +2065,60 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      for (const position of ['before', 'after']) {
+        it(`finalizes with the original error from a handler registered ${position} Datadog`, async () => {
+          const projectRoot = createProjectRoot()
+          const userError = new Error(`user handler ${position} Datadog failed`)
+          const userHandler = sinon.stub().rejects(userError)
+          const finalizationError = new Error('Datadog finalization failed')
+          const datadogHandler = position === 'before'
+            ? sinon.stub().rejects(finalizationError)
+            : sinon.stub()
+          datadogHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               * @returns {void}
+               */
+              setupNodeEvents (on) {
+                if (position === 'before') on('after:run', userHandler)
+                on('after:run', datadogHandler)
+                if (position === 'after') on('after:run', userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig, errors } = loadCypressConfig()
+          const results = { totalPassed: 1 }
+
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((event, handler) => {
+            handlers[event] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          await assert.rejects(handlers['after:run'](results), error => {
+            assert.strictEqual(error, userError)
+            return true
+          })
+          sinon.assert.calledOnceWithExactly(userHandler, results)
+          sinon.assert.calledOnceWithExactly(datadogHandler, results, userError)
+          if (position === 'before') {
+            assert.strictEqual(errors.length, 1)
+            assert.match(errors[0], /Datadog finalization failed/)
+          } else {
+            assert.deepStrictEqual(errors, [])
+          }
+        })
+      }
+
       it('runs the latest after:screenshot handler after user handlers', async () => {
         const projectRoot = createProjectRoot()
         const userHandler = sinon.stub().returns({ path: 'updated.png' })

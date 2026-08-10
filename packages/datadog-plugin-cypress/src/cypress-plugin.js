@@ -585,7 +585,7 @@ class CypressPlugin {
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
     this.testSuiteSpan = null
-    this.finishedTestSuiteSpans = []
+    this.pendingTestSuiteSpans = []
     this.testModuleSpan = null
     this.testSessionSpan = null
     this.command = undefined
@@ -1269,13 +1269,17 @@ class CypressPlugin {
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      for (const { span, finishTime } of this.pendingTestSuiteSpans) {
+        if (error) {
+          span.setTag(TEST_STATUS, 'fail')
+          span.setTag('error', error)
+        }
+        span.finish(finishTime)
+      }
+      this.pendingTestSuiteSpans = []
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
-        for (const testSuiteSpan of this.finishedTestSuiteSpans) {
-          testSuiteSpan.setTag(TEST_STATUS, 'fail')
-          testSuiteSpan.setTag('error', error)
-        }
       }
 
       addIntelligentTestRunnerSpanTags(
@@ -1605,8 +1609,10 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
-        this.testSuiteSpan.finish()
-        this.finishedTestSuiteSpans.push(this.testSuiteSpan)
+        this.pendingTestSuiteSpans.push({
+          span: this.testSuiteSpan,
+          finishTime: this._now(),
+        })
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }

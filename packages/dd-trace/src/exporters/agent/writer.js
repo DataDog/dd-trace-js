@@ -30,11 +30,11 @@ class AgentWriter extends BaseWriter {
     this._encoder = new AgentEncoder(this)
   }
 
-  _sendPayload (data, count, done) {
+  _sendPayload (data, count, done, flushOptions) {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, (err, res, status, headers) => {
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, flushOptions, (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -49,7 +49,7 @@ class AgentWriter extends BaseWriter {
 
       if (err) {
         log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
-        done()
+        done(flushOptions?.deadline === undefined ? undefined : err)
         return
       }
 
@@ -84,7 +84,7 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, cb) {
+function makeRequest (version, data, count, url, headers, lookup, flushOptions, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -99,6 +99,10 @@ function makeRequest (version, data, count, url, headers, lookup, cb) {
     },
     lookup,
     url,
+  }
+  if (flushOptions?.deadline !== undefined) {
+    options.deadline = flushOptions.deadline
+    options.retryOnHttpError = true
   }
 
   log.debug('Request to the agent: %j', options)

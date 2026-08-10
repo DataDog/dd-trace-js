@@ -36,7 +36,6 @@ const {
 } = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
 const { getChannelPromise } = require('./helpers/channel')
-const { finalizeAndRethrow } = require('./helpers/finalization')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -1372,13 +1371,18 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     try {
       runAllTestsReturn = await runAllTests.apply(this, arguments)
     } catch (error) {
-      return finalizeAndRethrow(error, () => getChannelPromise(testSessionFinishCh, {
-        status: 'fail',
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-      }), 'Playwright')
+      try {
+        await getChannelPromise(testSessionFinishCh, {
+          status: 'fail',
+          error,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+        })
+      } catch (finalizationError) {
+        log.error('Playwright test session finalization error: %s', finalizationError)
+      }
+      throw error
     }
 
     // Tests that have only skipped tests may reach this point

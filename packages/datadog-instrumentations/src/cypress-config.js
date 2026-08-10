@@ -10,6 +10,7 @@ const { getSegment } = require('../../dd-trace/src/util')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
 const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
@@ -182,6 +183,14 @@ function isDatadogTaskRegistration (handler) {
     typeof handler['dd:beforeEach'] === 'function' &&
     typeof handler['dd:afterEach'] === 'function' &&
     typeof handler['dd:addTags'] === 'function'
+}
+
+/**
+ * @param {unknown} handler Cypress after:run handler
+ * @returns {boolean} whether this is the handler registered by the manual Datadog plugin
+ */
+function isDatadogAfterRunHandler (handler) {
+  return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_RUN_HANDLER] === true
 }
 
 /**
@@ -446,16 +455,31 @@ function registerDdTraceHooks (
   if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
 
   const cleanupWrapper = () => {
-    if (generatedSupportFiles) cleanupGeneratedFiles(generatedSupportFiles)
+    if (generatedSupportFiles && !config.isInteractive) cleanupGeneratedFiles(generatedSupportFiles)
   }
 
-  const registerAfterRunWithCleanup = () => {
+  const registerAfterRunWithCleanup = (datadogHandler) => {
+    const handlers = datadogHandler
+      ? userAfterRunHandlers.filter(handler => handler !== datadogHandler)
+      : userAfterRunHandlers
+
     on('after:run', (results) => {
-      const chain = userAfterRunHandlers.reduce(
+      const chain = handlers.reduce(
         (p, h) => p.then(() => h(results)),
         Promise.resolve()
       )
-      return chain.finally(cleanupWrapper)
+      if (!datadogHandler) return chain.finally(cleanupWrapper)
+
+      return chain.then(
+        () => datadogHandler(results),
+        userError => Promise.resolve(datadogHandler(results, userError)).then(
+          () => { throw userError },
+          finalizationError => {
+            log.error('Datadog Cypress finalizer failed after a user handler error', finalizationError)
+            throw userError
+          }
+        )
+      ).finally(cleanupWrapper)
     })
   }
 
@@ -470,7 +494,7 @@ function registerDdTraceHooks (
     enableInteractiveRunEvents(config)
     registerAfterSpecHandlers(on, userAfterSpecHandlers)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
-    registerAfterRunWithCleanup()
+    registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
     return config
   }
 
@@ -515,6 +539,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     const userAfterScreenshotHandlers = []
     const manualPlugin = {
       detected: false,
+      afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
     }
 
@@ -523,6 +548,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         userAfterSpecHandlers.push(handler)
       } else if (event === 'after:run') {
         userAfterRunHandlers.push(handler)
+        if (isDatadogAfterRunHandler(handler)) manualPlugin.afterRunHandler = handler
       } else if (event === 'after:screenshot') {
         userAfterScreenshotHandlers.push(handler)
       } else {

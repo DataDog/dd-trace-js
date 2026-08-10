@@ -174,6 +174,20 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('should retry HTTP errors and propagate terminal errors during a bounded final flush', (done) => {
+      const error = new Error('agent unavailable')
+      const deadline = Date.now() + 10_000
+      request.yieldsAsync(error, null, 503)
+      encoder.count.returns(1)
+
+      writer.flush((flushError) => {
+        assert.strictEqual(flushError, error)
+        assert.strictEqual(request.firstCall.args[1].deadline, deadline)
+        assert.strictEqual(request.firstCall.args[1].retryOnHttpError, true)
+        done()
+      }, { deadline })
+    })
+
     it('should update sampling rates', (done) => {
       encoder.count.returns(1)
       writer.flush(() => {

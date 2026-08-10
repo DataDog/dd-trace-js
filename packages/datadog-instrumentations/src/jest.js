@@ -58,7 +58,6 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
-const { finalizeAndRethrow } = require('./helpers/finalization')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -3073,11 +3072,12 @@ function getCliWrapper (isNewJestVersion) {
       try {
         result = await runCLI.apply(this, arguments)
       } catch (error) {
-        return finalizeAndRethrow(
-          error,
-          () => waitForTestSessionFinish(getTestSessionFinishPayload('fail', error)),
-          'Jest'
-        )
+        try {
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error))
+        } catch (finalizationError) {
+          log.error('Jest test session finalization error: %s', finalizationError)
+        }
+        throw error
       }
 
       const {
