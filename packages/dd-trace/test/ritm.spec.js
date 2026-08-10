@@ -11,7 +11,7 @@ require('./setup/core')
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
-  let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
+  let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener, reloadHookCalls
   const mockedModuleName = '@azure/functions-core'
 
   before(() => {
@@ -41,6 +41,12 @@ describe('Ritm', () => {
     })
     Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
       exports.foo = 1
+      return exports
+    })
+    reloadHookCalls = 0
+    Hook(['./ritm-tests/module-reload'], function onRequire (exports) {
+      reloadHookCalls++
+      exports.instrumented = true
       return exports
     })
   })
@@ -123,6 +129,21 @@ describe('Ritm', () => {
     assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+  })
+
+  it('should reapply hooks after an entry is removed from require.cache', () => {
+    const modulePath = require.resolve('./ritm-tests/module-reload')
+    const firstModule = require('./ritm-tests/module-reload')
+    firstModule.mutated = true
+
+    delete require.cache[modulePath]
+    Hook.invalidateCache(modulePath)
+
+    const reloadedModule = require('./ritm-tests/module-reload')
+    assert.notStrictEqual(reloadedModule, firstModule)
+    assert.strictEqual(reloadedModule.mutated, undefined)
+    assert.strictEqual(reloadedModule.instrumented, true)
+    assert.strictEqual(reloadHookCalls, 2)
   })
 
   it('should use moduleId as cache key for node:-prefixed built-ins', () => {

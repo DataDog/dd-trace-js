@@ -13,6 +13,7 @@ const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
+const RitmHook = require('../../dd-trace/src/ritm')
 const {
   EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
@@ -3857,21 +3858,45 @@ function reportBetweenTestsReferenceError (runtime, moduleName, originalErrorMes
   return true
 }
 
-function requireOutsideJestRequireEngine (runtime, moduleName) {
-  if (typeof runtime._requireCoreModule === 'function') {
-    return runtime._requireCoreModule(moduleName)
+/**
+ * @param {object} runtime
+ * @returns {Map<string, object> | undefined}
+ */
+function getActiveJestModuleRegistry (runtime) {
+  if (typeof runtime.registries?.getActiveCjsRegistry === 'function') {
+    return runtime.registries.getActiveCjsRegistry()
   }
-  return require(moduleName)
+  return runtime._isolatedModuleRegistry || runtime._moduleRegistry
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} modulePath
+ * @returns {unknown}
+ */
+function requireOutsideJestRequireEngine (runtime, from, modulePath) {
+  const moduleRegistry = getActiveJestModuleRegistry(runtime)
+  const cachedModule = moduleRegistry?.get(modulePath)
+  if (cachedModule) return cachedModule.exports
+
+  const nativeRequire = createRequire(from)
+  delete nativeRequire.cache[modulePath]
+  RitmHook.invalidateCache(modulePath)
+  const moduleExports = nativeRequire(modulePath)
+  moduleRegistry?.set(modulePath, nativeRequire.cache[modulePath] || { exports: moduleExports })
+
+  return moduleExports
 }
 
 /**
  * @param {object} runtime
  * @param {string} from
  * @param {string} moduleName
- * @returns {boolean}
+ * @returns {string | undefined}
  */
-function shouldBypassJestRequireEngine (runtime, from, moduleName) {
-  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return false
+function getJestBypassModulePath (runtime, from, moduleName) {
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return
 
   try {
     let jestModulePath
@@ -3883,10 +3908,9 @@ function shouldBypassJestRequireEngine (runtime, from, moduleName) {
       // Jest 24-27 uses this name for its synchronous CommonJS resolver.
       jestModulePath = runtime._resolveModule(from, moduleName)
     }
-    return jestModulePath === createRequire(from).resolve(moduleName)
+    if (jestModulePath === createRequire(from).resolve(moduleName)) return jestModulePath
   } catch {
     // Let Jest produce its own resolution error or load a resolver-only module.
-    return false
   }
 }
 
@@ -3917,8 +3941,9 @@ addHook({
     wrapJestGlobalsForRuntime(this)
     try {
       // Jest calls requireModule only after deciding that the module should not be mocked.
-      const returnedValue = shouldBypassJestRequireEngine(this, from, moduleName)
-        ? requireOutsideJestRequireEngine(this, moduleName)
+      const bypassModulePath = getJestBypassModulePath(this, from, moduleName)
+      const returnedValue = bypassModulePath
+        ? requireOutsideJestRequireEngine(this, from, bypassModulePath)
         : requireModule.apply(this, arguments)
       if (moduleName === '@jest/globals') {
         wrapConcurrentJestGlobalsForRuntime(this, returnedValue)

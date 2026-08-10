@@ -3580,6 +3580,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   }
 
   for (const loggerName of ['pino', 'bunyan']) {
+    it(`should load suite-local ${loggerName}`, async () => {
+      let testOutput = ''
+      const loggerDirectory = path.join(
+        cwd,
+        'ci-visibility/jest-mock-bypass-require/workspace/node_modules',
+        loggerName
+      )
+      fs.mkdirSync(loggerDirectory, { recursive: true })
+      fs.writeFileSync(path.join(loggerDirectory, 'package.json'), JSON.stringify({
+        name: loggerName,
+        version: '0.0.0',
+        main: 'index.js',
+      }))
+      fs.writeFileSync(
+        path.join(loggerDirectory, 'index.js'),
+        `'use strict'\n\nmodule.exports = { suiteLocalLogger: '${loggerName}' }\n`
+      )
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/workspace/suite-local-logger-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    it(`should respect Jest module lifecycle for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/module-lifecycle-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
     for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
       it(`should respect Jest ${resolutionType} for ${loggerName}`, async () => {
         let testOutput = ''

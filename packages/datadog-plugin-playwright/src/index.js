@@ -497,7 +497,13 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(registerCompletion?.() || onDone)
+        const complete = registerCompletion?.() || onDone
+        try {
+          this.tracer._exporter.flush(complete)
+        } catch (error) {
+          complete?.()
+          throw error
+        }
       }
     })
 
