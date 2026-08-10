@@ -419,7 +419,7 @@ class CiVisibilityExporter extends BufferingExporter {
       if (deferredTestSuiteSpan) {
         if (!hasDeferredTestSuiteSpan && index > 0) immediateTrace = trace.slice(0, index)
         hasDeferredTestSuiteSpan = true
-        if (this._isInitialized && !this.canReportSessionTraces()) {
+        if (deferredTestSuiteSpan.emitted || (this._isInitialized && !this.canReportSessionTraces())) {
           this.#deferredTestSuiteSpans.delete(spanId)
         } else {
           deferredTestSuiteSpan.formattedSpan = formattedSpan
@@ -462,6 +462,7 @@ class CiVisibilityExporter extends BufferingExporter {
     this.#deferredTestSuiteSpans.set(testSuiteSpan.context()._spanId.toString(), {
       span: testSuiteSpan,
       formattedSpan: undefined,
+      emitted: false,
     })
   }
 
@@ -586,15 +587,21 @@ class CiVisibilityExporter extends BufferingExporter {
 
     const flushWriters = () => {
       if (isFinalFlush && this._writer && this.canReportSessionTraces()) {
-        for (const { span, formattedSpan } of this.#deferredTestSuiteSpans.values()) {
-          if (!formattedSpan) continue
+        for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
+          const { span, formattedSpan, emitted } = deferredTestSuiteSpan
+          if (emitted) continue
           const updatedSpan = spanFormat(span)
-          formattedSpan.error = updatedSpan.error
-          Object.assign(formattedSpan.meta, updatedSpan.meta)
-          Object.assign(formattedSpan.metrics, updatedSpan.metrics)
-          this._writer.append([formattedSpan])
+          if (formattedSpan) {
+            formattedSpan.error = updatedSpan.error
+            Object.assign(formattedSpan.meta, updatedSpan.meta)
+            Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+            this._writer.append([formattedSpan])
+            this.#deferredTestSuiteSpans.delete(spanId)
+          } else {
+            this._writer.append([updatedSpan])
+            deferredTestSuiteSpan.emitted = true
+          }
         }
-        this.#deferredTestSuiteSpans.clear()
       }
 
       const writers = [
@@ -622,11 +629,13 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     if (isFinalFlush && this._initializationRequest) {
-      const { controller, options } = this._initializationRequest
+      const initializationRequest = this._initializationRequest
+      const { controller, options } = initializationRequest
+      initializationRequest.finalFlush = finalFlush
       options.deadline = deadline
       initializationTimeoutId = setTimeout(() => {
         const error = createFinalFlushTimeoutError()
-        controller.abort(error)
+        if (initializationRequest.finalFlush === finalFlush) controller.abort(error)
         complete(error)
       }, Math.max(0, deadline - Date.now()))
     }

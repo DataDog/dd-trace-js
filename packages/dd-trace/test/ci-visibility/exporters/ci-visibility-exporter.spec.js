@@ -942,6 +942,52 @@ describe('CI Visibility Exporter', () => {
         sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
         sinon.assert.calledOnceWithExactly(done, undefined)
       })
+
+      it('serializes a completed suite at final flush before SpanProcessor exports it', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const spanId = { toString: () => 'suite-span-id' }
+        const testSuiteSpan = {
+          context: () => ({ _spanId: spanId }),
+        }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: spanId,
+          error: 1,
+          meta: {
+            'error.message': 'late reporter error',
+            'test.status': 'fail',
+          },
+          metrics: {},
+        }
+        const moduleEvent = { type: 'test_module_end' }
+        const sessionEvent = { type: 'test_session_end' }
+        formatSpan = sinon.stub().returns(suiteEvent)
+        const firstDone = sinon.spy()
+
+        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+        ciVisibilityExporter.flush(firstDone)
+
+        sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
+        sinon.assert.calledOnceWithExactly(firstDone, undefined)
+
+        ciVisibilityExporter.export([suiteEvent, moduleEvent, sessionEvent])
+        const secondDone = sinon.spy()
+        ciVisibilityExporter.flush(secondDone)
+
+        sinon.assert.calledTwice(writer.append)
+        sinon.assert.calledWithExactly(writer.append.secondCall, [moduleEvent, sessionEvent])
+        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
+        sinon.assert.calledOnceWithExactly(secondDone, undefined)
+      })
     })
   })
 

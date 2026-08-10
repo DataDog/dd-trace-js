@@ -47,7 +47,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     class Writer {
       constructor () {
         this.append = sinon.spy()
-        this.flush = sinon.spy(done => done())
+        this.flush = sinon.spy(done => done?.())
         writers.push(this)
       }
     }
@@ -162,6 +162,50 @@ describe('AgentProxyCiVisibilityExporter', () => {
       sinon.assert.calledOnceWithExactly(controlled.writers[0].append, secondTrace)
       sinon.assert.calledOnce(controlled.writers[0].flush)
       sinon.assert.calledOnceWithExactly(secondDone, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('keeps overlapping initialization owned by the latest final flush', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const firstDone = sinon.spy()
+      const firstTrace = [{ type: 'test', name: 'first session' }]
+
+      controlled.exporter.export(firstTrace)
+      controlled.exporter.flush(firstDone)
+      const requestOptions = controlled.getRequestOptions()
+
+      clock.tick(5_000)
+
+      const secondDone = sinon.spy()
+      const secondTrace = [{ type: 'test', name: 'second session' }]
+      controlled.exporter.export(secondTrace)
+      controlled.exporter.flush(secondDone)
+
+      assert.strictEqual(requestOptions.deadline, Date.now() + 10_000)
+
+      clock.tick(5_000)
+
+      assert.strictEqual(requestOptions.signal.aborted, false)
+      sinon.assert.calledOnce(firstDone)
+      assert.strictEqual(firstDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      sinon.assert.notCalled(secondDone)
+
+      controlled.finishAgentInfo(new Error('agent info unavailable'))
+      await Promise.resolve()
+
+      assert.strictEqual(controlled.writers.length, 1)
+      sinon.assert.calledWithExactly(controlled.writers[0].append.firstCall, firstTrace)
+      sinon.assert.calledWithExactly(controlled.writers[0].append.secondCall, secondTrace)
+      sinon.assert.calledOnce(controlled.writers[0].flush)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+
+      clock.tick(20_000)
+      sinon.assert.calledOnce(firstDone)
+      sinon.assert.calledOnce(secondDone)
     } finally {
       clock.restore()
     }

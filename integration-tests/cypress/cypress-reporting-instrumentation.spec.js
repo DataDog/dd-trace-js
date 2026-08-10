@@ -537,7 +537,6 @@ moduleTypes.forEach(({
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_REJECT_AFTER_SPEC: '1',
-            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }

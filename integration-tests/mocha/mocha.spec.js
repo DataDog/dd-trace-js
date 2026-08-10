@@ -317,7 +317,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
         },
       }
     )
