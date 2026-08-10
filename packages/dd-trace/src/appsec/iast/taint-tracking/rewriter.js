@@ -97,15 +97,15 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
+    if (isDdTrace(filename) || !isPrivateModule(filename) || !config.iast?.enabled) {
+      return compileMethod.apply(this, [content, filename])
+    }
+
+    let contentToCompile = content
+
+    // TODO when we have CJS support for orchestrion and taint-tracking, add
+    // them here as appropriate
     try {
-      if (isDdTrace(filename)) {
-        return compileMethod.apply(this, [content, filename])
-      }
-      if (!isPrivateModule(filename) || !config.iast?.enabled) {
-        return compileMethod.apply(this, [content, filename])
-      }
-      // TODO when we have CJS support for orchestrion and taint-tracking, add
-      // them here as appropriate
       const rewritten = rewriter.rewrite(content, filename, ['iast'])
 
       incrementTelemetryIfNeeded(rewritten.metrics)
@@ -115,12 +115,12 @@ function getCompileMethodFn (compileMethod) {
       }
 
       if (rewritten?.content) {
-        return compileMethod.apply(this, [rewritten.content, filename])
+        contentToCompile = rewritten.content
       }
     } catch (e) {
       log.error('Error rewriting file %s', filename, e)
     }
-    return compileMethod.apply(this, [content, filename])
+    return compileMethod.apply(this, [contentToCompile, filename])
   }
 
   const shim = function (...args) {
