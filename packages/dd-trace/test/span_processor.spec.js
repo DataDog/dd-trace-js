@@ -296,38 +296,59 @@ describe('SpanProcessor', () => {
     assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
   })
 
-  it('should mark only a different-service child as top-level for span stats', () => {
-    const rootId = { toString: () => '1' }
-    const sameServiceChildId = { toString: () => '2' }
-    const differentServiceChildId = { toString: () => '3' }
-    const parentId = { toString: () => '0' }
-    const makeSpan = (spanId, parentSpanId, service) => ({
-      _duration: 100,
-      tracer: sinon.stub().returns(tracer),
-      context: sinon.stub().returns({
+  it('should preserve service-entry top-level state across a partial flush', () => {
+    const toString = sinon.stub().throws(new Error('span IDs must not be stringified'))
+    const rootId = { toString }
+    const sameServiceChildId = { toString }
+    const differentServiceChildId = { toString }
+    const parentId = { toString }
+    const makeSpan = (spanId, parentSpanId, service, duration) => {
+      const tags = { 'service.name': service }
+      const context = {
         _trace: trace,
         _spanId: spanId,
         _parentId: parentSpanId,
         _sampling: {},
-        getTag: (key) => key === 'service.name' ? service : undefined,
-        getTags: () => ({ 'service.name': service }),
-      }),
-    })
-    const root = makeSpan(rootId, parentId, 'web')
+        getTag: (key) => tags[key],
+        getTags: () => tags,
+        setTag: (key, value) => { tags[key] = value },
+      }
+      return {
+        _duration: duration,
+        tracer: sinon.stub().returns(tracer),
+        context: sinon.stub().returns(context),
+      }
+    }
+    const root = makeSpan(rootId, parentId, 'web', 100)
     const sameServiceChild = makeSpan(sameServiceChildId, rootId, 'web')
     const differentServiceChild = makeSpan(differentServiceChildId, rootId, 'postgres')
-    const rootFormatted = { service: 'web', parent_id: parentId, metrics: { [TOP_LEVEL_KEY]: 1 } }
-    const sameServiceChildFormatted = { service: 'web', parent_id: rootId, metrics: {} }
-    const differentServiceChildFormatted = { service: 'postgres', parent_id: rootId, metrics: {} }
-    spanFormat.onFirstCall().returns(rootFormatted)
-    spanFormat.onSecondCall().returns(sameServiceChildFormatted)
-    spanFormat.onThirdCall().returns(differentServiceChildFormatted)
+    spanFormat.callsFake(span => {
+      const context = span.context()
+      const topLevel = context.getTag(TOP_LEVEL_KEY)
+      return {
+        service: context.getTag('service.name'),
+        parent_id: context._parentId,
+        metrics: topLevel === undefined ? {} : { [TOP_LEVEL_KEY]: topLevel },
+      }
+    })
     processor._stats = { onSpanFinished: sinon.stub() }
+    config.flushMinSpans = 1
     trace.started = [root, sameServiceChild, differentServiceChild]
-    trace.finished = [root, sameServiceChild, differentServiceChild]
+    trace.finished = [root]
 
+    processor.process(root)
+
+    assert.deepStrictEqual(trace.started, [sameServiceChild, differentServiceChild])
+    assert.strictEqual(sameServiceChild.context().getTag(TOP_LEVEL_KEY), undefined)
+    assert.strictEqual(differentServiceChild.context().getTag(TOP_LEVEL_KEY), 1)
+
+    sameServiceChild._duration = 100
+    differentServiceChild._duration = 100
+    trace.finished = [sameServiceChild, differentServiceChild]
     processor.process(differentServiceChild)
 
+    const sameServiceChildFormatted = spanFormat.getCall(1).returnValue
+    const differentServiceChildFormatted = spanFormat.getCall(2).returnValue
     assert.ok(!Object.hasOwn(sameServiceChildFormatted.metrics, TOP_LEVEL_KEY))
     assert.strictEqual(differentServiceChildFormatted.metrics[TOP_LEVEL_KEY], 1)
   })
