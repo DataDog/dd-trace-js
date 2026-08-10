@@ -17,17 +17,22 @@ const { parse: parseYaml } = require('yaml')
 
 const INTEGRATION_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
 const MODES = new Set(['add', 'review', 'debug', 'serverless'])
-const ORCHESTRION_TRAITS = new Set(['async', 'auto', 'callback', 'cjs-esm', 'orchestrion'])
 const PLUGIN_BASE_DIRECTORY = 'packages/dd-trace/src/plugins/'
-const PLUGIN_BASE_TRAITS = new Set([
-  'cache',
-  'client',
-  'consumer',
-  'database',
-  'producer',
-  'router',
-  'server',
-  'tracing',
+const PLUGIN_BASE_TRAITS = new Map([
+  ['cache', `${PLUGIN_BASE_DIRECTORY}cache.js`],
+  ['ci', `${PLUGIN_BASE_DIRECTORY}ci_plugin.js`],
+  ['client', `${PLUGIN_BASE_DIRECTORY}client.js`],
+  ['composite', `${PLUGIN_BASE_DIRECTORY}composite.js`],
+  ['consumer', `${PLUGIN_BASE_DIRECTORY}consumer.js`],
+  ['database', `${PLUGIN_BASE_DIRECTORY}database.js`],
+  ['log', `${PLUGIN_BASE_DIRECTORY}log_plugin.js`],
+  ['plugin', `${PLUGIN_BASE_DIRECTORY}plugin.js`],
+  ['producer', `${PLUGIN_BASE_DIRECTORY}producer.js`],
+  ['router', 'packages/datadog-plugin-router/src/index.js'],
+  ['schema', `${PLUGIN_BASE_DIRECTORY}schema.js`],
+  ['server', `${PLUGIN_BASE_DIRECTORY}server.js`],
+  ['storage', `${PLUGIN_BASE_DIRECTORY}storage.js`],
+  ['tracing', `${PLUGIN_BASE_DIRECTORY}tracing.js`],
 ])
 const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
 const TEST_SUFFIXES = ['.spec.js', '.spec.cjs', '.spec.mjs']
@@ -43,22 +48,13 @@ const TRAIT_KINDS = new Map([
   ['async', 'Async'],
   ['auto', 'Auto'],
   ['callback', 'Callback'],
+  ['sync', 'Sync'],
 ])
+const ORCHESTRION_TRAITS = new Set([...TRAIT_KINDS.keys(), 'cjs-esm', 'orchestrion'])
 const TRAITS = new Set([
-  'async',
-  'auto',
-  'cache',
-  'callback',
-  'cjs-esm',
-  'client',
-  'consumer',
-  'database',
-  'orchestrion',
-  'producer',
-  'router',
-  'server',
+  ...ORCHESTRION_TRAITS,
+  ...PLUGIN_BASE_TRAITS.keys(),
   'shimmer',
-  'tracing',
 ])
 const DISCOVERY_METADATA = new Map([
   ['.agents/skills/apm-integrations/agents/openai.yaml', 'apm-integrations'],
@@ -108,6 +104,7 @@ const failures = []
 /**
  * @typedef {object} InspectionTargets
  * @property {string} [instrumentation]
+ * @property {string[]} instrumentationDependencies
  * @property {string} [rewriter]
  * @property {string[]} plugins
  * @property {string[]} dependents
@@ -469,6 +466,18 @@ function findWorkflowLines (filename, integrations) {
 }
 
 /**
+ * @param {string[]} integrations
+ * @returns {string[]}
+ */
+function findWorkflowRegistrations (integrations) {
+  const locations = []
+  for (const filename of listRelativeFiles('.github/workflows', ['.yml', '.yaml'])) {
+    locations.push(...findWorkflowLines(filename, integrations))
+  }
+  return locations
+}
+
+/**
  * @param {string} filename
  * @returns {boolean}
  */
@@ -797,35 +806,56 @@ function findPackages (integration, registrations, packageName) {
 
 /**
  * @param {string[]} sources
+ * @param {(filename: string) => boolean} includes
+ * @returns {string[]}
+ */
+function findSourceDependencies (sources, includes) {
+  const queue = [...sources]
+  const visited = new Set(sources)
+  const dependencies = new Set()
+
+  for (let i = 0; i < queue.length; i++) {
+    const sourceCode = parseJavaScript(queue[i])
+    if (!sourceCode) continue
+
+    for (const { request } of findStaticRequires(sourceCode)) {
+      const dependency = resolveLocalSource(queue[i], request)
+      if (!dependency || visited.has(dependency) || !includes(dependency)) continue
+
+      visited.add(dependency)
+      dependencies.add(dependency)
+      queue.push(dependency)
+    }
+  }
+  return [...dependencies].sort()
+}
+
+/**
+ * @param {string[]} sources
  * @param {string[]} pluginDirectories
  * @returns {string[]}
  */
 function findContractSources (sources, pluginDirectories) {
-  const queue = [...sources]
-  const visited = new Set(sources)
-  const contracts = new Set()
+  return findSourceDependencies(sources, (dependency) => {
+    const isBase = dependency.startsWith(PLUGIN_BASE_DIRECTORY) &&
+      !dependency.slice(PLUGIN_BASE_DIRECTORY.length).includes('/')
+    const isCrossPlugin = dependency.startsWith('packages/datadog-plugin-') &&
+      !pluginDirectories.some(directory => dependency.startsWith(`${directory}/`))
+    return isBase || isCrossPlugin
+  })
+}
 
-  for (let i = 0; i < queue.length; i++) {
-    const source = queue[i]
-    const sourceCode = parseJavaScript(source)
-    if (!sourceCode) continue
+/**
+ * @param {string | undefined} instrumentation
+ * @returns {string[]}
+ */
+function findInstrumentationDependencies (instrumentation) {
+  if (!instrumentation) return []
 
-    for (const { request } of findStaticRequires(sourceCode)) {
-      const dependency = resolveLocalSource(source, request)
-      if (!dependency || visited.has(dependency)) continue
-
-      const isBase = dependency.startsWith(PLUGIN_BASE_DIRECTORY) &&
-        !dependency.slice(PLUGIN_BASE_DIRECTORY.length).includes('/')
-      const isCrossPlugin = dependency.startsWith('packages/datadog-plugin-') &&
-        !pluginDirectories.some(directory => dependency.startsWith(`${directory}/`))
-      if (!isBase && !isCrossPlugin) continue
-
-      visited.add(dependency)
-      contracts.add(dependency)
-      queue.push(dependency)
-    }
-  }
-  return [...contracts].sort()
+  const directory = 'packages/datadog-instrumentations/src/'
+  return findSourceDependencies([instrumentation], (dependency) => {
+    return dependency.startsWith(directory) && !dependency.startsWith(`${directory}helpers/`)
+  })
 }
 
 /**
@@ -833,10 +863,8 @@ function findContractSources (sources, pluginDirectories) {
  * @returns {string | undefined}
  */
 function findTraitSource (trait) {
-  const filename = trait === 'router'
-    ? 'packages/datadog-plugin-router/src/index.js'
-    : `packages/dd-trace/src/plugins/${trait}.js`
-  return PLUGIN_BASE_TRAITS.has(trait) ? existingPath(filename) : undefined
+  const filename = PLUGIN_BASE_TRAITS.get(trait)
+  return filename ? existingPath(filename) : undefined
 }
 
 /**
@@ -883,6 +911,29 @@ function listPluginFiles (pluginDirectories, subdirectory, suffixes) {
     files.push(...listRelativeFiles(`${directory}/${subdirectory}`, suffixes))
   }
   return files.sort()
+}
+
+/**
+ * @param {string} integration
+ * @param {string[]} pluginDirectories
+ * @returns {string[]}
+ */
+function findTests (integration, pluginDirectories) {
+  const tests = new Set(listPluginFiles(pluginDirectories, 'test', TEST_SUFFIXES))
+
+  for (const filename of listRelativeFiles('packages/datadog-instrumentations/test', TEST_SUFFIXES)) {
+    if (filename.startsWith(`packages/datadog-instrumentations/test/${integration}/`)) {
+      tests.add(filename)
+      continue
+    }
+    const basename = path.basename(filename)
+    const name = basename.slice(0, basename.lastIndexOf('.spec.'))
+    if (name === integration || name.startsWith(`${integration}-`)) tests.add(filename)
+  }
+  for (const filename of listRelativeFiles(`integration-tests/${integration}`, TEST_SUFFIXES)) {
+    tests.add(filename)
+  }
+  return [...tests].sort()
 }
 
 /**
@@ -935,11 +986,46 @@ function findRegistrationLedger (ids) {
     docs: findLines('docs/API.md', ids.flatMap(id => [`id="${id}"`, `[${id}]`])),
     docsTest: findLines('docs/test.ts', ids.flatMap(id => [`use('${id}'`, `use("${id}"`])),
     codeowners: findCodeownersCoverage(ids),
-    workflows: [
-      ...findWorkflowLines('.github/workflows/apm-integrations.yml', ids),
-      ...findWorkflowLines('.github/workflows/serverless.yml', ids),
-    ],
+    workflows: findWorkflowRegistrations(ids),
   }
+}
+
+/**
+ * @param {string} filename
+ * @returns {Map<string, Set<string>>}
+ */
+function findStaticClassStrings (filename) {
+  const properties = new Map()
+  const sourceCode = parseJavaScript(filename)
+  if (!sourceCode) return properties
+
+  for (const step of sourceCode.traverse()) {
+    if (step.type !== 'visit' || step.phase !== 1) continue
+
+    const node = step.target
+    let name
+    let value
+    if (node.type === 'PropertyDefinition' && node.static) {
+      name = findPropertyName(node)
+      value = node.value ? findStaticString(node.value) : undefined
+    } else if (node.type === 'MethodDefinition' && node.static && node.kind === 'get' &&
+        node.value.body.body.length === 1) {
+      const statement = node.value.body.body[0]
+      name = findPropertyName(node)
+      value = statement.type === 'ReturnStatement' && statement.argument
+        ? findStaticString(statement.argument)
+        : undefined
+    }
+    if (name === undefined || value === undefined) continue
+
+    let values = properties.get(name)
+    if (!values) {
+      values = new Set()
+      properties.set(name, values)
+    }
+    values.add(value)
+  }
+  return properties
 }
 
 /**
@@ -955,6 +1041,12 @@ function findSchemaRegistrations (filenames, publicIds) {
   const coordinates = new Map([['type', types], ['kind', kinds], ['id', ids], ['operation', operations]])
 
   for (const filename of filenames) {
+    for (const [name, values] of findStaticClassStrings(filename)) {
+      const coordinate = coordinates.get(name)
+      if (coordinate) {
+        for (const value of values) coordinate.add(value)
+      }
+    }
     const sourceCode = parseJavaScript(filename)
     if (!sourceCode) continue
 
@@ -962,32 +1054,17 @@ function findSchemaRegistrations (filenames, publicIds) {
       if (step.type !== 'visit' || step.phase !== 1) continue
 
       const node = step.target
-      let name
-      let value
-      if (node.type === 'PropertyDefinition' && node.static) {
-        name = findPropertyName(node)
-        value = node.value ? findStaticString(node.value) : undefined
-      } else if (node.type === 'MethodDefinition' && node.static && node.kind === 'get' &&
-          node.value.body.body.length === 1) {
-        const statement = node.value.body.body[0]
-        name = findPropertyName(node)
-        value = statement.type === 'ReturnStatement' && statement.argument
-          ? findStaticString(statement.argument)
-          : undefined
-      } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-          (findPropertyName(node.callee) === 'operationName' || findPropertyName(node.callee) === 'serviceName') &&
-          node.arguments[0]?.type === 'ObjectExpression') {
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+        (findPropertyName(node.callee) === 'operationName' || findPropertyName(node.callee) === 'serviceName') &&
+        node.arguments[0]?.type === 'ObjectExpression') {
         for (const property of node.arguments[0].properties) {
           if (property.type !== 'Property') continue
 
-          name = findPropertyName(property)
-          value = findStaticString(property.value)
+          const name = findPropertyName(property)
+          const value = findStaticString(property.value)
           if (name !== 'operation' && value !== undefined) coordinates.get(name)?.add(value)
         }
-        continue
       }
-
-      if (value !== undefined) coordinates.get(name)?.add(value)
     }
   }
 
@@ -1048,13 +1125,15 @@ function findReferences (mode, traits, hasRewriter) {
 /**
  * @param {string} integration
  * @param {string[]} traits
+ * @param {string} mode
  * @returns {{ integration: string, files: string[], registrations: string[] } | undefined}
  */
-function findClosestReference (integration, traits) {
+function findClosestReference (integration, traits, mode) {
   if (traits.length === 0) return
 
+  const isServerless = mode === 'serverless'
   const isShimmer = traits.includes('shimmer')
-  const directory = isShimmer
+  const directory = isShimmer || isServerless
     ? 'packages/datadog-instrumentations/src'
     : 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
   const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
@@ -1063,22 +1142,29 @@ function findClosestReference (integration, traits) {
   let closestScore = 0
 
   for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
-    if (isShimmer && path.posix.dirname(filename) !== directory) continue
+    if ((isShimmer || isServerless) && path.posix.dirname(filename) !== directory) continue
 
     const candidate = path.basename(filename, path.extname(filename))
     if (candidate === 'index' || candidate === integration) continue
 
     const source = read(filename)
-    if (isShimmer
+    if (!isServerless && (isShimmer
       ? !source.includes('datadog-shimmer') || findHookPackages(candidate).size === 0
-      : findRewriterRegistrations(candidate).length === 0) continue
+      : findRewriterRegistrations(candidate).length === 0)) continue
 
     const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
+    if (isServerless && (findHookPackages(candidate).size === 0 || !pluginSources.some(filename => {
+      return findStaticClassStrings(filename).get('type')?.has('serverless')
+    }))) continue
     const contractSources = findContractSources(pluginSources, registrations.pluginDirectories)
-    let score = isShimmer || traits.includes('orchestrion') ? 1 : 0
+
+    let score = isServerless || isShimmer || traits.includes('orchestrion') ? 1 : 0
     if (requestedSource && contractSources.includes(requestedSource)) score += 8
+    if (isServerless && requestedBase && pluginSources.some(filename => {
+      return findStaticClassStrings(filename).get('kind')?.has(requestedBase)
+    })) score += 8
     if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
@@ -1088,11 +1174,16 @@ function findClosestReference (integration, traits) {
     if (score <= closestScore) continue
 
     closestScore = score
-    const tests = listPluginFiles(registrations.pluginDirectories, 'test', TEST_SUFFIXES)
+    const tests = findTests(candidate, registrations.pluginDirectories)
     const pluginIndex = existingPath(`packages/datadog-plugin-${candidate}/src/index.js`) ??
       pluginSources.find(filename => path.basename(filename) === 'index.js')
     const integrationTest = existingPath(`packages/datadog-plugin-${candidate}/test/index.spec.js`) ??
       tests.find(filename => path.basename(filename) === 'index.spec.js')
+    let fixturePackage
+    for (const directory of registrations.pluginDirectories) {
+      fixturePackage = existingPath(`${directory}/test/fixtures/package.json`)
+      if (fixturePackage) break
+    }
     const ledger = findRegistrationLedger(registrations.publicIds)
     closest = {
       integration: candidate,
@@ -1101,6 +1192,7 @@ function findClosestReference (integration, traits) {
         resolveLocalSource('packages/datadog-instrumentations/src/helpers/hooks.js', `../${candidate}`),
         pluginIndex ?? pluginSources[0],
         integrationTest ?? tests[0],
+        fixturePackage,
       ]),
       registrations: compactPaths([
         registrations.hooks.get(moduleName),
@@ -1133,12 +1225,14 @@ function inspectIntegration (integration, packageName, mode, traits) {
   const packageRegistrations = findIntegrationRegistrations(integration)
   const plugins = listPluginFiles(packageRegistrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
   const dependents = findPluginDependents(packageRegistrations.pluginDirectories)
-  const tests = listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES)
+  const instrumentationDependencies = findInstrumentationDependencies(instrumentation)
+  const tests = findTests(integration, packageRegistrations.pluginDirectories)
   const contractSources = findContractSources(plugins, packageRegistrations.pluginDirectories)
   const { publicIds } = packageRegistrations
   const ledger = findRegistrationLedger(publicIds)
   const channelSources = compactPaths([
     instrumentation,
+    ...instrumentationDependencies,
     rewriter,
     ...plugins,
     ...dependents,
@@ -1150,6 +1244,7 @@ function inspectIntegration (integration, packageName, mode, traits) {
     traits,
     targets: {
       instrumentation,
+      instrumentationDependencies,
       rewriter,
       plugins,
       dependents,
@@ -1165,7 +1260,7 @@ function inspectIntegration (integration, packageName, mode, traits) {
       ...ledger,
       schemas: findSchemaRegistrations([...plugins, ...contractSources], publicIds),
     },
-    reference: findClosestReference(integration, traits),
+    reference: findClosestReference(integration, traits, mode),
     references: findReferences(mode, traits, rewriter !== undefined),
   }
 }
@@ -1212,10 +1307,14 @@ function renderInspection (packet) {
     `  instrumentation: ${packet.targets.instrumentation
       ? escapeControlCharacters(packet.targets.instrumentation)
       : 'missing'}`,
+    `  instrumentation dependencies: ${packet.targets.instrumentationDependencies.length}`,
     `  rewriter: ${packet.targets.rewriter ? escapeControlCharacters(packet.targets.rewriter) : 'missing'}`,
     `  plugin sources: ${packet.targets.plugins.length}`,
     `  dependent sources: ${packet.targets.dependents.length}`,
     `  tests: ${packet.targets.tests.length}`,
+    'Instrumentation dependencies:',
+    ...(packet.targets.instrumentationDependencies.length ? packet.targets.instrumentationDependencies : ['none'])
+      .map(filename => `  ${escapeControlCharacters(filename)}`),
     'Plugin sources:',
     ...(packet.targets.plugins.length ? packet.targets.plugins : ['none'])
       .map(filename => `  ${escapeControlCharacters(filename)}`),
