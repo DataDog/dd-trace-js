@@ -464,12 +464,14 @@ describe('no yarn dev references', function () {
       path.join(repoRoot, '.github/workflows/update-3rdparty-licenses.yml'),
       'utf8'
     ))
+    const installStep = workflow.jobs['check-licenses'].steps.find(step => step.name === 'Install dependencies')
 
     assert.deepStrictEqual(workflow.on.pull_request.paths.sort(), [
       '.github/vendored-dependencies.csv',
       '.github/workflows/update-3rdparty-licenses.yml',
       'LICENSE-3rdparty.csv',
       'bun.lock',
+      'bunfig.toml',
       'package.json',
       'scripts/generate-3rdparty-licenses.js',
       'scripts/helpers/concurrency.js',
@@ -477,6 +479,7 @@ describe('no yarn dev references', function () {
       'vendor/bun.lock',
       'vendor/package.json',
     ])
+    assert.strictEqual(installStep.run, 'bun install --frozen-lockfile --ignore-scripts')
   })
 
   it('keeps automated license updates off release proposal branches', () => {
