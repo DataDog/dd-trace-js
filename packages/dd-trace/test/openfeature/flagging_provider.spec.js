@@ -312,25 +312,7 @@ describe('FlaggingProvider', () => {
 
   it('returns PARSE_ERROR when a variant value violates the declared flag type', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
-    provider.setConfiguration({
-      flags: {
-        'invalid-integer-flag': {
-          key: 'invalid-integer-flag',
-          enabled: true,
-          variationType: 'INTEGER',
-          variations: {
-            on: { key: 'on', value: 'not-an-integer' },
-            off: { key: 'off', value: 0 },
-          },
-          allocations: [{
-            key: 'default-allocation',
-            rules: [],
-            splits: [{ variationKey: 'on', shards: [] }],
-            doLog: true,
-          }],
-        },
-      },
-    })
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
 
     const details = await provider.resolveNumberEvaluation(
       'invalid-integer-flag',
@@ -345,6 +327,47 @@ describe('FlaggingProvider', () => {
     sinon.assert.notCalled(mockChannel.publish)
   })
 
+  it('preserves TYPE_MISMATCH when the requested type differs from the flag type', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
+
+    const details = await provider.resolveStringEvaluation(
+      'invalid-integer-flag',
+      'fallback',
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(details.value, 'fallback')
+    assert.strictEqual(details.reason, 'ERROR')
+    assert.strictEqual(details.errorCode, 'TYPE_MISMATCH')
+  })
+
+  it('revalidates variant types when the configuration changes', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration(integerFlagConfiguration('not-an-integer'))
+
+    const invalidDetails = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+    assert.strictEqual(invalidDetails.errorCode, 'PARSE_ERROR')
+
+    provider.setConfiguration(integerFlagConfiguration(1))
+    const validDetails = await provider.resolveNumberEvaluation(
+      'invalid-integer-flag',
+      0,
+      { targetingKey: 'user-1' },
+      { error () {}, warn () {}, info () {}, debug () {} }
+    )
+
+    assert.strictEqual(validDetails.value, 1)
+    assert.strictEqual(validDetails.reason, 'STATIC')
+    assert.strictEqual(validDetails.errorCode, undefined)
+  })
+
   function loadUfc () {
     return JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'ufc-config.json'), 'utf8'))
   }
@@ -356,6 +379,28 @@ describe('FlaggingProvider', () => {
       const testCases = JSON.parse(fs.readFileSync(path.join(fixtureCaseDir, fileName), 'utf8'))
       return testCases.map((testCase, index) => ({ fileName, index, testCase }))
     })
+  }
+
+  function integerFlagConfiguration (value) {
+    return {
+      flags: {
+        'invalid-integer-flag': {
+          key: 'invalid-integer-flag',
+          enabled: true,
+          variationType: 'INTEGER',
+          variations: {
+            on: { key: 'on', value },
+            off: { key: 'off', value: 0 },
+          },
+          allocations: [{
+            key: 'default-allocation',
+            rules: [],
+            splits: [{ variationKey: 'on', shards: [] }],
+            doLog: true,
+          }],
+        },
+      },
+    }
   }
 
   async function evaluateDetails (provider, testCase) {

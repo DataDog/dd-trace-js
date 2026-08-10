@@ -20,8 +20,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
 
-  /** @type {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} */
-  #ffeConfig
+  /** @type {Map<string, string>} */
+  #variantTypeMismatches = new Map()
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
@@ -52,18 +52,18 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   }
 
   /**
-   * Stores the current configuration and updates the base provider.
+   * Updates the base provider and caches malformed variant types.
    *
    * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} configuration
    * @returns {void}
    */
   setConfiguration (configuration) {
-    this.#ffeConfig = configuration
+    this.#variantTypeMismatches = this.#findVariantTypeMismatches(configuration)
     super.setConfiguration(configuration)
   }
 
   /**
-   * Resolves a boolean flag and normalizes its canonical result.
+   * Resolves a boolean flag.
    *
    * @param {string} flagKey
    * @param {boolean} defaultValue
@@ -76,11 +76,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (parseError) return Promise.resolve(parseError)
 
     return super.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
-   * Resolves a string flag and normalizes its canonical result.
+   * Resolves a string flag.
    *
    * @param {string} flagKey
    * @param {string} defaultValue
@@ -93,11 +92,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (parseError) return Promise.resolve(parseError)
 
     return super.resolveStringEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
-   * Resolves a number flag and normalizes its canonical result.
+   * Resolves a number flag.
    *
    * @param {string} flagKey
    * @param {number} defaultValue
@@ -110,11 +108,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (parseError) return Promise.resolve(parseError)
 
     return super.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
   }
 
   /**
-   * Resolves an object flag and normalizes its canonical result.
+   * Resolves an object flag.
    *
    * @template {import('@openfeature/server-sdk').JsonValue} T
    * @param {string} flagKey
@@ -128,48 +125,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (parseError) return Promise.resolve(parseError)
 
     return super.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
-  }
-
-  /**
-   * Converts provider results to the canonical FFE reason contract.
-   *
-   * @template {import('@openfeature/server-sdk').FlagValue} T
-   * @param {string} flagKey
-   * @param {import('@openfeature/server-sdk').ResolutionDetails<T>} result
-   * @returns {import('@openfeature/server-sdk').ResolutionDetails<T>}
-   */
-  #normalizeResolution (flagKey, result) {
-    if (result?.reason !== 'TARGETING_MATCH' && result?.reason !== 'DEFAULT') {
-      return result
-    }
-
-    const allocations = this.#ffeConfig?.flags?.[flagKey]?.allocations
-    if (!Array.isArray(allocations)) {
-      return result
-    }
-
-    const allocation = allocations.find(item => item.key === result.flagMetadata?.allocationKey)
-    if (!allocation || allocation.rules?.length || !Array.isArray(allocation.splits)) {
-      return result
-    }
-
-    const flag = this.#ffeConfig.flags[flagKey]
-    const selectedSplit = allocation.splits.find(split => {
-      const variant = flag.variations?.[split.variationKey]
-      return variant?.key === result.variant || split.variationKey === result.variant
-    })
-    if (!selectedSplit) {
-      return result
-    }
-
-    const hasTimeBounds = allocation.startAt !== undefined || allocation.endAt !== undefined
-    if (hasTimeBounds && allocation.splits.length === 1 && !selectedSplit.shards?.length) {
-      return { ...result, reason: 'DEFAULT' }
-    }
-
-    const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
-    return { ...result, reason }
   }
 
   /**
@@ -183,11 +138,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {import('@openfeature/server-sdk').ResolutionDetails<T> | undefined}
    */
   #variantTypeMismatchResolution (flagKey, defaultValue, requestedType) {
-    const flag = this.#ffeConfig?.flags?.[flagKey]
-    if (!flag || flag.enabled === false || !this.#requestedTypeMatches(flag.variationType, requestedType)) {
-      return
-    }
-    if (!this.#hasVariantTypeMismatch(flagKey)) {
+    const variationType = this.#variantTypeMismatches.get(flagKey)
+    if (!variationType || !this.#requestedTypeMatches(variationType, requestedType)) {
       return
     }
 
@@ -218,23 +170,34 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   }
 
   /**
-   * Returns whether any variant value violates its flag's declared variation type.
+   * Finds flags with variant values that violate their declared variation type.
    *
-   * @param {string} flagKey
-   * @returns {boolean}
+   * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} configuration
+   * @returns {Map<string, string>}
    */
-  #hasVariantTypeMismatch (flagKey) {
-    const flag = this.#ffeConfig?.flags?.[flagKey]
-    if (!flag?.variations || typeof flag.variations !== 'object') {
-      return false
+  #findVariantTypeMismatches (configuration) {
+    const mismatches = new Map()
+    if (!configuration?.flags || typeof configuration.flags !== 'object') {
+      return mismatches
     }
 
-    return Object.values(flag.variations).some(variation => {
-      if (!variation || typeof variation !== 'object' || !('value' in variation)) {
-        return false
+    for (const [flagKey, flag] of Object.entries(configuration.flags)) {
+      if (!flag || flag.enabled === false || !flag.variations || typeof flag.variations !== 'object') {
+        continue
       }
-      return !this.#valueMatchesVariationType(flag.variationType, variation.value)
-    })
+
+      for (const variation of Object.values(flag.variations)) {
+        if (!variation || typeof variation !== 'object' || !('value' in variation)) {
+          continue
+        }
+        if (!this.#valueMatchesVariationType(flag.variationType, variation.value)) {
+          mismatches.set(flagKey, flag.variationType)
+          break
+        }
+      }
+    }
+
+    return mismatches
   }
 
   /**
