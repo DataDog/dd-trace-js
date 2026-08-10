@@ -56,13 +56,17 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
-      let serviceBySpanId
       if (this._stats) {
-        serviceBySpanId = new Map()
+        const contextBySpanId = new Map()
         for (const startedSpan of started) {
           const context = startedSpan.context()
-          const spanId = context._spanId?.toString(10)
-          if (spanId !== undefined) serviceBySpanId.set(spanId, context.getTag('service.name'))
+          const parentContext = contextBySpanId.get(context._parentId)
+          const service = context.getTag('service.name')
+          const parentService = parentContext?.getTag('service.name')
+          if (service !== undefined && parentService !== undefined && service !== parentService) {
+            context.setTag(TOP_LEVEL_KEY, 1)
+          }
+          if (context._spanId !== undefined) contextBySpanId.set(context._spanId, context)
         }
       }
 
@@ -73,13 +77,6 @@ class SpanProcessor {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
-          }
-          if (serviceBySpanId && !formattedSpan.metrics[TOP_LEVEL_KEY]) {
-            const parentService = serviceBySpanId.get(formattedSpan.parent_id?.toString(10))
-            const service = span.context().getTag('service.name')
-            if (service !== undefined && parentService !== undefined && service !== parentService) {
-              formattedSpan.metrics[TOP_LEVEL_KEY] = 1
-            }
           }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so

@@ -95,7 +95,10 @@ function buildResourceAttributes (tags, { reportHostname, service, env, serviceV
   if (tags) {
     const tracerTags = []
     for (const [key, value] of Object.entries(tags)) {
-      if (!RESERVED_TRACER_TAGS.has(key)) tracerTags.push(`${key}:${value}`)
+      const valueType = typeof value
+      const supported = valueType === 'string' || valueType === 'boolean' ||
+        (valueType === 'number' && Number.isFinite(value))
+      if (!RESERVED_TRACER_TAGS.has(key) && supported) tracerTags.push(`${key}:${value}`)
     }
     if (tracerTags.length) attrs['datadog.tracer_tags'] = tracerTags
   }
