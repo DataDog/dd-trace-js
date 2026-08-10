@@ -56,6 +56,20 @@ describe('buildResourceAttributes', () => {
     assert.strictEqual(attrs['datadog.runtime_id'], 'abc-123')
   })
 
+  it('includes non-reserved tracer tags as a single array attribute', () => {
+    const attrs = buildResourceAttributes({
+      team: 'apm',
+      region: 'us-east-1',
+      service: 'ignored',
+      env: 'ignored',
+      version: 'ignored',
+      runtime_id: 'ignored',
+      'runtime-id': 'abc-123',
+    })
+
+    assert.deepStrictEqual(attrs['datadog.tracer_tags'], ['team:apm', 'region:us-east-1'])
+  })
+
   it('includes datadog.process_tags as a single array attribute', () => {
     processTags.initialize()
     const attrs = buildResourceAttributes({})

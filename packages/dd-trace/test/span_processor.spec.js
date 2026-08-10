@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -294,6 +294,42 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
+  })
+
+  it('should mark only a different-service child as top-level for span stats', () => {
+    const rootId = { toString: () => '1' }
+    const sameServiceChildId = { toString: () => '2' }
+    const differentServiceChildId = { toString: () => '3' }
+    const parentId = { toString: () => '0' }
+    const makeSpan = (spanId, parentSpanId, service) => ({
+      _duration: 100,
+      tracer: sinon.stub().returns(tracer),
+      context: sinon.stub().returns({
+        _trace: trace,
+        _spanId: spanId,
+        _parentId: parentSpanId,
+        _sampling: {},
+        getTag: (key) => key === 'service.name' ? service : undefined,
+        getTags: () => ({ 'service.name': service }),
+      }),
+    })
+    const root = makeSpan(rootId, parentId, 'web')
+    const sameServiceChild = makeSpan(sameServiceChildId, rootId, 'web')
+    const differentServiceChild = makeSpan(differentServiceChildId, rootId, 'postgres')
+    const rootFormatted = { service: 'web', parent_id: parentId, metrics: { [TOP_LEVEL_KEY]: 1 } }
+    const sameServiceChildFormatted = { service: 'web', parent_id: rootId, metrics: {} }
+    const differentServiceChildFormatted = { service: 'postgres', parent_id: rootId, metrics: {} }
+    spanFormat.onFirstCall().returns(rootFormatted)
+    spanFormat.onSecondCall().returns(sameServiceChildFormatted)
+    spanFormat.onThirdCall().returns(differentServiceChildFormatted)
+    processor._stats = { onSpanFinished: sinon.stub() }
+    trace.started = [root, sameServiceChild, differentServiceChild]
+    trace.finished = [root, sameServiceChild, differentServiceChild]
+
+    processor.process(differentServiceChild)
+
+    assert.ok(!Object.hasOwn(sameServiceChildFormatted.metrics, TOP_LEVEL_KEY))
+    assert.strictEqual(differentServiceChildFormatted.metrics[TOP_LEVEL_KEY], 1)
   })
 
   describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {

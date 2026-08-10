@@ -10,6 +10,8 @@ const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
+const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id', 'runtime-id'])
+
 /**
  * @typedef {import('../../config')} Config
  */
@@ -90,6 +92,13 @@ function buildResourceAttributes (tags, { reportHostname, service, env, serviceV
   if (reportHostname) attrs['host.name'] = os.hostname()
 
   if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+  if (tags) {
+    const tracerTags = []
+    for (const [key, value] of Object.entries(tags)) {
+      if (!RESERVED_TRACER_TAGS.has(key)) tracerTags.push(`${key}:${value}`)
+    }
+    if (tracerTags.length) attrs['datadog.tracer_tags'] = tracerTags
+  }
   // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
   const processTagsArray = processTags.tagsArray
   if (processTagsArray?.length) {

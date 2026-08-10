@@ -344,6 +344,22 @@ describe('SpanBuckets', () => {
     assert.strictEqual(buckets.size, 1)
   })
 
+  it('should keep top-level and non-top-level distributions separate within one aggregation bucket', () => {
+    const localBuckets = new SpanBuckets()
+    const topLevelBasicSpan = {
+      ...basicSpan,
+      metrics: { ...basicSpan.metrics, [TOP_LEVEL_KEY]: 1 },
+    }
+
+    localBuckets.forSpan(basicSpan).record(basicSpan)
+    localBuckets.forSpan(topLevelBasicSpan).record(topLevelBasicSpan)
+
+    assert.strictEqual(localBuckets.size, 1)
+    const stats = localBuckets.values().next().value
+    assert.strictEqual(stats.nonTopLevelOkDistribution.count, 1)
+    assert.strictEqual(stats.topLevelOkDistribution.count, 1)
+  })
+
   it('should add a new entry when new span does not match existing agg keys', () => {
     buckets.forSpan(errorSpan)
     assert.strictEqual(buckets.size, 2)
