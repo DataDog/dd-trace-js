@@ -19,7 +19,7 @@ addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
       }
 
       const line = emit.apply(this, arguments)
-      if (logSubmissionCh.hasSubscribers && !arguments[1]) {
+      if (logSubmissionCh.hasSubscribers && logCh.hasSubscribers && !arguments[1]) {
         logSubmissionCh.publish({ source: 'bunyan', message: line ?? rec })
       }
       return line

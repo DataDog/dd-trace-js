@@ -101,6 +101,35 @@ describe('Plugin', () => {
           }
         })
 
+        describe('with disabled plugin', () => {
+          beforeEach(async () => {
+            tracer = await agent.load('pino', { enabled: false })
+          })
+
+          it('should not submit logs', function () {
+            const submittedLogs = []
+            const onLogSubmission = payload => {
+              submittedLogs.push(payload)
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
+
+            try {
+              setupTest()
+
+              if (!logger) {
+                this.skip()
+              }
+
+              logger.info('message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
+
+            assert.strictEqual(submittedLogs.length, 0)
+            sinon.assert.called(stream.write)
+          })
+        })
+
         describe('with configuration', () => {
           beforeEach(() => {
             return agent.load('pino', { logInjection: true })
@@ -120,6 +149,7 @@ describe('Plugin', () => {
               submittedLog = payload
             }
             logSubmissionCh.subscribe(onLogSubmission)
+            setupTest()
 
             tracer.scope().activate(span, () => {
               try {
@@ -143,6 +173,34 @@ describe('Plugin', () => {
               assert.strictEqual(submittedLog.source, 'pino')
               assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
             })
+          })
+
+          it('should submit records from child logger instances', () => {
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
+            setupTest()
+
+            const child = logger.child({ child: true })
+            tracer.scope().activate(span, () => {
+              try {
+                child.info('message')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+            })
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            assert.strictEqual(record.child, true)
+            assertObjectContains(record.dd, {
+              trace_id: span.context().toTraceId(true),
+              span_id: span.context().toSpanId(),
+            })
+            assert.strictEqual(submittedLog.source, 'pino')
+            assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
           })
 
           it('should support errors', () => {
@@ -192,6 +250,7 @@ describe('Plugin', () => {
               submittedLog = payload
             }
             logSubmissionCh.subscribe(onLogSubmission)
+            setupTest()
 
             tracer.scope().activate(span, () => {
               try {
@@ -208,6 +267,26 @@ describe('Plugin', () => {
               assert.strictEqual(submittedLog.source, 'pino')
               assert.deepStrictEqual(JSON.parse(submittedLog.message).dd, { custom: 'value' })
             })
+          })
+
+          it('should not submit records when the destination throws', () => {
+            const pino = getExport()
+            const failingStream = new Writable()
+            const submittedLogs = []
+            const onLogSubmission = payload => {
+              submittedLogs.push(payload)
+            }
+            sinon.stub(failingStream, 'write').throws(new Error('boom'))
+            logSubmissionCh.subscribe(onLogSubmission)
+
+            try {
+              logger = pino({}, failingStream)
+              assert.throws(() => logger.info('message'), { message: 'boom' })
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
+
+            assert.strictEqual(submittedLogs.length, 0)
           })
 
           if (semver.intersects(version, '>=9')) {
@@ -253,6 +332,26 @@ describe('Plugin', () => {
 
               assert.strictEqual(record.msg, '[Redacted]')
               assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+            })
+
+            it('should not submit transformed records when the destination throws', () => {
+              const pino = getExport()
+              const failingStream = new Writable()
+              const submittedLogs = []
+              const onLogSubmission = payload => {
+                submittedLogs.push(payload)
+              }
+              sinon.stub(failingStream, 'write').throws(new Error('boom'))
+              logSubmissionCh.subscribe(onLogSubmission)
+
+              try {
+                logger = pino({ hooks: { streamWrite: line => line } }, failingStream)
+                assert.throws(() => logger.info('message'), { message: 'boom' })
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+
+              assert.strictEqual(submittedLogs.length, 0)
             })
           }
 

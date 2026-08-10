@@ -149,13 +149,17 @@ describe('test optimization automatic log submission', () => {
             testOutput += chunk.toString()
           })
 
-          await Promise.all([
+          const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
             once(childProcess.stdout, 'end'),
             once(childProcess.stderr, 'end'),
             logsPromise,
             eventsPromise,
           ])
+
+          // Guards the Playwright worker completion barrier: the worker process must not exit
+          // until both trace export and pending log-submission requests have settled.
+          assert.strictEqual(exitCode, 0)
 
           const { logSpanId, logTraceId } = logIds
           const { testSpanId, testTraceId } = testIds

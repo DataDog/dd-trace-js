@@ -65,6 +65,30 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with disabled plugin', () => {
+        beforeEach(async () => {
+          tracer = await agent.load('bunyan', { enabled: false })
+        })
+
+        it('should not submit logs', () => {
+          const submittedLogs = []
+          const onLogSubmission = payload => {
+            submittedLogs.push(payload)
+          }
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            setupTest(version)
+            logger.info('message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          assert.strictEqual(submittedLogs.length, 0)
+          sinon.assert.called(stream.write)
+        })
+      })
+
       describe('with configuration', () => {
         beforeEach(() => {
           return agent.load('bunyan', { logInjection: true })

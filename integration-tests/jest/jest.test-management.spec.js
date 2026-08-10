@@ -3580,6 +3580,46 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   }
 
   for (const loggerName of ['pino', 'bunyan']) {
+    for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
+      it(`should respect Jest ${resolutionType} for ${loggerName}`, async () => {
+        let testOutput = ''
+        const resolutionConfig = resolutionType === 'moduleNameMapper'
+          ? {
+              CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
+                [`^${loggerName}$`]: '<rootDir>/ci-visibility/jest-mock-bypass-require/mapped-logger.js',
+              }),
+            }
+          : {
+              CONFIG_RESOLVER: '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-resolver.js',
+            }
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ...resolutionConfig,
+              TEST_LOGGER: loggerName,
+              TESTS_TO_RUN: 'jest-mock-bypass-require/mapped-logger-test',
+              USE_CONFIG_FILE: '1',
+              USE_JEST_RUN: '1',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', chunk => {
+          testOutput += chunk.toString()
+        })
+
+        const [code] = await once(childProcess, 'exit')
+        assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+      })
+    }
+
     it(`should respect Jest automocking for ${loggerName}`, async () => {
       let testOutput = ''
       childProcess = exec(

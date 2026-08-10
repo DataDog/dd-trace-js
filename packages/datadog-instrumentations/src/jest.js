@@ -3864,6 +3864,32 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
   return require(moduleName)
 }
 
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {boolean}
+ */
+function shouldBypassJestRequireEngine (runtime, from, moduleName) {
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) return false
+
+  try {
+    let jestModulePath
+    if (typeof runtime._resolveCjsModule === 'function') {
+      jestModulePath = runtime._resolveCjsModule(from, moduleName)
+    } else if (typeof runtime.cjsLoader?.resolution?.resolveCjs === 'function') {
+      jestModulePath = runtime.cjsLoader.resolution.resolveCjs(from, moduleName)
+    } else {
+      // Jest 24-27 uses this name for its synchronous CommonJS resolver.
+      jestModulePath = runtime._resolveModule(from, moduleName)
+    }
+    return jestModulePath === createRequire(from).resolve(moduleName)
+  } catch {
+    // Let Jest produce its own resolution error or load a resolver-only module.
+    return false
+  }
+}
+
 function formatDefaultStackTrace (error, structuredStackTrace) {
   const errorString = Error.prototype.toString.call(error)
   if (structuredStackTrace.length === 0) return errorString
@@ -3891,7 +3917,7 @@ addHook({
     wrapJestGlobalsForRuntime(this)
     try {
       // Jest calls requireModule only after deciding that the module should not be mocked.
-      const returnedValue = LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)
+      const returnedValue = shouldBypassJestRequireEngine(this, from, moduleName)
         ? requireOutsideJestRequireEngine(this, moduleName)
         : requireModule.apply(this, arguments)
       if (moduleName === '@jest/globals') {
