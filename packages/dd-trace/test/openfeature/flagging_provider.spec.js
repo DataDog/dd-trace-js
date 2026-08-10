@@ -310,6 +310,39 @@ describe('FlaggingProvider', () => {
     }
   })
 
+  describe('targeting regex conformance', () => {
+    const fixtureFile = path.join(fixtureRoot, 'regex-conformance', 'targeting-regex-conformance.json')
+    const regexCases = JSON.parse(fs.readFileSync(fixtureFile, 'utf8')).cases
+
+    assert.strictEqual(regexCases.length, 75)
+
+    for (const regexCase of regexCases) {
+      it(`should evaluate ${regexCase.id}`, async () => {
+        const engineExpectation = regexCase.engineExpectations?.re2js
+        const expectedCompile = engineExpectation?.compile ?? regexCase.expectedCompile
+        const expectedMatch = engineExpectation ? engineExpectation.match : regexCase.expectedMatch
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+        assert.strictEqual(typeof expectedCompile, 'boolean')
+        if (expectedCompile) {
+          assert.strictEqual(typeof expectedMatch, 'boolean')
+        }
+
+        provider.setConfiguration(createRegexConfiguration(regexCase.normalizedPattern))
+
+        const details = await provider.resolveBooleanEvaluation(
+          'regex-conformance',
+          false,
+          { targetingKey: regexCase.id, input: regexCase.input },
+          { error () {}, warn () {}, info () {}, debug () {} }
+        )
+
+        assert.strictEqual(details.reason, expectedCompile ? 'TARGETING_MATCH' : 'DEFAULT')
+        assert.strictEqual(details.value, expectedCompile ? expectedMatch : false)
+      })
+    }
+  })
+
   function loadUfc () {
     return JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'ufc-config.json'), 'utf8'))
   }
@@ -340,5 +373,34 @@ describe('FlaggingProvider', () => {
       return provider.resolveObjectEvaluation(testCase.flag, testCase.defaultValue, context, logger)
     }
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
+  }
+
+  function createRegexConfiguration (pattern) {
+    return {
+      flags: {
+        'regex-conformance': {
+          key: 'regex-conformance',
+          enabled: true,
+          variationType: 'BOOLEAN',
+          variations: {
+            matched: { key: 'matched', value: true },
+            'not-matched': { key: 'not-matched', value: false },
+          },
+          allocations: [
+            createRegexAllocation('matched', 'MATCHES', pattern),
+            createRegexAllocation('not-matched', 'NOT_MATCHES', pattern),
+          ],
+        },
+      },
+    }
+  }
+
+  function createRegexAllocation (key, operator, pattern) {
+    return {
+      key,
+      rules: [{ conditions: [{ attribute: 'input', operator, value: pattern }] }],
+      splits: [{ variationKey: key, shards: [] }],
+      doLog: false,
+    }
   }
 })
