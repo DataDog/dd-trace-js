@@ -118,6 +118,16 @@ function captureResponseHeader ({ name, value }) {
 }
 
 let incomingHttpRequestEndMessage
+let incomingHttpRequestStartMessage
+let responseWriteHeadMessages
+
+/**
+ * @param {{ req: object, res: object }} message
+ * @returns {void}
+ */
+function captureIncomingHttpRequestStart (message) {
+  incomingHttpRequestStartMessage = message
+}
 
 /**
  * @param {{ req: object, res: object }} message
@@ -125,6 +135,14 @@ let incomingHttpRequestEndMessage
  */
 function captureIncomingHttpRequestEnd (message) {
   incomingHttpRequestEndMessage = message
+}
+
+/**
+ * @param {{ req: object, res: object }} message
+ * @returns {void}
+ */
+function captureResponseWriteHead (message) {
+  responseWriteHeadMessages.push(message)
 }
 
 describe('Plugin', () => {
@@ -1039,29 +1057,48 @@ describe('Plugin', () => {
               await Promise.all([traceAsserted, request(http2, `http://localhost:${port}/users/42`)])
             })
 
-            it('publishes the adopted compatibility request at request end', async () => {
+            it('keeps one request identity across mixed security hooks', async () => {
               let realRequest
+              let realResponse
               const server = http2.createServer((req, res) => {
                 realRequest = req
+                realResponse = res
                 req.body = { inspected: true }
+                req.cookies = { session: 'test' }
+                req.query = { page: '1' }
                 res.writeHead(200)
                 res.end()
               })
               server.on('stream', () => {})
               await listenAsync(server)
 
+              incomingHttpRequestStartMessage = undefined
               incomingHttpRequestEndMessage = undefined
+              responseWriteHeadMessages = []
+              incomingHttpRequestStart.subscribe(captureIncomingHttpRequestStart)
               incomingHttpRequestEnd.subscribe(captureIncomingHttpRequestEnd)
+              responseWriteHead.subscribe(captureResponseWriteHead)
 
               try {
                 await Promise.all([
                   agent.assertFirstTraceSpan({ name: 'web.request' }),
                   request(http2, `http://localhost:${port}/user`),
                 ])
-                assert.strictEqual(incomingHttpRequestEndMessage.req, realRequest)
+                assert.notStrictEqual(incomingHttpRequestStartMessage.req, realRequest)
+                assert.strictEqual(incomingHttpRequestEndMessage.req, incomingHttpRequestStartMessage.req)
+                assert.strictEqual(incomingHttpRequestEndMessage.res, realResponse)
                 assert.deepStrictEqual(incomingHttpRequestEndMessage.req.body, { inspected: true })
+                assert.deepStrictEqual(incomingHttpRequestEndMessage.req.cookies, { session: 'test' })
+                assert.deepStrictEqual(incomingHttpRequestEndMessage.req.query, { page: '1' })
+                assert.ok(responseWriteHeadMessages.length > 0)
+                for (const message of responseWriteHeadMessages) {
+                  assert.strictEqual(message.req, incomingHttpRequestStartMessage.req)
+                  assert.strictEqual(message.res, realResponse)
+                }
               } finally {
+                incomingHttpRequestStart.unsubscribe(captureIncomingHttpRequestStart)
                 incomingHttpRequestEnd.unsubscribe(captureIncomingHttpRequestEnd)
+                responseWriteHead.unsubscribe(captureResponseWriteHead)
               }
             })
           })

@@ -165,6 +165,27 @@ describe('IAST HTTP/2 server', () => {
     })
   })
 
+  describe('mixed compatibility and core APIs', () => {
+    beforeEach(() => listen(() => {
+      const mixedServer = http2.createServer((req, res) => {
+        handler(req, res)
+        res.end()
+      })
+      mixedServer.on('stream', () => {})
+      return mixedServer
+    }))
+
+    it('taints the compatibility request url as a URI', done => {
+      let urlType
+      handler = (req) => { urlType = sourceTypeOf(req.url) }
+      agent.assertSomeTraces(traces => {
+        getWebSpanFrom(traces)
+        assert.strictEqual(urlType, HTTP_REQUEST_URI)
+      }).then(done, done)
+      request('/a-path').catch(done)
+    })
+  })
+
   describe('core API (server.on(\'stream\'))', () => {
     beforeEach(() => listen(() => {
       const coreServer = http2.createServer()

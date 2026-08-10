@@ -6,12 +6,13 @@ const addresses = require('../addresses')
 const apiSecurity = require('../api_security')
 const { isBlocked, callBlockDelegation, handleResults } = require('../blocking')
 const waf = require('../waf')
-const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
+const { storedResponseHeaders, copyHeadersOmitting, getCanonicalRequest } = require('./http-shared')
 
 const responseAnalyzedSet = new WeakSet()
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
+  req = getCanonicalRequest(req)
   if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
 
   // we don't support blocking at this point, so no results needed
