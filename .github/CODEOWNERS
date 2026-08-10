@@ -1,10 +1,10 @@
 # TODO: Restructure the project by product and clean up this file.
 
-# Default recursive ownership. GitHub applies the last matching rule, so the per-product entries
-# further down re-assign the parts of these trees that a product team owns.
+# Shared repository tooling
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
-/.github/ @DataDog/lang-platform-js
+/.github/actions/ @DataDog/lang-platform-js
+/.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
 /.gitlab/ @DataDog/lang-platform-js
 /.husky/ @DataDog/lang-platform-js
 /.vscode/ @DataDog/lang-platform-js
@@ -329,6 +329,8 @@
 # CI
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/all-green/ @DataDog/lang-platform-js
+/.github/audit-allowlist.json @DataDog/lang-platform-js
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
