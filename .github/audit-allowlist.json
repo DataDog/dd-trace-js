@@ -14,11 +14,6 @@
           "id": "GHSA-5c6j-r48x-rmvq",
           "package": "serialize-javascript",
           "reason": "Patched in 7.0.3, but mocha declares `serialize-javascript@^6.0.2` and cannot resolve a 7.x. Dev-only test runner; the RCE needs an attacker-controlled object to serialize, which only mocha's own parallel-mode test metadata reaches. Drops out when mocha widens the range."
-        },
-        {
-          "id": "GHSA-mh99-v99m-4gvg",
-          "package": "brace-expansion",
-          "reason": "The advisory declares `<= 5.0.7` across every major, so the 1.x and 2.x copies that mocha, glob and @eslint/eslintrc pin can never clear it. The root copy is already on a patched 5.x. Dev-only, and the DoS needs a hostile glob pattern, which only this repository's own scripts supply."
         }
       ]
     },
