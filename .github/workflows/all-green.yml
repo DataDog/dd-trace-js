@@ -36,6 +36,18 @@ jobs:
         id: dd-sts
       - uses: ./.github/actions/datadog-ci
       - run: pip install --quiet codecov-cli
+      # Lets a rerun of this job for the same commit (e.g. retrying a flaky sibling workflow) skip
+      # redownloading artifacts and resubmitting uploads for sibling workflow runs a previous
+      # attempt already finished — see PROCESSED_RUNS_CACHE_PATH in all-green.mjs. The key includes
+      # the attempt number so every attempt's save is a new entry (an exact-key hit skips saving,
+      # which would drop this attempt's newly-processed runs); restore-keys falls back to the most
+      # recent previous attempt's cache.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .all-green-processed-runs.json
+          key: all-green-processed-runs-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          restore-keys: |
+            all-green-processed-runs-${{ github.event.pull_request.head.sha || github.sha }}-
       # Polls sibling workflows and, as soon as each one reaches a final state, downloads its
       # artifacts, merges its reports, and uploads its junit/coverage to Datadog and Codecov —
       # instead of waiting for every workflow to finish before downloading or uploading anything.

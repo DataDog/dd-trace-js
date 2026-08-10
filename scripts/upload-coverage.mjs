@@ -93,13 +93,18 @@ export function hasCodecovCommit () {
  * lcov files that came from cells with the same content is safe, but merging Codecov uploads that
  * each need a different flag isn't.
  *
+ * The merge always runs, even when `skipUpload` is set, since the lcov half it also produces feeds
+ * the Datadog batch upload, which has no per-run cache of its own — see `all-green.mjs`.
+ *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
+ * @param {boolean} [skipUpload] Skip the `codecovcli do-upload` call — set when a previous All
+ *   Green job attempt already uploaded this run's coverage to Codecov successfully.
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
-export async function uploadCoverage (run, options) {
+export async function uploadCoverage (run, options, skipUpload = false) {
   const { jsonDir } = mergeRunCoverage(run.id)
-  if (!jsonDir) return []
+  if (!jsonDir || skipUpload) return []
 
   const commitReady = await ensureCodecovCommit(options)
   if (!commitReady) return []
