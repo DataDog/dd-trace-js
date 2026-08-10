@@ -1610,7 +1610,7 @@ class CypressPlugin {
         }
         const exporter = this.tracer._tracer._exporter
         if (exporter.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
-        this.testSuiteSpan.finish(this._now())
+        this.testSuiteSpan.finish()
         this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')

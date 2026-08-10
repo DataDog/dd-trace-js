@@ -485,7 +485,7 @@ class MochaPlugin extends CiPlugin {
         const exporter = this.tracer._exporter
         if (exporter.deferTestSuiteSpan) {
           exporter.deferTestSuiteSpan(testSuiteSpan)
-          testSuiteSpan.finish(this._now())
+          testSuiteSpan.finish()
         } else {
           this._pendingTestSuiteSpans.push({
             span: testSuiteSpan,
