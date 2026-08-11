@@ -53,7 +53,10 @@ describe('sequelize pool acquisition', () => {
         let sequelize
 
         before(async () => {
-          tracer = await agent.load(database.driver)
+          const pluginConfig = database.driver === 'mysql2'
+            ? { service: config => config.database }
+            : undefined
+          tracer = await agent.load(database.driver, pluginConfig)
         })
 
         after(() => agent.close({ ritmReset: false }))
@@ -114,6 +117,39 @@ describe('sequelize pool acquisition', () => {
           await tracePromise
         })
 
+        it('creates an acquire error span when acquisition fails before a query', async () => {
+          await sequelize.close()
+
+          const config = database.config
+          sequelize = new Sequelize(config.database, config.username, config.password, {
+            databaseVersion: config.databaseVersion,
+            dialect: config.dialect,
+            host: config.host,
+            logging: false,
+            port: config.port,
+            pool: { acquire: 50, min: 0, max: 1 },
+          })
+          const connection = await sequelize.connectionManager.getConnection()
+          const parent = tracer.startSpan('sequelize-timeout-parent')
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+            const acquireSpans = spans.filter(span => span.name === `${database.driver}.pool.acquire`)
+
+            assert.strictEqual(acquireSpans.length, 1)
+            assert.strictEqual(acquireSpans[0].error, 1)
+            assert.strictEqual(acquireSpans[0].parent_id.toString(), parent.context().toSpanId())
+            assert.strictEqual(spans.some(span => span.name === 'sequelize.pool.acquire'), false)
+          }, { spanResourceMatch: /^sequelize-timeout-parent$/ })
+
+          await tracer.scope().activate(parent, async () => {
+            await assert.rejects(sequelize.query('SELECT 1 AS one'))
+            parent.finish()
+          })
+          await sequelize.connectionManager.releaseConnection(connection)
+
+          await tracePromise
+        })
+
         if (database.driver === 'mysql2') {
           it('selects the read and write pools for direct replicated acquires', async () => {
             await sequelize.close()
@@ -132,7 +168,7 @@ describe('sequelize pool acquisition', () => {
               logging: false,
               pool: { min: 0, max: 1 },
               replication: {
-                read: [{ ...connectionConfig }],
+                read: [{ ...connectionConfig, database: 'information_schema' }],
                 write: { ...connectionConfig },
               },
             })
@@ -145,6 +181,10 @@ describe('sequelize pool acquisition', () => {
               const acquireSpans = traces[0].filter(span => span.name === 'mysql2.pool.acquire')
 
               assert.strictEqual(acquireSpans.length, 2)
+              assert.strictEqual(acquireSpans[0].meta['db.name'], 'information_schema')
+              assert.strictEqual(acquireSpans[0].service, 'information_schema')
+              assert.strictEqual(acquireSpans[1].meta['db.name'], 'db')
+              assert.strictEqual(acquireSpans[1].service, 'db')
             }, { spanResourceMatch: /^sequelize-replication-parent$/ })
 
             await tracer.scope().activate(parent, async () => {
@@ -191,11 +231,11 @@ describe('sequelize pool acquisition', () => {
 function assertQueryWaitTrace (parentResource, database) {
   return agent.assertSomeTraces(traces => {
     const spans = traces[0]
-    const querySpan = spans.find(span => span.name === database.querySpan &&
+    const querySpans = spans.filter(span => span.name === database.querySpan &&
       span.metrics[database.metric] !== undefined)
 
-    assert.ok(querySpan)
-    assert.strictEqual(typeof querySpan.metrics[database.metric], 'number')
+    assert.strictEqual(querySpans.length, 1)
+    assert.ok(querySpans[0].metrics[database.metric] > 0)
     assert.strictEqual(spans.some(span => span.name === `${database.driver}.pool.acquire`), false)
     assert.strictEqual(spans.some(span => span.name === 'sequelize.pool.acquire'), false)
   }, { spanResourceMatch: new RegExp(`^${parentResource}$`) })

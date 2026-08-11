@@ -133,7 +133,7 @@ describe('helpers/pool-acquire', () => {
 
       try {
         const owner = {}
-        const connection = {}
+        const connection = { config: { database: 'selected' } }
         const acquire = wrapPromisePoolAcquire(
           () => Promise.resolve(connection),
           () => 'mysql2',
@@ -155,6 +155,7 @@ describe('helpers/pool-acquire', () => {
         assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
         assert.strictEqual(contexts[0][1], contexts[1][1])
         assert.strictEqual(contexts[1][1].conf.database, 'db')
+        assert.strictEqual(contexts[1][1].connectionConfig, connection.config)
         assert.strictEqual(typeof contexts[1][1].poolWaitTime, 'number')
       } finally {
         startCh.unsubscribe(onStart)

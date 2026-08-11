@@ -55,7 +55,6 @@ describe('knex pool acquisition', () => {
             client: database.client,
             connection: { ...database.connection },
             pool: { min: 0, max: 1 },
-            acquireConnectionTimeout: 50,
           })
         })
 
@@ -153,6 +152,13 @@ describe('knex pool acquisition', () => {
         })
 
         it('creates an acquire error span when an internal acquisition fails before a query', async () => {
+          await client.destroy()
+          client = knex({
+            client: database.client,
+            connection: { ...database.connection },
+            pool: { min: 0, max: 1 },
+            acquireConnectionTimeout: 50,
+          })
           const connection = await client.client.acquireConnection()
           const parent = tracer.startSpan('knex-timeout-parent')
           const tracePromise = agent.assertSomeTraces(traces => {
@@ -248,11 +254,11 @@ describe('knex pool acquisition', () => {
 function assertQueryWaitTrace (parentResource, database) {
   return agent.assertSomeTraces(traces => {
     const spans = traces[0]
-    const querySpan = spans.find(span => span.name === database.querySpan &&
+    const querySpans = spans.filter(span => span.name === database.querySpan &&
       span.metrics[database.metric] !== undefined)
 
-    assert.ok(querySpan)
-    assert.strictEqual(typeof querySpan.metrics[database.metric], 'number')
+    assert.strictEqual(querySpans.length, 1)
+    assert.ok(querySpans[0].metrics[database.metric] > 0)
     assert.strictEqual(spans.some(span => span.name === `${database.client}.pool.acquire`), false)
     assert.strictEqual(spans.some(span => span.name === 'knex.pool.acquire'), false)
   }, { spanResourceMatch: new RegExp(`^${parentResource}$`) })

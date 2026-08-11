@@ -495,12 +495,16 @@ function createPromisePoolAcquireContext (driver, config) {
  * @param {DatabaseDriver} driver
  * @param {{ acquireFinishCh: Channel }} channels
  * @param {Record<string, unknown>|undefined} ctx
- * @param {object} connection
+ * @param {{
+ *   config?: Record<string, unknown>,
+ *   connectionParameters?: Record<string, unknown>
+ * }} connection
  * @param {number} waitTime
  */
 function finishPromisePoolAcquireContext (driver, channels, ctx, connection, waitTime) {
   ctx.poolWaitTime = waitTime
   if (driver === 'pg') ctx.params = connection.connectionParameters
+  else ctx.connectionConfig = connection.config
   channels.acquireFinishCh.publish(ctx)
 }
 
