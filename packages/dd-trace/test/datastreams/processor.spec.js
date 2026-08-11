@@ -363,6 +363,44 @@ describe('DataStreamsProcessor', () => {
 
     assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
   })
+
+  it('resets the edge start per hop so edge latency is per-hop, not cumulative', () => {
+    // Serial pipeline reported by real tracers: produce(topic-a) ->
+    // consume(topic-a) -> produce(topic-b) -> consume(topic-b), with a 1s
+    // processing gap at the middle service and near-zero queue waits.
+    //
+    // Each hop's edge latency must be measured from the *previous* checkpoint
+    // (per-hop). If the context handed to the next hop keeps the parent's
+    // edgeStartNs (the pre-fix behavior), edgeStart stays pinned at the pathway
+    // origin and every hop's edge latency becomes cumulative (== pathway
+    // latency), which double-counts when per-hop latencies are summed (e.g. the
+    // DSM Measure tab). Here the downstream topic-b edge must be the ~3ms queue
+    // wait, not the cumulative ~1008ms.
+    //
+    // A small fake epoch is used so Date.now() * 1e6 stays within safe-integer
+    // range and the nanosecond deltas are exact.
+    const recorded = []
+    sinon.stub(processor, 'recordCheckpoint').callsFake((checkpoint) => recorded.push(checkpoint))
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    const MS = 1e6 // nanoseconds per millisecond
+    try {
+      const produceA = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, null)
+      clock.tick(5) // topic-a queue wait
+      const consumeA = processor.setCheckpoint(['direction:in', 'group:g2', 'topic:a', 'type:kafka'], null, produceA)
+      clock.tick(1000) // in-service processing at the middle service
+      const produceB = processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, consumeA)
+      clock.tick(3) // topic-b queue wait
+      processor.setCheckpoint(['direction:in', 'group:g3', 'topic:b', 'type:kafka'], null, produceB)
+    } finally {
+      clock.restore()
+    }
+
+    const [, consumeACp, produceBCp, consumeBCp] = recorded
+    assert.strictEqual(consumeACp.edgeLatencyNs, 5 * MS, 'topic-a edge latency should be the queue wait')
+    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS, 'middle service internal latency should be the processing time')
+    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS, 'topic-b edge latency should be the queue wait, not cumulative')
+    assert.strictEqual(consumeBCp.pathwayLatencyNs, 1008 * MS, 'pathway latency should remain cumulative (end-to-end)')
+  })
 })
 
 describe('CheckpointRegistry', () => {
