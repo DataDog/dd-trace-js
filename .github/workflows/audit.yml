@@ -3,12 +3,16 @@ name: Audit
 on:
   pull_request:
     paths:
+      - ".github/audit-allowlist.json"
       - ".github/workflows/audit.yml"
       - ".github/actions/datadog-ci/bun.lock"
       - ".github/all-green/bun.lock"
       - "bun.lock"
       - "docs/bun.lock"
+      - "scripts/audit.js"
       - "vendor/bun.lock"
+  # Dependabot supports Bun version updates but not security updates, so a newly disclosed advisory does not change a
+  # lockfile or open a pull request that would trigger this workflow.
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
@@ -23,17 +27,18 @@ permissions:
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - "."
+          - ".github/actions/datadog-ci"
+          - ".github/all-green"
+          - "docs"
+          - "vendor"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
-      # Mocha cannot take serialize-javascript 7.x yet; the vulnerable path only serializes its own test metadata.
-      - run: bun audit --audit-level high --ignore GHSA-5c6j-r48x-rmvq
-      # The patched OpenTelemetry major is outside the compatibility range bundled by vendor.
-      - run: bun audit --audit-level moderate --ignore GHSA-8988-4f7v-96qf
-        working-directory: vendor
-      - run: bun audit --audit-level high
-        working-directory: docs
-      - run: bun audit --audit-level high
-        working-directory: .github/all-green
-      - run: bun audit --audit-level high
-        working-directory: .github/actions/datadog-ci
+      - run: node scripts/audit.js "$DIRECTORY"
+        env:
+          DIRECTORY: ${{ matrix.directory }}
