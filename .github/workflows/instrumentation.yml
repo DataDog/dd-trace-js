@@ -167,9 +167,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - env:
-          _DD_IGNORE_ENGINES: 'true'
-        run: npm run test:instrumentations:ci
+      - run: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
