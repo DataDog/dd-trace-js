@@ -521,7 +521,7 @@ moduleTypes.forEach(({
       assert.notStrictEqual(exitCode, 0)
     })
 
-    over10It('reports a completed suite when after:spec prevents after:run finalization', async () => {
+    over10It('reports a failed hierarchy when after:spec prevents Cypress after:run', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const customHooksConfigFile = type === 'esm'
         ? 'cypress-custom-after-hooks.config.mjs'
@@ -546,11 +546,13 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const suiteEvents = events.filter(event => event.type === 'test_suite_end')
-          assert.strictEqual(suiteEvents.length, 1)
-          assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(suiteEvents[0].content.error, 1)
-          assert.match(suiteEvents[0].content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const hierarchyEvents = events.filter(event => event.type === eventType)
+            assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
+            assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(hierarchyEvents[0].content.error, 1)
+            assert.match(hierarchyEvents[0].content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+          }
 
           const testEvent = events.find(event =>
             event.type === 'test' &&
@@ -800,14 +802,16 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
-              assert.strictEqual(suiteEvents.length, 1)
-              assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(suiteEvents[0].content.error, 1)
-              assert.match(
-                suiteEvents[0].content.meta[ERROR_MESSAGE],
-                new RegExp(`manual after:spec failed ${position} Datadog`)
-              )
+              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+                const hierarchyEvents = events.filter(event => event.type === eventType)
+                assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
+                assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(hierarchyEvents[0].content.error, 1)
+                assert.match(
+                  hierarchyEvents[0].content.meta[ERROR_MESSAGE],
+                  new RegExp(`manual after:spec failed ${position} Datadog`)
+                )
+              }
 
               const testEvent = events.find(event =>
                 event.type === 'test' &&

@@ -1648,9 +1648,7 @@ class CypressPlugin {
 
     if (error) {
       this.abortPendingScreenshotUploads(error)
-      const exporter = this.tracer._tracer._exporter
-      if (!exporter?.flush) return
-      return new Promise(resolve => exporter.flush(() => resolve(null)))
+      return this.afterRun(undefined, error)
     }
 
     const screenshotUploadsPromise = waitForScreenshotUploads()
