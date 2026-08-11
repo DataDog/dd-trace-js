@@ -376,6 +376,9 @@ function addAllowHeaders (req, res, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
+    'baggage',
+    'traceparent',
+    'tracestate',
     'x-datadog-origin',
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
