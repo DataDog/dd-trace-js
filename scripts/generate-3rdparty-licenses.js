@@ -221,12 +221,14 @@ async function fillMetadata (wanted, previous) {
       for (const license of packageLicenses) licenses.add(license)
       for (const owner of packageCopyright) copyright.add(owner)
     }
-    const previousOrigin = metadata.length > 1 ? previous.get(name)?.origin : undefined
+    const previousRow = previous.get(name)
     out.push({
       component: name,
-      origin: previousOrigin ?? metadata[0].origin,
+      // Registry repository/author fields are mutable metadata, not reviewed attribution. Keep them only as a seed
+      // for a new component; version changes still refresh the declared licenses below.
+      origin: previousRow?.origin ?? metadata[0].origin,
       license: pythonList([...licenses]),
-      copyright: pythonList([...copyright]),
+      copyright: previousRow?.copyright ?? pythonList([...copyright]),
     })
   }
 
