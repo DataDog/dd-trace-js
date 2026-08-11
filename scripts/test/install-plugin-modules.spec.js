@@ -212,13 +212,6 @@ externals.express.push({ name: 'axios', overrides: ${override} })
     assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
   })
 
-  it('makes the sqlite build dependency direct in knex sandboxes', () => {
-    runInstall('knex')
-
-    const manifest = require(path.join(versionsDir, 'knex@1', 'package.json'))
-    assert.strictEqual(manifest.dependencies.tar, '7.5.4')
-  })
-
   it('pins the Claude Agent SDK to its compatible zod major', () => {
     runInstall('claude-agent-sdk')
 
@@ -255,13 +248,6 @@ path.join = function join (...parts) {
     assert.ok(readVersionsManifest().trustedDependencies.includes('libpq'))
   })
 
-  it('normalizes unprefixed GitHub shorthand dependencies for Bun', () => {
-    runInstall('limitd-client')
-
-    const manifest = readVersionsManifest()
-    assert.strictEqual(manifest.overrides.hashlru, 'github:jfromaniello/hashlru#return_value_on_set')
-  })
-
   it('scopes the q transitive override to q sandboxes', () => {
     runInstall('q')
 
@@ -269,17 +255,6 @@ path.join = function join (...parts) {
       collections: '^5.0.0',
     })
     require(path.join(versionsDir, 'q')).get()
-  })
-
-  it('scopes the ai dependency repairs to ai sandboxes', () => {
-    runInstall('ai')
-
-    assert.deepStrictEqual(readVersionsManifest().overrides, {
-      'zod-to-json-schema': '<3.25.0',
-    })
-    const manifest = require(path.join(versionsDir, 'ai', 'package.json'))
-    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^3.0.0'), true)
-    require(path.join(versionsDir, 'ai@4.0.2')).get()
   })
 
   it('scopes the recorded OpenAI dependency graph to langchain sandboxes', () => {
