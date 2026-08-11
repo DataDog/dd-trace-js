@@ -253,5 +253,8 @@
     "workerpool": "^10.0.3",
     "yaml": "^2.9.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "resolutions": {
+    "@datadog/wasm-js-rewriter/js-yaml": "^4.3.1"
   }
 }
