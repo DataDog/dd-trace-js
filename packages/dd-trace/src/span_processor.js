@@ -6,10 +6,11 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
+const servicesByTrace = new WeakMap()
 
 class SpanProcessor {
   constructor (exporter, prioritySampler, config, otlpStatsExporter) {
@@ -17,6 +18,7 @@ class SpanProcessor {
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this._trackServiceBoundaries = Boolean(otlpStatsExporter)
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
@@ -56,7 +58,32 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      let serviceBySpanId
+      if (this._trackServiceBoundaries) {
+        serviceBySpanId = servicesByTrace.get(trace)
+        if (!serviceBySpanId) {
+          serviceBySpanId = new WeakMap()
+          servicesByTrace.set(trace, serviceBySpanId)
+        }
+        for (const span of started) {
+          const context = span.context()
+          if (context._spanId !== undefined) {
+            serviceBySpanId.set(context._spanId, context.getTag('service.name'))
+          }
+        }
+      }
+
       for (const span of started) {
+        if (serviceBySpanId) {
+          const context = span.context()
+          const parentId = context._parentId
+          const service = context.getTag('service.name')
+          const parentService = serviceBySpanId.get(parentId)
+          if (parentId && (!serviceBySpanId.has(parentId) ||
+            (service !== undefined && parentService !== undefined && service !== parentService))) {
+            context.setTag(TOP_LEVEL_KEY, 1)
+          }
+        }
         if (span._duration === undefined) {
           active.push(span)
         } else {
