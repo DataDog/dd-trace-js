@@ -30,9 +30,15 @@ module.exports = defineConfig({
         const ddAfterSpec = require('dd-trace/ci/cypress/after-spec')
         on('after:spec', (...args) => ddAfterSpec(...args))
       }
+      if (process.env.CYPRESS_REJECT_AFTER_SPEC_BEFORE_PLUGIN) {
+        on('after:spec', () => Promise.reject(new Error('manual after:spec failed before Datadog')))
+      }
       const resolvedConfig = ddTracePlugin(on, config)
       if (process.env.CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN) {
         on('after:run', () => Promise.reject(new Error('manual after:run failed after Datadog')))
+      }
+      if (process.env.CYPRESS_REJECT_AFTER_SPEC_AFTER_PLUGIN) {
+        on('after:spec', () => Promise.reject(new Error('manual after:spec failed after Datadog')))
       }
       if (process.env.CYPRESS_ENABLE_AFTER_SPEC_USER) {
         on('after:spec', () => {

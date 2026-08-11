@@ -773,6 +773,61 @@ moduleTypes.forEach(({
       assert.notStrictEqual(exitCode, 0)
     })
 
+    for (const position of ['before', 'after']) {
+      over10It(`finalizes the suite when a manual after:spec handler registered ${position} Datadog rejects`,
+        async () => {
+          const envVars = getCiVisAgentlessConfig(receiver.port)
+          const legacyConfigFile = type === 'esm'
+            ? 'cypress-legacy-plugin.config.mjs'
+            : 'cypress-legacy-plugin.config.js'
+          const rejectionVariable = `CYPRESS_REJECT_AFTER_SPEC_${position.toUpperCase()}_PLUGIN`
+
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                [rejectionVariable]: '1',
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+              assert.strictEqual(suiteEvents.length, 1)
+              assert.strictEqual(suiteEvents[0].content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(suiteEvents[0].content.error, 1)
+              assert.match(
+                suiteEvents[0].content.meta[ERROR_MESSAGE],
+                new RegExp(`manual after:spec failed ${position} Datadog`)
+              )
+
+              const testEvent = events.find(event =>
+                event.type === 'test' &&
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+              assert.ok(testEvent, 'expected completed test event')
+              assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            },
+            { hardTimeout: 60000 }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.notStrictEqual(exitCode, 0)
+        })
+    }
+
     over10It(
       'uses one tracer when auto-instrumentation and the manual plugin are different package copies',
       async () => {
@@ -2259,6 +2314,53 @@ if (requestedVersion === 'latest' &&
           } else {
             assert.deepStrictEqual(errors, [])
           }
+        })
+      }
+
+      for (const position of ['before', 'after']) {
+        it(`runs manual Datadog after:spec finalization after a user handler registered ${position}`, async () => {
+          const projectRoot = createProjectRoot()
+          const userError = new Error(`user handler ${position} Datadog failed`)
+          const userHandler = sinon.stub().rejects(userError)
+          const datadogHandler = sinon.stub()
+          datadogHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               * @returns {void}
+               */
+              setupNodeEvents (on) {
+                if (position === 'before') on('after:spec', userHandler)
+                on('after:spec', datadogHandler)
+                if (position === 'after') on('after:spec', userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig } = loadCypressConfig()
+          const spec = { relative: 'cypress/e2e/basic-pass.js' }
+          const results = { stats: { passes: 1 } }
+
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((event, handler) => {
+            handlers[event] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          await assert.rejects(handlers['after:spec'](spec, results), error => {
+            assert.strictEqual(error, userError)
+            return true
+          })
+          sinon.assert.callOrder(userHandler, datadogHandler)
+          sinon.assert.calledOnceWithExactly(userHandler, spec, results)
+          sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
         })
       }
 
