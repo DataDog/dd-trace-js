@@ -1,0 +1,4338 @@
+[
+    {
+        "dependency": "aerospike",
+        "integration": "aerospike",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "6.7.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.0.5",
+                    "5.13.2",
+                    "6.7.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "6.7.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.0.5",
+                    "5.13.2",
+                    "6.7.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "6.7.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.0.5",
+                    "5.13.2",
+                    "6.7.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "ai",
+        "integration": "ai",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "7.0.58",
+                "tested_versions": [
+                    "4.0.0",
+                    "5.0.230",
+                    "6.0.0",
+                    "6.0.247",
+                    "7.0.0",
+                    "7.0.58"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "7.0.58",
+                "tested_versions": [
+                    "4.0.0",
+                    "5.0.230",
+                    "6.0.0",
+                    "6.0.247",
+                    "7.0.0",
+                    "7.0.58"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "7.0.58",
+                "tested_versions": [
+                    "4.0.0",
+                    "5.0.230",
+                    "6.0.0",
+                    "6.0.247",
+                    "7.0.0",
+                    "7.0.58"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "amqp10",
+        "integration": "amqp10",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.6.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.6.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.6.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "amqplib",
+        "integration": "amqplib",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.5.3",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "0.5.3",
+                    "0.10.9",
+                    "1.2.0",
+                    "2.0.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.5.3",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "0.5.3",
+                    "0.10.9",
+                    "1.2.0",
+                    "2.0.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.5.3",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "0.5.3",
+                    "0.10.9",
+                    "1.2.0",
+                    "2.0.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@anthropic-ai/sdk",
+        "integration": "anthropic",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.116.0",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.32.1",
+                    "0.33.0",
+                    "0.116.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.116.0",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.32.1",
+                    "0.33.0",
+                    "0.116.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.116.0",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.32.1",
+                    "0.33.0",
+                    "0.116.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@apollo/gateway",
+        "integration": "apollo",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.3.0",
+                "maximum_package_version": "2.14.3",
+                "tested_versions": [
+                    "2.3.0",
+                    "2.6.0",
+                    "2.14.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.3.0",
+                "maximum_package_version": "2.14.3",
+                "tested_versions": [
+                    "2.3.0",
+                    "2.6.0",
+                    "2.14.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.3.0",
+                "maximum_package_version": "2.14.3",
+                "tested_versions": [
+                    "2.3.0",
+                    "2.6.0",
+                    "2.14.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "avsc",
+        "integration": "avsc",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "5.7.9",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.7.9"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "5.7.9",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.7.9"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "5.7.9",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.7.9"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@aws/durable-execution-sdk-js",
+        "integration": "aws-durable-execution-sdk-js",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.1.7",
+                    "2.2.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.1.7",
+                    "2.2.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.1.7",
+                    "2.2.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@aws-sdk/smithy-client",
+        "integration": "aws-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.374.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.374.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.374.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.374.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.374.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.374.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@smithy/core",
+        "integration": "aws-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.24.0",
+                "maximum_package_version": "3.31.0",
+                "tested_versions": [
+                    "3.24.0",
+                    "3.31.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.24.0",
+                "maximum_package_version": "3.31.0",
+                "tested_versions": [
+                    "3.24.0",
+                    "3.31.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.24.0",
+                "maximum_package_version": "3.31.0",
+                "tested_versions": [
+                    "3.24.0",
+                    "3.31.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@smithy/smithy-client",
+        "integration": "aws-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "4.14.15",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.0",
+                    "2.5.1",
+                    "3.7.0",
+                    "4.14.15"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "4.14.15",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.0",
+                    "2.5.1",
+                    "3.7.0",
+                    "4.14.15"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "4.14.15",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.0",
+                    "2.5.1",
+                    "3.7.0",
+                    "4.14.15"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "aws-sdk",
+        "integration": "aws-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.1.35",
+                "maximum_package_version": "2.1693.0",
+                "tested_versions": [
+                    "2.1.35",
+                    "2.3.0",
+                    "2.1693.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.1.35",
+                "maximum_package_version": "2.1693.0",
+                "tested_versions": [
+                    "2.1.35",
+                    "2.3.0",
+                    "2.1693.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.1.35",
+                "maximum_package_version": "2.1693.0",
+                "tested_versions": [
+                    "2.1.35",
+                    "2.3.0",
+                    "2.1693.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@azure/cosmos",
+        "integration": "azure-cosmos",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "4.10.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.10.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "4.10.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.10.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "4.10.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.10.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "durable-functions",
+        "integration": "azure-durable-functions",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.5.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.5.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.5.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.5.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.5.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.5.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@azure/event-hubs",
+        "integration": "azure-event-hubs",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "6.0.4",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.0.4"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "6.0.4",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.0.4"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "6.0.4",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.0.4"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@azure/functions",
+        "integration": "azure-functions",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.16.2",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.16.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.16.2",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.16.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.16.2",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.16.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@azure/service-bus",
+        "integration": "azure-service-bus",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "7.9.2",
+                "maximum_package_version": "7.9.5",
+                "tested_versions": [
+                    "7.9.2",
+                    "7.9.5"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "7.9.2",
+                "maximum_package_version": "7.9.5",
+                "tested_versions": [
+                    "7.9.2",
+                    "7.9.5"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "7.9.2",
+                "maximum_package_version": "7.9.5",
+                "tested_versions": [
+                    "7.9.2",
+                    "7.9.5"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "bullmq",
+        "integration": "bullmq",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "5.66.0",
+                "maximum_package_version": "5.81.2",
+                "tested_versions": [
+                    "5.66.0",
+                    "5.81.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "5.66.0",
+                "maximum_package_version": "5.81.2",
+                "tested_versions": [
+                    "5.66.0",
+                    "5.81.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "5.66.0",
+                "maximum_package_version": "5.81.2",
+                "tested_versions": [
+                    "5.66.0",
+                    "5.81.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "bunyan",
+        "integration": "bunyan",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.8.15",
+                    "2.0.5"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.8.15",
+                    "2.0.5"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.8.15",
+                    "2.0.5"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "cassandra-driver",
+        "integration": "cassandra-driver",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "4.9.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.2.2",
+                    "3.3.0",
+                    "3.6.0",
+                    "4.3.1",
+                    "4.4.0",
+                    "4.9.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "4.9.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.2.2",
+                    "3.3.0",
+                    "3.6.0",
+                    "4.3.1",
+                    "4.4.0",
+                    "4.9.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "4.9.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.2.2",
+                    "3.3.0",
+                    "3.6.0",
+                    "4.3.1",
+                    "4.4.0",
+                    "4.9.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:child_process",
+        "integration": "child_process",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@anthropic-ai/claude-agent-sdk",
+        "integration": "claude-agent-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.2.113",
+                "maximum_package_version": "0.3.223",
+                "tested_versions": [
+                    "0.2.113",
+                    "0.3.223"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.2.113",
+                "maximum_package_version": "0.3.223",
+                "tested_versions": [
+                    "0.2.113",
+                    "0.3.223"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.2.113",
+                "maximum_package_version": "0.3.223",
+                "tested_versions": [
+                    "0.2.113",
+                    "0.3.223"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@confluentinc/kafka-javascript",
+        "integration": "confluentinc-kafka-javascript",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.10.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.10.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.10.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "connect",
+        "integration": "connect",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.2.2",
+                "maximum_package_version": "3.7.0",
+                "tested_versions": [
+                    "2.2.2",
+                    "3.0.0",
+                    "3.3.5",
+                    "3.4.0",
+                    "3.7.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.2.2",
+                "maximum_package_version": "3.7.0",
+                "tested_versions": [
+                    "2.2.2",
+                    "3.0.0",
+                    "3.3.5",
+                    "3.4.0",
+                    "3.7.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.2.2",
+                "maximum_package_version": "3.7.0",
+                "tested_versions": [
+                    "2.2.2",
+                    "3.0.0",
+                    "3.3.5",
+                    "3.4.0",
+                    "3.7.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "couchbase",
+        "integration": "couchbase",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.7",
+                "maximum_package_version": "4.7.1",
+                "tested_versions": [
+                    "3.0.7",
+                    "3.1.3",
+                    "3.2.2",
+                    "3.2.7",
+                    "4.7.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.7",
+                "maximum_package_version": "4.7.1",
+                "tested_versions": [
+                    "3.0.7",
+                    "3.1.3",
+                    "3.2.2",
+                    "3.2.7",
+                    "4.7.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.7",
+                "maximum_package_version": "4.7.1",
+                "tested_versions": [
+                    "3.0.7",
+                    "3.1.3",
+                    "3.2.2",
+                    "3.2.7",
+                    "4.7.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@cucumber/cucumber",
+        "integration": "cucumber",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "13.2.1",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.2.1",
+                    "7.3.0",
+                    "7.3.2",
+                    "8.11.1",
+                    "9.6.0",
+                    "10.9.0",
+                    "11.0.0",
+                    "11.3.0",
+                    "12.9.0",
+                    "13.0.0",
+                    "13.1.1",
+                    "13.2.0",
+                    "13.2.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "13.2.1",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.2.1",
+                    "7.3.0",
+                    "7.3.2",
+                    "8.11.1",
+                    "9.6.0",
+                    "10.9.0",
+                    "11.0.0",
+                    "11.3.0",
+                    "12.9.0",
+                    "13.0.0",
+                    "13.1.1",
+                    "13.2.0",
+                    "13.2.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "13.2.1",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.2.1",
+                    "7.3.0",
+                    "7.3.2",
+                    "8.11.1",
+                    "9.6.0",
+                    "10.9.0",
+                    "11.0.0",
+                    "11.3.0",
+                    "12.9.0",
+                    "13.0.0",
+                    "13.1.1",
+                    "13.2.0",
+                    "13.2.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "cypress",
+        "integration": "cypress",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "12.0.0",
+                "maximum_package_version": "15.20.0",
+                "tested_versions": [
+                    "12.0.0",
+                    "12.17.4",
+                    "13.17.0",
+                    "14.5.4",
+                    "15.20.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "12.0.0",
+                "maximum_package_version": "15.20.0",
+                "tested_versions": [
+                    "12.0.0",
+                    "12.17.4",
+                    "13.17.0",
+                    "14.5.4",
+                    "15.20.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "12.0.0",
+                "maximum_package_version": "15.20.0",
+                "tested_versions": [
+                    "12.0.0",
+                    "12.17.4",
+                    "13.17.0",
+                    "14.5.4",
+                    "15.20.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:dns",
+        "integration": "dns",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@elastic/elasticsearch",
+        "integration": "elasticsearch",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "5.6.16",
+                "maximum_package_version": "9.4.2",
+                "tested_versions": [
+                    "5.6.16",
+                    "5.6.22",
+                    "6.8.8",
+                    "7.17.14",
+                    "8.0.0",
+                    "8.19.2",
+                    "9.4.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "5.6.16",
+                "maximum_package_version": "9.4.2",
+                "tested_versions": [
+                    "5.6.16",
+                    "5.6.22",
+                    "6.8.8",
+                    "7.17.14",
+                    "8.0.0",
+                    "8.19.2",
+                    "9.4.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "5.6.16",
+                "maximum_package_version": "9.4.2",
+                "tested_versions": [
+                    "5.6.16",
+                    "5.6.22",
+                    "6.8.8",
+                    "7.17.14",
+                    "8.0.0",
+                    "8.19.2",
+                    "9.4.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@elastic/transport",
+        "integration": "elasticsearch",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "9.3.7",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.10.2",
+                    "9.0.0",
+                    "9.3.7"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "9.3.7",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.10.2",
+                    "9.0.0",
+                    "9.3.7"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "9.3.7",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.10.2",
+                    "9.0.0",
+                    "9.3.7"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "elasticsearch",
+        "integration": "elasticsearch",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "16.7.3",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.1.3",
+                    "11.0.1",
+                    "12.1.3",
+                    "13.3.1",
+                    "14.2.2",
+                    "15.5.0",
+                    "16.7.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "16.7.3",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.1.3",
+                    "11.0.1",
+                    "12.1.3",
+                    "13.3.1",
+                    "14.2.2",
+                    "15.5.0",
+                    "16.7.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "16.7.3",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.1.3",
+                    "11.0.1",
+                    "12.1.3",
+                    "13.3.1",
+                    "14.2.2",
+                    "15.5.0",
+                    "16.7.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "electron",
+        "integration": "electron",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "37.0.0",
+                "maximum_package_version": "43.3.0",
+                "tested_versions": [
+                    "37.0.0",
+                    "37.10.3",
+                    "38.8.6",
+                    "39.8.10",
+                    "40.10.6",
+                    "41.10.4",
+                    "42.8.1",
+                    "43.3.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "37.0.0",
+                "maximum_package_version": "43.3.0",
+                "tested_versions": [
+                    "37.0.0",
+                    "37.10.3",
+                    "38.8.6",
+                    "39.8.10",
+                    "40.10.6",
+                    "41.10.4",
+                    "42.8.1",
+                    "43.3.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "37.0.0",
+                "maximum_package_version": "43.3.0",
+                "tested_versions": [
+                    "37.0.0",
+                    "37.10.3",
+                    "38.8.6",
+                    "39.8.10",
+                    "40.10.6",
+                    "41.10.4",
+                    "42.8.1",
+                    "43.3.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "express",
+        "integration": "express",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "5.2.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.2.0",
+                    "4.3.0",
+                    "4.22.2",
+                    "5.0.0",
+                    "5.2.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "5.2.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.2.0",
+                    "4.3.0",
+                    "4.22.2",
+                    "5.0.0",
+                    "5.2.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "5.2.1",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.2.0",
+                    "4.3.0",
+                    "4.22.2",
+                    "5.0.0",
+                    "5.2.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "fastify",
+        "integration": "fastify",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "5.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.14.6",
+                    "2.0.0",
+                    "2.15.3",
+                    "3.0.0",
+                    "3.29.5",
+                    "4.29.1",
+                    "5.10.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "5.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.14.6",
+                    "2.0.0",
+                    "2.15.3",
+                    "3.0.0",
+                    "3.29.5",
+                    "4.29.1",
+                    "5.10.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "5.10.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.14.6",
+                    "2.0.0",
+                    "2.15.3",
+                    "3.0.0",
+                    "3.29.5",
+                    "4.29.1",
+                    "5.10.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "find-my-way",
+        "integration": "find-my-way",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "9.7.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.18.1",
+                    "2.2.5",
+                    "3.0.5",
+                    "4.5.1",
+                    "5.6.0",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.2.2",
+                    "9.7.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "9.7.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.18.1",
+                    "2.2.5",
+                    "3.0.5",
+                    "4.5.1",
+                    "5.6.0",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.2.2",
+                    "9.7.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "9.7.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.18.1",
+                    "2.2.5",
+                    "3.0.5",
+                    "4.5.1",
+                    "5.6.0",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.2.2",
+                    "9.7.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:fs",
+        "integration": "fs",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@google-cloud/pubsub",
+        "integration": "google-cloud-pubsub",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.2.0",
+                "maximum_package_version": "5.3.1",
+                "tested_versions": [
+                    "1.2.0",
+                    "1.7.3",
+                    "2.19.4",
+                    "3.7.5",
+                    "4.11.0",
+                    "5.3.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.2.0",
+                "maximum_package_version": "5.3.1",
+                "tested_versions": [
+                    "1.2.0",
+                    "1.7.3",
+                    "2.19.4",
+                    "3.7.5",
+                    "4.11.0",
+                    "5.3.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.2.0",
+                "maximum_package_version": "5.3.1",
+                "tested_versions": [
+                    "1.2.0",
+                    "1.7.3",
+                    "2.19.4",
+                    "3.7.5",
+                    "4.11.0",
+                    "5.3.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@google-cloud/vertexai",
+        "integration": "google-cloud-vertexai",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.12.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.12.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.12.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.12.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.12.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.12.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@google/genai",
+        "integration": "google-genai",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.19.0",
+                "maximum_package_version": "2.16.0",
+                "tested_versions": [
+                    "1.19.0",
+                    "1.52.0",
+                    "2.16.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.19.0",
+                "maximum_package_version": "2.16.0",
+                "tested_versions": [
+                    "1.19.0",
+                    "1.52.0",
+                    "2.16.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.19.0",
+                "maximum_package_version": "2.16.0",
+                "tested_versions": [
+                    "1.19.0",
+                    "1.52.0",
+                    "2.16.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "graphql",
+        "integration": "graphql",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.10.0",
+                "maximum_package_version": "16.14.2",
+                "tested_versions": [
+                    "0.10.0",
+                    "0.13.2",
+                    "16.14.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.10.0",
+                "maximum_package_version": "16.14.2",
+                "tested_versions": [
+                    "0.10.0",
+                    "0.13.2",
+                    "16.14.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.10.0",
+                "maximum_package_version": "16.14.2",
+                "tested_versions": [
+                    "0.10.0",
+                    "0.13.2",
+                    "16.14.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mercurius",
+        "integration": "graphql",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "13.0.0",
+                "maximum_package_version": "16.10.0",
+                "tested_versions": [
+                    "13.0.0",
+                    "13.4.1",
+                    "14.1.0",
+                    "15.1.0",
+                    "16.10.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "13.0.0",
+                "maximum_package_version": "16.10.0",
+                "tested_versions": [
+                    "13.0.0",
+                    "13.4.1",
+                    "14.1.0",
+                    "15.1.0",
+                    "16.10.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "13.0.0",
+                "maximum_package_version": "16.10.0",
+                "tested_versions": [
+                    "13.0.0",
+                    "13.4.1",
+                    "14.1.0",
+                    "15.1.0",
+                    "16.10.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@grpc/grpc-js",
+        "integration": "grpc",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "1.14.4",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.3",
+                    "1.1.4",
+                    "1.14.4"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "1.14.4",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.3",
+                    "1.1.4",
+                    "1.14.4"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.3",
+                "maximum_package_version": "1.14.4",
+                "tested_versions": [
+                    "1.0.3",
+                    "1.1.3",
+                    "1.1.4",
+                    "1.14.4"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@hapi/hapi",
+        "integration": "hapi",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "17.9.0",
+                "maximum_package_version": "21.4.10",
+                "tested_versions": [
+                    "17.9.0",
+                    "18.4.1",
+                    "19.2.0",
+                    "20.3.0",
+                    "21.4.10"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "17.9.0",
+                "maximum_package_version": "21.4.10",
+                "tested_versions": [
+                    "17.9.0",
+                    "18.4.1",
+                    "19.2.0",
+                    "20.3.0",
+                    "21.4.10"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "17.9.0",
+                "maximum_package_version": "21.4.10",
+                "tested_versions": [
+                    "17.9.0",
+                    "18.4.1",
+                    "19.2.0",
+                    "20.3.0",
+                    "21.4.10"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "hapi",
+        "integration": "hapi",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "16.0.0",
+                "maximum_package_version": "18.1.0",
+                "tested_versions": [
+                    "16.0.0",
+                    "16.8.4",
+                    "17.0.0",
+                    "17.8.5",
+                    "18.1.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "16.0.0",
+                "maximum_package_version": "18.1.0",
+                "tested_versions": [
+                    "16.0.0",
+                    "16.8.4",
+                    "17.0.0",
+                    "17.8.5",
+                    "18.1.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "16.0.0",
+                "maximum_package_version": "18.1.0",
+                "tested_versions": [
+                    "16.0.0",
+                    "16.8.4",
+                    "17.0.0",
+                    "17.8.5",
+                    "18.1.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "hono",
+        "integration": "hono",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.12.32",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.12.32"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.12.32",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.12.32"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.0.0",
+                "maximum_package_version": "4.12.32",
+                "tested_versions": [
+                    "4.0.0",
+                    "4.12.32"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:http",
+        "integration": "http",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:https",
+        "integration": "http",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:http2",
+        "integration": "http2",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "ioredis",
+        "integration": "ioredis",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "5.11.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.5.0",
+                    "3.2.2",
+                    "4.0.0",
+                    "4.10.4",
+                    "4.11.0",
+                    "4.31.0",
+                    "5.0.0",
+                    "5.11.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "5.11.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.5.0",
+                    "3.2.2",
+                    "4.0.0",
+                    "4.10.4",
+                    "4.11.0",
+                    "4.31.0",
+                    "5.0.0",
+                    "5.11.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "5.11.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.5.0",
+                    "3.2.2",
+                    "4.0.0",
+                    "4.10.4",
+                    "4.11.0",
+                    "4.31.0",
+                    "5.0.0",
+                    "5.11.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "iovalkey",
+        "integration": "iovalkey",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.0.1",
+                "maximum_package_version": "0.3.3",
+                "tested_versions": [
+                    "0.0.1",
+                    "0.3.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.0.1",
+                "maximum_package_version": "0.3.3",
+                "tested_versions": [
+                    "0.0.1",
+                    "0.3.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.0.1",
+                "maximum_package_version": "0.3.3",
+                "tested_versions": [
+                    "0.0.1",
+                    "0.3.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@happy-dom/jest-environment",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "20.11.2",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.11.2",
+                    "11.2.0",
+                    "12.10.3",
+                    "13.10.1",
+                    "14.12.3",
+                    "15.11.7",
+                    "16.8.1",
+                    "17.6.3",
+                    "18.0.1",
+                    "19.0.2",
+                    "20.11.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "20.11.2",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.11.2",
+                    "11.2.0",
+                    "12.10.3",
+                    "13.10.1",
+                    "14.12.3",
+                    "15.11.7",
+                    "16.8.1",
+                    "17.6.3",
+                    "18.0.1",
+                    "19.0.2",
+                    "20.11.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "10.0.0",
+                "maximum_package_version": "20.11.2",
+                "tested_versions": [
+                    "10.0.0",
+                    "10.11.2",
+                    "11.2.0",
+                    "12.10.3",
+                    "13.10.1",
+                    "14.12.3",
+                    "15.11.7",
+                    "16.8.1",
+                    "17.6.3",
+                    "18.0.1",
+                    "19.0.2",
+                    "20.11.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@jest/core",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@jest/test-sequencer",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@jest/transform",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-circus",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-config",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-environment-jsdom",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-environment-node",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-runtime",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.2",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "jest-worker",
+        "integration": "jest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "28.0.0",
+                "maximum_package_version": "30.4.1",
+                "tested_versions": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "kafkajs",
+        "integration": "kafkajs",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.4.0",
+                "maximum_package_version": "2.2.4",
+                "tested_versions": [
+                    "1.4.0",
+                    "1.16.0",
+                    "2.2.4"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.4.0",
+                "maximum_package_version": "2.2.4",
+                "tested_versions": [
+                    "1.4.0",
+                    "1.16.0",
+                    "2.2.4"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.4.0",
+                "maximum_package_version": "2.2.4",
+                "tested_versions": [
+                    "1.4.0",
+                    "1.16.0",
+                    "2.2.4"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@koa/router",
+        "integration": "koa",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "15.7.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.2",
+                    "13.1.1",
+                    "14.0.0",
+                    "15.7.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "15.7.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.2",
+                    "13.1.1",
+                    "14.0.0",
+                    "15.7.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "15.7.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.2",
+                    "13.1.1",
+                    "14.0.0",
+                    "15.7.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "koa",
+        "integration": "koa",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.4",
+                    "3.2.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.4",
+                    "3.2.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.4",
+                    "3.2.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "koa-router",
+        "integration": "koa",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "14.0.0",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.4.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.1",
+                    "13.1.1",
+                    "14.0.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "14.0.0",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.4.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.1",
+                    "13.1.1",
+                    "14.0.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "7.0.0",
+                "maximum_package_version": "14.0.0",
+                "tested_versions": [
+                    "7.0.0",
+                    "7.4.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.1",
+                    "13.1.1",
+                    "14.0.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@langchain/core",
+        "integration": "langchain",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.1.0",
+                "maximum_package_version": "1.2.5",
+                "tested_versions": [
+                    "0.1.0",
+                    "1.2.5"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.1.0",
+                "maximum_package_version": "1.2.5",
+                "tested_versions": [
+                    "0.1.0",
+                    "1.2.5"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.1.0",
+                "maximum_package_version": "1.2.5",
+                "tested_versions": [
+                    "0.1.0",
+                    "1.2.5"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@langchain/langgraph",
+        "integration": "langgraph",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.1.2",
+                "maximum_package_version": "1.4.9",
+                "tested_versions": [
+                    "1.1.2",
+                    "1.4.9"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.1.2",
+                "maximum_package_version": "1.4.9",
+                "tested_versions": [
+                    "1.1.2",
+                    "1.4.9"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.1.2",
+                "maximum_package_version": "1.4.9",
+                "tested_versions": [
+                    "1.1.2",
+                    "1.4.9"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mariadb",
+        "integration": "mariadb",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.4",
+                "maximum_package_version": "3.5.2",
+                "tested_versions": [
+                    "2.0.4",
+                    "2.5.1",
+                    "2.5.2",
+                    "2.5.6",
+                    "3.0.0",
+                    "3.4.0",
+                    "3.4.1",
+                    "3.5.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.4",
+                "maximum_package_version": "3.5.2",
+                "tested_versions": [
+                    "2.0.4",
+                    "2.5.1",
+                    "2.5.2",
+                    "2.5.6",
+                    "3.0.0",
+                    "3.4.0",
+                    "3.4.1",
+                    "3.5.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.4",
+                "maximum_package_version": "3.5.2",
+                "tested_versions": [
+                    "2.0.4",
+                    "2.5.1",
+                    "2.5.2",
+                    "2.5.6",
+                    "3.0.0",
+                    "3.4.0",
+                    "3.4.1",
+                    "3.5.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "memcached",
+        "integration": "memcached",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.2.0",
+                "maximum_package_version": "2.2.2",
+                "tested_versions": [
+                    "2.2.0",
+                    "2.2.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.2.0",
+                "maximum_package_version": "2.2.2",
+                "tested_versions": [
+                    "2.2.0",
+                    "2.2.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.2.0",
+                "maximum_package_version": "2.2.2",
+                "tested_versions": [
+                    "2.2.0",
+                    "2.2.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "microgateway-core",
+        "integration": "microgateway-core",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.1.0",
+                "maximum_package_version": "3.0.0",
+                "tested_versions": [
+                    "2.1.0",
+                    "2.5.17",
+                    "3.0.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.1.0",
+                "maximum_package_version": "3.0.0",
+                "tested_versions": [
+                    "2.1.0",
+                    "2.5.17",
+                    "3.0.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.1.0",
+                "maximum_package_version": "3.0.0",
+                "tested_versions": [
+                    "2.1.0",
+                    "2.5.17",
+                    "3.0.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@wdio/local-runner",
+        "integration": "mocha",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "9.0.0",
+                "maximum_package_version": "9.30.1",
+                "tested_versions": [
+                    "9.0.0",
+                    "9.30.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "9.0.0",
+                "maximum_package_version": "9.30.1",
+                "tested_versions": [
+                    "9.0.0",
+                    "9.30.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "9.0.0",
+                "maximum_package_version": "9.30.1",
+                "tested_versions": [
+                    "9.0.0",
+                    "9.30.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mocha",
+        "integration": "mocha",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "11.8.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.4.0",
+                    "9.2.2",
+                    "10.8.2",
+                    "11.8.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "11.8.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.4.0",
+                    "9.2.2",
+                    "10.8.2",
+                    "11.8.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "11.8.0",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.4.0",
+                    "9.2.2",
+                    "10.8.2",
+                    "11.8.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mocha-each",
+        "integration": "mocha",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.1",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "2.0.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.1",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "2.0.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.1",
+                "maximum_package_version": "2.0.1",
+                "tested_versions": [
+                    "2.0.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "workerpool",
+        "integration": "mocha",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "10.0.3",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.5.1",
+                    "7.0.0",
+                    "8.0.0",
+                    "9.3.4",
+                    "10.0.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "10.0.3",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.5.1",
+                    "7.0.0",
+                    "8.0.0",
+                    "9.3.4",
+                    "10.0.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "6.0.0",
+                "maximum_package_version": "10.0.3",
+                "tested_versions": [
+                    "6.0.0",
+                    "6.5.1",
+                    "7.0.0",
+                    "8.0.0",
+                    "9.3.4",
+                    "10.0.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@modelcontextprotocol/sdk",
+        "integration": "modelcontextprotocol-sdk",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.27.1",
+                "maximum_package_version": "1.30.0",
+                "tested_versions": [
+                    "1.27.1",
+                    "1.30.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.27.1",
+                "maximum_package_version": "1.30.0",
+                "tested_versions": [
+                    "1.27.1",
+                    "1.30.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.27.1",
+                "maximum_package_version": "1.30.0",
+                "tested_versions": [
+                    "1.27.1",
+                    "1.30.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "moleculer",
+        "integration": "moleculer",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.15.1",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.15.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.15.1",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.15.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.14.0",
+                "maximum_package_version": "0.15.1",
+                "tested_versions": [
+                    "0.14.0",
+                    "0.15.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mongodb",
+        "integration": "mongodb-core",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.3.0",
+                "maximum_package_version": "7.5.0",
+                "tested_versions": [
+                    "3.3.0",
+                    "3.5.4",
+                    "3.7.4",
+                    "4.0.0",
+                    "4.5.0",
+                    "4.6.0",
+                    "4.10.0",
+                    "4.17.2",
+                    "5.0.0",
+                    "5.9.2",
+                    "6.0.0",
+                    "6.3.0",
+                    "6.4.0",
+                    "6.21.0",
+                    "7.5.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.3.0",
+                "maximum_package_version": "7.5.0",
+                "tested_versions": [
+                    "3.3.0",
+                    "3.5.4",
+                    "3.7.4",
+                    "4.0.0",
+                    "4.5.0",
+                    "4.6.0",
+                    "4.10.0",
+                    "4.17.2",
+                    "5.0.0",
+                    "5.9.2",
+                    "6.0.0",
+                    "6.3.0",
+                    "6.4.0",
+                    "6.21.0",
+                    "7.5.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.3.0",
+                "maximum_package_version": "7.5.0",
+                "tested_versions": [
+                    "3.3.0",
+                    "3.5.4",
+                    "3.7.4",
+                    "4.0.0",
+                    "4.5.0",
+                    "4.6.0",
+                    "4.10.0",
+                    "4.17.2",
+                    "5.0.0",
+                    "5.9.2",
+                    "6.0.0",
+                    "6.3.0",
+                    "6.4.0",
+                    "6.21.0",
+                    "7.5.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mongodb-core",
+        "integration": "mongodb-core",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.7",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.1.20",
+                    "3.1.9",
+                    "3.1.10",
+                    "3.1.11",
+                    "3.2.0",
+                    "3.2.7"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.7",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.1.20",
+                    "3.1.9",
+                    "3.1.10",
+                    "3.1.11",
+                    "3.2.0",
+                    "3.2.7"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "3.2.7",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.1.20",
+                    "3.1.9",
+                    "3.1.10",
+                    "3.1.11",
+                    "3.2.0",
+                    "3.2.7"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mongoose",
+        "integration": "mongoose",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.6.4",
+                "maximum_package_version": "9.7.4",
+                "tested_versions": [
+                    "4.6.4",
+                    "4.13.21",
+                    "5.0.0",
+                    "5.13.23",
+                    "6.0.0",
+                    "6.13.11",
+                    "7.0.0",
+                    "7.8.12",
+                    "8.24.3",
+                    "9.7.4"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.6.4",
+                "maximum_package_version": "9.7.4",
+                "tested_versions": [
+                    "4.6.4",
+                    "4.13.21",
+                    "5.0.0",
+                    "5.13.23",
+                    "6.0.0",
+                    "6.13.11",
+                    "7.0.0",
+                    "7.8.12",
+                    "8.24.3",
+                    "9.7.4"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.6.4",
+                "maximum_package_version": "9.7.4",
+                "tested_versions": [
+                    "4.6.4",
+                    "4.13.21",
+                    "5.0.0",
+                    "5.13.23",
+                    "6.0.0",
+                    "6.13.11",
+                    "7.0.0",
+                    "7.8.12",
+                    "8.24.3",
+                    "9.7.4"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mysql",
+        "integration": "mysql",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "2.18.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.18.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "2.18.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.18.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "2.18.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.18.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "mysql2",
+        "integration": "mysql2",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.23.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.7.0",
+                    "2.3.0",
+                    "2.3.3",
+                    "3.11.4",
+                    "3.11.5",
+                    "3.23.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.23.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.7.0",
+                    "2.3.0",
+                    "2.3.3",
+                    "3.11.4",
+                    "3.11.5",
+                    "3.23.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.23.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.7.0",
+                    "2.3.0",
+                    "2.3.3",
+                    "3.11.4",
+                    "3.11.5",
+                    "3.23.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@nats-io/nats-core",
+        "integration": "nats",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@nats-io/transport-node",
+        "integration": "nats",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "3.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "node:net",
+        "integration": "net",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "24": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            },
+            "26": {
+                "minimum_package_version": "",
+                "maximum_package_version": "",
+                "tested_versions": [
+                    ""
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "next",
+        "integration": "next",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "10.2.0",
+                "maximum_package_version": "16.3.0",
+                "tested_versions": [
+                    "10.2.0",
+                    "10.2.3",
+                    "11.0.1",
+                    "11.1.0",
+                    "11.1.4",
+                    "12.3.7",
+                    "13.0.0",
+                    "13.1.6",
+                    "13.2.0",
+                    "13.3.0",
+                    "13.5.11",
+                    "14.2.35",
+                    "15.4.1",
+                    "15.5.23",
+                    "16.3.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "10.2.0",
+                "maximum_package_version": "16.3.0",
+                "tested_versions": [
+                    "10.2.0",
+                    "10.2.3",
+                    "11.0.1",
+                    "11.1.0",
+                    "11.1.4",
+                    "12.3.7",
+                    "13.0.0",
+                    "13.1.6",
+                    "13.2.0",
+                    "13.3.0",
+                    "13.5.11",
+                    "14.2.35",
+                    "15.4.1",
+                    "15.5.23",
+                    "16.3.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "10.2.0",
+                "maximum_package_version": "16.3.0",
+                "tested_versions": [
+                    "10.2.0",
+                    "10.2.3",
+                    "11.0.1",
+                    "11.1.0",
+                    "11.1.4",
+                    "12.3.7",
+                    "13.0.0",
+                    "13.1.6",
+                    "13.2.0",
+                    "13.3.0",
+                    "13.5.11",
+                    "14.2.35",
+                    "15.4.1",
+                    "15.5.23",
+                    "16.3.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "nyc",
+        "integration": "nyc",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "17.0.0",
+                "maximum_package_version": "18.0.0",
+                "tested_versions": [
+                    "17.0.0",
+                    "17.1.0",
+                    "18.0.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "17.0.0",
+                "maximum_package_version": "18.0.0",
+                "tested_versions": [
+                    "17.0.0",
+                    "17.1.0",
+                    "18.0.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "17.0.0",
+                "maximum_package_version": "18.0.0",
+                "tested_versions": [
+                    "17.0.0",
+                    "17.1.0",
+                    "18.0.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "openai",
+        "integration": "openai",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "7.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.3.0",
+                    "4.0.0",
+                    "4.0.1",
+                    "4.1.0",
+                    "4.17.0",
+                    "4.17.1",
+                    "4.33.1",
+                    "4.34.0",
+                    "4.85.0",
+                    "4.87.0",
+                    "4.104.0",
+                    "5.0.0",
+                    "5.23.2",
+                    "6.49.0",
+                    "7.4.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "7.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.3.0",
+                    "4.0.0",
+                    "4.0.1",
+                    "4.1.0",
+                    "4.17.0",
+                    "4.17.1",
+                    "4.33.1",
+                    "4.34.0",
+                    "4.85.0",
+                    "4.87.0",
+                    "4.104.0",
+                    "5.0.0",
+                    "5.23.2",
+                    "6.49.0",
+                    "7.4.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "7.4.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.3.0",
+                    "4.0.0",
+                    "4.0.1",
+                    "4.1.0",
+                    "4.17.0",
+                    "4.17.1",
+                    "4.33.1",
+                    "4.34.0",
+                    "4.85.0",
+                    "4.87.0",
+                    "4.104.0",
+                    "5.0.0",
+                    "5.23.2",
+                    "6.49.0",
+                    "7.4.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@openai/agents",
+        "integration": "openai-agents",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.7.0",
+                "maximum_package_version": "0.14.3",
+                "tested_versions": [
+                    "0.7.0",
+                    "0.14.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.7.0",
+                "maximum_package_version": "0.14.3",
+                "tested_versions": [
+                    "0.7.0",
+                    "0.14.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.7.0",
+                "maximum_package_version": "0.14.3",
+                "tested_versions": [
+                    "0.7.0",
+                    "0.14.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@opensearch-project/opensearch",
+        "integration": "opensearch",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.2.0",
+                    "2.13.0",
+                    "3.6.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.2.0",
+                    "2.13.0",
+                    "3.6.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.6.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.2.0",
+                    "2.13.0",
+                    "3.6.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "oracledb",
+        "integration": "oracledb",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "7.0.1",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.5.0",
+                    "6.10.0",
+                    "7.0.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "7.0.1",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.5.0",
+                    "6.10.0",
+                    "7.0.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "5.0.0",
+                "maximum_package_version": "7.0.1",
+                "tested_versions": [
+                    "5.0.0",
+                    "5.5.0",
+                    "6.10.0",
+                    "7.0.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "pg",
+        "integration": "pg",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "8.0.3",
+                "maximum_package_version": "8.22.0",
+                "tested_versions": [
+                    "8.0.3",
+                    "8.22.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "8.0.3",
+                "maximum_package_version": "8.22.0",
+                "tested_versions": [
+                    "8.0.3",
+                    "8.22.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "8.0.3",
+                "maximum_package_version": "8.22.0",
+                "tested_versions": [
+                    "8.0.3",
+                    "8.22.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "pino",
+        "integration": "pino",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "10.3.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.0",
+                    "3.4.0",
+                    "4.0.0",
+                    "4.17.6",
+                    "5.0.0",
+                    "5.17.0",
+                    "6.7.0",
+                    "6.8.0",
+                    "6.14.0",
+                    "7.11.0",
+                    "8.21.0",
+                    "9.14.0",
+                    "10.3.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "10.3.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.0",
+                    "3.4.0",
+                    "4.0.0",
+                    "4.17.6",
+                    "5.0.0",
+                    "5.17.0",
+                    "6.7.0",
+                    "6.8.0",
+                    "6.14.0",
+                    "7.11.0",
+                    "8.21.0",
+                    "9.14.0",
+                    "10.3.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "2.0.0",
+                "maximum_package_version": "10.3.1",
+                "tested_versions": [
+                    "2.0.0",
+                    "2.16.0",
+                    "3.4.0",
+                    "4.0.0",
+                    "4.17.6",
+                    "5.0.0",
+                    "5.17.0",
+                    "6.7.0",
+                    "6.8.0",
+                    "6.14.0",
+                    "7.11.0",
+                    "8.21.0",
+                    "9.14.0",
+                    "10.3.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "pino-pretty",
+        "integration": "pino",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "13.1.3",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.1",
+                    "2.6.1",
+                    "3.0.0",
+                    "3.6.1",
+                    "4.8.0",
+                    "5.1.3",
+                    "6.0.0",
+                    "7.6.1",
+                    "8.1.0",
+                    "9.4.1",
+                    "10.3.1",
+                    "11.3.0",
+                    "12.1.0",
+                    "13.1.3"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "13.1.3",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.1",
+                    "2.6.1",
+                    "3.0.0",
+                    "3.6.1",
+                    "4.8.0",
+                    "5.1.3",
+                    "6.0.0",
+                    "7.6.1",
+                    "8.1.0",
+                    "9.4.1",
+                    "10.3.1",
+                    "11.3.0",
+                    "12.1.0",
+                    "13.1.3"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "13.1.3",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.1",
+                    "2.6.1",
+                    "3.0.0",
+                    "3.6.1",
+                    "4.8.0",
+                    "5.1.3",
+                    "6.0.0",
+                    "7.6.1",
+                    "8.1.0",
+                    "9.4.1",
+                    "10.3.1",
+                    "11.3.0",
+                    "12.1.0",
+                    "13.1.3"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "playwright",
+        "integration": "playwright",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.38.0",
+                "maximum_package_version": "1.62.1",
+                "tested_versions": [
+                    "1.38.0",
+                    "1.55.0",
+                    "1.59.1",
+                    "1.60.0",
+                    "1.62.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.38.0",
+                "maximum_package_version": "1.62.1",
+                "tested_versions": [
+                    "1.38.0",
+                    "1.55.0",
+                    "1.59.1",
+                    "1.60.0",
+                    "1.62.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.38.0",
+                "maximum_package_version": "1.62.1",
+                "tested_versions": [
+                    "1.38.0",
+                    "1.55.0",
+                    "1.59.1",
+                    "1.60.0",
+                    "1.62.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@prisma/client",
+        "integration": "prisma",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "6.1.0",
+                "maximum_package_version": "7.8.0",
+                "tested_versions": [
+                    "6.1.0",
+                    "6.19.3",
+                    "7.0.0",
+                    "7.8.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "6.1.0",
+                "maximum_package_version": "7.8.0",
+                "tested_versions": [
+                    "6.1.0",
+                    "6.19.3",
+                    "7.0.0",
+                    "7.8.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "6.1.0",
+                "maximum_package_version": "7.8.0",
+                "tested_versions": [
+                    "6.1.0",
+                    "6.19.3",
+                    "7.0.0",
+                    "7.8.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "protobufjs",
+        "integration": "protobufjs",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "6.8.0",
+                "maximum_package_version": "8.7.1",
+                "tested_versions": [
+                    "6.8.0",
+                    "6.11.6",
+                    "7.6.5",
+                    "8.7.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "6.8.0",
+                "maximum_package_version": "8.7.1",
+                "tested_versions": [
+                    "6.8.0",
+                    "6.11.6",
+                    "7.6.5",
+                    "8.7.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "6.8.0",
+                "maximum_package_version": "8.7.1",
+                "tested_versions": [
+                    "6.8.0",
+                    "6.11.6",
+                    "7.6.5",
+                    "8.7.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@node-redis/client",
+        "integration": "redis",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.0.6",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.6"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.0.6",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.6"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "1.0.6",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.6"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "@redis/client",
+        "integration": "redis",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "6.1.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.6.1",
+                    "6.1.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "6.1.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.6.1",
+                    "6.1.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.1.0",
+                "maximum_package_version": "6.1.0",
+                "tested_versions": [
+                    "1.1.0",
+                    "1.6.1",
+                    "6.1.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "redis",
+        "integration": "redis",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.12.0",
+                "maximum_package_version": "3.1.2",
+                "tested_versions": [
+                    "0.12.0",
+                    "0.12.1",
+                    "1.0.0",
+                    "2.5.3",
+                    "2.6.0",
+                    "2.8.0",
+                    "3.1.2"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.12.0",
+                "maximum_package_version": "3.1.2",
+                "tested_versions": [
+                    "0.12.0",
+                    "0.12.1",
+                    "1.0.0",
+                    "2.5.3",
+                    "2.6.0",
+                    "2.8.0",
+                    "3.1.2"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.12.0",
+                "maximum_package_version": "3.1.2",
+                "tested_versions": [
+                    "0.12.0",
+                    "0.12.1",
+                    "1.0.0",
+                    "2.5.3",
+                    "2.6.0",
+                    "2.8.0",
+                    "3.1.2"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "restify",
+        "integration": "restify",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "11.1.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.0.3",
+                    "4.3.4",
+                    "5.2.1",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.6.1",
+                    "9.1.0",
+                    "10.0.0",
+                    "11.1.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "11.1.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.0.3",
+                    "4.3.4",
+                    "5.2.1",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.6.1",
+                    "9.1.0",
+                    "10.0.0",
+                    "11.1.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "3.0.0",
+                "maximum_package_version": "11.1.0",
+                "tested_versions": [
+                    "3.0.0",
+                    "3.0.3",
+                    "4.3.4",
+                    "5.2.1",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.6.1",
+                    "9.1.0",
+                    "10.0.0",
+                    "11.1.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "rhea",
+        "integration": "rhea",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.24",
+                    "2.0.8",
+                    "3.0.5"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.24",
+                    "2.0.8",
+                    "3.0.5"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.0.5",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.0.24",
+                    "2.0.8",
+                    "3.0.5"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "router",
+        "integration": "router",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.3.8",
+                    "2.0.0",
+                    "2.2.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.3.8",
+                    "2.0.0",
+                    "2.2.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "2.2.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.3.8",
+                    "2.0.0",
+                    "2.2.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "selenium-webdriver",
+        "integration": "selenium",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.11.0",
+                "maximum_package_version": "4.46.0",
+                "tested_versions": [
+                    "4.11.0",
+                    "4.46.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.11.0",
+                "maximum_package_version": "4.46.0",
+                "tested_versions": [
+                    "4.11.0",
+                    "4.46.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.11.0",
+                "maximum_package_version": "4.46.0",
+                "tested_versions": [
+                    "4.11.0",
+                    "4.46.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "sharedb",
+        "integration": "sharedb",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "6.0.1",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.9.2",
+                    "2.2.6",
+                    "3.3.2",
+                    "4.1.5",
+                    "5.2.2",
+                    "6.0.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "6.0.1",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.9.2",
+                    "2.2.6",
+                    "3.3.2",
+                    "4.1.5",
+                    "5.2.2",
+                    "6.0.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "6.0.1",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.9.2",
+                    "2.2.6",
+                    "3.3.2",
+                    "4.1.5",
+                    "5.2.2",
+                    "6.0.1"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "tedious",
+        "integration": "tedious",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "20.0.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.15.0",
+                    "2.7.1",
+                    "3.0.1",
+                    "4.2.0",
+                    "5.0.3",
+                    "6.7.1",
+                    "7.0.0",
+                    "8.3.1",
+                    "9.2.3",
+                    "10.0.0",
+                    "11.8.0",
+                    "12.3.0",
+                    "13.2.0",
+                    "14.7.0",
+                    "15.1.3",
+                    "16.7.1",
+                    "17.0.0",
+                    "18.6.2",
+                    "19.2.2",
+                    "20.0.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "20.0.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.15.0",
+                    "2.7.1",
+                    "3.0.1",
+                    "4.2.0",
+                    "5.0.3",
+                    "6.7.1",
+                    "7.0.0",
+                    "8.3.1",
+                    "9.2.3",
+                    "10.0.0",
+                    "11.8.0",
+                    "12.3.0",
+                    "13.2.0",
+                    "14.7.0",
+                    "15.1.3",
+                    "16.7.1",
+                    "17.0.0",
+                    "18.6.2",
+                    "19.2.2",
+                    "20.0.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "20.0.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.15.0",
+                    "2.7.1",
+                    "3.0.1",
+                    "4.2.0",
+                    "5.0.3",
+                    "6.7.1",
+                    "7.0.0",
+                    "8.3.1",
+                    "9.2.3",
+                    "10.0.0",
+                    "11.8.0",
+                    "12.3.0",
+                    "13.2.0",
+                    "14.7.0",
+                    "15.1.3",
+                    "16.7.1",
+                    "17.0.0",
+                    "18.6.2",
+                    "19.2.2",
+                    "20.0.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "undici",
+        "integration": "undici",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "8.9.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.16.0",
+                    "5.0.0",
+                    "5.29.0",
+                    "6.0.0",
+                    "6.28.0",
+                    "7.29.0",
+                    "8.9.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "8.9.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.16.0",
+                    "5.0.0",
+                    "5.29.0",
+                    "6.0.0",
+                    "6.28.0",
+                    "7.29.0",
+                    "8.9.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "4.4.1",
+                "maximum_package_version": "8.9.0",
+                "tested_versions": [
+                    "4.4.1",
+                    "4.16.0",
+                    "5.0.0",
+                    "5.29.0",
+                    "6.0.0",
+                    "6.28.0",
+                    "7.29.0",
+                    "8.9.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "tinypool",
+        "integration": "vitest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "0.8.0",
+                "maximum_package_version": "2.1.0",
+                "tested_versions": [
+                    "0.8.0",
+                    "0.9.0",
+                    "1.1.1",
+                    "2.1.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "0.8.0",
+                "maximum_package_version": "2.1.0",
+                "tested_versions": [
+                    "0.8.0",
+                    "0.9.0",
+                    "1.1.1",
+                    "2.1.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "0.8.0",
+                "maximum_package_version": "2.1.0",
+                "tested_versions": [
+                    "0.8.0",
+                    "0.9.0",
+                    "1.1.1",
+                    "2.1.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "vitest",
+        "integration": "vitest",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.6.0",
+                "maximum_package_version": "4.1.10",
+                "tested_versions": [
+                    "1.6.0",
+                    "1.6.1",
+                    "2.0.0",
+                    "2.0.4",
+                    "2.0.5",
+                    "2.1.0",
+                    "2.1.9",
+                    "3.0.0",
+                    "3.0.8",
+                    "3.0.9",
+                    "3.2.0",
+                    "3.2.7",
+                    "4.0.0",
+                    "4.1.10"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.6.0",
+                "maximum_package_version": "4.1.10",
+                "tested_versions": [
+                    "1.6.0",
+                    "1.6.1",
+                    "2.0.0",
+                    "2.0.4",
+                    "2.0.5",
+                    "2.1.0",
+                    "2.1.9",
+                    "3.0.0",
+                    "3.0.8",
+                    "3.0.9",
+                    "3.2.0",
+                    "3.2.7",
+                    "4.0.0",
+                    "4.1.10"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.6.0",
+                "maximum_package_version": "4.1.10",
+                "tested_versions": [
+                    "1.6.0",
+                    "1.6.1",
+                    "2.0.0",
+                    "2.0.4",
+                    "2.0.5",
+                    "2.1.0",
+                    "2.1.9",
+                    "3.0.0",
+                    "3.0.8",
+                    "3.0.9",
+                    "3.2.0",
+                    "3.2.7",
+                    "4.0.0",
+                    "4.1.10"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "winston",
+        "integration": "winston",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.19.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.1.2",
+                    "2.0.0",
+                    "2.4.7",
+                    "3.0.0",
+                    "3.19.0"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.19.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.1.2",
+                    "2.0.0",
+                    "2.4.7",
+                    "3.0.0",
+                    "3.19.0"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "1.0.0",
+                "maximum_package_version": "3.19.0",
+                "tested_versions": [
+                    "1.0.0",
+                    "1.1.2",
+                    "2.0.0",
+                    "2.4.7",
+                    "3.0.0",
+                    "3.19.0"
+                ]
+            }
+        }
+    },
+    {
+        "dependency": "ws",
+        "integration": "ws",
+        "auto-instrumented": true,
+        "node_versions": {
+            "22": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "8.21.1",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.21.1"
+                ]
+            },
+            "24": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "8.21.1",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.21.1"
+                ]
+            },
+            "26": {
+                "minimum_package_version": "8.0.0",
+                "maximum_package_version": "8.21.1",
+                "tested_versions": [
+                    "8.0.0",
+                    "8.21.1"
+                ]
+            }
+        }
+    }
+]
