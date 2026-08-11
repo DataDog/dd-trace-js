@@ -7,28 +7,29 @@ const path = require('node:path')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 
+const {
+  brokenVersionReason,
+  getCappedRange,
+  resolvePluginVersions,
+} = require('../packages/dd-trace/test/plugins/versions')
+const mapWithConcurrency = require('./helpers/concurrency')
+
 const CHECK_FLAG = '--check'
-const FETCH_TIMEOUT_MS = 3000
+const NODE_RANGE_FLAG = '--node-range'
+const FETCH_TIMEOUT_MS = 10_000
+const FETCH_CONCURRENCY = 10
 
 const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
 const ROOT_PACKAGE = path.join(ROOT, 'package.json')
+const ROOT_VERSION = path.join(ROOT, 'version.js')
 const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/versions/package.json')
 const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
 const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
 
-const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions_output.json')
-const CSV_OUTPUT_PATH = path.join(ROOT, 'supported_versions_table.csv')
+const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions.json')
 
-const COLUMNS = [
-  'dependency',
-  'integration',
-  'minimum_tracer_supported',
-  'max_tracer_supported',
-  'auto-instrumented',
-]
-
-const NODE_BUILTINS = new Set(builtinModules)
+const NODE_BUILTINS = new Set(builtinModules.map(name => name.replace(/^node:/, '')))
 
 // Capture `get '<key>' () { return require('.../datadog-plugin-<name>/src') }`
 // (and the bare-key form) from packages/dd-trace/src/plugins/index.js. Keys
@@ -37,8 +38,50 @@ const NODE_BUILTINS = new Set(builtinModules)
 const PLUGIN_GETTER =
   /get\s+(?:'((?!\.{1,2}\/|global:)[^']+)'|((?!\.{1,2}\/|global:)[\w$]+))\s*\(\s*\)\s*\{\s*return\s+require\([^)]*datadog-plugin-([^'")]+?)\/src/g
 
+/**
+ * @typedef {object} NodeProfile
+ * @property {string} key
+ * @property {string} version
+ */
+
+/**
+ * @typedef {object} PackageInfo
+ * @property {{ node?: string }} [engines]
+ * @property {number} [nodeMaxMajor]
+ */
+
+/**
+ * @typedef {object} InstrumentationDeclaration
+ * @property {string[]} [versions]
+ * @property {string} [node]
+ */
+
+/**
+ * @typedef {object} GenerationOptions
+ * @property {string} [nodeRange]
+ * @property {Map<string, string>} [plugins]
+ * @property {PackageInfo} [packageInfo]
+ * @property {Record<string, string>} [versions]
+ * @property {NodeProfile[]} [nodeProfiles]
+ * @property {Map<string, Map<string, InstrumentationDeclaration[]>>} [instrumentations]
+ * @property {(dependency: string) => Promise<string[]>} [getPackageVersions]
+ * @property {string} [outputPath]
+ */
+
+/**
+ * @param {string} dependency
+ * @returns {boolean}
+ */
 function isBuiltin (dependency) {
-  return dependency.startsWith('node:') || NODE_BUILTINS.has(dependency)
+  return NODE_BUILTINS.has(dependency.replace(/^node:/, ''))
+}
+
+/**
+ * @param {string} dependency
+ * @returns {string}
+ */
+function normalizeDependency (dependency) {
+  return dependency.startsWith('node:') || !isBuiltin(dependency) ? dependency : `node:${dependency}`
 }
 
 /**
@@ -48,7 +91,7 @@ function readPluginMap () {
   const source = readFileSync(PLUGINS_INDEX, 'utf8')
   const map = new Map()
   for (const [, quoted, bare, plugin] of source.matchAll(PLUGIN_GETTER)) {
-    map.set(quoted ?? bare, plugin)
+    map.set(normalizeDependency(quoted ?? bare), plugin)
   }
   if (map.size === 0) {
     throw new Error(`No plugin getters in ${path.relative(ROOT, PLUGINS_INDEX)}`)
@@ -57,181 +100,259 @@ function readPluginMap () {
 }
 
 /**
- * @param {{ min: string, maxMajor: number | undefined }} engines
- * @returns {Map<string, Set<string>>}
+ * @param {string} cached
+ * @returns {boolean}
  */
-function readInstrumentationRanges (engines) {
-  const profiles = new Set()
-  if (engines.min) profiles.add(engines.min)
-  if (engines.maxMajor !== undefined) profiles.add(`${engines.maxMajor}.0.0`)
+function isRuntimeSpecificInstrumentation (cached) {
+  return (cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
+    cached === ROOT_VERSION
+}
 
+/**
+ * @param {NodeProfile[]} nodeProfiles
+ * @returns {Map<string, Map<string, InstrumentationDeclaration[]>>}
+ */
+function readInstrumentations (nodeProfiles) {
   const registry = require(INSTRUMENTATION_REGISTRY)
   const hookFactories = Object.values(require(INSTRUMENTATION_HOOKS))
-  const ranges = new Map()
+  const originalNodeVersion = Object.getOwnPropertyDescriptor(process.versions, 'node')
+  const originalRegistry = { ...registry }
+  const originalCache = new Map()
+  const instrumentations = new Map()
 
-  for (const profile of profiles) {
-    Object.defineProperty(process.versions, 'node', { value: profile, configurable: true })
+  for (const cached of Object.keys(require.cache)) {
+    if (isRuntimeSpecificInstrumentation(cached)) originalCache.set(cached, require.cache[cached])
+  }
 
-    // `helpers/instrument.js` closes over the registry reference, so reset
-    // the registry in place; drop the other instrumentation sources so they
-    // re-execute and re-evaluate `MIN_VERSION` under the simulated Node.
+  try {
+    for (const { version } of nodeProfiles) {
+      Object.defineProperty(process.versions, 'node', { value: version, configurable: true })
+
+      // Hook modules evaluate their Node.js gates at load time, while addHook closes over this registry object.
+      for (const key of Object.keys(registry)) delete registry[key]
+      for (const cached of Object.keys(require.cache)) {
+        if (isRuntimeSpecificInstrumentation(cached)) delete require.cache[cached]
+      }
+
+      for (const value of hookFactories) {
+        const factory = typeof value === 'function' ? value : value.fn
+        factory?.()
+      }
+
+      const byDependency = new Map()
+      for (const [name, entries] of Object.entries(registry)) {
+        byDependency.set(name, [...entries])
+      }
+      instrumentations.set(version, byDependency)
+    }
+  } finally {
     for (const key of Object.keys(registry)) delete registry[key]
+    Object.assign(registry, originalRegistry)
+
     for (const cached of Object.keys(require.cache)) {
-      if ((cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
-          cached.endsWith('/version.js')) {
-        delete require.cache[cached]
-      }
+      if (isRuntimeSpecificInstrumentation(cached)) delete require.cache[cached]
     }
+    for (const [cached, module] of originalCache) require.cache[cached] = module
 
-    for (const value of hookFactories) {
-      const factory = typeof value === 'function' ? value : value.fn
-      factory?.()
-    }
-
-    for (const [name, entries] of Object.entries(registry)) {
-      const set = ranges.get(name) ?? new Set()
-      for (const { versions } of entries) {
-        if (!Array.isArray(versions)) continue
-        for (const range of versions) {
-          if (range) set.add(range)
-        }
-      }
-      if (set.size > 0) ranges.set(name, set)
-    }
+    if (originalNodeVersion) Object.defineProperty(process.versions, 'node', originalNodeVersion)
   }
-  return ranges
+
+  return instrumentations
 }
 
 /**
- * @param {Set<string> | undefined} ranges
- * @returns {string} Lowest version satisfying any of the given ranges, or `''`.
+ * @param {PackageInfo} packageInfo
+ * @param {Record<string, string>} versions
+ * @param {string} nodeRange
+ * @returns {NodeProfile[]}
  */
-function lowestVersion (ranges) {
-  let lowest
-  if ((ranges) != null) {
-    for (const range of ranges) {
-      const candidate = semver.minVersion(range)
-      if (candidate && (!lowest || semver.lt(candidate, lowest))) lowest = candidate
-    }
+function readNodeProfiles (packageInfo, versions, nodeRange) {
+  const releaseRange = [
+    packageInfo.engines?.node,
+    packageInfo.nodeMaxMajor === undefined ? undefined : `<${packageInfo.nodeMaxMajor}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  if (!semver.validRange(nodeRange)) throw new Error(`Invalid Node.js version range: ${nodeRange}`)
+
+  const profiles = new Map()
+  for (const [name, alias] of Object.entries(versions)) {
+    const nameMatch = name.match(/^node-(\d+)$/)
+    const aliasMatch = alias.match(/^npm:node@(\d+\.\d+\.\d+)$/)
+    if (!nameMatch || !aliasMatch) continue
+
+    const version = aliasMatch[1]
+    if (releaseRange && !semver.satisfies(version, releaseRange)) continue
+    if (!semver.satisfies(version, nodeRange)) continue
+    profiles.set(nameMatch[1], version)
   }
-  return lowest?.version ?? ''
-}
 
-/**
- * Resolve the lower bound and the highest tracked major from a semver range
- * (e.g. `>=18 <26` -> `{ min: '18.0.0', maxMajor: 25 }`).
- *
- * @param {string} engines
- * @returns {{ min: string, maxMajor: number | undefined }}
- */
-function parseEnginesRange (engines) {
-  let maxMajor
-  for (const comparators of new semver.Range(engines).set) {
-    for (const { operator, semver: bound } of comparators) {
-      if (!bound || (operator !== '<' && operator !== '<=')) continue
-      const candidate = operator === '<' ? bound.major - 1 : bound.major
-      if (maxMajor === undefined || candidate > maxMajor) maxMajor = candidate
-    }
+  const result = []
+  for (const [key, version] of profiles) result.push({ key, version })
+  result.sort((left, right) => Number(left.key) - Number(right.key))
+
+  if (result.length === 0) {
+    throw new Error(`No tested Node.js versions satisfy '${releaseRange}' and '${nodeRange}'`)
   }
-  return { min: semver.minVersion(engines)?.version ?? '', maxMajor }
+  return result
 }
 
 /**
- * Latest released patch on the given Node.js major line, looked up via the
- * tiny SHASUMS256 file that nodejs.org redirects to the newest release.
- * Returns `undefined` on any network/parse failure.
- *
- * @param {number} major
- * @returns {Promise<string | undefined>}
+ * @param {string} dependency
+ * @returns {Promise<string[]>}
  */
-async function fetchLatestNodeVersion (major) {
-  try {
-    const response = await fetch(
-      `https://nodejs.org/dist/latest-v${major}.x/SHASUMS256.txt`,
-      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
-    )
-    if (!response.ok) return
-    const body = await response.text()
-    return body.match(/node-v(\d+\.\d+\.\d+)-/)?.[1]
-  } catch { /* offline or transient: fall through to the persisted value */ }
+async function fetchPackageVersions (dependency) {
+  const response = await fetch(
+    `https://registry.npmjs.org/${encodeURIComponent(dependency)}`,
+    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+  )
+  if (!response.ok) {
+    throw new Error(`Could not read npm metadata for '${dependency}': ${response.status} ${response.statusText}`)
+  }
+
+  const packument = await response.json()
+  return Object.keys(packument.versions ?? {})
 }
 
 /**
- * @returns {string | undefined} Last `max_tracer_supported` recorded for a
- *   node built-in, used as the offline fallback for `fetchLatestNodeVersion`.
+ * @param {string} dependency
+ * @param {InstrumentationDeclaration[]} declarations
+ * @param {string} nodeVersion
+ * @param {string[]} packageVersions
+ * @returns {string[]}
  */
-function readPersistedBuiltinMax () {
-  try {
-    for (const row of JSON.parse(readFileSync(JSON_OUTPUT_PATH, 'utf8'))) {
-      if (row.max_tracer_supported && isBuiltin(row.dependency)) return row.max_tracer_supported
-    }
-  } catch { /* missing or unreadable */ }
+function resolveTestedVersions (dependency, declarations, nodeVersion, packageVersions) {
+  const { versionList } = resolvePluginVersions({
+    name: dependency,
+    declarations,
+    nodeVersion,
+    env: {},
+  })
+  const testedVersions = new Set()
+
+  for (const { versionKey } of versionList) {
+    const range = getCappedRange(dependency, versionKey)
+    const version = semver.maxSatisfying(packageVersions, range)
+    if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+    if (!brokenVersionReason(dependency, version)) testedVersions.add(version)
+  }
+
+  return [...testedVersions].sort(semver.compare)
 }
 
 /**
  * @param {Map<string, string>} plugins
- * @param {Map<string, Set<string>>} ranges
- * @param {Record<string, string>} versions
- * @param {{ min: string, max: string }} nodeRange
+ * @param {NodeProfile[]} nodeProfiles
+ * @param {Map<string, Map<string, InstrumentationDeclaration[]>>} instrumentations
+ * @param {(dependency: string) => Promise<string[]>} getPackageVersions
+ * @returns {Promise<object[]>}
  */
-function buildRows (plugins, ranges, versions, nodeRange) {
+async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVersions) {
+  const dependencies = new Set()
+  for (const [dependency] of plugins) {
+    if (isBuiltin(dependency)) continue
+    for (const { version } of nodeProfiles) {
+      if (instrumentations.get(version)?.has(dependency)) {
+        dependencies.add(dependency)
+        break
+      }
+    }
+  }
+
+  const availableVersions = new Map()
+  await mapWithConcurrency([...dependencies], FETCH_CONCURRENCY, async dependency => {
+    availableVersions.set(dependency, await getPackageVersions(dependency))
+  })
+
   const rows = []
   for (const [dependency, integration] of plugins) {
     const builtin = isBuiltin(dependency)
-    const min = builtin ? nodeRange.min : lowestVersion(ranges.get(dependency))
-    const max = builtin ? nodeRange.max : versions[dependency] ?? ''
-    if (min && max) {
-      rows.push({
+    const nodeVersions = {}
+    let hasNodeVersions = false
+
+    for (const { key, version: nodeVersion } of nodeProfiles) {
+      if (builtin) {
+        nodeVersions[key] = {
+          minimum_package_version: '',
+          maximum_package_version: '',
+          tested_versions: [''],
+        }
+        hasNodeVersions = true
+        continue
+      }
+
+      const declarations = instrumentations.get(nodeVersion)?.get(dependency)
+      if (!declarations) continue
+      const testedVersions = resolveTestedVersions(
         dependency,
+        declarations,
+        nodeVersion,
+        availableVersions.get(dependency)
+      )
+      if (testedVersions.length === 0) continue
+
+      nodeVersions[key] = {
+        minimum_package_version: testedVersions[0],
+        maximum_package_version: testedVersions.at(-1),
+        tested_versions: testedVersions,
+      }
+      hasNodeVersions = true
+    }
+
+    if (hasNodeVersions) {
+      rows.push({
+        dependency: normalizeDependency(dependency),
         integration,
-        minimum_tracer_supported: min,
-        max_tracer_supported: max,
-        'auto-instrumented': 'True',
+        'auto-instrumented': true,
+        node_versions: nodeVersions,
       })
     }
   }
-  return rows.sort((a, b) =>
-    a.dependency.localeCompare(b.dependency) || a.integration.localeCompare(b.integration)
+
+  return rows.sort((left, right) =>
+    left.integration.localeCompare(right.integration) || left.dependency.localeCompare(right.dependency)
   )
 }
 
-function toCsv (rows) {
-  const header = COLUMNS.join(',')
-  const body = rows.map(row => COLUMNS.map(column => row[column]).join(','))
-  return [header, ...body, ''].join('\n')
-}
-
-async function generateSupportedIntegrations () {
-  const pkg = JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
-  const plugins = readPluginMap()
-  const engines = parseEnginesRange(pkg.engines.node)
-  if (engines.maxMajor === undefined && pkg.nodeMaxMajor !== undefined) {
-    engines.maxMajor = pkg.nodeMaxMajor - 1
-  }
-  const ranges = readInstrumentationRanges(engines)
-  const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
-
-  const max = engines.maxMajor === undefined
-    ? ''
-    : await fetchLatestNodeVersion(engines.maxMajor) ||
-      readPersistedBuiltinMax() ||
-      `${engines.maxMajor}.0.0`
-
-  const rows = buildRows(plugins, ranges, versions, { min: engines.min, max })
+/**
+ * @param {GenerationOptions} [options]
+ * @returns {Promise<{ rows: object[], json: string }>}
+ */
+async function generateSupportedIntegrations (options = {}) {
+  const packageInfo = options.packageInfo ?? JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
+  const versions = options.versions ??
+    JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies
+  const nodeProfiles = options.nodeProfiles ?? readNodeProfiles(packageInfo, versions, options.nodeRange ?? '*')
+  const plugins = options.plugins ?? readPluginMap()
+  const instrumentations = options.instrumentations ?? readInstrumentations(nodeProfiles)
+  const rows = await buildRows(
+    plugins,
+    nodeProfiles,
+    instrumentations,
+    options.getPackageVersions ?? fetchPackageVersions
+  )
 
   return {
     rows,
-    json: JSON.stringify(rows, null, 2) + '\n',
-    csv: toCsv(rows),
+    json: JSON.stringify(rows, null, 4) + '\n',
   }
 }
 
-async function writeSupportedIntegrations () {
-  const { json, csv } = await generateSupportedIntegrations()
-  writeFileSync(JSON_OUTPUT_PATH, json)
-  writeFileSync(CSV_OUTPUT_PATH, csv)
+/**
+ * @param {GenerationOptions} [options]
+ * @returns {Promise<void>}
+ */
+async function writeSupportedIntegrations (options = {}) {
+  const { json } = await generateSupportedIntegrations(options)
+  writeFileSync(options.outputPath ?? JSON_OUTPUT_PATH, json)
 }
 
+/**
+ * @param {string} file
+ * @param {string} expected
+ * @returns {boolean}
+ */
 function reportDrift (file, expected) {
   if (readFileSync(file, 'utf8').replaceAll('\r\n', '\n') === expected) return false
   // eslint-disable-next-line no-console
@@ -239,29 +360,49 @@ function reportDrift (file, expected) {
   return true
 }
 
-async function checkSupportedIntegrations () {
-  const { json, csv } = await generateSupportedIntegrations()
-  // Run both checks before short-circuiting so all stale paths are reported.
-  const jsonStale = reportDrift(JSON_OUTPUT_PATH, json)
-  const csvStale = reportDrift(CSV_OUTPUT_PATH, csv)
-  if (!jsonStale && !csvStale) return true
+/**
+ * @param {GenerationOptions} [options]
+ * @returns {Promise<boolean>}
+ */
+async function checkSupportedIntegrations (options = {}) {
+  const { json } = await generateSupportedIntegrations(options)
+  if (!reportDrift(options.outputPath ?? JSON_OUTPUT_PATH, json)) return true
   // eslint-disable-next-line no-console
   console.error('\nRun: npm run generate:supported-integrations')
   return false
 }
 
-if (require.main === module) {
+/**
+ * @param {string[]} args
+ * @returns {string}
+ */
+function readNodeRange (args) {
+  const index = args.indexOf(NODE_RANGE_FLAG)
+  if (index === -1) return '*'
+  const range = args[index + 1]
+  if (!range || range.startsWith('--')) throw new Error(`${NODE_RANGE_FLAG} requires a semver range`)
+  return range
+}
+
+/** @returns {Promise<void>} */
+async function main () {
+  const options = { nodeRange: readNodeRange(process.argv.slice(2)) }
   if (process.argv.includes(CHECK_FLAG)) {
-    checkSupportedIntegrations().then(ok => {
-      process.exitCode = ok ? 0 : 1
-    })
+    process.exitCode = Number(!await checkSupportedIntegrations(options))
   } else {
-    writeSupportedIntegrations()
+    await writeSupportedIntegrations(options)
   }
 }
 
+if (require.main === module) {
+  main().catch(error => {
+    // eslint-disable-next-line no-console
+    console.error(error)
+    process.exitCode = 1
+  })
+}
+
 module.exports = {
-  CSV_OUTPUT_PATH,
   JSON_OUTPUT_PATH,
   checkSupportedIntegrations,
   generateSupportedIntegrations,

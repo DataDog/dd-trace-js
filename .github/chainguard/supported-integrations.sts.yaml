@@ -5,7 +5,7 @@ subject: repo:DataDog/dd-trace-js:pull_request
 claim_pattern:
   event_name: pull_request
   ref: refs/pull/[0-9]+/merge
-  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/project.yml@refs/pull/[0-9]+/merge
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/generate-supported-versions.yml@refs/pull/[0-9]+/merge
 
 permissions:
   contents: write

@@ -310,12 +310,12 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities-js
+/scripts/generate-supported-integrations.spec.mjs @DataDog/apm-sdk-capabilities-js
 /scripts/helpers/test-file-index.js @DataDog/apm-sdk-capabilities-js
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities-js
-/supported_versions_output.json @DataDog/apm-sdk-capabilities-js
-/supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
+/supported_versions.json @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
@@ -347,6 +347,7 @@
 /.github/workflows/update-3rdparty-licenses.yml @DataDog/lang-platform-js
 
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
+/.github/workflows/generate-supported-versions.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/eslint-rules.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
