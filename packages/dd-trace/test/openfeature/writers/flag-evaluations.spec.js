@@ -78,6 +78,9 @@ describe('FlagEvaluationsWriter', () => {
     })
 
     writer = new FlagEvaluationsWriter(config)
+    // The writer is delivery-disabled until the Agent probe enables it; tests exercise
+    // the flush path, so enable delivery upfront.
+    writer.setEnabled(true)
   })
 
   afterEach(() => {
@@ -112,6 +115,17 @@ describe('FlagEvaluationsWriter', () => {
       const minimal = new FlagEvaluationsWriter({ ...config, version: undefined, env: undefined })
       assert.deepStrictEqual(minimal._context, { service: 'test-service' })
       minimal.destroy()
+    })
+
+    it('does not flush until setEnabled(true) is called by the Agent probe', () => {
+      const disabled = new FlagEvaluationsWriter(config)
+      disabled.enqueue(makeEvent())
+      disabled.flush()
+      sinon.assert.notCalled(request)
+      disabled.setEnabled(true)
+      disabled.flush()
+      sinon.assert.calledOnce(request)
+      disabled.destroy()
     })
   })
 

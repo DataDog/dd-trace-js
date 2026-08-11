@@ -503,8 +503,8 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */
   _context
 
-  /** @type {boolean} whether the Agent advertises /evp_proxy/v2 (gates flush) */
-  #enabled = true
+  /** @type {boolean} whether the Agent advertises /evp_proxy/v2 (gates flush); disabled until the probe enables it */
+  #enabled = false
 
   /** @type {Array<FlagEvalRawEvent>} bounded hand-off queue, drained by the aggregator */
   _rawQueue
