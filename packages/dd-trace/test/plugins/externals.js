@@ -40,14 +40,6 @@ module.exports = {
     {
       name: 'zod',
       versions: ['>=3.25.75'],
-      // `ai@4.0.2` declares `zod` as an optional peer (`^3.0.0`) and
-      // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Bun's isolated
-      // linker skips optional peers, so inject it into each ai sandbox.
-      dep: true,
-      // zod-to-json-schema@3.25.x requires the zod/v3 export absent from zod@3.23.x.
-      overrides: {
-        'zod-to-json-schema': '<3.25.0',
-      },
     },
   ],
   apollo: [
@@ -417,24 +409,11 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
-  // These packages pass schema objects across package boundaries; GraphQL rejects objects created by another copy.
-  '@apollo/gateway': [
-    {
-      name: 'graphql',
-      dep: true,
-    },
-  ],
   '@apollo/server': [
     {
       // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
       // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
-      name: 'graphql',
-      dep: true,
-    },
-  ],
-  '@apollo/subgraph': [
-    {
       name: 'graphql',
       dep: true,
     },
@@ -467,13 +446,6 @@ module.exports = {
       // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
-    },
-    {
-      // Bun runs @vscode/sqlite3's node-gyp script before its package-local tar dependency is available.
-      name: 'tar',
-      version: '7.5.4',
-      dep: true,
-      forced: true,
     },
     {
       name: 'pg',
@@ -565,15 +537,6 @@ module.exports = {
     {
       name: 'fastify',
       versions: ['>=3'],
-    },
-  ],
-  'limitd-client': [
-    {
-      name: 'hashlru',
-      // limitd-protocol@2.1.1 uses an unprefixed GitHub shorthand that Bun cannot resolve.
-      overrides: {
-        hashlru: 'github:jfromaniello/hashlru#return_value_on_set',
-      },
     },
   ],
   mariadb: [
@@ -687,33 +650,6 @@ module.exports = {
       name: '@openai/agents-openai',
       versions: ['>=0.7.0'],
       node: '>=22',
-    },
-  ],
-  // Every `@openai/agents*` package declares `zod` as a peer and imports it at load time. Bun's
-  // isolated linker skips unmet peers, so each sandbox has to declare it for the store entry it
-  // resolves to carry `zod`; without it the SDK throws `Cannot find module 'zod'` on first require.
-  '@openai/agents': [
-    {
-      name: 'zod',
-      version: '^4.0.0',
-      dep: true,
-      forced: true,
-    },
-  ],
-  '@openai/agents-core': [
-    {
-      name: 'zod',
-      version: '^4.0.0',
-      dep: true,
-      forced: true,
-    },
-  ],
-  '@openai/agents-openai': [
-    {
-      name: 'zod',
-      version: '^4.0.0',
-      dep: true,
-      forced: true,
     },
   ],
   passport: [
