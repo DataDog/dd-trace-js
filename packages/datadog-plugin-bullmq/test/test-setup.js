@@ -49,10 +49,10 @@ class BullmqTestSetup {
    * @returns {Promise<void>}
    */
   async queueAddError (isBullmq6) {
-    const opts = isBullmq6
+    const options = isBullmq6
       ? { jobId: '0' }
       : { repeat: { pattern: 'invalid-cron-pattern' } }
-    await this.queue.add('error-job', { data: 'test' }, opts)
+    await this.queue.add('error-job', { data: 'test' }, options)
   }
 
   async queueAddBulk () {

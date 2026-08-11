@@ -198,7 +198,7 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
 
       try {
         await testSetup.flowProducerAddError()
-      } catch (err) {
+      } catch {
         // Expected error
       }
 
