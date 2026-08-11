@@ -17,7 +17,6 @@ const latests = require('../packages/dd-trace/test/plugins/versions/package.json
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
-const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
 
@@ -547,13 +546,6 @@ async function assertWorkspaces () {
   }, null, 2) + '\n')
 }
 
-/**
- * Install the generated versions/ workspaces.
- *
- * Some workspaces download large prebuilt binaries at postinstall time (e.g. Electron pulls one archive per major
- * from GitHub's release CDN), which intermittently fail with 5xx gateway errors. Retry with backoff so a brief CDN
- * outage doesn't fail the whole job.
- */
 function install () {
   try {
     // versions/bunfig.toml pins `linker = "isolated"`, which gives every sandbox
@@ -565,14 +557,10 @@ function install () {
     // (moleculer's runtime `require('bluebird')` fallback, etc.) are wired
     // through `externals.js` `dep: true, forced: true` so they land as a direct
     // dep of the consuming sandbox rather than as a sibling workspace.
-    retry(() => exec('bun install --trust', { cwd: folder() }), {
-      onRetry: (error, attempt, delayMs) => process.stderr.write(
-        `bun install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
-      ),
-    })
+    exec('bun install --trust', { cwd: folder() })
   } catch (error) {
-    // A failure that outlasts the retries is most often an unresolvable version: a declared range spans a major
-    // version that was never published. Point at the fix instead of leaving a bare bun error.
+    // A failure is most often an unresolvable version: a declared range spans a major version that was never
+    // published. Point at the fix instead of leaving a bare bun error.
     throw new Error(
       'bun failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
       'major version that was never published (non-consecutive majors), add that package to ' +
