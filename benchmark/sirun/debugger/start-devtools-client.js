@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const Module = require('node:module')
 
 // Point the tracer at this variant's per-core agent (port matches `agent.js`)
 // before `getConfig()` reads the URL. Set it unconditionally so a globally
@@ -10,15 +9,9 @@ const Module = require('node:module')
 // another parallel variant owns.
 process.env.DD_TRACE_AGENT_URL = `http://127.0.0.1:${8080 + Number(process.env.CPU_AFFINITY || 0)}`
 
-// The trace-context expression the devtools client evaluates on the paused frame
-// for every hit does `global.require('dd-trace')`. This bench loads the tracer by
-// relative path, so the bare specifier would otherwise throw MODULE_NOT_FOUND on
-// every hit and skew the measurement. Resolve it to this checkout's entry point.
-const ddTraceEntry = require.resolve('../../..')
-const originalResolveFilename = Module._resolveFilename
-Module._resolveFilename = function (request, ...rest) {
-  return originalResolveFilename.call(this, request === 'dd-trace' ? ddTraceEntry : request, ...rest)
-}
+// Production initializes the tracer before starting Dynamic Instrumentation. This benchmark imports the debugger
+// internals directly, so initialize the tracer explicitly before the paused-frame expression reads global._ddtrace.
+require('../../..')
 
 // The global snapshot cap (MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) is read in the
 // devtools worker thread at module load, with no config or env path to override
@@ -26,9 +19,6 @@ Module._resolveFilename = function (request, ...rest) {
 // variants measure capture cost on every hit instead of the rate-limited path.
 // No-op unless the variant opts in via the env var.
 patchGlobalSnapshotCap(process.env.MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
-
-// Entry point normally primes this; bench imports src directly.
-globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const getConfig = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
