@@ -416,7 +416,10 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
 function finalizeAfterUserHandlers (userHandlers, finalizer) {
   return userHandlers.then(
     () => finalizer(),
-    userError => Promise.resolve().then(() => finalizer(userError)).then(
+    userError => Promise.resolve().then(() => {
+      const finalizerError = userError || new Error('Cypress user handler rejected without an error')
+      return finalizer(finalizerError)
+    }).then(
       () => { throw userError },
       finalizationError => {
         log.error('Datadog Cypress finalizer failed after a user handler error', finalizationError)

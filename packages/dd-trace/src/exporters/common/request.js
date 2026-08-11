@@ -138,13 +138,14 @@ function request (data, options, callback) {
    *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
    * @param {(error: Error, statusCode?: number,
    *   headers?: import('node:http').IncomingHttpHeaders) => void} handleError
+   * @param {number} attemptTimeout
    */
-  const onResponse = (res, complete, handleError) => {
+  const onResponse = (res, complete, handleError, attemptTimeout) => {
     markEndpointReached(options)
 
     const chunks = []
 
-    res.setTimeout(timeout)
+    res.setTimeout(attemptTimeout)
 
     res.once('aborted', () => {
       handleError(Object.assign(new Error('Response aborted'), { code: 'ECONNRESET' }))
@@ -212,6 +213,10 @@ function request (data, options, callback) {
   /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
     if (signal?.aborted) return callback(getAbortError(signal))
+
+    const attemptTimeout = options.deadline === undefined
+      ? timeout
+      : Math.max(1, Math.min(timeout, options.deadline - Date.now()))
 
     if (!request.writable) {
       if (options.deadline !== undefined && Date.now() < options.deadline) {
@@ -283,7 +288,8 @@ function request (data, options, callback) {
               complete(error, null, statusCode, headers)
               return
             }
-            delay = Math.min(delay, Math.max(0, remaining - timeout))
+            const retryAttemptTimeout = timeout < remaining ? timeout : Math.ceil(remaining / 2)
+            delay = Math.min(delay, Math.max(0, remaining - retryAttemptTimeout))
           }
           settled = true
           finalize()
@@ -296,13 +302,13 @@ function request (data, options, callback) {
         }
       }
 
-      const req = client.request(options, (res) => onResponse(res, complete, handleError))
+      const req = client.request(options, (res) => onResponse(res, complete, handleError, attemptTimeout))
 
       req.once('close', finalize)
       req.once('timeout', finalize)
       req.once('error', handleError)
 
-      req.setTimeout(timeout, () => {
+      req.setTimeout(attemptTimeout, () => {
         try {
           if (typeof req.abort === 'function') {
             req.abort()

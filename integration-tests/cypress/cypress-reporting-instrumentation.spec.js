@@ -521,57 +521,70 @@ moduleTypes.forEach(({
       assert.notStrictEqual(exitCode, 0)
     })
 
-    over10It('reports a failed hierarchy when after:spec prevents Cypress after:run', async () => {
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-      const customHooksConfigFile = type === 'esm'
-        ? 'cypress-custom-after-hooks.config.mjs'
-        : 'cypress-custom-after-hooks.config.js'
-      const startedAt = Date.now()
+    for (const { testName, rejectionVariable, expectedError } of [
+      {
+        testName: 'reports a failed hierarchy when after:spec prevents Cypress after:run',
+        rejectionVariable: 'CYPRESS_REJECT_AFTER_SPEC',
+        expectedError: /custom after:spec failed/,
+      },
+      {
+        testName: 'reports a failed hierarchy when after:spec rejects without a reason',
+        rejectionVariable: 'CYPRESS_REJECT_AFTER_SPEC_WITHOUT_REASON',
+        expectedError: /Cypress user handler rejected without an error/,
+      },
+    ]) {
+      over10It(testName, async () => {
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        const customHooksConfigFile = type === 'esm'
+          ? 'cypress-custom-after-hooks.config.mjs'
+          : 'cypress-custom-after-hooks.config.js'
+        const startedAt = Date.now()
 
-      childProcess = exec(
-        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
-        {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            CYPRESS_REJECT_AFTER_SPEC: '1',
-            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
-          },
-        }
-      )
-
-      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) => url.endsWith('/api/v2/citestcycle'),
-        (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-            const hierarchyEvents = events.filter(event => event.type === eventType)
-            assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
-            assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(hierarchyEvents[0].content.error, 1)
-            assert.match(hierarchyEvents[0].content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              [rejectionVariable]: '1',
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
           }
+        )
 
-          const testEvent = events.find(event =>
-            event.type === 'test' &&
-            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
-          )
-          assert.ok(testEvent, 'expected completed test event')
-          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
-        },
-        { hardTimeout: 60000 }
-      )
+        const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              const hierarchyEvents = events.filter(event => event.type === eventType)
+              assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
+              assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(hierarchyEvents[0].content.error, 1)
+              assert.match(hierarchyEvents[0].content.meta[ERROR_MESSAGE], expectedError)
+            }
 
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
+            const testEvent = events.find(event =>
+              event.type === 'test' &&
+              event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+            )
+            assert.ok(testEvent, 'expected completed test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+          },
+          { hardTimeout: 60000 }
+        )
 
-      assert.notStrictEqual(exitCode, 0)
-      assert.ok(Date.now() - startedAt < 20_000, 'final writer flush should remain bounded')
-    })
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.notStrictEqual(exitCode, 0)
+        assert.ok(Date.now() - startedAt < 20_000, 'final writer flush should remain bounded')
+      })
+    }
 
     over10It('bounds after:spec error finalization while a screenshot upload is pending', async () => {
       receiver.setMediaResponsesPending()

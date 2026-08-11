@@ -669,6 +669,39 @@ describe('request', function () {
     })
   })
 
+  it('preserves backoff when the request timeout exceeds the final flush budget', (done) => {
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    retryStubs.getRetryDelay.returns(5000)
+    const realSetTimeout = setTimeout
+    const retryTimer = { unref: sinon.spy() }
+    const setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((callback, delay, ...args) => {
+      if (delay !== 5000) return realSetTimeout(callback, delay, ...args)
+      queueMicrotask(() => callback(...args))
+      return retryTimer
+    })
+
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(500)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      timeout: 15_000,
+      deadline: Date.now() + 10_000,
+      retryOnHttpError: true,
+    }, (err, res) => {
+      setTimeoutStub.restore()
+      clock.restore()
+      assert.strictEqual(res, 'OK')
+      sinon.assert.calledOnce(retryStubs.getRetryDelay)
+      sinon.assert.calledOnce(retryTimer.unref)
+      done(err)
+    })
+  })
+
   it('shortens a network retry delay to fit the remaining final flush budget', (done) => {
     const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
     retryStubs.getRetryDelay.callsFake(() => {
