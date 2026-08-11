@@ -80,7 +80,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     fs.rmSync(fixtureDirectory, { recursive: true, force: true })
   })
 
-  it('refreshes exact-version licenses and escapes every CSV field', async () => {
+  it('refreshes exact-version licenses while preserving reviewed copyright', async () => {
     const tracePath = path.join(fixtureDirectory, 'registry-trace.txt')
     await runGenerator({
       DD_TEST_LICENSE_METADATA: JSON.stringify({
@@ -108,7 +108,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       [
         '"component","origin","license","copyright"',
         '"dd-fixture","https://github.com/DataDog/dd-fixture","[\'BSD-3-Clause\']","[\'Fixture author\']"',
-        '"foo","https://old.example/""quoted""","[\'MIT\', \'Apache-2.0\']","[\'Old author\', \'New author\']"',
+        '"foo","https://old.example/""quoted""","[\'MIT\', \'Apache-2.0\']","[\'Old author\']"',
         '"vendored","https://vendored.example","[\'ISC\']","[\'Vendored author\']"',
       ]
     )
@@ -138,7 +138,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     )
   })
 
-  it('refreshes attribution metadata for a single locked version', async () => {
+  it('refreshes a single locked version license without replacing reviewed attribution', async () => {
     fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), JSON.stringify({
       lockfileVersion: 1,
       workspaces: { '': { dependencies: { foo: '2.0.0' } } },
@@ -156,9 +156,10 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     })
 
     const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
-    assert.match(
-      generated,
-      /"foo","https:\/\/new\.example\/repository","\['Apache-2\.0'\]","\['New author'\]"/
+    const fooRow = generated.split('\r\n').find(line => line.startsWith('"foo",'))
+    assert.strictEqual(
+      fooRow,
+      '"foo","https://old.example/""quoted""","[\'Apache-2.0\']","[\'Old author\']"'
     )
   })
 

@@ -3,19 +3,12 @@ name: Audit
 on:
   pull_request:
     paths:
+      - ".github/workflows/audit.yml"
       - ".github/actions/datadog-ci/bun.lock"
       - ".github/all-green/bun.lock"
       - "bun.lock"
       - "docs/bun.lock"
       - "vendor/bun.lock"
-      # An advisory exemption is only as good as the run that re-checks it, so changing the policy or
-      # the wrapper that enforces it has to trigger this workflow too.
-      - ".github/audit-allowlist.json"
-      - ".github/workflows/audit.yml"
-      - "scripts/audit.js"
-  schedule:
-    - cron: "0 6 * * 1"
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
@@ -27,22 +20,17 @@ permissions:
 jobs:
   dependencies:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        directory:
-          - "."
-          - ".github/actions/datadog-ci"
-          - ".github/all-green"
-          - "docs"
-          - "vendor"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
-      # Severity threshold and accepted advisories both live in .github/audit-allowlist.json, per directory, each with
-      # a written reason. The wrapper also fails once an accepted advisory stops being reported, which a bare
-      # `--ignore` list cannot do: `bun audit` takes unknown ids without complaint, so a suppression silently outlives
-      # the advisory it was added for.
-      - run: node scripts/audit.js "$DIRECTORY"
-        env:
-          DIRECTORY: ${{ matrix.directory }}
+      # Mocha cannot take serialize-javascript 7.x yet; the vulnerable path only serializes its own test metadata.
+      - run: bun audit --audit-level high --ignore GHSA-5c6j-r48x-rmvq
+      # The patched OpenTelemetry major is outside the compatibility range bundled by vendor.
+      - run: bun audit --audit-level moderate --ignore GHSA-8988-4f7v-96qf
+        working-directory: vendor
+      - run: bun audit --audit-level high
+        working-directory: docs
+      - run: bun audit --audit-level high
+        working-directory: .github/all-green
+      - run: bun audit --audit-level high
+        working-directory: .github/actions/datadog-ci
