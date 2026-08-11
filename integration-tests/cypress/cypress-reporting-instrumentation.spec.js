@@ -2354,13 +2354,17 @@ if (requestedVersion === 'latest' &&
             handlers[event] = handler
           }, { projectRoot, supportFile: false, isInteractive: false })
 
-          await assert.rejects(handlers['after:spec'](spec, results), error => {
-            assert.strictEqual(error, userError)
-            return true
-          })
-          sinon.assert.callOrder(userHandler, datadogHandler)
-          sinon.assert.calledOnceWithExactly(userHandler, spec, results)
-          sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
+          try {
+            await assert.rejects(handlers['after:spec'](spec, results), error => {
+              assert.strictEqual(error, userError)
+              return true
+            })
+            sinon.assert.callOrder(userHandler, datadogHandler)
+            sinon.assert.calledOnceWithExactly(userHandler, spec, results)
+            sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
+          } finally {
+            await handlers['after:run']({})
+          }
         })
       }
 

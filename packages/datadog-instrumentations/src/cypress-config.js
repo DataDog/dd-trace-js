@@ -451,7 +451,7 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler) {
       Promise.resolve()
     )
     if (!datadogHandler) return chain
-    return finalizeAfterUserHandlers(chain, userError => datadogHandler(spec, results, userError))
+    return finalizeAfterUserHandlers(chain, (...args) => datadogHandler(spec, results, ...args))
   })
 }
 
@@ -512,7 +512,7 @@ function registerDdTraceHooks (
       )
       if (!datadogHandler) return chain.finally(cleanupWrapper)
 
-      return finalizeAfterUserHandlers(chain, userError => datadogHandler(results, userError))
+      return finalizeAfterUserHandlers(chain, (...args) => datadogHandler(results, ...args))
         .finally(cleanupWrapper)
     })
   }
