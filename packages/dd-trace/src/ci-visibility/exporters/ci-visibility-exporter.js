@@ -101,6 +101,7 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
+  #deferredHierarchyTraces = []
   #deferredTestSuiteSpans = new Map()
 
   constructor (config, options = {}) {
@@ -447,10 +448,13 @@ class CiVisibilityExporter extends BufferingExporter {
       this._traceBuffer.push(trace)
       return
     }
-    if (!this.canReportSessionTraces() && getIsTestSessionTrace(trace)) {
+    const isHierarchyTrace = getIsTestSessionTrace(trace)
+    if (!this.canReportSessionTraces() && isHierarchyTrace) {
       return
     }
-    this._export(trace, undefined, undefined, getIsTestSessionTrace(trace))
+    if (this._export(trace, undefined, undefined, isHierarchyTrace) === false && isHierarchyTrace) {
+      this.#deferredHierarchyTraces.push(trace)
+    }
   }
 
   /**
@@ -557,6 +561,25 @@ class CiVisibilityExporter extends BufferingExporter {
     this.#deferredTestSuiteSpans.clear()
   }
 
+  /**
+   * Retries hierarchy traces rejected by writer backpressure within the final deadline.
+   *
+   * @param {{ deadline?: number }} options final-flush options
+   * @returns {void}
+   */
+  #exportDeferredHierarchyTraces (options) {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    let retainedCount = 0
+
+    for (const trace of this.#deferredHierarchyTraces) {
+      if (this._writer.append(trace, options) === false) {
+        this.#deferredHierarchyTraces[retainedCount++] = trace
+      }
+    }
+    this.#deferredHierarchyTraces.length = retainedCount
+  }
+
   exportCoverage (formattedCoverage) {
     this.#resetFinalFlush()
 
@@ -625,7 +648,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSuiteSpans.size === 0) {
+      this.#deferredTestSuiteSpans.size === 0 && this.#deferredHierarchyTraces.length === 0) {
       onDone()
       return
     }
@@ -669,7 +692,10 @@ class CiVisibilityExporter extends BufferingExporter {
 
     const flushWriters = () => {
       const options = deadline === undefined ? undefined : { deadline }
-      if (isFinalFlush) this.exportDeferredTestSuiteSpans(options)
+      if (isFinalFlush) {
+        this.exportDeferredTestSuiteSpans(options)
+        this.#exportDeferredHierarchyTraces(options)
+      }
 
       const writers = [
         this._writer,

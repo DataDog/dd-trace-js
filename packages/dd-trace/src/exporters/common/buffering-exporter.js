@@ -28,7 +28,7 @@ class BufferingExporter {
     if (this._config.isCiVisibility) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
-    writer.append(payload)
+    const appended = writer.append(payload)
 
     const { flushInterval } = this._config
 
@@ -41,6 +41,8 @@ class BufferingExporter {
       }, flushInterval)
       this[timerKey].unref?.()
     }
+
+    return appended
   }
 
   getUncodedTraces () {

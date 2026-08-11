@@ -1072,6 +1072,58 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.exportDeferredTestSuiteSpans()
         sinon.assert.calledTwice(writer.append)
       })
+
+      it('retains hierarchy parents until bounded final appends are accepted', () => {
+        const writer = {
+          append: sinon.stub()
+            .onFirstCall().returns(false)
+            .onSecondCall().returns(true)
+            .onThirdCall().returns(true),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const spanId = { toString: () => 'suite-span-id' }
+        const testSuiteSpan = {
+          context: () => ({ _spanId: spanId }),
+        }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: spanId,
+          error: 0,
+          meta: { 'test.status': 'pass' },
+          metrics: {},
+        }
+        const moduleEvent = { type: 'test_module_end' }
+        const sessionEvent = { type: 'test_session_end' }
+        const hierarchyParents = [moduleEvent, sessionEvent]
+        formatSpan = sinon.stub().returns(suiteEvent)
+
+        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+        ciVisibilityExporter.export([suiteEvent, ...hierarchyParents])
+
+        sinon.assert.calledOnceWithExactly(writer.append, hierarchyParents)
+
+        const done = sinon.spy()
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledThrice(writer.append)
+        sinon.assert.calledWithExactly(
+          writer.append.secondCall,
+          [suiteEvent],
+          sinon.match({ deadline: sinon.match.number })
+        )
+        sinon.assert.calledWithExactly(
+          writer.append.thirdCall,
+          hierarchyParents,
+          writer.append.secondCall.args[1]
+        )
+        sinon.assert.calledOnceWithExactly(writer.flush, sinon.match.func, writer.append.secondCall.args[1])
+        sinon.assert.calledOnceWithExactly(done, undefined)
+      })
     })
   })
 
