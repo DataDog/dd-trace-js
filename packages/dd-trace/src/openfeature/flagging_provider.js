@@ -70,6 +70,15 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   }
 
   /**
+   * Returns the exact source configuration supplied to the provider.
+   *
+   * @returns {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined}
+   */
+  getConfiguration () {
+    return this.#ffeState.sourceConfiguration
+  }
+
+  /**
    * Resolves a boolean flag and normalizes its canonical result.
    *
    * @param {string} flagKey

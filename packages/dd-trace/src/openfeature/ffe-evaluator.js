@@ -18,6 +18,7 @@ const UINT64_MAX = '18446744073709551615'
  * @returns {{
  *   configuration: import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined,
  *   rejected: Set<string>,
+ *   sourceConfiguration: import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined,
  *   semverConditions: Map<string, Array<{
  *     attribute: string,
  *     comparand: string,
@@ -30,7 +31,7 @@ function sanitizeConfiguration (configuration) {
   const rejected = new Set()
   const semverConditions = new Map()
   if (!configuration?.flags || typeof configuration.flags !== 'object' || Array.isArray(configuration.flags)) {
-    return { configuration, rejected, semverConditions }
+    return { configuration, rejected, semverConditions, sourceConfiguration: configuration }
   }
 
   const flags = { ...configuration.flags }
@@ -48,6 +49,7 @@ function sanitizeConfiguration (configuration) {
     configuration: rejected.size || semverConditions.size ? { ...configuration, flags } : configuration,
     rejected,
     semverConditions,
+    sourceConfiguration: configuration,
   }
 }
 
