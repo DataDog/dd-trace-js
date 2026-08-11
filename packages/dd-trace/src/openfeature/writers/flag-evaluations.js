@@ -808,8 +808,8 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     // Full tier: all optional fields (variant, allocation, targeting_key, context)
     for (const entry of this._full.values()) {
       // `runtime_default_used` is a required boolean in the flagevaluation event
-      // contract (the bundled @datadog/flagging-core serializer always emits it), so
-      // it is set in the literal for every evaluation rather than omitted when false.
+      // contract (the bundled flagging-core serializer always emits it), so it is
+      // set in the literal for every evaluation rather than omitted when false.
       const ev = {
         timestamp: flushTimeMs,
         flag: { key: entry.flagKey },

@@ -64,7 +64,7 @@ class FlagEvalEVPHook {
     const targetingKey = hookContext.context?.targetingKey ?? ''
 
     // Prefer an eval-time stamp from flag metadata when a provider supplies one.
-    // The bundled @datadog/flagging-core provider stamps evaluation start time under
+    // The bundled flagging-core provider stamps evaluation start time under
     // the reserved key `__dd_eval_timestamp_ms`; fall back to hook-fire time only when
     // the metadata value is absent or not a finite number, matching the provider's own
     // Number.isFinite fallback so first/last_evaluation stay accurate.
