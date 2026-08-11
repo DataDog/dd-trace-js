@@ -111,7 +111,7 @@
 /packages/dd-trace/src/propagation-hash/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/process-tags.spec.js @DataDog/apm-idm-js
-/versions/bunfig.toml @DataDog/apm-idm-js
+/versions/bunfig.toml @DataDog/lang-platform-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
@@ -330,7 +330,6 @@
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
 /.github/all-green/ @DataDog/lang-platform-js
-/.github/audit-allowlist.json @DataDog/lang-platform-js
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
