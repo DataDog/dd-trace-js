@@ -118,6 +118,7 @@ function encodeField (key, value) {
  * @returns {string}
  */
 function canonicalContextKey (attrs) {
+  if (!attrs) return ''
   let out = ''
   for (const k of Object.keys(attrs)) {
     out += encodeField(k, attrs[k])
@@ -130,22 +131,32 @@ function canonicalContextKey (attrs) {
  * @returns {boolean}
  */
 function isPlainObject (value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  // Date (and other scalar-like objects OpenFeature permits as EvaluationContextValue)
+  // must be treated as leaves, not traversed: `Object.keys(new Date())` is empty, so
+  // descending into a Date would silently drop it. Dates are serialized to ISO strings
+  // in the flatten leaf branch below.
+  return value !== null && typeof value === 'object' && !Array.isArray(value) &&
+    !(value instanceof Date)
 }
 
 /**
- * Emptiness probe that does not allocate a keys array. Returns true iff `obj` has at
- * least one own enumerable key. AGENTS.md: don't use `Object.keys(obj).length` as a
- * presence probe — it materializes the whole key array.
+ * Assigns `value` to `obj[key]` as an own enumerable data property. An own `__proto__`
+ * key (e.g. from a JSON-parsed context) would otherwise invoke the legacy prototype
+ * setter on an ordinary `{}` and be silently dropped, so the special key uses
+ * `Object.defineProperty` to create a real data property. Dotted keys like
+ * `user.__proto__` are not the special key and are safe with plain assignment.
  *
  * @param {Record<string, unknown>} obj
- * @returns {boolean}
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {void}
  */
-function hasOwnKey (obj) {
-  for (const k in obj) {
-    if (Object.hasOwn(obj, k)) return true
+function safeAssign (obj, key, value) {
+  if (key === '__proto__') {
+    Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true })
+  } else {
+    obj[key] = value
   }
-  return false
 }
 
 /**
@@ -160,8 +171,12 @@ function hasOwnKey (obj) {
  * @returns {Record<string, unknown>}
  */
 function flattenContext (attrs) {
-  if (!attrs) return {}
+  if (!attrs) return null
 
+  // An own `__proto__` key (e.g. from a JSON-parsed context) must survive as an
+  // enumerable data property. Assigning it to an ordinary `{}` invokes the legacy
+  // prototype setter and silently drops the attribute, so leaf emission goes through
+  // `safeAssign` (Object.defineProperty for the special key).
   const out = {}
   // ancestors tracks containers currently on the walk path; a container is added
   // when we descend into it and removed after all its descendants are processed.
@@ -178,6 +193,12 @@ function flattenContext (attrs) {
     if (key === 'targetingKey') continue
     stack.push(['leaf', key, attrs[key], 1])
   }
+
+  // Bounded traversal: `emitted` counts accepted leaves so a caller-supplied broad
+  // array/object cannot push millions of frames or grow `out` past the field cap on
+  // the evaluation hot path. Once the cap is reached we stop expanding containers and
+  // stop accepting leaves; per-container pushes are also capped at MAX_CONTEXT_FIELDS.
+  let emitted = 0
 
   while (stack.length > 0) {
     const frame = stack.pop()
@@ -198,22 +219,40 @@ function flattenContext (attrs) {
       continue
     }
 
+    // Date is a supported OpenFeature scalar-like value, not a traversable record.
+    // Serialize to ISO 8601 so the canonical key and the emitted JSON agree; an
+    // invalid Date (NaN) is dropped like other unsupported values.
+    if (value instanceof Date) {
+      if (emitted < MAX_CONTEXT_FIELDS && Number.isFinite(value.getTime())) {
+        safeAssign(out, prefix, value.toISOString())
+        emitted++
+      }
+      continue
+    }
+
     const isArray = Array.isArray(value)
     if (isArray || isPlainObject(value)) {
       if (depth >= MAX_CONTEXT_DEPTH) continue
       if (ancestors.has(value)) continue // cycle — truncate
+      // Leaves beyond the field cap can never survive pruning, so descending into
+      // further containers once the cap is reached only burns memory/time.
+      if (emitted >= MAX_CONTEXT_FIELDS) continue
 
       ancestors.add(value)
       stack.push(['exit', value])
 
       if (isArray) {
-        // Push in reverse so pop order matches natural iteration order.
-        for (let i = value.length - 1; i >= 0; i--) {
+        // Cap children pushed per container: leaves beyond MAX_CONTEXT_FIELDS can never
+        // survive, so pushing them only grows the stack. Bounds a million-element
+        // array to ≤ MAX_CONTEXT_FIELDS frames here instead of ≤1,000,000.
+        const len = Math.min(value.length, MAX_CONTEXT_FIELDS)
+        for (let i = len - 1; i >= 0; i--) {
           stack.push(['leaf', `${prefix}.${i}`, value[i], depth + 1])
         }
       } else {
         const childKeys = Object.keys(value)
-        for (let i = childKeys.length - 1; i >= 0; i--) {
+        const len = Math.min(childKeys.length, MAX_CONTEXT_FIELDS)
+        for (let i = len - 1; i >= 0; i--) {
           const k = childKeys[i]
           stack.push(['leaf', `${prefix}.${k}`, value[k], depth + 1])
         }
@@ -221,7 +260,10 @@ function flattenContext (attrs) {
       continue
     }
 
-    out[prefix] = value
+    if (emitted < MAX_CONTEXT_FIELDS) {
+      safeAssign(out, prefix, value)
+      emitted++
+    }
   }
   return out
 }
@@ -275,24 +317,29 @@ function contextFitsWithoutFlattening (attrs) {
  * @returns {Record<string, unknown>}
  */
 function pruneContext (attrs) {
-  if (!attrs) return {}
+  if (!attrs) return null
 
   // Fast path: no flatten needed. Just sort + strip targetingKey.
   if (contextFitsWithoutFlattening(attrs)) {
     const keys = Object.keys(attrs)
-    if (keys.length === 0) return {}
+    // Track whether any field survived at the assignment site — avoids both a for-in
+    // presence probe (AGENTS.md: never use for-in) and an Object.keys().length probe
+    // (materializes the key array) on the evaluation hot path.
+    let emitted = false
     keys.sort()
     const out = {}
     for (const k of keys) {
       if (k === 'targetingKey') continue
-      out[k] = attrs[k]
+      safeAssign(out, k, attrs[k])
+      emitted = true
     }
-    return out
+    return emitted ? out : null
   }
 
   const flat = flattenContext(attrs)
+  if (!flat) return null
   const flatKeys = Object.keys(flat)
-  if (flatKeys.length === 0) return {}
+  if (flatKeys.length === 0) return null
 
   flatKeys.sort()
 
@@ -313,19 +360,21 @@ function pruneContext (attrs) {
 
   const out = {}
   if (!needsFieldSkip) {
-    for (const k of flatKeys) out[k] = flat[k]
+    for (const k of flatKeys) safeAssign(out, k, flat[k])
     return out
   }
 
   let count = 0
+  let emitted = false
   for (const k of flatKeys) {
     if (count >= MAX_CONTEXT_FIELDS) break
     const v = flat[k]
     if (typeof v === 'string' && v.length > MAX_FIELD_LENGTH) continue
-    out[k] = v
+    safeAssign(out, k, v)
     count++
+    emitted = true
   }
-  return out
+  return emitted ? out : null
 }
 
 /**
@@ -361,8 +410,14 @@ function eventEvaluationCount (event) {
  * @returns {string}
  */
 function makeFullKey (flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey) {
-  // NUL separator: safe because length-delimited ctxKey cannot contain NUL as a separator
-  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}\0${targetingKey}\0${ctxKey}`
+  // Every dimension is length-delimited so a NUL inside any dimension cannot collide
+  // with the separator. ctxKey is already length-delimited via canonicalContextKey.
+  return appendLengthDelimited(Buffer.from(flagKey, 'utf8')) +
+    appendLengthDelimited(Buffer.from(variant, 'utf8')) +
+    appendLengthDelimited(Buffer.from(allocationKey, 'utf8')) +
+    appendLengthDelimited(Buffer.from(errorMessage, 'utf8')) +
+    appendLengthDelimited(Buffer.from(targetingKey, 'utf8')) +
+    ctxKey
 }
 
 /**
@@ -375,7 +430,10 @@ function makeFullKey (flagKey, variant, allocationKey, errorMessage, targetingKe
  * @returns {string}
  */
 function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
-  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}`
+  return appendLengthDelimited(Buffer.from(flagKey, 'utf8')) +
+    appendLengthDelimited(Buffer.from(variant, 'utf8')) +
+    appendLengthDelimited(Buffer.from(allocationKey, 'utf8')) +
+    appendLengthDelimited(Buffer.from(errorMessage, 'utf8'))
 }
 
 /**
@@ -444,6 +502,9 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
 class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */
   _context
+
+  /** @type {boolean} whether the Agent advertises /evp_proxy/v2 (gates flush) */
+  #enabled = true
 
   /** @type {Array<FlagEvalRawEvent>} bounded hand-off queue, drained by the aggregator */
   _rawQueue
@@ -626,7 +687,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       return
     }
 
-    // New full-tier bucket
+    // New full-tier bucket. `event.attrs` is null when the pruned context was empty
+    // (pruneContext returns null), otherwise a non-empty null-prototype map — so no
+    // re-probe is needed here to tell empty from non-empty.
     this._full.set(fKey, {
       flagKey,
       variant,
@@ -637,7 +700,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       first: evalTimeMs,
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
-      contextAttrs: hasOwnKey(attrs) ? attrs : null,
+      contextAttrs: event.attrs,
     })
     this._globalCount++
   }
@@ -682,10 +745,29 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
+   * Gates delivery on the Agent advertising the EVP proxy endpoint. Mirrors the
+   * exposure writer's `setAgentStrategy` gate: when the Agent lacks `/evp_proxy/v2`,
+   * flush becomes a no-op so the writer stops POSTing to an unsupported endpoint.
+   * Aggregation still runs (bounded by the cardinality caps) so no evaluation work is
+   * lost if the probe later enables delivery.
+   *
+   * @param {boolean} enabled - Whether the Agent supports EVP proxy delivery
+   * @returns {void}
+   */
+  setEnabled (enabled) {
+    this.#enabled = enabled
+  }
+
+  /**
    * Flushes aggregated buckets. Drains any pending event snapshots first so a flush never
    * races ahead of the microtask-scheduled drain and loses queued evaluations.
    */
   flush () {
+    // Skip delivery entirely when the Agent does not expose /evp_proxy/v2. The hand-off
+    // queue and aggregation maps are still bounded by their caps, so memory stays fenced
+    // while delivery is disabled.
+    if (!this.#enabled) return
+
     this._drainQueue()
 
     const flushTimeMs = Date.now()
@@ -725,15 +807,18 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     // Full tier: all optional fields (variant, allocation, targeting_key, context)
     for (const entry of this._full.values()) {
+      // `runtime_default_used` is a required boolean in the flagevaluation event
+      // contract (the bundled @datadog/flagging-core serializer always emits it), so
+      // it is set in the literal for every evaluation rather than omitted when false.
       const ev = {
         timestamp: flushTimeMs,
         flag: { key: entry.flagKey },
         first_evaluation: entry.first,
         last_evaluation: entry.last,
         evaluation_count: entry.count,
+        runtime_default_used: entry.runtimeDefault,
       }
 
-      if (entry.runtimeDefault) ev.runtime_default_used = true
       if (entry.targetingKey) ev.targeting_key = entry.targetingKey
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
@@ -755,9 +840,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
         first_evaluation: entry.first,
         last_evaluation: entry.last,
         evaluation_count: entry.count,
+        runtime_default_used: entry.runtimeDefault,
       }
 
-      if (entry.runtimeDefault) ev.runtime_default_used = true
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
       if (entry.errorMessage) ev.error = { message: entry.errorMessage }

@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_hook')
+const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag-eval-evp-hook')
 
 describe('FlagEvalEVPHook', () => {
   let writer
@@ -82,16 +82,16 @@ describe('FlagEvalEVPHook', () => {
         'allocationKey must be sourced from evaluationDetails.flagMetadata, not hookContext')
     })
 
-    it('reads dd.eval.timestamp_ms from evaluationDetails.flagMetadata when present', () => {
+    it('reads __dd_eval_timestamp_ms from evaluationDetails.flagMetadata when present', () => {
       hook.finally(
         { flagKey: 'f' },
-        { variant: 'on', reason: 'STATIC', flagMetadata: { 'dd.eval.timestamp_ms': 1700000000123 } }
+        { variant: 'on', reason: 'STATIC', flagMetadata: { __dd_eval_timestamp_ms: 1700000000123 } }
       )
 
       assert.strictEqual(lastEnqueued().evalTimeMs, 1700000000123)
     })
 
-    it('falls back to hook-fire time when no eval-time stamp is present', () => {
+    it('falls back to hook-fire time when the eval-time stamp is absent or non-finite', () => {
       const before = Date.now()
       hook.finally({ flagKey: 'f' }, { variant: 'on', reason: 'STATIC' })
       const after = Date.now()
@@ -99,6 +99,21 @@ describe('FlagEvalEVPHook', () => {
       const evalTimeMs = lastEnqueued().evalTimeMs
       assert.ok(evalTimeMs >= before && evalTimeMs <= after,
         'evalTimeMs must fall back to hook-fire Date.now() when unstamped')
+
+      // A non-finite metadata value (e.g. a malformed stamp) must also fall back rather
+      // than propagate NaN into first/last_evaluation bounds — matches the bundled
+      // @datadog/flagging-core provider's Number.isFinite guard.
+      const beforeFallback = Date.now()
+      hook.finally(
+        { flagKey: 'f' },
+        { variant: 'on', reason: 'STATIC', flagMetadata: { __dd_eval_timestamp_ms: NaN } }
+      )
+      const afterFallback = Date.now()
+      const fallbackMs = lastEnqueued().evalTimeMs
+      assert.ok(typeof fallbackMs === 'number' && Number.isFinite(fallbackMs),
+        'non-finite metadata stamp must fall back to a finite hook-fire time')
+      assert.ok(fallbackMs >= beforeFallback && fallbackMs <= afterFallback,
+        'non-finite metadata stamp must fall back to hook-fire Date.now()')
     })
   })
 

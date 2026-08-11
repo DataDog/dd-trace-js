@@ -10,7 +10,7 @@ if (!globalThis[ddTraceSymbol]?.beforeExitHandlers) {
 
 const proxyquire = require('proxyquire')
 const getConfig = require('../packages/dd-trace/src/config')
-const FlagEvalEVPHook = require('../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
+const FlagEvalEVPHook = require('../packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook')
 const benchmark = require('./benchmark')
 const {
   createSingleExposureEvent,
@@ -22,7 +22,7 @@ const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers
   '../../exporters/common/request': () => {},
 })
 
-const FlagEvaluationsWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/flag_evaluations', {
+const FlagEvaluationsWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/flag-evaluations', {
   './base': proxyquire('../packages/dd-trace/src/openfeature/writers/base', {
     '../../exporters/common/request': () => {},
   }),

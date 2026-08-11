@@ -25,6 +25,7 @@ describe('FlaggingProvider', () => {
   let mockFlagEvalWriterClass
   let mockFlagEvalEVPHook
   let mockFlagEvalEVPHookClass
+  let setAgentStrategyStub
 
   beforeEach(() => {
     mockTracer = {
@@ -75,11 +76,14 @@ describe('FlaggingProvider', () => {
 
     mockFlagEvalWriter = {
       destroy: sinon.spy(),
+      setEnabled: sinon.spy(),
     }
     mockFlagEvalWriterClass = sinon.stub().returns(mockFlagEvalWriter)
 
     mockFlagEvalEVPHook = {}
     mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
+
+    setAgentStrategyStub = sinon.stub()
 
     // evaluationCountsEnabled defaults to true in mockConfig; tests that need the killswitch
     // set mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false directly.
@@ -92,8 +96,9 @@ describe('FlaggingProvider', () => {
       './configuration_source': configurationSource,
       './flag-eval-metrics-hook': mockFlagEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
-      './writers/flag_evaluations': mockFlagEvalWriterClass,
-      './writers/flag_eval_evp_hook': mockFlagEvalEVPHookClass,
+      './writers/flag-evaluations': mockFlagEvalWriterClass,
+      './writers/flag-eval-evp-hook': mockFlagEvalEVPHookClass,
+      './writers/util': { setAgentStrategy: setAgentStrategyStub },
     })
   })
 
@@ -164,6 +169,25 @@ describe('FlaggingProvider', () => {
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
         'EVP hook must not be registered when killswitch is false')
       sinon.assert.notCalled(mockFlagEvalWriterClass)
+      sinon.assert.notCalled(setAgentStrategyStub)
+      assert.ok(!setAgentStrategyStub.called,
+        'agent probe must not run when the killswitch disables the writer')
+    })
+
+    it('gates EVP delivery on the Agent advertising /evp_proxy/v2', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnce(setAgentStrategyStub)
+      const setEnabled = mockFlagEvalWriter.setEnabled
+      const probe = setAgentStrategyStub.firstCall.args[1]
+
+      // Agent has EVP proxy → writer stays enabled for delivery.
+      probe(true)
+      sinon.assert.calledWith(setEnabled, true)
+
+      // Agent lacks EVP proxy → writer disabled, stops POSTing to the unsupported endpoint.
+      probe(false)
+      sinon.assert.calledWith(setEnabled, false)
     })
 
     it('OTel FlagEvalMetricsHook is always registered regardless of killswitch', () => {

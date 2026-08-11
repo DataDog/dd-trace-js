@@ -6,8 +6,9 @@ const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
-const FlagEvalEVPHook = require('./writers/flag_eval_evp_hook')
-const FlagEvaluationsWriter = require('./writers/flag_evaluations')
+const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
+const FlagEvaluationsWriter = require('./writers/flag-evaluations')
+const { setAgentStrategy } = require('./writers/util')
 
 const { DatadogNodeServerProvider } = require('./require-provider')
 
@@ -43,6 +44,14 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
       this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
       this.hooks.push(new FlagEvalEVPHook(this.#flagEvalEVPWriter))
+      // Gate delivery on the Agent advertising the EVP proxy endpoint, mirroring the
+      // exposure writer (writers/util.setAgentStrategy). Until the probe resolves the
+      // writer stays enabled by default; if the Agent lacks /evp_proxy/v2 the writer is
+      // disabled so it stops POSTing to an unsupported endpoint (no recurring request
+      // errors). Aggregation still runs, bounded by the writer's cardinality caps.
+      setAgentStrategy(config, hasAgent => {
+        this.#flagEvalEVPWriter?.setEnabled(hasAgent)
+      })
       log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
     } else {
       log.debug('%s EVP flagevaluation writer disabled (DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false)',

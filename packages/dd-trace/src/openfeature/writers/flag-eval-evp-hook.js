@@ -15,11 +15,11 @@
  * this hook is registered IN ADDITION to it, not as a replacement.
  */
 class FlagEvalEVPHook {
-  /** @type {import('./flag_evaluations')} */
+  /** @type {import('./flag-evaluations')} */
   _writer
 
   /**
-   * @param {import('./flag_evaluations')} writer - FlagEvaluationsWriter instance
+   * @param {import('./flag-evaluations')} writer - FlagEvaluationsWriter instance
    */
   constructor (writer) {
     this._writer = writer
@@ -63,10 +63,13 @@ class FlagEvalEVPHook {
 
     const targetingKey = hookContext.context?.targetingKey ?? ''
 
-    // Prefer an eval-time stamp from flag metadata when a provider supplies one;
-    // the Datadog Node evaluator does not currently stamp it, so this falls back to
-    // hook-fire time, which still populates first/last_evaluation bounds correctly.
-    const evalTimeMs = flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
+    // Prefer an eval-time stamp from flag metadata when a provider supplies one.
+    // The bundled @datadog/flagging-core provider stamps evaluation start time under
+    // the reserved key `__dd_eval_timestamp_ms`; fall back to hook-fire time only when
+    // the metadata value is absent or not a finite number, matching the provider's own
+    // Number.isFinite fallback so first/last_evaluation stay accurate.
+    const metadataTimestamp = flagMetadata?.__dd_eval_timestamp_ms
+    const evalTimeMs = Number.isFinite(metadataTimestamp) ? metadataTimestamp : Date.now()
     const errorMessage = evaluationDetails.errorMessage ?? evaluationDetails.errorCode ?? ''
 
     // Passed to the writer for inline pruning (see FlagEvaluationsWriter.enqueue).

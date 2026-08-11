@@ -68,7 +68,7 @@ describe('FlagEvaluationsWriter', () => {
 
     clock = sinon.useFakeTimers()
 
-    FlagEvaluationsWriter = proxyquire('../../../src/openfeature/writers/flag_evaluations', {
+    FlagEvaluationsWriter = proxyquire('../../../src/openfeature/writers/flag-evaluations', {
       '../../log': log,
       '../../telemetry/metrics': telemetryMetrics,
       './base': proxyquire('../../../src/openfeature/writers/base', {
@@ -190,6 +190,19 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(payload.flagEvaluations.length, 2)
     })
 
+    it('dimensions containing NUL do not collide across the separator', () => {
+      // (flagKey='A\0B', variant='C') and (flagKey='A', variant='B\0C') must NOT merge:
+      // every aggregation-key dimension is length-delimited, so a NUL inside a dimension
+      // cannot be mistaken for the separator.
+      writer.enqueue(makeEvent({ flagKey: 'A\0B', variant: 'C', attrs: {} }))
+      writer.enqueue(makeEvent({ flagKey: 'A', variant: 'B\0C', attrs: {} }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 2,
+        'NUL-bearing dimensions must produce distinct buckets, not collide')
+    })
+
     it('context keying keeps boolean, null, and empty-context snapshots distinct', () => {
       writer.enqueue(makeEvent({ attrs: { value: true } }))
       writer.enqueue(makeEvent({ attrs: { value: false } }))
@@ -264,14 +277,16 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(ev.runtime_default_used, true)
     })
 
-    it('evaluation with non-empty variant does not set runtime_default_used', () => {
+    it('evaluation with non-empty variant emits runtime_default_used=false', () => {
       writer.enqueue(makeEvent({ variant: 'on' }))
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
       const ev = payload.flagEvaluations[0]
-      // runtime_default_used should be falsy / absent
-      assert.ok(!ev.runtime_default_used)
+      // runtime_default_used is a required boolean in the flagevaluation event contract
+      // (the bundled @datadog/flagging-core serializer always emits it), so the
+      // non-default path emits an explicit false rather than omitting the field.
+      assert.strictEqual(ev.runtime_default_used, false)
     })
   })
 
@@ -367,7 +382,7 @@ describe('FlagEvaluationsWriter', () => {
       const ctx = { plan: 'pro' }
       ctx.self = ctx
 
-      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: ctx })))
+      writer.enqueue(makeEvent({ attrs: ctx }))
 
       // The plain leaf survives; the ancestor-repeat is truncated. `self` descends once
       // into ctx (which is not yet on the walk path at that point), but the further
@@ -376,7 +391,7 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(flattened.plan, 'pro')
       assert.strictEqual(flattened['self.plan'], 'pro')
       for (const k of Object.keys(flattened)) {
-        assert.ok(!k.startsWith('self.self'),
+        assert.doesNotMatch(k, /^self\.self/,
           `nested cycle should have been truncated, got key: ${k}`)
       }
     })
@@ -385,13 +400,13 @@ describe('FlagEvaluationsWriter', () => {
       const arr = ['a']
       arr.push(arr)
 
-      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: { list: arr } })))
+      writer.enqueue(makeEvent({ attrs: { list: arr } }))
 
       const flattened = writer._rawQueue[0].attrs
       assert.strictEqual(flattened['list.0'], 'a')
       // The cyclic self-reference at list[1] must not have produced any further keys.
       for (const k of Object.keys(flattened)) {
-        assert.ok(!k.startsWith('list.1.'), `cyclic array element should be truncated, got key: ${k}`)
+        assert.doesNotMatch(k, /^list\.1\./, `cyclic array element should be truncated, got key: ${k}`)
       }
     })
 
@@ -402,12 +417,13 @@ describe('FlagEvaluationsWriter', () => {
         leaf = { next: leaf }
       }
 
-      assert.doesNotThrow(() => writer.enqueue(makeEvent({ attrs: { root: leaf } })))
+      writer.enqueue(makeEvent({ attrs: { root: leaf } }))
 
       const flattened = writer._rawQueue[0].attrs
-      // The terminal leaf sits well past the depth cap, so no key survives — this is
-      // the truncate-on-breach policy. Just proving the enqueue didn't overflow.
-      assert.ok(!Object.prototype.hasOwnProperty.call(flattened, 'root.next.end'))
+      // The terminal leaf sits well past the depth cap, so no key survives — pruneContext
+      // returns null for an empty pruned context (the truncate-on-breach policy). Just
+      // proving the enqueue didn't overflow.
+      assert.ok(!flattened || !Object.hasOwn(flattened, 'root.next.end'))
     })
 
     it('emits keys for chains shallower than the depth cap', () => {
@@ -444,6 +460,58 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(payload.flagEvaluations[0].targeting_key, 'user-1')
       assert.ok(!Object.hasOwn(payload.flagEvaluations[0].context.evaluation, 'targetingKey'))
     })
+
+    it('serializes Date context values to ISO strings instead of dropping them', () => {
+      const iso = '2026-08-10T12:00:00.000Z'
+      const d = new Date(iso)
+      writer.enqueue(makeEvent({ attrs: { when: d, plan: 'pro' } }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const ev = payload.flagEvaluations[0]
+      assert.strictEqual(ev.context.evaluation.when, iso,
+        'Date must be serialized to an ISO string, not silently dropped')
+      assert.strictEqual(ev.context.evaluation.plan, 'pro')
+    })
+
+    it('drops invalid Date values rather than emitting them', () => {
+      writer.enqueue(makeEvent({ attrs: { when: new Date(NaN), plan: 'pro' } }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const ev = payload.flagEvaluations[0]
+      assert.ok(!Object.hasOwn(ev.context.evaluation, 'when'),
+        'invalid Date must be dropped, not emitted')
+      assert.strictEqual(ev.context.evaluation.plan, 'pro')
+    })
+
+    it('preserves an own __proto__ context attribute', () => {
+      // A JSON-parsed context can carry an own `__proto__` key; assigning it to an
+      // ordinary {} would invoke the prototype setter and silently drop it.
+      const attrs = JSON.parse('{"__proto__":"secret","plan":"pro"}')
+      writer.enqueue(makeEvent({ attrs }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const ev = payload.flagEvaluations[0]
+      const protoDesc = Object.getOwnPropertyDescriptor(ev.context.evaluation, '__proto__')
+      assert.ok(protoDesc, 'own __proto__ attribute must survive pruning, not be dropped by the setter')
+      assert.strictEqual(protoDesc.value, 'secret',
+        'own __proto__ attribute must survive pruning, not be dropped by the setter')
+      assert.strictEqual(ev.context.evaluation.plan, 'pro')
+    })
+
+    it('bounds a pathologically broad array without blocking the enqueue', () => {
+      const huge = new Array(500_000)
+      for (let i = 0; i < huge.length; i++) huge[i] = `v${i}`
+      const start = Date.now()
+      writer.enqueue(makeEvent({ attrs: { list: huge } }))
+      // The traversal cap keeps the enqueue fast even for a half-million-element array.
+      assert.ok(Date.now() - start < 1000, 'broad-array enqueue must be bounded')
+      const attrs = writer._rawQueue[0].attrs
+      assert.strictEqual(Object.keys(attrs).length, 256,
+        'broad array must be capped to MAX_CONTEXT_FIELDS leaves before queueing')
+    })
   })
 
   describe('EVP transport', () => {
@@ -474,7 +542,9 @@ describe('FlagEvaluationsWriter', () => {
 
   describe('payload size limits', () => {
     it('splits aggregate payloads so each request stays under the configured payload limit', () => {
-      writer._payloadSizeLimit = 520
+      // Limit chosen so a single full-tier event fits alone (no degradation) but two
+      // full-tier events exceed it, forcing a split into separate requests.
+      writer._payloadSizeLimit = 580
 
       writer.enqueue(makeEvent({ flagKey: 'flag-a', attrs: { blob: 'a'.repeat(180) } }))
       writer.enqueue(makeEvent({ flagKey: 'flag-b', attrs: { blob: 'b'.repeat(180) } }))
@@ -576,7 +646,7 @@ describe('FlagEvaluationsWriter', () => {
     it('FlagEvaluationsWriter source does not import or reference md5', () => {
       const fs = require('node:fs')
       const src = fs.readFileSync(
-        require.resolve('../../../src/openfeature/writers/flag_evaluations'),
+        require.resolve('../../../src/openfeature/writers/flag-evaluations'),
         'utf8'
       )
       assert.doesNotMatch(src, /md5/i, 'writer must NOT reference md5 (frozen contract)')

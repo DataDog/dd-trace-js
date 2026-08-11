@@ -32,8 +32,8 @@ require.cache[requestPath] = {
   },
 }
 
-const FlagEvaluationsWriter = require('../../../packages/dd-trace/src/openfeature/writers/flag_evaluations')
-const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
+const FlagEvaluationsWriter = require('../../../packages/dd-trace/src/openfeature/writers/flag-evaluations')
+const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook')
 
 const {
   VARIANT,
