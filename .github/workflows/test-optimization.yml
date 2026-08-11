@@ -299,19 +299,6 @@ jobs:
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
 
-  # Unit tests for `packages/datadog-plugin-jest`. The `integration-jest` matrix above only runs
-  # `integration-tests/jest/*.spec.js`, so this is the only CI invocation whose glob expands to
-  # cover `packages/datadog-plugin-jest/test/util.spec.js`.
-  jest:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: jest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/plugins/test
-
   dependency-helpers:
     runs-on: ubuntu-latest
     steps:

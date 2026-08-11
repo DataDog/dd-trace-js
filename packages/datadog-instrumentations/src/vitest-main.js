@@ -23,10 +23,10 @@ const {
   getTestOptimizationRequestResults,
   getTestSuitePath,
   isModifiedTest,
+  isMarkedAsUnskippable,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 const noWorkerInit = require('./vitest-main-no-worker-init')
@@ -54,6 +54,7 @@ const {
   findExportByName,
   getTypeTasks,
   getWorkspaceProject,
+  parseProvidedContextValue,
   setProvidedContext,
   getVitestTestProperties,
 } = require('./vitest-util')
@@ -1445,7 +1446,7 @@ function getMainProcessProvidedContext (ctx) {
     const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
 
     return {
-      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+      testPropertiesByFilepath: parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath) || {},
     }
   } catch {
     return {

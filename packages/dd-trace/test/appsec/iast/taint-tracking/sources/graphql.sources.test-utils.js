@@ -11,6 +11,7 @@ const overheadController = require('../../../../../src/appsec/iast/overhead-cont
 const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
 const { getConfigFresh } = require('../../../../helpers/config')
 const agent = require('../../../../plugins/agent')
+const { invokeCommandInjectionSink } = require('../../utils')
 const schema = `
 type Book {
   title: String,
@@ -47,8 +48,7 @@ const books = [
 const resolvers = {
   Query: {
     books: (root, args, context) => {
-      const { execSync } = require('child_process')
-      execSync(args.title)
+      invokeCommandInjectionSink(args.title)
       return books.filter(book => {
         return book.title.includes(args.title)
       })
