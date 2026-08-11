@@ -397,8 +397,8 @@ describe('DataStreamsProcessor', () => {
 
     const [, consumeACp, produceBCp, consumeBCp] = recorded
     assert.strictEqual(consumeACp.edgeLatencyNs, 5 * MS, 'topic-a edge latency should be the queue wait')
-    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS, 'middle service internal latency should be the processing time')
-    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS, 'topic-b edge latency should be the queue wait, not cumulative')
+    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS, 'middle service internal latency = processing time')
+    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS, 'topic-b edge = queue wait, not cumulative')
     assert.strictEqual(consumeBCp.pathwayLatencyNs, 1008 * MS, 'pathway latency should remain cumulative (end-to-end)')
   })
 })
