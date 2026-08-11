@@ -56,6 +56,7 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
