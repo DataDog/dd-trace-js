@@ -6,8 +6,13 @@ const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+const { addSemverContext, sanitizeConfiguration } = require('./ffe-evaluator')
 
 const { DatadogNodeServerProvider } = require('./require-provider')
+
+/** @type {import('@openfeature/server-sdk').ErrorCode} */
+// @ts-expect-error OpenFeature publishes ErrorCode as a string enum, but providers return its wire value.
+const PARSE_ERROR = 'PARSE_ERROR'
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -19,6 +24,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
+
+  /** @type {ReturnType<sanitizeConfiguration>} */
+  #ffeState = sanitizeConfiguration()
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
@@ -46,6 +54,149 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
     this.#configurationSource?.start()
+  }
+
+  /**
+   * Stores the current configuration and updates the base provider.
+   *
+   * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} configuration
+   * @returns {void}
+   */
+  setConfiguration (configuration) {
+    const state = sanitizeConfiguration(configuration)
+    // @ts-expect-error The upstream implementation accepts undefined to clear its current configuration.
+    super.setConfiguration(state.configuration)
+    this.#ffeState = state
+  }
+
+  /**
+   * Resolves a boolean flag and normalizes its canonical result.
+   *
+   * @param {string} flagKey
+   * @param {boolean} defaultValue
+   * @param {import('@openfeature/server-sdk').EvaluationContext} context
+   * @param {import('@openfeature/server-sdk').Logger} logger
+   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<boolean>>}
+   */
+  resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
+    const local = this.#rejectedFlagResolution(flagKey, defaultValue)
+    if (local) return Promise.resolve(local)
+    return super.resolveBooleanEvaluation(flagKey, defaultValue, this.#addSemverContext(flagKey, context), logger)
+      .then(result => this.#normalizeResolution(flagKey, result))
+  }
+
+  /**
+   * Resolves a string flag and normalizes its canonical result.
+   *
+   * @param {string} flagKey
+   * @param {string} defaultValue
+   * @param {import('@openfeature/server-sdk').EvaluationContext} context
+   * @param {import('@openfeature/server-sdk').Logger} logger
+   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<string>>}
+   */
+  resolveStringEvaluation (flagKey, defaultValue, context, logger) {
+    const local = this.#rejectedFlagResolution(flagKey, defaultValue)
+    if (local) return Promise.resolve(local)
+    return super.resolveStringEvaluation(flagKey, defaultValue, this.#addSemverContext(flagKey, context), logger)
+      .then(result => this.#normalizeResolution(flagKey, result))
+  }
+
+  /**
+   * Resolves a number flag and normalizes its canonical result.
+   *
+   * @param {string} flagKey
+   * @param {number} defaultValue
+   * @param {import('@openfeature/server-sdk').EvaluationContext} context
+   * @param {import('@openfeature/server-sdk').Logger} logger
+   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<number>>}
+   */
+  resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
+    const local = this.#rejectedFlagResolution(flagKey, defaultValue)
+    if (local) return Promise.resolve(local)
+    return super.resolveNumberEvaluation(flagKey, defaultValue, this.#addSemverContext(flagKey, context), logger)
+      .then(result => this.#normalizeResolution(flagKey, result))
+  }
+
+  /**
+   * Resolves an object flag and normalizes its canonical result.
+   *
+   * @template {import('@openfeature/server-sdk').JsonValue} T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {import('@openfeature/server-sdk').EvaluationContext} context
+   * @param {import('@openfeature/server-sdk').Logger} logger
+   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<T>>}
+   */
+  resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
+    const local = this.#rejectedFlagResolution(flagKey, defaultValue)
+    if (local) return Promise.resolve(local)
+    return super.resolveObjectEvaluation(flagKey, defaultValue, this.#addSemverContext(flagKey, context), logger)
+      .then(result => this.#normalizeResolution(flagKey, result))
+  }
+
+  /**
+   * Converts provider results to the canonical FFE reason contract.
+   *
+   * @template {import('@openfeature/server-sdk').FlagValue} T
+   * @param {string} flagKey
+   * @param {import('@openfeature/server-sdk').ResolutionDetails<T>} result
+   * @returns {import('@openfeature/server-sdk').ResolutionDetails<T>}
+   */
+  #normalizeResolution (flagKey, result) {
+    if (result?.reason !== 'TARGETING_MATCH' && result?.reason !== 'DEFAULT') {
+      return result
+    }
+
+    const flag = this.#ffeState.configuration?.flags?.[flagKey]
+    const allocations = flag?.allocations
+    if (!flag || !Array.isArray(allocations)) {
+      return result
+    }
+
+    const allocation = allocations.find(item => item.key === result.flagMetadata?.allocationKey)
+    if (!allocation || allocation.rules?.length || !Array.isArray(allocation.splits)) {
+      return result
+    }
+
+    const selectedSplit = allocation.splits.find(split => {
+      const variant = flag.variations?.[split.variationKey]
+      return variant?.key === result.variant || split.variationKey === result.variant
+    })
+    if (!selectedSplit) {
+      return result
+    }
+
+    const hasTimeBounds = allocation.startAt !== undefined || allocation.endAt !== undefined
+    if (hasTimeBounds && allocation.splits.length === 1 && !selectedSplit.shards?.length) {
+      return { ...result, reason: 'DEFAULT' }
+    }
+
+    const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
+    return { ...result, reason }
+  }
+
+  /**
+   * Returns the canonical parse error for a flag rejected during ingestion.
+   *
+   * @template {import('@openfeature/server-sdk').FlagValue} T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @returns {import('@openfeature/server-sdk').ResolutionDetails<T> | false}
+   */
+  #rejectedFlagResolution (flagKey, defaultValue) {
+    return this.#ffeState.rejected.has(flagKey) &&
+      { value: defaultValue, reason: 'ERROR', errorCode: PARSE_ERROR }
+  }
+
+  /**
+   * Adds synthetic attributes consumed by transformed SemVer rules.
+   *
+   * @param {string} flagKey
+   * @param {import('@openfeature/server-sdk').EvaluationContext} context
+   * @returns {import('@openfeature/server-sdk').EvaluationContext}
+   */
+  #addSemverContext (flagKey, context) {
+    return addSemverContext(this.#ffeState.semverConditions.get(flagKey), context)
   }
 
   /**
