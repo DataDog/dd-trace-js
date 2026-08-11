@@ -4,8 +4,11 @@ const { channel } = require('dc-polyfill')
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
-const EvalMetricsHook = require('./eval-metrics-hook')
+const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
+const FlagEvaluationsWriter = require('./writers/flag-evaluations')
+const { setAgentStrategy } = require('./writers/util')
 
 const { DatadogNodeServerProvider } = require('./require-provider')
 
@@ -16,6 +19,9 @@ const { DatadogNodeServerProvider } = require('./require-provider')
 class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
+
+  /** @type {FlagEvaluationsWriter | undefined} */
+  #flagEvalEVPWriter
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
@@ -30,7 +36,27 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
-    this.hooks.push(new EvalMetricsHook(config))
+    // OTel feature_flag.evaluations hook — ALWAYS registered; untouched
+    this.hooks.push(new FlagEvalMetricsHook(config))
+
+    // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+    // Default: enabled (only explicit false disables); routed through config system.
+    if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
+      this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
+      this.hooks.push(new FlagEvalEVPHook(this.#flagEvalEVPWriter))
+      // Gate delivery on the Agent advertising the EVP proxy endpoint, mirroring the
+      // exposure writer (writers/util.setAgentStrategy). Until the probe resolves the
+      // writer stays enabled by default; if the Agent lacks /evp_proxy/v2 the writer is
+      // disabled so it stops POSTing to an unsupported endpoint (no recurring request
+      // errors). Aggregation still runs, bounded by the writer's cardinality caps.
+      setAgentStrategy(config, hasAgent => {
+        this.#flagEvalEVPWriter?.setEnabled(hasAgent)
+      })
+      log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
+    } else {
+      log.debug('%s EVP flagevaluation writer disabled (DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false)',
+        this.constructor.name)
+    }
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -57,6 +83,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
     this.#spanEnrichmentHook = undefined
+    this.#flagEvalEVPWriter?.destroy()
+    this.#flagEvalEVPWriter = undefined
   }
 }
 

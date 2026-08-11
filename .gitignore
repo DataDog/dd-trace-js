@@ -160,3 +160,4 @@ __queuestorage__/AzuriteConfig
 
 # Generated at prepare time by scripts/generate-electron-package.js
 /package.electron.json
+.pi-subagents/

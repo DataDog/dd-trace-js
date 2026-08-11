@@ -102,6 +102,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 20
         GROUP: 6
+      - MAJOR_VERSION: 20
+        GROUP: 7
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -114,6 +116,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 24
         GROUP: 6
+      - MAJOR_VERSION: 24
+        GROUP: 7
       - MAJOR_VERSION: 26
         GROUP: 1
       - MAJOR_VERSION: 26
@@ -126,8 +130,10 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 26
         GROUP: 6
+      - MAJOR_VERSION: 26
+        GROUP: 7
   variables:
-    SPLITS: 6
+    SPLITS: 7
 
 benchmark-serverless:
   stage: benchmarks
