@@ -7,6 +7,7 @@ const { LRUCache } = require('../../../vendor/dist/lru-cache')
  */
 
 const operationTypes = new Set(['query', 'mutation', 'subscription'])
+const requestCacheMax = 500
 
 // Mercurius funnels every operation through `fastifyGraphQl`, but the parsed
 // document — and therefore the operation signature/type/name — is only known
@@ -24,13 +25,8 @@ const operationTypes = new Set(['query', 'mutation', 'subscription'])
 // the metadata of whichever operation was cached last for that source (A),
 // mislabeling the span. Operation names cannot contain a newline, so it is a
 // safe separator that keeps the two parts from colliding.
-const requestOperationCache = new LRUCache({ max: 500 })
-
 // A validated document lets a later JIT-only sibling calculate only its requested signature.
 // Keep it weak so the tracer never extends its lifetime beyond mercurius's own cache.
-/** @type {import('lru-cache')<string, WeakRef<import('graphql').DocumentNode>>} */
-const requestDocumentCache = new LRUCache({ max: 500 })
-
 // Mercurius also accepts a pre-parsed document AST as the source, which reaches
 // the request boundary as an object rather than query text — so there is no
 // string to key the LRU by. Mercurius keys its own document LRU by that source
@@ -45,8 +41,41 @@ const requestDocumentCache = new LRUCache({ max: 500 })
  * }} DocumentOperations
  */
 
-/** @type {WeakMap<object, DocumentOperations>} */
-const documentOperationCache = new WeakMap()
+/**
+ * @typedef {{
+ *   documentOperations: WeakMap<object, DocumentOperations>,
+ *   documents: import('lru-cache')<string, WeakRef<import('graphql').DocumentNode>>,
+ *   operations: import('lru-cache')<string, RequestOperation>
+ * }} RequestCache
+ */
+
+/** @type {WeakMap<object, RequestCache>} */
+const requestCaches = new WeakMap()
+
+/**
+ * @param {object | undefined} owner
+ * @param {boolean | number | undefined} configuredLimit
+ * @returns {RequestCache | undefined}
+ */
+function getRequestCache (owner, configuredLimit) {
+  if (!owner || configuredLimit === false || (typeof configuredLimit === 'number' && configuredLimit <= 0)) return
+
+  let requestCache = requestCaches.get(owner)
+  if (requestCache !== undefined) return requestCache
+
+  const max = typeof configuredLimit === 'number'
+    ? Math.min(Math.floor(configuredLimit), requestCacheMax)
+    : requestCacheMax
+  if (max <= 0) return
+
+  requestCache = {
+    documentOperations: new WeakMap(),
+    documents: new LRUCache({ max }),
+    operations: new LRUCache({ max }),
+  }
+  requestCaches.set(owner, requestCache)
+  return requestCache
+}
 
 /**
  * @param {string} source - The raw query text; the same key mercurius uses.
@@ -63,24 +92,27 @@ function requestOperationKey (source, operationName) {
  *   execute) has no cache entry and yields undefined.
  * @param {string | undefined} operationName - The requested operation name.
  * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
+ * @param {RequestCache | undefined} requestCache
  * @returns {RequestOperation | undefined}
  */
-function getCachedRequestOperation (source, operationName, calculateSignature) {
+function getCachedRequestOperation (source, operationName, calculateSignature, requestCache) {
+  if (requestCache === undefined) return
+
   if (typeof source === 'string') {
     const key = requestOperationKey(source, operationName)
-    let operation = requestOperationCache.get(key)
+    let operation = requestCache.operations.get(key)
     if (operation !== undefined) return operation
 
-    const document = requestDocumentCache.get(source)?.deref()
+    const document = requestCache.documents.get(source)?.deref()
     if (document === undefined) return
 
     operation = getRequestOperation(document, operationName, calculateSignature)
-    requestOperationCache.set(key, operation)
+    requestCache.operations.set(key, operation)
     return operation
   }
   if (source === null || typeof source !== 'object') return
 
-  const cached = documentOperationCache.get(source)
+  const cached = requestCache.documentOperations.get(source)
   if (cached === undefined) return
 
   let operation = cached.operations.get(operationName)
@@ -167,8 +199,17 @@ function refineRequestSpanMetadata (requestSpan, signature, type, name) {
  * @param {string | undefined} operationName - The requested operation name.
  * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
  * @param {boolean} validated - Whether graphql validation completed without errors.
+ * @param {RequestCache | undefined} requestCache
  */
-function refineRequestSpan (requestSpan, document, requestSource, operationName, calculateSignature, validated) {
+function refineRequestSpan (
+  requestSpan,
+  document,
+  requestSource,
+  operationName,
+  calculateSignature,
+  validated,
+  requestCache
+) {
   /* istanbul ignore if: validate only refines after the request span and parsed document exist. */
   if (!requestSpan || requestSpan.ddRequestRefined || !document) return
   requestSpan.ddRequestRefined = true
@@ -180,31 +221,32 @@ function refineRequestSpan (requestSpan, document, requestSource, operationName,
   if (type) requestSpan.setTag('graphql.operation.type', type)
   if (name) requestSpan.setTag('graphql.operation.name', name)
 
-  if (!isCacheableSource(requestSource)) return
+  if (!requestCache || !isCacheableSource(requestSource)) return
 
-  cacheRequestOperation(requestSource, operationName, operation, validated ? document : undefined)
+  cacheRequestOperation(requestCache, requestSource, operationName, operation, validated ? document : undefined)
 }
 
 /**
+ * @param {RequestCache} requestCache
  * @param {string | import('graphql').DocumentNode} source - Query text keys the
  *   text LRU; a caller-owned document AST keys the WeakMap (never mutated).
  * @param {string | undefined} operationName - The requested operation name.
  * @param {RequestOperation} operation
  * @param {import('graphql').DocumentNode | undefined} document - Retained only after successful validation.
  */
-function cacheRequestOperation (source, operationName, operation, document) {
+function cacheRequestOperation (requestCache, source, operationName, operation, document) {
   if (typeof source === 'string') {
-    requestOperationCache.set(requestOperationKey(source, operationName), operation)
+    requestCache.operations.set(requestOperationKey(source, operationName), operation)
     if (document !== undefined) {
-      requestDocumentCache.set(source, new WeakRef(document))
+      requestCache.documents.set(source, new WeakRef(document))
     }
     return
   }
 
-  let cached = documentOperationCache.get(source)
+  let cached = requestCache.documentOperations.get(source)
   if (cached === undefined) {
     cached = { operations: new Map() }
-    documentOperationCache.set(source, cached)
+    requestCache.documentOperations.set(source, cached)
   }
   if (document !== undefined) {
     cached.document = new WeakRef(document)
@@ -355,6 +397,7 @@ module.exports = {
   extractErrorIntoSpanEvent,
   getCachedRequestOperation,
   getOperation,
+  getRequestCache,
   getSignature,
   isApolloHealthCheck,
   isApolloHealthCheckSource,

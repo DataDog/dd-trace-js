@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
+const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -301,6 +302,41 @@ describe('Plugin', () => {
         // WeakMap by a primitive. A bare Error would also accept a TypeError thrown by us.
         await assert.rejects(app.graphql(null), { message: /Must provide document/ })
         await assert.rejects(app.graphql(42), { name: 'TypeError', message: /not iterable/ })
+      })
+
+      it('carries each app cache setting through the request context', async () => {
+        const resolvedMercurius = require(`../../../versions/mercurius@${version}`).version()
+        const fastifyKey = semver.satisfies(resolvedMercurius, '>=15') ? '5' : '4'
+        const Fastify = require(`../../../versions/fastify@${fastifyKey}`).get()
+        const mercurius = require(`../../../versions/mercurius@${version}`).get()
+        const requestStartChannel = dc.channel('tracing:orchestrion:mercurius:apm:graphql:request:start')
+        const cacheLimits = new Map()
+        const apps = []
+        /** @param {{ ddCacheLimit?: boolean | number, self: object }} ctx */
+        const captureCacheLimit = ctx => {
+          cacheLimits.set(ctx.self, {
+            present: Object.hasOwn(ctx, 'ddCacheLimit'),
+            value: ctx.ddCacheLimit,
+          })
+        }
+
+        requestStartChannel.subscribe(captureCacheLimit)
+        try {
+          for (const cache of [undefined, false, 1, 500, 501]) {
+            const cacheApp = Fastify()
+            const options = { schema, resolvers }
+            if (cache !== undefined) options.cache = cache
+            cacheApp.register(mercurius, options)
+            await cacheApp.ready()
+            apps.push(cacheApp)
+
+            await cacheApp.graphql('query CacheContext { hello }')
+            assert.deepStrictEqual(cacheLimits.get(cacheApp), { present: true, value: cache })
+          }
+        } finally {
+          requestStartChannel.unsubscribe(captureCacheLimit)
+          await Promise.all(apps.map(cacheApp => cacheApp.close()))
+        }
       })
 
       it('carries the operation signature on the JIT warm path', async () => {

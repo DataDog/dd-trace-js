@@ -1,12 +1,20 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { extractErrorIntoSpanEvent, getCachedRequestOperation, isApolloHealthCheckSource } = require('./utils')
+const {
+  extractErrorIntoSpanEvent,
+  getCachedRequestOperation,
+  getRequestCache,
+  isApolloHealthCheckSource,
+} = require('./utils')
+
+/** @typedef {ReturnType<typeof getRequestCache>} RequestCache */
 
 /**
  * @typedef {object} GraphQLRequestStore
  * @property {import('../../dd-trace/src/opentracing/span')} [span]
  * @property {import('../../dd-trace/src/opentracing/span')} [graphqlRequestSpan]
+ * @property {RequestCache} [graphqlRequestCache]
  * @property {string} [graphqlRequestOperationName]
  * @property {unknown} [graphqlRequestSource]
  */
@@ -17,7 +25,9 @@ const { extractErrorIntoSpanEvent, getCachedRequestOperation, isApolloHealthChec
  * @property {GraphQLRequestStore} [currentStore]
  * @property {GraphQLRequestStore} [parentStore]
  * @property {boolean} [ddSkipped]
+ * @property {boolean | number} [ddCacheLimit]
  * @property {{ errors?: import('graphql').GraphQLError[] }} [result]
+ * @property {object} [self]
  */
 
 // Top-level GraphQL request span for drivers that funnel every operation
@@ -55,6 +65,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     }
 
     const operationName = ctx.arguments?.[3]
+    const requestCache = getRequestCache(ctx.self, ctx.ddCacheLimit)
 
     // `source` is the request text on the common path, but mercurius also
     // accepts a pre-parsed document AST; only a string is the query text, and
@@ -66,7 +77,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     // by query text for a string, by document identity for a pre-parsed AST.
     // Empty on the cold path — validate hasn't refined yet — where the request
     // span is refined from the parsed document instead.
-    const cached = getCachedRequestOperation(source, operationName, this.config.signature)
+    const cached = getCachedRequestOperation(source, operationName, this.config.signature, requestCache)
 
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),
@@ -92,6 +103,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     // internally parsed document, not the caller's source, and for a pre-parsed
     // AST the two are different objects.
     ctx.currentStore.graphqlRequestSpan = span
+    ctx.currentStore.graphqlRequestCache = requestCache
     ctx.currentStore.graphqlRequestOperationName = operationName
     ctx.currentStore.graphqlRequestSource = source
 

@@ -36,7 +36,60 @@ const { parse } = require('graphql')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { defaultEngineReportingSignature } = require('../../src/tools/signature')
-const { getCachedRequestOperation, refineRequestSpan } = require('../../src/utils')
+const { getCachedRequestOperation, getRequestCache, refineRequestSpan } = require('../../src/utils')
+
+const noop = () => {}
+
+/**
+ * @typedef {ReturnType<typeof getRequestCache>} RequestCache
+ */
+
+/**
+ * @param {RequestCache} requestCache
+ * @param {number} index
+ * @returns {{ operationName: string, source: string }}
+ */
+function cacheQuery (requestCache, index) {
+  const operationName = `CacheQuery${index}`
+  const source = `query ${operationName} { __typename }`
+  const document = parse(source)
+  refineRequestSpan({ setTag: noop }, document, source, operationName, false, true, requestCache)
+  return { operationName, source }
+}
+
+/**
+ * @param {boolean | number | undefined} configuredLimit
+ * @param {number} expectedLimit
+ */
+function assertRequestCacheLimit (configuredLimit, expectedLimit) {
+  const requestCache = getRequestCache({}, configuredLimit)
+
+  if (expectedLimit === 0) {
+    const entry = cacheQuery(requestCache, 0)
+    assert.equal(getCachedRequestOperation(entry.source, entry.operationName, false, requestCache), undefined)
+    return
+  }
+
+  let first
+  let last
+  for (let index = 0; index < expectedLimit; index++) {
+    const entry = cacheQuery(requestCache, index)
+    first ??= entry
+    last = entry
+  }
+
+  assert.deepStrictEqual(
+    getCachedRequestOperation(last.source, last.operationName, false, requestCache),
+    { signature: `query ${last.operationName}`, type: 'query', name: last.operationName }
+  )
+
+  const overflow = cacheQuery(requestCache, expectedLimit)
+  assert.equal(getCachedRequestOperation(first.source, first.operationName, false, requestCache), undefined)
+  assert.deepStrictEqual(
+    getCachedRequestOperation(overflow.source, overflow.operationName, false, requestCache),
+    { signature: `query ${overflow.operationName}`, type: 'query', name: overflow.operationName }
+  )
+}
 
 describe('graphql signature memoization', () => {
   let visitSpy
@@ -130,26 +183,27 @@ describe('graphql signature memoization', () => {
     const source = 'query A { a } query B { b }'
     const ast = parse(source)
     const span = { setTag: sinon.spy() }
+    const requestCache = getRequestCache({}, undefined)
 
     const printsBefore = printSpy.callCount
-    refineRequestSpan(span, ast, source, 'A', true, true)
+    refineRequestSpan(span, ast, source, 'A', true, true, requestCache)
     assert.equal(printSpy.callCount - printsBefore, 1)
 
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'A', true), {
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'A', true, requestCache), {
       signature: 'query A{a}',
       type: 'query',
       name: 'A',
     })
     assert.equal(printSpy.callCount - printsBefore, 1)
 
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'B', true), {
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'B', true, requestCache), {
       signature: 'query B{b}',
       type: 'query',
       name: 'B',
     })
     assert.equal(printSpy.callCount - printsBefore, 2)
 
-    getCachedRequestOperation(source, 'B', true)
+    getCachedRequestOperation(source, 'B', true, requestCache)
     assert.equal(printSpy.callCount - printsBefore, 2)
   })
 
@@ -157,22 +211,24 @@ describe('graphql signature memoization', () => {
     const source = 'query InvalidA { a } query InvalidB { b }'
     const ast = parse(source)
     const span = { setTag: sinon.spy() }
+    const requestCache = getRequestCache({}, undefined)
 
-    refineRequestSpan(span, ast, source, 'InvalidA', true, false)
+    refineRequestSpan(span, ast, source, 'InvalidA', true, false, requestCache)
 
-    assert.equal(getCachedRequestOperation(source, 'InvalidB', true), undefined)
+    assert.equal(getCachedRequestOperation(source, 'InvalidB', true, requestCache), undefined)
   })
 
   it('retains a later valid document for a pre-parsed source and derives a sibling lazily', () => {
     const source = parse('query ObjectA { a } query ObjectB { b }')
     const invalidDocument = parse('query ObjectA { a } query ObjectB { b }')
     const validDocument = parse('query ObjectA { a } query ObjectB { b }')
+    const requestCache = getRequestCache({}, undefined)
 
-    refineRequestSpan({ setTag: sinon.spy() }, invalidDocument, source, 'ObjectA', true, false)
-    assert.equal(getCachedRequestOperation(source, 'ObjectB', true), undefined)
+    refineRequestSpan({ setTag: sinon.spy() }, invalidDocument, source, 'ObjectA', true, false, requestCache)
+    assert.equal(getCachedRequestOperation(source, 'ObjectB', true, requestCache), undefined)
 
-    refineRequestSpan({ setTag: sinon.spy() }, validDocument, source, 'ObjectA', true, true)
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'ObjectB', true), {
+    refineRequestSpan({ setTag: sinon.spy() }, validDocument, source, 'ObjectA', true, true, requestCache)
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'ObjectB', true, requestCache), {
       signature: 'query ObjectB{b}',
       type: 'query',
       name: 'ObjectB',
@@ -188,6 +244,51 @@ describe('graphql signature memoization', () => {
 
     assert.equal(printSpy.callCount - printsBefore, 2)
     assert.equal(sigA, sigB)
+  })
+})
+
+describe('graphql request signature cache limits', () => {
+  it('does not retain operations when Mercurius caching is disabled', () => {
+    assertRequestCacheLimit(false, 0)
+  })
+
+  it('uses the tracer limit for the default Mercurius cache', () => {
+    assertRequestCacheLimit(undefined, 500)
+  })
+
+  it('uses a configured Mercurius cache smaller than the tracer limit', () => {
+    assertRequestCacheLimit(1, 1)
+  })
+
+  it('does not fail for a fractional cache below one', () => {
+    assertRequestCacheLimit(0.5, 0)
+  })
+
+  it('accepts the exact tracer cache limit', () => {
+    assertRequestCacheLimit(500, 500)
+  })
+
+  it('caps a larger Mercurius cache at the tracer limit', () => {
+    assertRequestCacheLimit(501, 500)
+  })
+
+  it('keeps differently configured Mercurius apps isolated', () => {
+    const smallCache = getRequestCache({}, 1)
+    const largeCache = getRequestCache({}, 500)
+    const smallFirst = cacheQuery(smallCache, 0)
+    const largeFirst = cacheQuery(largeCache, 0)
+
+    cacheQuery(smallCache, 1)
+    cacheQuery(largeCache, 1)
+
+    assert.equal(
+      getCachedRequestOperation(smallFirst.source, smallFirst.operationName, false, smallCache),
+      undefined
+    )
+    assert.deepStrictEqual(
+      getCachedRequestOperation(largeFirst.source, largeFirst.operationName, false, largeCache),
+      { signature: 'query CacheQuery0', type: 'query', name: 'CacheQuery0' }
+    )
   })
 })
 

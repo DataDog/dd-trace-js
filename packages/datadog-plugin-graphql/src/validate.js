@@ -51,7 +51,8 @@ class GraphQLValidatePlugin extends TracingPlugin {
       ctx.currentStore?.graphqlRequestSource,
       ctx.currentStore?.graphqlRequestOperationName,
       this.config.signature,
-      !errors?.length
+      !errors?.length,
+      ctx.currentStore?.graphqlRequestCache
     )
 
     if (errors?.length) {

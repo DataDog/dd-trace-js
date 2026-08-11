@@ -23,6 +23,7 @@ module.exports = {
   configureGraphqlJitExecute,
   configureGraphqlJitExecutionInfo,
   configureGraphqlJitRuntime,
+  configureMercuriusRequest,
   waitForAsyncEnd,
 }
 
@@ -381,6 +382,15 @@ function configureGraphqlJitRuntime (_state, node) {
     `).body),
     'configureGraphqlJitRuntime: could not finalize the plan'
   )
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').ObjectExpression} node
+ */
+function configureMercuriusRequest (_state, node) {
+  const properties = parse('({ ddCacheLimit: opts.cache })').body[0].expression.properties
+  node.properties.push(...properties)
 }
 
 /**
