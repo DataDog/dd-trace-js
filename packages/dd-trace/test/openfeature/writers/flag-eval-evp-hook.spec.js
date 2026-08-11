@@ -102,14 +102,15 @@ describe('FlagEvalEVPHook', () => {
 
       // A non-finite metadata value (e.g. a malformed stamp) must also fall back rather
       // than propagate NaN into first/last_evaluation bounds — matches the bundled
-      // @datadog/flagging-core provider's Number.isFinite guard.
+      // flagging-core provider's Number.isFinite guard.
       const beforeFallback = Date.now()
       hook.finally(
         { flagKey: 'f' },
         { variant: 'on', reason: 'STATIC', flagMetadata: { __dd_eval_timestamp_ms: NaN } }
       )
       const afterFallback = Date.now()
-      const fallbackMs = lastEnqueued().evalTimeMs
+      // `lastEnqueued` returns the first call; read the second call directly.
+      const fallbackMs = writer.enqueue.lastCall.args[0].evalTimeMs
       assert.ok(typeof fallbackMs === 'number' && Number.isFinite(fallbackMs),
         'non-finite metadata stamp must fall back to a finite hook-fire time')
       assert.ok(fallbackMs >= beforeFallback && fallbackMs <= afterFallback,
