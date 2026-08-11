@@ -798,6 +798,7 @@ class MochaPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
 
+        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()

@@ -42,7 +42,9 @@ const config = {
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
   reporter: process.env.PLAYWRIGHT_THROWING_REPORTER
     ? './ci-visibility/playwright-reporter-throws.js'
-    : 'line',
+    : process.env.PLAYWRIGHT_LOGGING_REPORTER
+      ? './ci-visibility/playwright-reporter-logs-error.js'
+      : 'line',
   /* Configure projects for major browsers */
   projects,
   testMatch: '**/*-test.js',

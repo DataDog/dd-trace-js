@@ -1616,9 +1616,10 @@ pageGotoCh.subscribe({
 reporterErrorCh.subscribe((error) => {
   if (reporterError) return
 
-  reporterError = new Error(error.message || error.value)
-  reporterError.name = error.name || reporterError.name
-  reporterError.stack = error.stack || reporterError.stack
+  const errorObject = error && typeof error === 'object' ? error : undefined
+  reporterError = new Error(errorObject?.message || errorObject?.value || String(error))
+  reporterError.name = errorObject?.name || reporterError.name
+  reporterError.stack = errorObject?.stack || reporterError.stack
 })
 
 /**

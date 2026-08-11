@@ -124,6 +124,7 @@ class CucumberPlugin extends CiPlugin {
         this.testSessionSpan.setTag('error', error)
         this.testModuleSpan.setTag('error', error)
       }
+      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()

@@ -492,6 +492,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   screenshotUploadPromisesByTraceId = new Map()
+  screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
@@ -581,6 +582,7 @@ class CypressPlugin {
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
     this.screenshotUploadPromisesByTraceId = new Map()
+    this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
@@ -642,6 +644,19 @@ class CypressPlugin {
       return
     }
     return Promise.all(uploadPromises).then(getScreenshotUploadResult)
+  }
+
+  /**
+   * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
+   *
+   * @param {Error} error - Error that triggered finalization
+   * @returns {void}
+   */
+  abortPendingScreenshotUploads (error) {
+    for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
+    this.screenshotUploadAbortControllers.clear()
+    this.screenshotUploadPromisesByTraceId.clear()
+    this.pendingScreenshotUploads = []
   }
 
   /**
@@ -1307,6 +1322,7 @@ class CypressPlugin {
         newTestsWithDynamicNames: this.newTestsWithDynamicNames,
       })
 
+      this.tracer._tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -1588,13 +1604,16 @@ class CypressPlugin {
         const screenshotUploadResultPromise = failedTestTraceId
           ? this.getScreenshotUploadResultPromise(failedTestTraceId)
           : undefined
-        if (screenshotUploadResultPromise) {
+        if (screenshotUploadResultPromise && !error) {
           testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
             setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
             this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
             finishedTest.testSpan.finish(finishedTest.finishTime)
           }))
         } else {
+          if (screenshotUploadResultPromise) {
+            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+          }
           finishedTest.testSpan.finish(finishedTest.finishTime)
         }
       }
@@ -1627,6 +1646,13 @@ class CypressPlugin {
 
     finishSuite()
 
+    if (error) {
+      this.abortPendingScreenshotUploads(error)
+      const exporter = this.tracer._tracer._exporter
+      if (!exporter?.flush) return
+      return new Promise(resolve => exporter.flush(() => resolve(null)))
+    }
+
     const screenshotUploadsPromise = waitForScreenshotUploads()
     let afterSpecPromise = screenshotUploadsPromise
     if (testSpanFinishPromises.length > 0) {
@@ -1638,11 +1664,7 @@ class CypressPlugin {
       }
     }
 
-    if (!error) return afterSpecPromise
-
-    const exporter = this.tracer._tracer._exporter
-    if (!exporter?.flush) return afterSpecPromise
-    return Promise.resolve(afterSpecPromise).then(() => new Promise(resolve => exporter.flush(() => resolve(null))))
+    return afterSpecPromise
   }
 
   /**
@@ -1662,6 +1684,7 @@ class CypressPlugin {
     }
 
     const uploadPromises = []
+    const abortController = new AbortController()
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
@@ -1680,6 +1703,7 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
+          signal: abortController.signal,
         }, (err) => {
           resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
@@ -1687,7 +1711,10 @@ class CypressPlugin {
     }
 
     if (uploadPromises.length > 0) {
-      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.screenshotUploadAbortControllers.add(abortController)
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult).finally(() => {
+        this.screenshotUploadAbortControllers.delete(abortController)
+      })
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }

@@ -3,6 +3,25 @@
 const { channel } = require('dc-polyfill')
 
 const reporterErrorCh = channel('ci:playwright:reporter:error')
+const PLAYWRIGHT_REPORTER_ERROR_MESSAGE = 'Error in reporter'
+const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
+  /^\s*at wrapAsync .*?[\\/]playwright[\\/]lib[\\/]runner[\\/]index\.js:\d+:\d+\)?$/
+
+/**
+ * Identifies the private Playwright 1.60-1.61 reporter error fallback without
+ * interpreting identical user console output as a framework error.
+ *
+ * @param {unknown} message - First console.error argument
+ * @param {unknown} error - Second console.error argument
+ * @returns {boolean}
+ */
+function isPlaywrightReporterError (message, error) {
+  if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE || error == null) return false
+
+  const stack = new Error('Playwright reporter error provenance').stack
+  const caller = stack?.split('\n', 3)[2]
+  return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(caller || '')
+}
 
 module.exports = class DatadogPlaywrightReporter {
   /**
@@ -19,7 +38,7 @@ module.exports = class DatadogPlaywrightReporter {
     const reporter = this
     // eslint-disable-next-line no-console
     this.consoleError = console.error = function (message, error) {
-      if (message === 'Error in reporter') {
+      if (isPlaywrightReporterError(message, error)) {
         reporter.onError(error)
       }
       return originalConsoleError.apply(this, arguments)
@@ -29,7 +48,7 @@ module.exports = class DatadogPlaywrightReporter {
   /**
    * Reports errors emitted by Playwright while later reporters are finalizing.
    *
-   * @param {object} error
+   * @param {unknown} error
    * @returns {void}
    */
   onError (error) {

@@ -3073,7 +3073,9 @@ function getCliWrapper (isNewJestVersion) {
         result = await runCLI.apply(this, arguments)
       } catch (error) {
         try {
-          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error))
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
+            isTestSessionFinalizationError: true,
+          }))
         } catch (finalizationError) {
           log.error('Jest test session finalization error: %s', finalizationError)
         }

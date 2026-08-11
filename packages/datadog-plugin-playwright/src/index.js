@@ -173,6 +173,7 @@ class PlaywrightPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
+        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()

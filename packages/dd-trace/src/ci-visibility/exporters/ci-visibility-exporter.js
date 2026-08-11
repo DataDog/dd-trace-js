@@ -506,6 +506,34 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
+   * Appends completed suites before their module and session parents are exported.
+   *
+   * @returns {void}
+   */
+  exportDeferredTestSuiteSpans () {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
+      const { span, formattedSpan, emitted } = deferredTestSuiteSpan
+      if (emitted) continue
+      const updatedSpan = span && spanFormat(span)
+      if (span && formattedSpan) {
+        formattedSpan.error = updatedSpan.error
+        Object.assign(formattedSpan.meta, updatedSpan.meta)
+        Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+        this._writer.append([formattedSpan])
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else if (formattedSpan) {
+        this._writer.append([formattedSpan])
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else {
+        this._writer.append([updatedSpan])
+        deferredTestSuiteSpan.emitted = true
+      }
+    }
+  }
+
+  /**
    * Discards completed suites that the selected transport cannot deliver.
    *
    * @returns {void}
@@ -625,26 +653,7 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     const flushWriters = () => {
-      if (isFinalFlush && this._writer && this.canReportSessionTraces()) {
-        for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
-          const { span, formattedSpan, emitted } = deferredTestSuiteSpan
-          if (emitted) continue
-          const updatedSpan = span && spanFormat(span)
-          if (span && formattedSpan) {
-            formattedSpan.error = updatedSpan.error
-            Object.assign(formattedSpan.meta, updatedSpan.meta)
-            Object.assign(formattedSpan.metrics, updatedSpan.metrics)
-            this._writer.append([formattedSpan])
-            this.#deferredTestSuiteSpans.delete(spanId)
-          } else if (formattedSpan) {
-            this._writer.append([formattedSpan])
-            this.#deferredTestSuiteSpans.delete(spanId)
-          } else {
-            this._writer.append([updatedSpan])
-            deferredTestSuiteSpan.emitted = true
-          }
-        }
-      }
+      if (isFinalFlush) this.exportDeferredTestSuiteSpans()
 
       const writers = [
         this._writer,

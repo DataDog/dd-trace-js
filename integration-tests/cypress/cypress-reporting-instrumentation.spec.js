@@ -492,7 +492,6 @@ moduleTypes.forEach(({
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_REJECT_AFTER_RUN: '1',
-            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
@@ -562,6 +561,60 @@ moduleTypes.forEach(({
         },
         { hardTimeout: 60000 }
       )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+      assert.ok(Date.now() - startedAt < 20_000, 'final writer flush should remain bounded')
+    })
+
+    over10It('bounds after:spec error finalization while a screenshot upload is pending', async () => {
+      receiver.setMediaResponsesPending()
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+      const startedAt = Date.now()
+      let testOutput = ''
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile} ` +
+        '--config screenshotOnRunFailure=true',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_AFTER_SPEC: '1',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            SPEC_PATTERN: 'cypress/e2e/basic-fail.js',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_suite_end', 'test']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event\n${testOutput}`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          }
+          const suiteEvent = events.find(event => event.type === 'test_suite_end')
+          assert.match(suiteEvent.content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+        },
+        { hardTimeout: 30_000 }
+      ).catch((error) => {
+        error.message += `\nCypress output:\n${testOutput}`
+        throw error
+      })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
@@ -691,7 +744,6 @@ moduleTypes.forEach(({
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
             CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN: '1',
-            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
