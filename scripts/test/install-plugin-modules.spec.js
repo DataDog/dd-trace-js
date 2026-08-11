@@ -109,6 +109,21 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.match(result.stderr, /Original error:/)
   })
 
+  it('does not retry a failed install against partial state', () => {
+    const traceFile = path.join(wrapperDirectory, 'failed-install-trace.ndjson')
+    const failureMarker = path.join(wrapperDirectory, 'failed-install')
+    const result = spawnInstall('not-a-plugin', {
+      DD_TEST_FAIL_BUN_INSTALL_ONCE_FILE: failureMarker,
+      DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile,
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.deepStrictEqual(
+      fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
+      [['bun', 'install', '--trust']]
+    )
+  })
+
   it('rejects conflicting declarative overrides', () => {
     const preload = path.join(wrapperDirectory, 'conflicting-overrides.js')
     fs.writeFileSync(preload, `
@@ -331,13 +346,19 @@ function createPackageManagerWrappers () {
 'use strict'
 
 const { spawnSync } = require('node:child_process')
-const { appendFileSync } = require('node:fs')
+const { appendFileSync, existsSync, writeFileSync } = require('node:fs')
 
 const args = process.argv.slice(2)
 if (process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE) {
   appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE, JSON.stringify(['bun', ...args]) + '\n')
 }
 if (process.env.DD_TEST_FAIL_BUN_INSTALL === 'true' && args[0] === 'install') process.exit(1)
+if (process.env.DD_TEST_FAIL_BUN_INSTALL_ONCE_FILE &&
+    args[0] === 'install' &&
+    !existsSync(process.env.DD_TEST_FAIL_BUN_INSTALL_ONCE_FILE)) {
+  writeFileSync(process.env.DD_TEST_FAIL_BUN_INSTALL_ONCE_FILE, '')
+  process.exit(1)
+}
 const result = spawnSync(${JSON.stringify(bunBinary)}, args, { stdio: 'inherit' })
 if (result.error) throw result.error
 process.exit(result.status ?? 1)
