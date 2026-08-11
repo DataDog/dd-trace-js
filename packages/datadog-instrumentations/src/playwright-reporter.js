@@ -19,7 +19,7 @@ function isPlaywrightReporterError (message, error) {
   if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE || error == null) return false
 
   const stack = new Error('Playwright reporter error provenance').stack
-  const caller = stack?.split('\n', 3)[2]
+  const caller = stack?.split('\n', 4)[3]
   return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(caller || '')
 }
 

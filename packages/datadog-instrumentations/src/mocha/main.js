@@ -411,6 +411,38 @@ function stopCurrentTest (runner, test) {
 }
 
 /**
+ * Prevents Mocha from entering a hook after its hook-start reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ * @param {Error} error
+ * @returns {void}
+ */
+function stopCurrentHook (runner, hook, error) {
+  const hookMethod = runner.hook
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+  const run = hook.run
+
+  runner.hook = function (name, onDone) {
+    runner.hook = hookMethod
+    onDone()
+  }
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+  hook.run = function (onDone) {
+    hook.run = run
+    onDone(error)
+  }
+}
+
+/**
  * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
  * runs Datadog's end handler and propagates the original error after finalization.
  *
@@ -438,6 +470,7 @@ function wrapRunnerEmit (Runner) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
           if (event === 'test') stopCurrentTest(this, arguments[1])
+          else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
         }
         return
       }
