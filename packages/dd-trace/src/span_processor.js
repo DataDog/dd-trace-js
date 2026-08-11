@@ -6,11 +6,10 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('./constants')
+const { APM_TRACING_ENABLED_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
-const servicesByTrace = new WeakMap()
 
 class SpanProcessor {
   constructor (exporter, prioritySampler, config, otlpStatsExporter) {
@@ -57,25 +56,7 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
-      let serviceBySpanId
-      if (this._stats) {
-        serviceBySpanId = servicesByTrace.get(trace)
-        if (!serviceBySpanId) {
-          serviceBySpanId = new WeakMap()
-          servicesByTrace.set(trace, serviceBySpanId)
-        }
-      }
-
       for (const span of started) {
-        if (serviceBySpanId) {
-          const context = span.context()
-          const service = context.getTag('service.name')
-          const parentService = serviceBySpanId.get(context._parentId)
-          if (service !== undefined && parentService !== undefined && service !== parentService) {
-            context.setTag(TOP_LEVEL_KEY, 1)
-          }
-          if (context._spanId !== undefined && service !== undefined) serviceBySpanId.set(context._spanId, service)
-        }
         if (span._duration === undefined) {
           active.push(span)
         } else {
