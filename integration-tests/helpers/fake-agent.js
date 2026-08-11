@@ -406,6 +406,8 @@ function buildExpressServer (agent) {
     // Emit the remote config request payload for testing
     agent.emit('remote-config-request', req.body)
 
+    // `has_error` is only ever set by the pure-JS client; the native one reports failures per
+    // config state below instead.
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
@@ -434,18 +436,16 @@ function buildExpressServer (agent) {
       return
     }
 
-    if (Object.keys(agent._rcFiles).length === 0) {
-      // All config files have been removed, but the client has not yet been informed.
-      // Return this custom result to let the client know.
-      res.json({ client_configs: [] })
-      return
-    }
-
-    // The actual targets object is much more complicated,
-    // but the Node.js tracer currently only cares about the following properties.
+    // The client never verifies the signatures, but it does reject the whole response if the
+    // `signatures` field itself, or any `signed` field other than `custom.agent_refresh_interval`,
+    // is missing.
     const targets = {
+      signatures: [],
       signed: {
-        custom: { opaque_backend_state: 'foo' },
+        _type: 'targets',
+        custom: { agent_refresh_interval: 5, opaque_backend_state: 'foo' },
+        expires: '2100-01-01T00:00:00.000000000Z',
+        spec_version: '1.0.0',
         targets: {},
         version: agent._rcTargetsVersion,
       },
@@ -468,10 +468,10 @@ function buildExpressServer (agent) {
       targetFiles.push({ path, raw: base64(config) })
     }
 
-    // The real response object also contains a `roots` property which has been omitted here since it's not currently
-    // used by the Node.js tracer.
+    // The real response object also contains a `roots` property which has been omitted here since the
+    // Node.js tracer only uses it to track the root version.
     res.json({
-      targets: clientConfigs.length === 0 ? undefined : base64(targets),
+      targets: base64(targets),
       target_files: targetFiles,
       client_configs: clientConfigs,
     })
