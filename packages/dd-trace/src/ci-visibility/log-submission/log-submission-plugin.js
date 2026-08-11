@@ -23,6 +23,17 @@ const BATCH_FLUSH_INTERVAL = 1000
  */
 
 /**
+ * @typedef {object} PendingLogRequest
+ * @property {string} source
+ */
+
+/**
+ * @typedef {object} LogRequestCompletion
+ * @property {() => void} complete
+ * @property {Set<PendingLogRequest>} pendingRequests
+ */
+
+/**
  * @param {import('../../config/config-base')} config
  * @returns {URL | undefined}
  */
@@ -84,9 +95,10 @@ class LogSubmissionPlugin extends Plugin {
   #batches = new Map()
   #beforeExitHandler = () => this.#flush()
   #logSubmissionUrl
-  /** @type {Array<() => void>} */
+  /** @type {Set<PendingLogRequest>} */
+  #pendingRequests = new Set()
+  /** @type {LogRequestCompletion[]} */
   #requestCompletions = []
-  #pendingRequests = 0
   #timer
   #winstonStreamClass
 
@@ -207,11 +219,7 @@ class LogSubmissionPlugin extends Plugin {
 
     const batches = this.#batches
     this.#batches = new Map()
-
-    this.#pendingRequests += batches.size
-    if (registerCompletion && this.#pendingRequests > 0) {
-      this.#requestCompletions.push(registerCompletion())
-    }
+    const requests = []
 
     for (const [source, batch] of batches) {
       const options = {
@@ -223,34 +231,54 @@ class LogSubmissionPlugin extends Plugin {
         },
         url: this.#logSubmissionUrl,
       }
+      const pendingRequest = { source }
+      this.#pendingRequests.add(pendingRequest)
+      requests.push({
+        data: `[${batch.messages.join(',')}]`,
+        options,
+        pendingRequest,
+      })
+    }
 
+    if (registerCompletion && this.#pendingRequests.size > 0) {
+      this.#requestCompletions.push({
+        complete: registerCompletion(),
+        pendingRequests: new Set(this.#pendingRequests),
+      })
+    }
+
+    for (const { data, options, pendingRequest } of requests) {
       try {
-        request(`[${batch.messages.join(',')}]`, options, error => this.#finishRequest(source, error))
+        request(data, options, error => this.#finishRequest(pendingRequest, error))
       } catch (error) {
-        this.#finishRequest(source, error)
+        this.#finishRequest(pendingRequest, error)
       }
     }
   }
 
   /**
-   * Records a completed request and releases Playwright when every pending request has settled.
+   * Records a completed request and releases lifecycle barriers waiting for that request.
    *
-   * @param {string} source
+   * @param {PendingLogRequest} pendingRequest
    * @param {Error | null | undefined} error
    * @returns {void}
    */
-  #finishRequest (source, error) {
-    if (error) {
-      log.error('Error submitting %s logs', source, error)
-    }
+  #finishRequest (pendingRequest, error) {
+    this.#pendingRequests.delete(pendingRequest)
 
-    this.#pendingRequests--
-    if (this.#pendingRequests !== 0) return
+    if (error) {
+      log.error('Error submitting %s logs', pendingRequest.source, error)
+    }
 
     const requestCompletions = this.#requestCompletions
     this.#requestCompletions = []
-    for (const complete of requestCompletions) {
-      complete()
+    for (const requestCompletion of requestCompletions) {
+      requestCompletion.pendingRequests.delete(pendingRequest)
+      if (requestCompletion.pendingRequests.size === 0) {
+        requestCompletion.complete()
+      } else {
+        this.#requestCompletions.push(requestCompletion)
+      }
     }
   }
 }

@@ -3957,7 +3957,7 @@ function requireOutsideJestRequireEngine (runtime, from, modulePath) {
   const moduleExports = nativeRequire(modulePath)
   const nativeModule = nativeRequire.cache[modulePath]
   recordNativeModuleGraph(runtime, modulePath, nativeModule)
-  moduleRegistry?.set(modulePath, nativeModule || { exports: moduleExports })
+  moduleRegistry?.set(modulePath, { exports: moduleExports })
 
   return moduleExports
 }

@@ -240,6 +240,38 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(hasCompleted, true)
   })
 
+  it('does not wait for requests started after the lifecycle flush', () => {
+    const finishRequests = []
+    let hasCompleted = false
+    request.callsFake((data, options, callback) => {
+      finishRequests.push(callback)
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"first"}\n' })
+    clock.tick(batchFlushInterval)
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"last"}\n' })
+
+    flushCh.publish({
+      registerCompletion: () => () => {
+        hasCompleted = true
+      },
+    })
+
+    logSubmissionCh.publish({ source: 'pino', message: '{"msg":"background"}\n' })
+    clock.tick(batchFlushInterval)
+
+    sinon.assert.calledThrice(request)
+    assert.strictEqual(hasCompleted, false)
+
+    finishRequests[0](null)
+    assert.strictEqual(hasCompleted, false)
+
+    finishRequests[1](null)
+    assert.strictEqual(hasCompleted, true)
+
+    finishRequests[2](null)
+  })
+
   it('completes lifecycle flush when log submission fails', async () => {
     const error = new Error('boom')
     let hasCompleted = false
