@@ -65,6 +65,7 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
 const runnerEndHandlers = new WeakMap()
+const runnerHookMethods = new WeakMap()
 const runnerTestEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
@@ -461,6 +462,75 @@ function stopAfterEachHooks (runner, test) {
 }
 
 /**
+ * Prevents Mocha from entering any subsequent user hooks after a reporter error.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function stopFutureHooks (runner) {
+  if (runnerHookMethods.has(runner)) return
+
+  runnerHookMethods.set(runner, runner.hook)
+  runner.hook = function (name, onDone) {
+    onDone()
+  }
+}
+
+/**
+ * Restores the runner hook method after reporter-error finalization.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function restoreFutureHooks (runner) {
+  const hook = runnerHookMethods.get(runner)
+  if (!hook) return
+
+  runnerHookMethods.delete(runner)
+  runner.hook = hook
+}
+
+/**
+ * Stops hooks remaining in the currently executing hook array.
+ *
+ * @param {object} hook
+ * @returns {boolean} whether the completed hook was a before-each hook
+ */
+function stopRemainingCurrentHooks (hook) {
+  const hookLists = [hook.parent?._beforeAll, hook.parent?._beforeEach, hook.parent?._afterEach, hook.parent?._afterAll]
+
+  for (const hooks of hookLists) {
+    const hookIndex = hooks?.indexOf(hook) ?? -1
+    if (hookIndex === -1) continue
+
+    for (let index = hookIndex + 1; index < hooks.length; index++) {
+      const remainingHook = hooks[index]
+      const run = remainingHook.run
+      remainingHook.run = function (onDone) {
+        remainingHook.run = run
+        onDone()
+      }
+    }
+    return hooks === hook.parent._beforeEach
+  }
+  return false
+}
+
+/**
+ * Prevents a completed before-each hook from continuing into the test body.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ * @returns {void}
+ */
+function stopAfterHookEnd (runner, hook) {
+  if (!stopRemainingCurrentHooks(hook) || !runner.test) return
+
+  runner.test.pending = true
+  runner.test._ddReporterStartFailed = true
+}
+
+/**
  * Prevents Mocha from entering the root suite after a run-start reporter error.
  *
  * @param {object} runner
@@ -502,9 +572,11 @@ function wrapRunnerEmit (Runner) {
         if (!pendingFrameworkError) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
+          stopFutureHooks(this)
           if (event === 'start') stopRootSuite(this)
           else if (event === 'test') stopCurrentTest(this, arguments[1])
           else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
+          else if (event === 'hook end') stopAfterHookEnd(this, arguments[1])
           else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
@@ -518,6 +590,7 @@ function wrapRunnerEmit (Runner) {
     }
 
     runnerEndHandlers.delete(this)
+    restoreFutureHooks(this)
     runnerTestEndHandlers.delete(this)
     runnerStarted.delete(this)
     let result
