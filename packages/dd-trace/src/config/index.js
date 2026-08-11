@@ -598,8 +598,11 @@ class Config extends ConfigBase {
       this.tags.version = this.version
     }
     this.tags['runtime-id'] = RUNTIME_ID
-    for (const [name, value] of Object.entries(getPlatformTags())) {
-      this.tags[name] ??= value
+    const platformTags = getPlatformTags()
+    if (platformTags) {
+      for (let i = 0; i < platformTags.length; i += 2) {
+        this.tags[platformTags[i]] ??= platformTags[i + 1]
+      }
     }
 
     if (IS_SERVERLESS) {

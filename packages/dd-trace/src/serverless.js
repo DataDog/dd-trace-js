@@ -45,26 +45,27 @@ function isInServerlessEnvironment () {
 /**
  * Gets tags describing the platform where the tracer is running.
  *
- * @returns {Record<string, string>}
+ * @returns {string[]|undefined}
  */
 function getPlatformTags () {
-  return getVercelTags()
-}
+  if (getEnvironmentVariable('VERCEL') !== '1') return
 
-/**
- * @returns {Record<string, string>}
- */
-function getVercelTags () {
-  if (getEnvironmentVariable('VERCEL') !== '1') return {}
-
-  const tags = {
-    'vercel.project_id': getEnvironmentVariable('VERCEL_PROJECT_ID'),
-    'vercel.environment': getEnvironmentVariable('VERCEL_ENV'),
-    'vercel.region': getEnvironmentVariable('VERCEL_REGION'),
+  let tags
+  const projectId = getEnvironmentVariable('VERCEL_PROJECT_ID')
+  if (projectId) {
+    tags = ['vercel.project_id', projectId]
   }
 
-  for (const [name, value] of Object.entries(tags)) {
-    if (!value) delete tags[name]
+  const environment = getEnvironmentVariable('VERCEL_ENV')
+  if (environment) {
+    tags ??= []
+    tags.push('vercel.environment', environment)
+  }
+
+  const region = getEnvironmentVariable('VERCEL_REGION')
+  if (region) {
+    tags ??= []
+    tags.push('vercel.region', region)
   }
 
   return tags

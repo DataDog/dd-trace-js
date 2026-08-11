@@ -104,9 +104,21 @@ describe('Vercel span metadata', () => {
       VERCEL_PROJECT_ID: 'prj_123',
     }
 
-    assert.deepStrictEqual(getPlatformTags(), {
-      'vercel.project_id': 'prj_123',
-      'vercel.environment': 'preview',
-    })
+    assert.deepStrictEqual(getPlatformTags(), [
+      'vercel.project_id', 'prj_123',
+      'vercel.environment', 'preview',
+    ])
+  })
+
+  it('discovers Vercel metadata when project ID is missing', () => {
+    process.env = {
+      ...environment,
+      VERCEL: '1',
+      VERCEL_ENV: 'preview',
+    }
+
+    assert.deepStrictEqual(getPlatformTags(), [
+      'vercel.environment', 'preview',
+    ])
   })
 })
