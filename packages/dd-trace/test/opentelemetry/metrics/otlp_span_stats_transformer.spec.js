@@ -41,16 +41,16 @@ function makeTopLevelSpan (overrides = {}) {
   return makeSpan({ metrics: { [TOP_LEVEL_KEY]: 1 }, ...overrides })
 }
 
-function makeBucket (spans, options) {
-  const bucket = new SpanBuckets(options)
+function makeBucket (spans, includeTraceRoot) {
+  const bucket = new SpanBuckets(includeTraceRoot)
   for (const span of spans) {
     bucket.forSpan(span).record(span)
   }
   return bucket
 }
 
-function makeDrained (timeNs, spans, options) {
-  return [{ timeNs, bucket: makeBucket(spans, options) }]
+function makeDrained (timeNs, spans, includeTraceRoot) {
+  return [{ timeNs, bucket: makeBucket(spans, includeTraceRoot) }]
 }
 
 /**
@@ -108,7 +108,7 @@ describe('OtlpStatsTransformer', () => {
         },
       })
       const payload = JSON.parse(transformer.transform(
-        makeDrained(12340000000000, [span], { includeTraceRoot: true }),
+        makeDrained(12340000000000, [span], true),
         BUCKET_SIZE_NS
       ))
       const dataPoint = dataPointsOf(payload)[0]
@@ -179,7 +179,7 @@ describe('OtlpStatsTransformer', () => {
         makeSpan({ parent_id: { equals: () => false } }),
       ]
       const payload = JSON.parse(transformer.transform(
-        makeDrained(12340000000000, spans, { includeTraceRoot: true }),
+        makeDrained(12340000000000, spans, true),
         BUCKET_SIZE_NS
       ))
       const points = dataPointsOf(payload)
@@ -191,7 +191,7 @@ describe('OtlpStatsTransformer', () => {
     })
 
     it('omits datadog.is_trace_root when its value is unknown', () => {
-      const drained = makeDrained(12340000000000, [makeSpan()], { includeTraceRoot: true })
+      const drained = makeDrained(12340000000000, [makeSpan()], true)
 
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
 
