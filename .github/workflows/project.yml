@@ -109,13 +109,7 @@ jobs:
       # `--ignore-scripts` skips the `prepare` script (the frozen vendor install):
       # the packed tarball ships pre-built `vendor/dist/**` artifacts but not
       # `vendor/bun.lock`, so a fresh consumer install can't rebuild vendor.
-      # Bun applies the release-age gate while resolving omitted dev dependencies.
-      # Remove them for the consumer install, then restore the shipped manifest for the size report.
-      - run: |
-          cp package.json /tmp/dd-trace-package.json
-          npm pkg delete devDependencies
-          bun --config=/tmp/dd-trace-bunfig.toml install --production --omit=optional --ignore-scripts
-          mv /tmp/dd-trace-package.json package.json
+      - run: bun --config=/tmp/dd-trace-bunfig.toml install --production --omit=optional --ignore-scripts
       - run: ls -lisa
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
