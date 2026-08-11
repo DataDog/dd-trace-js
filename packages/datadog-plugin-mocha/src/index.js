@@ -752,6 +752,7 @@ class MochaPlugin extends CiPlugin {
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
           if (isFrameworkError) {
+            this.tracer._exporter.setDeferredTestSuiteError?.(error)
             for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
               testSuiteSpan.setTag(TEST_STATUS, 'fail')
               testSuiteSpan.setTag('error', error)

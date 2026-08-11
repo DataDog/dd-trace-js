@@ -461,6 +461,21 @@ function stopAfterEachHooks (runner, test) {
 }
 
 /**
+ * Prevents Mocha from entering the root suite after a run-start reporter error.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function stopRootSuite (runner) {
+  const runSuite = runner.runSuite
+
+  runner.runSuite = function (suite, onDone) {
+    runner.runSuite = runSuite
+    onDone()
+  }
+}
+
+/**
  * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
  * runs Datadog's end handler and propagates the original error after finalization.
  *
@@ -487,7 +502,8 @@ function wrapRunnerEmit (Runner) {
         if (!pendingFrameworkError) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
-          if (event === 'test') stopCurrentTest(this, arguments[1])
+          if (event === 'start') stopRootSuite(this)
+          else if (event === 'test') stopCurrentTest(this, arguments[1])
           else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
           else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
             const test = arguments[1]

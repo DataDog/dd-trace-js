@@ -250,6 +250,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/retries.js'
       } else if (reporterEvent === 'pass' || reporterEvent === 'test end') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-terminal-event.js'
+      } else if (reporterEvent === 'start') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-run-start.js'
       } else if (reporterEvent === 'test' || reporterEvent === 'hook') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-test-start.js'
       }
@@ -335,7 +337,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         eventsPromise,
       ])
       assert.match(testOutput, /custom Mocha reporter failed/)
-      if (reporterEvent === 'test' || reporterEvent === 'hook') {
+      if (reporterEvent === 'start' || reporterEvent === 'test' || reporterEvent === 'hook') {
         assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
       }
       if (['pass', 'fail', 'retry', 'test end'].includes(reporterEvent)) {
@@ -344,6 +346,58 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.notStrictEqual(exitCode, 0, testOutput)
     })
   }
+
+  onlyLatestIt('marks parallel worker suites as failed when the coordinator reporter throws', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+      ' ./ci-visibility/mocha-plugin-tests/passing.js' +
+      ' ./ci-visibility/test/ci-visibility-test-2.js' +
+      ' --reporter ./ci-visibility/mocha-reporter-throws.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_REPORTER_THROW_EVENT: 'suite end',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const hierarchyEvents = events.filter(event =>
+          event.type === 'test_session_end' ||
+          event.type === 'test_module_end' ||
+          event.type === 'test_suite_end'
+        )
+        const sessionEvent = hierarchyEvents.find(event => event.type === 'test_session_end')
+        const suiteEvents = hierarchyEvents.filter(event => event.type === 'test_suite_end')
+
+        assert.ok(sessionEvent, 'expected test_session_end event')
+        assert.strictEqual(sessionEvent.content.meta[MOCHA_IS_PARALLEL], 'true')
+        assert.strictEqual(suiteEvents.length, 2)
+        assert.strictEqual(hierarchyEvents.length, 4)
+        for (const event of hierarchyEvents) {
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.error, 1)
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.match(testOutput, /custom Mocha reporter failed/)
+    assert.notStrictEqual(exitCode, 0, testOutput)
+  })
 
   it('reports a completed suite when the process exits before session finalization', async function () {
     this.timeout(20_000)
