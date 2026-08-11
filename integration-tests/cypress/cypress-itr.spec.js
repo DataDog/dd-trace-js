@@ -197,7 +197,7 @@ moduleTypes.forEach(({
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const eventTypes = events.map(event => event.type)
-          assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         })
 
         await receiverPromise
@@ -248,7 +248,7 @@ moduleTypes.forEach(({
           assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-          assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')

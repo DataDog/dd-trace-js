@@ -917,7 +917,7 @@ describe(`cucumber@${version} commonJS`, () => {
             }
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -991,7 +991,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -1032,7 +1032,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const testSession = payload.events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -1097,7 +1097,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
               assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-              assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+              assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
@@ -1190,7 +1190,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -1237,7 +1237,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
