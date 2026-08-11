@@ -1,0 +1,21 @@
+{
+  ".": {
+    "allow": [
+      {
+        "id": "GHSA-5c6j-r48x-rmvq",
+        "package": "serialize-javascript",
+        "reason": "Patched in 7.0.3, but mocha declares serialize-javascript@^6.0.2. The vulnerable path is limited to mocha's dev-only parallel test metadata until mocha widens its range."
+      }
+    ]
+  },
+  "vendor": {
+    "level": "moderate",
+    "allow": [
+      {
+        "id": "GHSA-8988-4f7v-96qf",
+        "package": "@opentelemetry/core",
+        "reason": "Patched in 2.8.0, outside the OpenTelemetry 1.x compatibility range bundled for customers. Clearing it requires a deliberate vendored OpenTelemetry major upgrade."
+      }
+    ]
+  }
+}
