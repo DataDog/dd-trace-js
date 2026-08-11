@@ -248,6 +248,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
       } else if (reporterEvent === 'retry') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/retries.js'
+      } else if (reporterEvent === 'pass' || reporterEvent === 'test end') {
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-terminal-event.js'
       } else if (reporterEvent === 'test' || reporterEvent === 'hook') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/reporter-test-start.js'
       }
@@ -335,6 +337,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.match(testOutput, /custom Mocha reporter failed/)
       if (reporterEvent === 'test' || reporterEvent === 'hook') {
         assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
+      }
+      if (['pass', 'fail', 'retry', 'test end'].includes(reporterEvent)) {
+        assert.doesNotMatch(testOutput, /MOCHA AFTER EACH EXECUTED/)
       }
       assert.notStrictEqual(exitCode, 0, testOutput)
     })

@@ -65,6 +65,7 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
 const runnerEndHandlers = new WeakMap()
+const runnerTestEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
 const runnerStarted = new WeakSet()
@@ -443,6 +444,23 @@ function stopCurrentHook (runner, hook, error) {
 }
 
 /**
+ * Prevents Mocha from running after-each hooks after a terminal test reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function stopAfterEachHooks (runner, test) {
+  const hookUp = runner.hookUp
+
+  test._ddReporterTerminalFailed = true
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
  * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
  * runs Datadog's end handler and propagates the original error after finalization.
  *
@@ -471,12 +489,20 @@ function wrapRunnerEmit (Runner) {
           this.abort()
           if (event === 'test') stopCurrentTest(this, arguments[1])
           else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
+          else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
+            const test = arguments[1]
+            stopAfterEachHooks(this, test)
+            if (event === 'test end' && !test._ddTestFinishPublished) {
+              runnerTestEndHandlers.get(this)?.(test)
+            }
+          }
         }
         return
       }
     }
 
     runnerEndHandlers.delete(this)
+    runnerTestEndHandlers.delete(this)
     runnerStarted.delete(this)
     let result
     let frameworkError = pendingFrameworkError
@@ -1010,13 +1036,15 @@ addHook({
 
     // Reporters are registered before this run wrapper. Prepend terminal handlers
     // so a reporter error cannot strand a test span that Mocha already completed.
-    this.prependListener('test end', getOnTestEndHandler(config, {
+    const onTestEnd = getOnTestEndHandler(config, {
       onStart: incrementPendingRootFinalization,
       onFinish: function (test) {
         finishRootSuiteAfterFinalAttempt(test)
         decrementPendingRootFinalization(test)
       },
-    }))
+    })
+    runnerTestEndHandlers.set(this, onTestEnd)
+    this.prependListener('test end', onTestEnd)
 
     this.prependListener('retry', getOnTestRetryHandler(config))
 

@@ -116,4 +116,24 @@ describe('common Writer', () => {
       options
     )
   })
+
+  it('reports whether an appended payload was accepted', () => {
+    const payload = [{ type: 'test_suite_end' }]
+
+    assert.strictEqual(writer.append(payload), true)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+
+    request.writable = false
+    assert.strictEqual(writer.append(payload), false)
+    sinon.assert.calledOnce(encoder.encode)
+  })
+
+  it('accepts a bounded final append when the request buffer is full', () => {
+    request.writable = false
+    const payload = [{ type: 'test_suite_end' }]
+    const options = { deadline: Date.now() + 1000 }
+
+    assert.strictEqual(writer.append(payload, options), true)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
 })

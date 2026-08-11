@@ -1015,7 +1015,11 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
         ciVisibilityExporter.flush(firstDone)
 
-        sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+        sinon.assert.calledOnceWithExactly(
+          writer.append,
+          [suiteEvent],
+          sinon.match({ deadline: sinon.match.number })
+        )
         sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
         sinon.assert.calledOnceWithExactly(firstDone, undefined)
 
@@ -1027,6 +1031,46 @@ describe('CI Visibility Exporter', () => {
         sinon.assert.calledWithExactly(writer.append.secondCall, [moduleEvent, sessionEvent])
         sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
         sinon.assert.calledOnceWithExactly(secondDone, undefined)
+      })
+
+      it('retains a deferred suite until a bounded final append is accepted', () => {
+        const writer = {
+          append: sinon.stub().onFirstCall().returns(false).onSecondCall().returns(true),
+          flush: sinon.spy(done => done?.()),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._writer = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+        const spanId = { toString: () => 'suite-span-id' }
+        const testSuiteSpan = {
+          context: () => ({ _spanId: spanId }),
+        }
+        const suiteEvent = {
+          type: 'test_suite_end',
+          span_id: spanId,
+          error: 0,
+          meta: { 'test.status': 'pass' },
+          metrics: {},
+        }
+        formatSpan = sinon.stub().returns(suiteEvent)
+
+        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+        ciVisibilityExporter.export([suiteEvent])
+        ciVisibilityExporter.exportDeferredTestSuiteSpans()
+
+        sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+        const done = sinon.spy()
+        ciVisibilityExporter.flush(done)
+
+        sinon.assert.calledTwice(writer.append)
+        assert.strictEqual(writer.append.secondCall.args[0][0], suiteEvent)
+        assert.strictEqual(typeof writer.append.secondCall.args[1].deadline, 'number')
+        sinon.assert.calledOnceWithExactly(done, undefined)
+
+        ciVisibilityExporter.exportDeferredTestSuiteSpans()
+        sinon.assert.calledTwice(writer.append)
       })
     })
   })
@@ -1079,7 +1123,11 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       await Promise.resolve()
 
-      sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+      sinon.assert.calledOnceWithExactly(
+        writer.append,
+        [suiteEvent],
+        sinon.match({ deadline: sinon.match.number })
+      )
       sinon.assert.calledOnce(writer.flush)
       sinon.assert.calledOnceWithExactly(done, undefined)
     })
@@ -1128,6 +1176,39 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter.flush(() => {})
 
       sinon.assert.calledTwice(writer.flush)
+    })
+
+    it('starts a new final flush after a suite is deferred', () => {
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => done?.()),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+      const testSuiteSpan = {
+        context: () => ({ _spanId: { toString: () => 'suite-span-id' } }),
+      }
+      const suiteEvent = {
+        type: 'test_suite_end',
+        error: 0,
+        meta: { 'test.status': 'pass' },
+        metrics: {},
+      }
+      formatSpan = sinon.stub().returns(suiteEvent)
+
+      const firstDone = sinon.spy()
+      ciVisibilityExporter.flush(firstDone)
+      ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
+      const secondDone = sinon.spy()
+      ciVisibilityExporter.flush(secondDone)
+
+      sinon.assert.calledTwice(writer.flush)
+      sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent], sinon.match({ deadline: sinon.match.number }))
+      sinon.assert.calledOnceWithExactly(firstDone, undefined)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
     })
 
     it('does not coalesce new test data into an active final flush', () => {

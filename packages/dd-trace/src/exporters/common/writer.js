@@ -54,17 +54,18 @@ class Writer {
     }
   }
 
-  append (payload) {
-    if (!request.writable) {
+  append (payload, options) {
+    if (!request.writable && options?.deadline === undefined) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
-      return
+      return false
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)
+    return true
   }
 
   _encode (payload) {

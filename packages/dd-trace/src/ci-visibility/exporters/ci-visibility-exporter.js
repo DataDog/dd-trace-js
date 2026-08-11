@@ -460,6 +460,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {void}
    */
   deferTestSuiteSpan (testSuiteSpan) {
+    this.#resetFinalFlush()
     this.#deferredTestSuiteSpans.set(testSuiteSpan.context()._spanId.toString(), {
       span: testSuiteSpan,
       formattedSpan: undefined,
@@ -506,11 +507,25 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
+   * Appends a completed suite while preserving the ordinary writer call shape outside finalization.
+   *
+   * @param {object} formattedSpan
+   * @param {{ deadline?: number }} [options]
+   * @returns {boolean|undefined}
+   */
+  #appendDeferredTestSuiteSpan (formattedSpan, options) {
+    if (options === undefined) return this._writer.append([formattedSpan])
+
+    return this._writer.append([formattedSpan], options)
+  }
+
+  /**
    * Appends completed suites before their module and session parents are exported.
    *
+   * @param {{ deadline?: number }} [options]
    * @returns {void}
    */
-  exportDeferredTestSuiteSpans () {
+  exportDeferredTestSuiteSpans (options) {
     if (!this._writer || !this.canReportSessionTraces()) return
 
     for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
@@ -521,13 +536,13 @@ class CiVisibilityExporter extends BufferingExporter {
         formattedSpan.error = updatedSpan.error
         Object.assign(formattedSpan.meta, updatedSpan.meta)
         Object.assign(formattedSpan.metrics, updatedSpan.metrics)
-        this._writer.append([formattedSpan])
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
         this.#deferredTestSuiteSpans.delete(spanId)
       } else if (formattedSpan) {
-        this._writer.append([formattedSpan])
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
         this.#deferredTestSuiteSpans.delete(spanId)
       } else {
-        this._writer.append([updatedSpan])
+        if (this.#appendDeferredTestSuiteSpan(updatedSpan, options) === false) continue
         deferredTestSuiteSpan.emitted = true
       }
     }
@@ -653,7 +668,8 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     const flushWriters = () => {
-      if (isFinalFlush) this.exportDeferredTestSuiteSpans()
+      const options = deadline === undefined ? undefined : { deadline }
+      if (isFinalFlush) this.exportDeferredTestSuiteSpans(options)
 
       const writers = [
         this._writer,
@@ -675,7 +691,6 @@ class CiVisibilityExporter extends BufferingExporter {
         if (remaining === 0) complete(flushError)
       }
 
-      const options = deadline === undefined ? undefined : { deadline }
       for (const writer of writers) writer.flush(onFlushComplete, options)
     }
 
