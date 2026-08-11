@@ -4,7 +4,7 @@ const assert = require('assert')
 
 afterAll(() => {
   process.nextTick(() => {
-    require('./off-timing-import.js')
+    require(process.env.TEST_LOGGER || './off-timing-import.js')
   })
 })
 it('will fail', () => {

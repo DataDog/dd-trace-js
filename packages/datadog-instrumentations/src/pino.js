@@ -137,8 +137,12 @@ function wrapStreamWrite (streamWrite, messages) {
   return function streamWriteWithLogSubmission (line) {
     const message = streamWrite.apply(this, arguments)
     try {
-      JSON.parse(message)
-      messages[messages.length - 1] = message
+      const parsedMessage = JSON.parse(message)
+      messages[messages.length - 1] = parsedMessage !== null &&
+        typeof parsedMessage === 'object' &&
+        !Array.isArray(parsedMessage)
+        ? message
+        : undefined
     } catch {
       messages[messages.length - 1] = undefined
     }

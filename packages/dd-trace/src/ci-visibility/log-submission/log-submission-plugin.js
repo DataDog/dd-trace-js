@@ -38,11 +38,12 @@ function getLogSubmissionUrl (config) {
     }
   }
 
+  const hostname = `http-intake.logs.${config.site}`
   try {
-    return new URL(`https://http-intake.logs.${config.site}`)
-  } catch {
-    log.error('Could not parse automatic log submission site: %s', config.site)
-  }
+    const url = new URL(`https://${hostname}`)
+    if (url.hostname === hostname.toLowerCase()) return url
+  } catch {}
+  log.error('Could not parse automatic log submission site: %s', config.site)
 }
 
 /**

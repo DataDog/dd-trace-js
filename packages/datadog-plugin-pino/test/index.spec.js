@@ -440,6 +440,36 @@ describe('Plugin', () => {
               assert.strictEqual(JSON.parse(submittedLogs[0].message).msg, 'valid')
             })
 
+            it('should not submit non-object JSON streamWrite output', () => {
+              const submittedLogs = []
+              const transformedMessages = ['"redacted"', 'null', '[]']
+              const onLogSubmission = payload => {
+                submittedLogs.push(payload)
+              }
+              logSubmissionCh.subscribe(onLogSubmission)
+
+              setupTest({
+                hooks: {
+                  /** @param {string} line */
+                  streamWrite (line) {
+                    return transformedMessages.shift() ?? line
+                  },
+                },
+              })
+
+              try {
+                logger.info('string')
+                logger.info('null')
+                logger.info('array')
+                logger.info('valid')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+
+              assert.strictEqual(submittedLogs.length, 1)
+              assert.strictEqual(JSON.parse(submittedLogs[0].message).msg, 'valid')
+            })
+
             it('should not submit transformed records when the destination throws', () => {
               const pino = getExport()
               const failingStream = new Writable()

@@ -474,6 +474,28 @@ describe('LogSubmissionPlugin', () => {
     sinon.assert.calledWithExactly(errorLog, 'Could not parse automatic log submission site: %s', 'invalid site')
   })
 
+  it('stays disabled when the site contains URL metacharacters', () => {
+    plugin.configure(false)
+
+    for (const site of ['datadoghq.com@evil.example', 'datadoghq.com:443', 'datadoghq.com/path']) {
+      plugin.configure({
+        enabled: true,
+        DD_API_KEY: 'api-key',
+        service: 'my-service',
+        site,
+      })
+
+      logSubmissionCh.publish({ source: 'pino', message: '{"msg":"hello"}\n' })
+      clock.tick(batchFlushInterval)
+      plugin.configure(false)
+
+      sinon.assert.calledWithExactly(errorLog, 'Could not parse automatic log submission site: %s', site)
+    }
+
+    sinon.assert.callCount(errorLog, 3)
+    sinon.assert.notCalled(request)
+  })
+
   it('logs request errors', () => {
     const error = new Error('boom')
     request.callsFake((data, options, callback) => callback(error))

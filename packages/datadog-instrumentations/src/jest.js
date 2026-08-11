@@ -3284,6 +3284,14 @@ function shouldWaitForTestSuiteFinish (environment) {
 }
 
 /**
+ * @param {object} runtime
+ * @returns {boolean}
+ */
+function isJestEnvironmentTornDown (runtime) {
+  return runtime.isTornDown === true || runtime.testState?.isTornDown?.() === true
+}
+
+/**
  * @param {Record<string, unknown>} payload
  * @param {boolean} waitForFinish
  */
@@ -3477,18 +3485,15 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         errorMessage,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+      const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+      if (finishPromise) {
+        return finishPromise.then(() => {
+          // Cleanup per-suite state to avoid memory leaks
+          cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
-            return suiteResults
-          })
-        }
+          return suiteResults
+        })
       }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
@@ -3501,18 +3506,15 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         error,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+      const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+      if (finishPromise) {
+        return finishPromise.then(() => {
+          // Cleanup per-suite state to avoid memory leaks
+          cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
-            throw error
-          })
-        }
+          throw error
+        })
       }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
@@ -3825,8 +3827,10 @@ function cacheJestEachBind (jestEach) {
 
 function getLastLoggedReferenceError (runtime) {
   const loggedReferenceErrors = runtime?.loggedReferenceErrors
-  if (!loggedReferenceErrors?.size) return
-  return [...loggedReferenceErrors].pop()
+  if (loggedReferenceErrors?.size) return [...loggedReferenceErrors].pop()
+
+  const publishedReferenceErrors = publishedRuntimeReferenceErrors.get(runtime)
+  if (publishedReferenceErrors?.size) return [...publishedReferenceErrors].pop()
 }
 
 function publishRuntimeReferenceError (runtime, errorMessage) {
@@ -4011,6 +4015,10 @@ addHook({
     try {
       // Jest calls requireModule only after deciding that the module should not be mocked.
       const bypassModulePath = getJestBypassModulePath(this, from, moduleName)
+      if (bypassModulePath && isJestEnvironmentTornDown(this)) {
+        reportBetweenTestsReferenceError(this, moduleName)
+        return
+      }
       const returnedValue = bypassModulePath
         ? requireOutsideJestRequireEngine(this, from, bypassModulePath)
         : requireModule.apply(this, arguments)

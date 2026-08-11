@@ -3580,6 +3580,38 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   }
 
   for (const loggerName of ['pino', 'bunyan']) {
+    it(`should preserve Jest's post-teardown import failure for ${loggerName}`, async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event =>
+            event.type === 'test_suite_end' &&
+            event.content.meta[TEST_SUITE] === 'ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
+          )
+
+          assert.ok(testSuite)
+          assert.match(testSuite.content.meta[ERROR_MESSAGE], /a file after the Jest environment has been torn down/)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            RUN_IN_PARALLEL: 'true',
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-bad-import-torn-down/jest-bad-import-test',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
     it(`should load suite-local ${loggerName}`, async () => {
       let testOutput = ''
       const loggerDirectory = path.join(
