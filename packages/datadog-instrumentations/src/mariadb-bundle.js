@@ -28,6 +28,26 @@ const transactionMethods = [
 ]
 
 /** @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} Descriptor */
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+/** @typedef {{ options: object, pendingRemovals: number }} ClusterNodeOptions */
+/** @typedef {{ options?: object }} ClusterSelection */
+/** @typedef {import('node:async_hooks').AsyncLocalStorage<ClusterSelection>} ClusterSelectionStorage */
+
+/** @type {ClusterSelectionStorage | undefined} */
+let clusterSelectionStorage
+
+/**
+ * Creates cluster selection storage only when an application uses pool clusters.
+ *
+ * @returns {ClusterSelectionStorage}
+ */
+function getClusterSelectionStorage () {
+  if (clusterSelectionStorage === undefined) {
+    const { AsyncLocalStorage } = require('node:async_hooks')
+    clusterSelectionStorage = new AsyncLocalStorage()
+  }
+  return clusterSelectionStorage
+}
 
 /**
  * Extracts SQL from MariaDB's string and object command forms.
@@ -37,16 +57,6 @@ const transactionMethods = [
  */
 function normalizeSql (command) {
   return command !== null && typeof command === 'object' ? command.sql : command
-}
-
-/**
- * Matches MariaDB's use of the default cluster selector for every falsy pattern.
- *
- * @param {unknown} pattern
- * @returns {unknown}
- */
-function normalizeClusterPattern (pattern) {
-  return pattern || /^/
 }
 
 /**
@@ -67,20 +77,22 @@ function normalizeOptions (defaultOptions, options) {
 /**
  * Marks a command as active on its owning public connection.
  *
- * @param {object} owner
+ * @param {object | undefined} owner
  * @returns {void}
  */
 function startCommand (owner) {
+  if (owner === undefined) return
   activeCommands.set(owner, (activeCommands.get(owner) ?? 0) + 1)
 }
 
 /**
  * Releases one active command without clearing concurrent commands.
  *
- * @param {object} owner
+ * @param {object | undefined} owner
  * @returns {void}
  */
 function endCommand (owner) {
+  if (owner === undefined) return
   const active = activeCommands.get(owner)
   if (active === 1) {
     activeCommands.delete(owner)
@@ -93,7 +105,7 @@ function endCommand (owner) {
  * Publishes command completion state and releases its owner.
  *
  * @param {object} ctx
- * @param {object} owner
+ * @param {object | undefined} owner
  * @param {Error} [error]
  * @param {unknown} [result]
  * @returns {void}
@@ -111,7 +123,7 @@ function finishCommandState (ctx, owner, error, result) {
  * Publishes a complete command lifecycle outside a callback continuation.
  *
  * @param {object} ctx
- * @param {object} owner
+ * @param {object | undefined} owner
  * @param {Error} [error]
  * @param {unknown} [result]
  * @returns {void}
@@ -127,14 +139,16 @@ function finishCommand (ctx, owner, error, result) {
  * @param {object} options
  * @param {unknown} [preparedSql]
  * @param {object} [commandOwner]
+ * @param {number} [_commandArity] Reserved for callback command wrappers.
+ * @param {boolean} [trackActiveCommands]
  * @returns {(command: Function) => Function}
  */
-function createWrapPromiseCommand (options, preparedSql, commandOwner) {
+function createWrapPromiseCommand (options, preparedSql, commandOwner, _commandArity, trackActiveCommands = true) {
   return function wrapCommand (command) {
     return function (sql) {
       if (!startCh.hasSubscribers) return command.apply(this, arguments)
 
-      const owner = commandOwner ?? this
+      const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
 
       startCommand(owner)
@@ -165,16 +179,17 @@ function createWrapPromiseCommand (options, preparedSql, commandOwner) {
  * @param {unknown} [preparedSql]
  * @param {object} [commandOwner]
  * @param {number} [commandArity] Original arity when command is wrapped by a variadic forwarding function.
+ * @param {boolean} [trackActiveCommands]
  * @returns {(command: Function) => Function}
  */
-function createWrapCallbackCommand (options, preparedSql, commandOwner, commandArity) {
+function createWrapCallbackCommand (options, preparedSql, commandOwner, commandArity, trackActiveCommands = true) {
   return function wrapCommand (command) {
     const callbackIndex = (commandArity ?? command.length) - 1
 
     return function (sql) {
       if (!startCh.hasSubscribers) return command.apply(this, arguments)
 
-      const owner = commandOwner ?? this
+      const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const callback = arguments[arguments.length - 1]
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
       const wrapper = callback => function (error) {
@@ -441,14 +456,15 @@ function createWrapCallbackPreparedExecute (options, sql, connection) {
  * Runs bundled pool internals in the skip store while tracing the public command.
  *
  * @param {object} options
- * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number) =>
+ * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number,
+ *   trackActiveCommands?: boolean) =>
  *   (command: Function) => Function} createWrapper
  * @param {unknown} [preparedSql]
  * @returns {(command: Function) => Function}
  */
 function createWrapPoolCommand (options, createWrapper, preparedSql) {
   return function wrapPoolCommand (command) {
-    return createWrapper(options, preparedSql, undefined, command.length)(function () {
+    return createWrapper(options, preparedSql, undefined, command.length, false)(function () {
       return skipCh.runStores({}, command, this, ...arguments)
     })
   }
@@ -545,19 +561,35 @@ function wrapPoolConnectionEvent (pool, options, wrapConnection) {
  *
  * @param {object} cluster
  * @param {Function} defaultOptions
- * @returns {(pattern: unknown) => object}
+ * @param {ClusterSelectionStorage} selectionStorage
+ * @returns {void}
  */
-function captureClusterOptions (cluster, defaultOptions) {
+function captureClusterOptions (cluster, defaultOptions, selectionStorage) {
+  /** @type {Map<string, ClusterNodeOptions>} */
   const optionsByIdentifier = new Map()
-  const optionsByPattern = new Map()
   let nodeCounter = 0
 
   const removeOptions = identifier => {
-    optionsByIdentifier.delete(identifier)
-    optionsByPattern.clear()
+    const nodeOptions = optionsByIdentifier.get(identifier)
+    if (nodeOptions?.pendingRemovals) {
+      nodeOptions.pendingRemovals--
+    } else {
+      optionsByIdentifier.delete(identifier)
+    }
   }
 
-  const eventEmitter = cluster.on('remove', removeOptions)
+  // ClusterCallback.on is bound to its private Cluster, so EventEmitter returns the internal
+  // runtime object for both APIs. MariaDB does not expose the selected node on the returned
+  // connection; capture _selectPool while the acquisition's async-local selection is active.
+  const internalCluster = cluster.on('remove', removeOptions)
+  if (typeof internalCluster._selectPool === 'function') {
+    shimmer.wrap(internalCluster, '_selectPool', selectPool => function () {
+      const identifier = selectPool.apply(this, arguments)
+      const selection = selectionStorage.getStore()
+      if (selection !== undefined) selection.options = optionsByIdentifier.get(identifier)?.options
+      return identifier
+    })
+  }
 
   shimmer.wrap(cluster, 'add', add => function (identifier, options) {
     const hasIdentifier = typeof identifier === 'string' ||
@@ -565,54 +597,37 @@ function captureClusterOptions (cluster, defaultOptions) {
     const generatedIdentifier = hasIdentifier ? String(identifier) : `PoolNode-${nodeCounter++}`
     const connectionOptions = hasIdentifier ? options : identifier
     const result = skipCh.runStores({}, add, this, ...arguments)
-    optionsByIdentifier.set(generatedIdentifier, normalizeOptions(defaultOptions, connectionOptions))
-    optionsByPattern.clear()
+    const previousNodeOptions = optionsByIdentifier.get(generatedIdentifier)
+
+    // MariaDB deletes a failed node before emitting its delayed remove event. A successful
+    // same-identifier add while options remain therefore adds one stale event to ignore.
+    const nodeOptions = {
+      options: normalizeOptions(defaultOptions, connectionOptions),
+      pendingRemovals: previousNodeOptions === undefined ? 0 : previousNodeOptions.pendingRemovals + 1,
+    }
+    optionsByIdentifier.set(generatedIdentifier, nodeOptions)
+
     return result
   })
 
   shimmer.wrap(cluster, 'remove', remove => function (pattern) {
     const result = remove.apply(this, arguments)
     removeClusterOptions(optionsByIdentifier, pattern)
-    optionsByPattern.clear()
     return result
   })
 
   shimmer.wrap(cluster, 'end', end => function () {
+    const result = end.apply(this, arguments)
     optionsByIdentifier.clear()
-    optionsByPattern.clear()
-    eventEmitter.removeListener('remove', removeOptions)
-    return end.apply(this, arguments)
+    internalCluster.removeListener('remove', removeOptions)
+    return result
   })
-
-  return pattern => {
-    const normalizedPattern = normalizeClusterPattern(pattern)
-    const cacheKey = String(normalizedPattern)
-    const cachedOptions = optionsByPattern.get(cacheKey)
-    if (cachedOptions !== undefined) return cachedOptions
-
-    const regularExpression = new RegExp(normalizedPattern)
-    let matchedOptions
-
-    for (const [identifier, options] of optionsByIdentifier) {
-      regularExpression.lastIndex = 0
-      if (!regularExpression.test(identifier)) continue
-      if (matchedOptions !== undefined) {
-        optionsByPattern.set(cacheKey, emptyOptions)
-        return emptyOptions
-      }
-      matchedOptions = options
-    }
-
-    matchedOptions ??= emptyOptions
-    optionsByPattern.set(cacheKey, matchedOptions)
-    return matchedOptions
-  }
 }
 
 /**
  * Removes options for every cluster node matching a selector.
  *
- * @param {Map<string, object>} optionsByIdentifier
+ * @param {Map<string, ClusterNodeOptions>} optionsByIdentifier
  * @param {string} pattern
  * @returns {void}
  */
@@ -626,21 +641,42 @@ function removeClusterOptions (optionsByIdentifier, pattern) {
 }
 
 /**
+ * Calls a cluster acquisition inside the pool-skip context while selection storage is active.
+ *
+ * @param {Function} getConnection
+ * @param {object} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function runClusterGetConnection (getConnection, receiver, args) {
+  return skipCh.runStores({}, getConnection, receiver, ...args)
+}
+
+/**
  * Wraps promise connections acquired from a bundled pool cluster.
  *
- * @param {(pattern: unknown) => object} getOptions
+ * @param {ClusterSelectionStorage} selectionStorage
  * @returns {(getConnection: Function) => Function}
  */
-function createWrapPromiseClusterGetConnection (getOptions) {
+function createWrapPromiseClusterGetConnection (selectionStorage) {
   return function wrapGetConnection (getConnection) {
-    return function (pattern) {
+    return function () {
       const ctx = {}
-      const options = getOptions(pattern)
+      /** @type {ClusterSelection} */
+      const selection = {}
 
       connectionStartCh.publish(ctx)
 
-      return skipCh.runStores({}, getConnection, this, ...arguments).then(
-        connection => finishPromiseGetConnection(ctx, connection, options),
+      const result = selectionStorage.run(
+        selection,
+        runClusterGetConnection,
+        getConnection,
+        this,
+        arguments
+      )
+
+      return result.then(
+        connection => finishPromiseGetConnection(ctx, connection, selection.options ?? emptyOptions),
         error => finishPromiseGetConnectionError(ctx, error)
       )
     }
@@ -650,26 +686,33 @@ function createWrapPromiseClusterGetConnection (getOptions) {
 /**
  * Wraps callback connections acquired from a bundled pool cluster.
  *
- * @param {(pattern: unknown) => object} getOptions
+ * @param {ClusterSelectionStorage} selectionStorage
  * @returns {(getConnection: Function) => Function}
  */
-function createWrapCallbackClusterGetConnection (getOptions) {
+function createWrapCallbackClusterGetConnection (selectionStorage) {
   return function wrapGetConnection (getConnection) {
-    return function (pattern) {
+    return function () {
       const callback = arguments[arguments.length - 1]
       if (typeof callback !== 'function') return getConnection.apply(this, arguments)
 
       const ctx = {}
-      const options = getOptions(typeof pattern === 'function' ? undefined : pattern)
+      /** @type {ClusterSelection} */
+      const selection = {}
       arguments[arguments.length - 1] = function () {
         const connection = arguments[1]
-        if (connection) wrapCallbackConnection(connection, options)
+        if (connection) wrapCallbackConnection(connection, selection.options ?? emptyOptions)
         return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
       }
 
       connectionStartCh.publish(ctx)
 
-      return skipCh.runStores({}, getConnection, this, ...arguments)
+      return selectionStorage.run(
+        selection,
+        runClusterGetConnection,
+        getConnection,
+        this,
+        arguments
+      )
     }
   }
 }
@@ -682,9 +725,10 @@ function createWrapCallbackClusterGetConnection (getOptions) {
  * @returns {object}
  */
 function wrapPromiseCluster (cluster, defaultOptions) {
-  const getOptions = captureClusterOptions(cluster, defaultOptions)
+  const selectionStorage = getClusterSelectionStorage()
+  captureClusterOptions(cluster, defaultOptions, selectionStorage)
 
-  shimmer.wrap(cluster, 'getConnection', createWrapPromiseClusterGetConnection(getOptions))
+  shimmer.wrap(cluster, 'getConnection', createWrapPromiseClusterGetConnection(selectionStorage))
 
   return cluster
 }
@@ -697,13 +741,14 @@ function wrapPromiseCluster (cluster, defaultOptions) {
  * @returns {object}
  */
 function wrapCallbackCluster (cluster, defaultOptions) {
-  const getOptions = captureClusterOptions(cluster, defaultOptions)
+  const selectionStorage = getClusterSelectionStorage()
+  captureClusterOptions(cluster, defaultOptions, selectionStorage)
 
-  shimmer.wrap(cluster, 'getConnection', createWrapCallbackClusterGetConnection(getOptions))
+  shimmer.wrap(cluster, 'getConnection', createWrapCallbackClusterGetConnection(selectionStorage))
   // The filtered callback facade delegates to a private Cluster instance, bypassing the public method above.
-  shimmer.wrap(cluster, 'of', of => function (pattern) {
+  shimmer.wrap(cluster, 'of', of => function () {
     const filteredCluster = of.apply(this, arguments)
-    shimmer.wrap(filteredCluster, 'getConnection', createWrapCallbackClusterGetConnection(() => getOptions(pattern)))
+    shimmer.wrap(filteredCluster, 'getConnection', createWrapCallbackClusterGetConnection(selectionStorage))
     return filteredCluster
   })
 
@@ -832,7 +877,10 @@ function createWrapPromiseImportFile (defaultOptions) {
     return function (options) {
       const wrapper = createWrapPromiseCommand(
         normalizeOptions(defaultOptions, options),
-        IMPORT_FILE_RESOURCE
+        IMPORT_FILE_RESOURCE,
+        undefined,
+        undefined,
+        false
       )(importFile)
       return wrapper.apply(this, arguments)
     }
@@ -850,7 +898,10 @@ function createWrapCallbackImportFile (defaultOptions) {
     return function (options) {
       const wrapper = createWrapCallbackCommand(
         normalizeOptions(defaultOptions, options),
-        IMPORT_FILE_RESOURCE
+        IMPORT_FILE_RESOURCE,
+        undefined,
+        undefined,
+        false
       )(importFile)
       return wrapper.apply(this, arguments)
     }

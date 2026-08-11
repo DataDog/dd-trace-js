@@ -9,7 +9,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ANY_STRING } = require('../../../integration-tests/helpers')
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -43,6 +43,15 @@ function consumeStream (stream) {
     stream.once('end', resolve)
     stream.resume()
   })
+}
+
+/**
+ * Waits for work already queued with setImmediate.
+ *
+ * @returns {Promise<void>}
+ */
+function nextImmediate () {
+  return new Promise(resolve => setImmediate(resolve))
 }
 
 /**
@@ -173,6 +182,7 @@ describe('Plugin', () => {
         })
 
         it('traces batch and importFile operations', async () => {
+          const importFile = mariadb.importFile
           const assertion = assertTraceResources('bundle.promise.bulk', [
             'INSERT INTO dd_bundle_batch VALUES (?)',
             'IMPORT FILE',
@@ -183,7 +193,7 @@ describe('Plugin', () => {
           await tracer.trace('bundle.promise.bulk', async () => {
             await connection.batch('INSERT INTO dd_bundle_batch VALUES (?)', [[1], [2]])
             await connection.importFile({ file: importFilePath })
-            await mariadb.importFile({ ...connectionOptions, file: importFilePath })
+            await importFile({ ...connectionOptions, file: importFilePath })
           })
 
           await assertion
@@ -226,28 +236,36 @@ describe('Plugin', () => {
           }
         })
 
-        it('traces pool clusters, falsy selectors, and unambiguous node metadata', async () => {
+        it('traces pool clusters, falsy selectors, and selected node metadata', async () => {
           const cluster = mariadb.createPoolCluster()
           cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
+          cluster.add('secondary', { ...connectionOptions, host: '127.0.0.1', minimumIdle: 0 })
+          const filteredCluster = cluster.of(/^(primary|secondary)$/, 'RR')
           const filteredAssertion = agent.assertFirstTraceSpan({
             resource: 'SELECT 7 AS cluster_query',
             meta: {
               'db.name': 'db',
               'db.user': 'root',
+              'out.host': '127.0.0.1',
             },
+            metrics: { [CLIENT_PORT_KEY]: 3306 },
           }, { spanResourceMatch: /cluster_query/ })
           const falsyAssertion = agent.assertFirstTraceSpan({
             resource: 'SELECT 8 AS falsy_cluster_query',
             meta: {
               'db.name': 'db',
               'db.user': 'root',
+              'out.host': 'localhost',
             },
+            metrics: { [CLIENT_PORT_KEY]: 3306 },
           }, { spanResourceMatch: /falsy_cluster_query/ })
 
           try {
+            const firstConnection = await filteredCluster.getConnection()
+            await firstConnection.release()
             await Promise.all([
               filteredAssertion,
-              cluster.of('primary').query('SELECT 7 AS cluster_query'),
+              filteredCluster.query('SELECT 7 AS cluster_query'),
             ])
             const acquired = await cluster.getConnection(false)
             await Promise.all([
@@ -255,6 +273,46 @@ describe('Plugin', () => {
               acquired.query('SELECT 8 AS falsy_cluster_query'),
             ])
             await acquired.release()
+          } finally {
+            await cluster.end()
+          }
+        })
+
+        it('retains metadata when an automatically removed node is immediately re-added', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false, removeNodeErrorCount: 1 })
+          cluster.add('primary', {
+            ...connectionOptions,
+            host: '127.0.0.1',
+            port: 1,
+            acquireTimeout: 100,
+            connectTimeout: 50,
+            minimumIdle: 0,
+          })
+
+          try {
+            await assert.rejects(cluster.getConnection('primary'))
+            cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
+            await nextImmediate()
+
+            const assertion = agent.assertFirstTraceSpan({
+              resource: 'SELECT 21 AS readded_cluster_query',
+              meta: {
+                'db.name': 'db',
+                'db.user': 'root',
+                'out.host': 'localhost',
+              },
+              metrics: { [CLIENT_PORT_KEY]: 3306 },
+            }, { spanResourceMatch: /readded_cluster_query/ })
+            const acquired = await cluster.getConnection('primary')
+
+            try {
+              await Promise.all([
+                assertion,
+                acquired.query('SELECT 21 AS readded_cluster_query'),
+              ])
+            } finally {
+              await acquired.release()
+            }
           } finally {
             await cluster.end()
           }
@@ -348,6 +406,7 @@ describe('Plugin', () => {
         })
 
         it('traces batch and importFile operations', async () => {
+          const importFile = mariadb.importFile
           const assertion = assertTraceResources('bundle.callback.bulk', [
             'INSERT INTO dd_bundle_callback_batch VALUES (?)',
             'IMPORT FILE',
@@ -363,7 +422,7 @@ describe('Plugin', () => {
             })
             await callbackResult(callback => connection.importFile({ file: importFilePath }, callback))
             await callbackResult(callback => {
-              mariadb.importFile({ ...connectionOptions, file: importFilePath }, callback)
+              importFile({ ...connectionOptions, file: importFilePath }, callback)
             })
           })
 
@@ -442,24 +501,72 @@ describe('Plugin', () => {
           }
         })
 
-        it('traces pool clusters and uses unambiguous node metadata', async () => {
+        it('traces pool clusters and uses selected node metadata', async () => {
           const cluster = mariadb.createPoolCluster()
           cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
+          cluster.add('secondary', { ...connectionOptions, host: '127.0.0.1', minimumIdle: 0 })
+          const filteredCluster = cluster.of(/^(primary|secondary)$/, 'RR')
           const assertion = agent.assertFirstTraceSpan({
             resource: 'SELECT 16 AS callback_cluster_query',
             meta: {
               'db.name': 'db',
               'db.user': 'root',
+              'out.host': '127.0.0.1',
             },
+            metrics: { [CLIENT_PORT_KEY]: 3306 },
           })
 
           try {
+            const [firstConnection] = await callbackResult(callback => filteredCluster.getConnection(callback))
+            await callbackResult(callback => firstConnection.release(callback))
             await Promise.all([
               assertion,
               callbackResult(callback => {
-                cluster.of('primary').query('SELECT 16 AS callback_cluster_query', callback)
+                filteredCluster.query('SELECT 16 AS callback_cluster_query', callback)
               }),
             ])
+          } finally {
+            await callbackResult(callback => cluster.end(callback))
+          }
+        })
+
+        it('retains metadata when an automatically removed node is immediately re-added', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false, removeNodeErrorCount: 1 })
+          cluster.add('primary', {
+            ...connectionOptions,
+            host: '127.0.0.1',
+            port: 1,
+            acquireTimeout: 100,
+            connectTimeout: 50,
+            minimumIdle: 0,
+          })
+
+          try {
+            await assert.rejects(callbackResult(callback => cluster.getConnection('primary', callback)))
+            cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
+            await nextImmediate()
+
+            const assertion = agent.assertFirstTraceSpan({
+              resource: 'SELECT 22 AS callback_readded_cluster_query',
+              meta: {
+                'db.name': 'db',
+                'db.user': 'root',
+                'out.host': 'localhost',
+              },
+              metrics: { [CLIENT_PORT_KEY]: 3306 },
+            }, { spanResourceMatch: /callback_readded_cluster_query/ })
+            const [acquired] = await callbackResult(callback => cluster.getConnection('primary', callback))
+
+            try {
+              await Promise.all([
+                assertion,
+                callbackResult(callback => {
+                  acquired.query('SELECT 22 AS callback_readded_cluster_query', callback)
+                }),
+              ])
+            } finally {
+              await callbackResult(callback => acquired.release(callback))
+            }
           } finally {
             await callbackResult(callback => cluster.end(callback))
           }
