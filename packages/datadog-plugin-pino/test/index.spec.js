@@ -229,6 +229,30 @@ describe('Plugin', () => {
             })
           }
 
+          if (semver.intersects(version, '>=3 <5')) {
+            it('should submit records from configured custom level methods', () => {
+              let submittedLog
+              const onLogSubmission = payload => {
+                submittedLog = payload
+              }
+              logSubmissionCh.subscribe(onLogSubmission)
+              setupTest({ level: 'custom', levelVal: 35 })
+
+              try {
+                logger.custom('message')
+              } finally {
+                logSubmissionCh.unsubscribe(onLogSubmission)
+              }
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.strictEqual(record.msg, 'message')
+              assert.strictEqual(record.level, 35)
+              assert.strictEqual(submittedLog.source, 'pino')
+              assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
+            })
+          }
+
           it('should submit records from child logger instances', () => {
             let submittedLog
             const onLogSubmission = payload => {

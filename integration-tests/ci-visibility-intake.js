@@ -58,6 +58,7 @@ class FakeCiVisIntake extends FakeAgent {
   #correlationId = DEFAULT_CORRELATION_ID
   #knownTests = DEFAULT_KNOWN_TESTS
   #knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
+  #logResponseBlocker
   #waitingTime = 0
   #knownTestsPageIndex = 0
   #testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
@@ -74,6 +75,19 @@ class FakeCiVisIntake extends FakeAgent {
 
   setKnownTestsResponseCode (statusCode) {
     this.#knownTestsStatusCode = statusCode
+  }
+
+  /**
+   * Blocks log intake responses until the returned callback is invoked.
+   *
+   * @returns {() => void}
+   */
+  blockLogResponses () {
+    let release
+    this.#logResponseBlocker = new Promise(resolve => {
+      release = resolve
+    })
+    return release
   }
 
   setKnownTests (newKnownTestsResponse) {
@@ -379,12 +393,17 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/logs',
       '/debugger/v1/input',
     ], express.json(), (req, res) => {
-      res.status(200).send('OK')
       this.emit('message', {
         headers: req.headers,
         url: req.url,
         logMessage: req.body,
       })
+      const respond = () => res.status(200).send('OK')
+      if (req.path === '/api/v2/logs' && this.#logResponseBlocker) {
+        this.#logResponseBlocker.then(respond)
+      } else {
+        respond()
+      }
     })
 
     app.post([

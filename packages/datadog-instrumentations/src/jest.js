@@ -56,6 +56,7 @@ const {
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
 const {
+  getChannelBarrierPromise,
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
@@ -90,6 +91,7 @@ const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
 const modifiedFilesCh = channel('ci:jest:modified-files')
+const agentlessFlushCh = channel('ci:agentless:flush')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -176,6 +178,7 @@ const wrappedJestGlobals = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
+const nativeModuleGraphsByRuntime = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
@@ -3285,17 +3288,24 @@ function shouldWaitForTestSuiteFinish (environment) {
  * @param {boolean} waitForFinish
  */
 function publishTestSuiteFinish (payload, waitForFinish) {
-  if (!testSuiteFinishCh.hasSubscribers) return
+  let finishPromise
 
-  if (!waitForFinish) {
-    testSuiteFinishCh.publish(payload)
-    return
+  if (testSuiteFinishCh.hasSubscribers) {
+    if (waitForFinish) {
+      finishPromise = getChannelPromise(testSuiteFinishCh, {
+        ...payload,
+        waitForFinish,
+      })
+    } else {
+      testSuiteFinishCh.publish(payload)
+    }
   }
 
-  return getChannelPromise(testSuiteFinishCh, {
-    ...payload,
-    waitForFinish,
-  })
+  if (!isJestWorker || !agentlessFlushCh.hasSubscribers) return finishPromise
+
+  return finishPromise
+    ? finishPromise.then(() => getChannelBarrierPromise(agentlessFlushCh))
+    : getChannelBarrierPromise(agentlessFlushCh)
 }
 
 function cleanupTestSuiteState (testSuiteAbsolutePath) {
@@ -3870,6 +3880,64 @@ function getActiveJestModuleRegistry (runtime) {
 }
 
 /**
+ * @param {import('node:module').Module} rootModule
+ * @returns {Set<string>}
+ */
+function collectNativeModuleGraph (rootModule) {
+  const moduleGraph = new Set()
+  const pendingModules = [rootModule]
+
+  while (pendingModules.length > 0) {
+    const loadedModule = pendingModules.pop()
+    if (!loadedModule?.filename || moduleGraph.has(loadedModule.filename)) continue
+
+    moduleGraph.add(loadedModule.filename)
+    for (const childModule of loadedModule.children) {
+      pendingModules.push(childModule)
+    }
+  }
+
+  return moduleGraph
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} modulePath
+ * @param {ReturnType<typeof createRequire>} nativeRequire
+ * @returns {void}
+ */
+function evictNativeModuleGraph (runtime, modulePath, nativeRequire) {
+  let moduleGraphs = nativeModuleGraphsByRuntime.get(runtime)
+  if (!moduleGraphs) {
+    moduleGraphs = new Map()
+    nativeModuleGraphsByRuntime.set(runtime, moduleGraphs)
+  }
+
+  const cachedRootModule = nativeRequire.cache[modulePath]
+  const moduleGraph = cachedRootModule
+    ? collectNativeModuleGraph(cachedRootModule)
+    : moduleGraphs.get(modulePath) || [modulePath]
+
+  for (const moduleFilename of moduleGraph) {
+    delete nativeRequire.cache[moduleFilename]
+    RitmHook.invalidateCache(moduleFilename)
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} modulePath
+ * @param {import('node:module').Module | undefined} rootModule
+ * @returns {void}
+ */
+function recordNativeModuleGraph (runtime, modulePath, rootModule) {
+  if (!rootModule) return
+
+  const moduleGraphs = nativeModuleGraphsByRuntime.get(runtime)
+  moduleGraphs?.set(modulePath, collectNativeModuleGraph(rootModule))
+}
+
+/**
  * @param {object} runtime
  * @param {string} from
  * @param {string} modulePath
@@ -3881,10 +3949,11 @@ function requireOutsideJestRequireEngine (runtime, from, modulePath) {
   if (cachedModule) return cachedModule.exports
 
   const nativeRequire = createRequire(from)
-  delete nativeRequire.cache[modulePath]
-  RitmHook.invalidateCache(modulePath)
+  evictNativeModuleGraph(runtime, modulePath, nativeRequire)
   const moduleExports = nativeRequire(modulePath)
-  moduleRegistry?.set(modulePath, nativeRequire.cache[modulePath] || { exports: moduleExports })
+  const nativeModule = nativeRequire.cache[modulePath]
+  recordNativeModuleGraph(runtime, modulePath, nativeModule)
+  moduleRegistry?.set(modulePath, nativeModule || { exports: moduleExports })
 
   return moduleExports
 }

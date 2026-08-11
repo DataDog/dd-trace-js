@@ -181,6 +181,36 @@ describe('Plugin', () => {
           assert.strictEqual(record.msg, 'message')
         })
 
+        it('should submit the serialized record for raw-only streams', () => {
+          const bunyan = require(`../../../versions/bunyan@${version}`).get()
+          const rawStream = new Writable({ objectMode: true, write (_chunk, _encoding, callback) { callback() } })
+          let submittedLog
+          const onLogSubmission = payload => {
+            submittedLog = payload
+          }
+          sinon.spy(rawStream, 'write')
+          logger = bunyan.createLogger({
+            name: 'test',
+            serializers: {
+              secret: () => '[REDACTED]',
+            },
+            streams: [{ type: 'raw', stream: rawStream }],
+          })
+          logSubmissionCh.subscribe(onLogSubmission)
+
+          try {
+            logger.info({ secret: 'sensitive' }, 'message')
+          } finally {
+            logSubmissionCh.unsubscribe(onLogSubmission)
+          }
+
+          const record = rawStream.write.firstCall.args[0]
+
+          assert.strictEqual(record.secret, '[REDACTED]')
+          assert.strictEqual(submittedLog.source, 'bunyan')
+          assert.strictEqual(submittedLog.message, record)
+        })
+
         it('should not submit records when Bunyan skips emission', () => {
           const submittedLogs = []
           /** @param {{ source: string, message: Record<string, unknown> }} payload */

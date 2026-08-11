@@ -3646,6 +3646,80 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
     })
 
+    it(`should isolate transitive native modules for ${loggerName}`, async () => {
+      let testOutput = ''
+      const workspaceDirectory = path.join(
+        cwd,
+        'ci-visibility/jest-mock-bypass-require/transitive-workspace'
+      )
+      const loggerDirectory = path.join(workspaceDirectory, 'node_modules', loggerName)
+      const loggerLibDirectory = path.join(loggerDirectory, 'lib')
+      fs.mkdirSync(loggerLibDirectory, { recursive: true })
+      fs.writeFileSync(path.join(loggerDirectory, 'package.json'), JSON.stringify({
+        name: loggerName,
+        version: '0.0.0',
+        main: 'index.js',
+      }))
+      fs.writeFileSync(
+        path.join(loggerDirectory, 'index.js'),
+        "'use strict'\n\nmodule.exports = { state: require('./lib/state') }\n"
+      )
+      fs.writeFileSync(path.join(loggerLibDirectory, 'state.js'), "'use strict'\n\nmodule.exports = {}\n")
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/transitive-workspace/module-lifecycle-test',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
+    onlyLatestIt(`should preserve Jest transforms for ${loggerName}`, async () => {
+      let testOutput = ''
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            CONFIG_TRANSFORM: JSON.stringify({
+              '\\.[jt]s$': '<rootDir>/ci-visibility/jest-mock-bypass-require/logger-transformer.js',
+            }),
+            CONFIG_TRANSFORM_IGNORE_PATTERNS: '[]',
+            TEST_LOGGER: loggerName,
+            TESTS_TO_RUN: 'jest-mock-bypass-require/transformed-logger-test',
+            USE_CONFIG_FILE: '1',
+            USE_JEST_RUN: '1',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+
+      const [code] = await once(childProcess, 'exit')
+      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
+    })
+
     for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
       it(`should respect Jest ${resolutionType} for ${loggerName}`, async () => {
         let testOutput = ''

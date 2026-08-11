@@ -27,6 +27,10 @@ if (process.env.CONFIG_TRANSFORM) {
   config.transform = JSON.parse(process.env.CONFIG_TRANSFORM)
 }
 
+if (process.env.CONFIG_TRANSFORM_IGNORE_PATTERNS) {
+  config.transformIgnorePatterns = JSON.parse(process.env.CONFIG_TRANSFORM_IGNORE_PATTERNS)
+}
+
 if (process.env.CONFIG_MODULE_NAME_MAPPER) {
   config.moduleNameMapper = JSON.parse(process.env.CONFIG_MODULE_NAME_MAPPER)
 }

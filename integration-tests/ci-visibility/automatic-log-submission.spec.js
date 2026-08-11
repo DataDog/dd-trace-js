@@ -175,6 +175,46 @@ describe('test optimization automatic log submission', () => {
           assert.equal(logTraceId, testTraceId)
         })
 
+        if (name === 'jest' && loggerName !== 'winston') {
+          it('waits for the final log request to complete before the worker exits', async () => {
+            const releaseLogResponses = receiver.blockLogResponses()
+            const logsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+                assert.strictEqual(payloads.length, 1, testOutput)
+                assert.strictEqual(payloads[0].logMessage.length, 2, testOutput)
+              })
+
+            childProcess = exec(command, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+                DD_API_KEY: '1',
+                DD_SERVICE: 'my-service',
+                TEST_JEST_WORKER_SHUTDOWN: '1',
+                TEST_LOGGER: loggerName,
+                ...getExtraEnvVars(),
+              },
+            })
+            childProcess.stdout?.on('data', chunk => {
+              testOutput += chunk.toString()
+            })
+            childProcess.stderr?.on('data', chunk => {
+              testOutput += chunk.toString()
+            })
+
+            const exitPromise = once(childProcess, 'exit')
+            await logsPromise
+
+            assert.strictEqual(childProcess.exitCode, null, testOutput)
+            releaseLogResponses()
+
+            const [exitCode] = await exitPromise
+            assert.strictEqual(exitCode, 0, testOutput)
+          })
+        }
+
         it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is not set', async () => {
           childProcess = exec(command,
             {
