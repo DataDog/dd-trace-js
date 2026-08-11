@@ -155,10 +155,9 @@ class SpanBuckets extends Map {
   #includeTraceRoot
 
   /**
-   * @param {object} [options]
-   * @param {boolean} [options.includeTraceRoot]
+   * @param {boolean} [includeTraceRoot]
    */
-  constructor ({ includeTraceRoot = false } = {}) {
+  constructor (includeTraceRoot = false) {
     super()
     this.#includeTraceRoot = includeTraceRoot
   }
@@ -181,20 +180,19 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
-  #spanBucketOptions
+  #includeTraceRoot
 
   /**
-   * @param {object} [spanBucketOptions]
-   * @param {boolean} [spanBucketOptions.includeTraceRoot]
+   * @param {boolean} [includeTraceRoot]
    */
-  constructor (spanBucketOptions) {
+  constructor (includeTraceRoot = false) {
     super()
-    this.#spanBucketOptions = spanBucketOptions
+    this.#includeTraceRoot = includeTraceRoot
   }
 
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets(this.#spanBucketOptions))
+      this.set(time, new SpanBuckets(this.#includeTraceRoot))
     }
 
     return this.get(time)
@@ -221,7 +219,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets({ includeTraceRoot: Boolean(otlpExporter) })
+    this.buckets = new TimeBuckets(Boolean(otlpExporter))
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null

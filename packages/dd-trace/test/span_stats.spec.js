@@ -371,7 +371,7 @@ describe('SpanBuckets', () => {
     const rootSpan = { ...basicSpan, parent_id: { equals: rootIdEquals } }
     const childSpan = { ...basicSpan, parent_id: { equals: childIdEquals } }
     const legacyBuckets = new SpanBuckets()
-    const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+    const otlpBuckets = new SpanBuckets(true)
 
     legacyBuckets.forSpan(rootSpan)
     legacyBuckets.forSpan(childSpan)
@@ -391,7 +391,7 @@ describe('SpanBuckets', () => {
 
   it('should leave trace-root unknown when parent_id is missing or null', () => {
     for (const parentId of [undefined, null]) {
-      const otlpBuckets = new SpanBuckets({ includeTraceRoot: true })
+      const otlpBuckets = new SpanBuckets(true)
 
       otlpBuckets.forSpan({ ...basicSpan, parent_id: parentId })
 

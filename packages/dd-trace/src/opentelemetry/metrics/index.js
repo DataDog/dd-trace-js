@@ -81,7 +81,7 @@ function initializeOpenTelemetryMetrics (config) {
 }
 
 /**
- * @param {Record<string, unknown>} [tags]
+ * @param {Record<string, unknown>} tags
  * @param {object} [options]
  * @param {boolean} [options.reportHostname]
  * @param {string} [options.service]
@@ -100,20 +100,18 @@ function buildResourceAttributes (tags, { reportHostname, service, env, serviceV
   if (env) attrs['deployment.environment.name'] = env
   if (reportHostname) attrs['host.name'] = os.hostname()
 
-  if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-  if (tags) {
-    const tracerTags = []
-    for (const [key, value] of Object.entries(tags)) {
-      const valueType = typeof value
-      const supported = valueType === 'string' || valueType === 'boolean' ||
-        (valueType === 'number' && Number.isFinite(value))
-      if (!RESERVED_TRACER_TAGS.has(key) && supported) tracerTags.push(`${key}:${value}`)
-    }
-    if (tracerTags.length) attrs['datadog.tracer_tags'] = tracerTags
+  if (tags['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+  const tracerTags = []
+  for (const [key, value] of Object.entries(tags)) {
+    const valueType = typeof value
+    const supported = valueType === 'string' || valueType === 'boolean' ||
+      (valueType === 'number' && Number.isFinite(value))
+    if (!RESERVED_TRACER_TAGS.has(key) && supported) tracerTags.push(`${key}:${value}`)
   }
+  if (tracerTags.length) attrs['datadog.tracer_tags'] = tracerTags
   // Mirrors the legacy v0.6/stats ProcessTags shape (buildProcessTags().tagsArray); keep both in sync.
   const processTagsArray = processTags.tagsArray
-  if (processTagsArray?.length) {
+  if (processTagsArray.length) {
     attrs['datadog.process_tags'] = processTagsArray
   }
   return attrs
