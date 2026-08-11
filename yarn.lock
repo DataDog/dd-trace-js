@@ -295,12 +295,12 @@
     pprof-format "^2.2.1"
     source-map "^0.8.0"
 
-"@datadog/wasm-js-rewriter@5.0.1":
-  version "5.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.1.tgz#f227d2e3eb0f83b8a37f190a9ff8fdbde5955782"
-  integrity sha512-EzbV3Lrdt3udQEsbDOVC5gB1y7yxfpBbrSIk4jaEsGjyj0Dbv2HGj7tZjs+qXzIzNonHc8h5El2bYZOGfC2wwg==
+"@datadog/wasm-js-rewriter@5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.2.tgz#f7cb491d02a0ce54429ca732f3dba5436b5e9271"
+  integrity sha512-ffv9TqdtuE8XnZgaGnmMIU1A+t+eaHIEbdVpV5elijq1dKK03OqFb+Xo4ojTbgCwxIYDA1zmA8TnZJBjtzuVuw==
   dependencies:
-    js-yaml "^4.1.0"
+    js-yaml "^4.1.1"
     lru-cache "^7.14.0"
     module-details-from-path "^1.0.3"
     node-gyp-build "^4.5.0"

@@ -186,7 +186,7 @@
     "@datadog/native-metrics": "3.1.2",
     "@datadog/openfeature-node-server": "2.0.2",
     "@datadog/pprof": "5.17.0",
-    "@datadog/wasm-js-rewriter": "5.0.1",
+    "@datadog/wasm-js-rewriter": "5.0.2",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
     "oxc-parser": "^0.132.0"
