@@ -6,7 +6,7 @@ const { describe, it, afterEach } = require('mocha')
 
 require('./setup/core')
 
-const { getPlatformTags, enableGCPPubSubPushSubscription } = require('../src/serverless')
+const { getServerlessPlatformTags, enableGCPPubSubPushSubscription } = require('../src/serverless')
 const agent = require('./plugins/agent')
 
 describe('enableGCPPubSubPushSubscription', () => {
@@ -104,7 +104,7 @@ describe('Vercel span metadata', () => {
       VERCEL_PROJECT_ID: 'prj_123',
     }
 
-    assert.deepStrictEqual(getPlatformTags(), [
+    assert.deepStrictEqual(getServerlessPlatformTags(), [
       'vercel.project_id', 'prj_123',
       'vercel.environment', 'preview',
     ])
@@ -117,7 +117,7 @@ describe('Vercel span metadata', () => {
       VERCEL_ENV: 'preview',
     }
 
-    assert.deepStrictEqual(getPlatformTags(), [
+    assert.deepStrictEqual(getServerlessPlatformTags(), [
       'vercel.environment', 'preview',
     ])
   })

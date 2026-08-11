@@ -43,13 +43,20 @@ function isInServerlessEnvironment () {
 }
 
 /**
- * Gets tags describing the platform where the tracer is running.
+ * Gets tags describing the serverless platform where the tracer is running.
  *
  * @returns {string[]|undefined}
  */
-function getPlatformTags () {
-  if (getEnvironmentVariable('VERCEL') !== '1') return
+function getServerlessPlatformTags () {
+  if (getEnvironmentVariable('VERCEL') === '1') {
+    return getVercelPlatformTags()
+  }
+}
 
+/**
+ * @returns {string[]|undefined}
+ */
+function getVercelPlatformTags () {
   let tags
   const projectId = getEnvironmentVariable('VERCEL_PROJECT_ID')
   if (projectId) {
@@ -72,7 +79,7 @@ function getPlatformTags () {
 }
 
 module.exports = {
-  getPlatformTags,
+  getServerlessPlatformTags,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
