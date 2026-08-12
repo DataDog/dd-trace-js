@@ -170,7 +170,8 @@ describe('otel-orchestration-store', () => {
     assert.equal(meta.traceId, '00000000000000000000000000000001')
     assert.equal(meta.parentId, '0000000000000004')
     assert.equal(meta.spanId.length, 16)
-    assert.equal(meta.pendingStart, true)
+    assert.ok(meta.startTime)
+    assert.equal(meta.pendingStart, undefined)
     // A worker with no in-process state must still read the HTTP parent.
     assert.equal(readOrchestrationSpanMetaSync('seed-new').parentId, '0000000000000004')
   })
@@ -193,8 +194,7 @@ describe('otel-orchestration-store', () => {
     assert.equal(meta.parentId, '0000000000000004')
     assert.equal(meta.traceId, '00000000000000000000000000000001')
     assert.equal(meta.spanId, seeded.spanId)
-    assert.equal(meta.pendingStart, undefined)
-    assert.ok(meta.startTime >= seeded.startTime)
+    assert.strictEqual(meta.startTime, seeded.startTime)
   })
 
   it('does not seed twice for the same instance', () => {
