@@ -15,8 +15,43 @@ const execFileAsync = promisify(execFile)
 // GitHub's connection/rate limits and fail every request for a run with a generic `fetch failed`
 // (undici's error for a dropped connection), even though a smaller burst succeeds fine. Capping
 // concurrency keeps the burst size sane; retrying absorbs the transient failures that still slip
-// through.
+// through. All Green processes more than one sibling workflow's downloads concurrently (see
+// `all-green.mjs`'s `scheduleProcessing`), so the cap has to hold across every in-flight
+// `downloadArtifacts` call, not just within one of them — a per-call limit still lets N concurrent
+// runs each open their own 10, recreating the exact burst this exists to prevent.
 const MAX_CONCURRENT_DOWNLOADS = 10
+
+/**
+ * Bounds how many downloads run at once across every concurrent `downloadArtifacts` call in this
+ * process, instead of per call.
+ */
+class Semaphore {
+  #permits
+  #queue = []
+
+  constructor (permits) {
+    this.#permits = permits
+  }
+
+  acquire () {
+    if (this.#permits > 0) {
+      this.#permits--
+      return Promise.resolve()
+    }
+    return new Promise(resolve => this.#queue.push(resolve))
+  }
+
+  release () {
+    const next = this.#queue.shift()
+    if (next) {
+      next()
+    } else {
+      this.#permits++
+    }
+  }
+}
+
+const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
 /**
  * Download and unzip a single artifact, retrying on failure with a backoff delay.
@@ -61,32 +96,6 @@ async function downloadOne ({ runId, artifact, owner, repo, token, retries, dela
 }
 
 /**
- * Pull tasks off the front of `tasks` one at a time until it's empty, so at most one task per
- * worker is ever in flight.
- *
- * @param {Array<() => Promise<void>>} tasks
- * @returns {Promise<void>}
- */
-async function worker (tasks) {
-  const task = tasks.shift()
-  if (!task) return
-  await task()
-  return worker(tasks)
-}
-
-/**
- * Run a bounded number of `tasks` at a time instead of firing every one at once.
- *
- * @param {Array<() => Promise<void>>} tasks
- * @param {number} limit
- * @returns {Promise<void>}
- */
-async function runWithConcurrencyLimit (tasks, limit) {
-  const queue = [...tasks]
-  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, () => worker(queue)))
-}
-
-/**
  * @param {import('octokit').Octokit} octokit
  * @param {object} opts
  * @param {string} opts.owner
@@ -113,13 +122,19 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs, re
   )
 
   let failed = 0
-  await runWithConcurrencyLimit(
-    toDownload.map(({ runId, artifact }) => async () => {
-      const ok = await downloadOne({ runId, artifact, owner, repo, token, retries, delayMs })
-      if (!ok) failed++
-    }),
-    MAX_CONCURRENT_DOWNLOADS
+  await Promise.all(
+    toDownload.map(async ({ runId, artifact }) => {
+      await downloadSemaphore.acquire()
+      try {
+        const ok = await downloadOne({ runId, artifact, owner, repo, token, retries, delayMs })
+        if (!ok) failed++
+      } finally {
+        downloadSemaphore.release()
+      }
+    })
   )
 
   return { downloaded: toDownload.length - failed, failed }
 }
+
+export { Semaphore }
