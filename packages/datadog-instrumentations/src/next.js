@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const shimmer = require('../../datadog-shimmer')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
@@ -49,7 +51,7 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
-const backgroundRevalidationRequests = new WeakSet()
+const backgroundRevalidations = new AsyncLocalStorage()
 
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
@@ -344,7 +346,7 @@ const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
     const nodeRequest = req.originalRequest || req
-    if (error && !backgroundRevalidationRequests.has(nodeRequest)) {
+    if (error && backgroundRevalidations.getStore() !== nodeRequest) {
       publishError(req, undefined, error)
     }
     return onRequestError.apply(this, arguments)
@@ -405,7 +407,8 @@ function wrapPrepare (prepare) {
 function wrapResponseGenerator (responseGenerator, routeModule, req) {
   return function (context) {
     if (context?.hasResolved) {
-      backgroundRevalidationRequests.add(req.originalRequest || req)
+      const nodeRequest = req.originalRequest || req
+      return backgroundRevalidations.run(nodeRequest, () => responseGenerator.apply(this, arguments))
     }
     if (!routeModule) {
       return responseGenerator.apply(this, arguments)
@@ -424,10 +427,10 @@ function wrapResponseGenerator (responseGenerator, routeModule, req) {
 
 /**
  * @param {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>} handleResponse
- * @param {boolean} finishOnResponse
+ * @param {boolean} associateNextRequest
  * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
  */
-function wrapHandleResponse (handleResponse, finishOnResponse) {
+function wrapHandleResponse (handleResponse, associateNextRequest) {
   return function (options) {
     const req = options.req
     const res = routeResponses.get(req)
@@ -437,7 +440,7 @@ function wrapHandleResponse (handleResponse, finishOnResponse) {
       return handleResponse.apply(this, arguments)
     }
 
-    const routeModule = finishOnResponse ? undefined : this
+    const routeModule = associateNextRequest ? this : undefined
     options.responseGenerator = wrapResponseGenerator(options.responseGenerator, routeModule, req)
 
     return instrument(req, res, ctx => {
@@ -457,7 +460,7 @@ function wrapHandleResponse (handleResponse, finishOnResponse) {
 
         throw error
       })
-    }, undefined, finishOnResponse && finishChannel.hasSubscribers)
+    }, undefined, finishChannel.hasSubscribers)
   }
 }
 
@@ -466,7 +469,7 @@ function wrapHandleResponse (handleResponse, finishOnResponse) {
  * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
  */
 function wrapAppRouteHandleResponse (handleResponse) {
-  return wrapHandleResponse(handleResponse, false)
+  return wrapHandleResponse(handleResponse, true)
 }
 
 /**
@@ -474,7 +477,7 @@ function wrapAppRouteHandleResponse (handleResponse) {
  * @returns {(options: HandleResponseOptions) => Promise<ResponseCacheEntry | undefined>}
  */
 function wrapAppPageHandleResponse (handleResponse) {
-  return wrapHandleResponse(handleResponse, true)
+  return wrapHandleResponse(handleResponse, false)
 }
 
 function instrumentRouteModule (RouteModule, wrappers, handleErrors) {
