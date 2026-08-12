@@ -148,6 +148,10 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
+      if (IS_AWS_LAMBDA_MICROVM) {
+        this.#registerMicroVmRunHook(config)
+      }
+
       // Add config dependent process tags
       processTags.initialize(config)
 
@@ -290,9 +294,6 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
 
-      if (IS_AWS_LAMBDA_MICROVM) {
-        this.#registerMicroVmRunHook(config)
-      }
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
