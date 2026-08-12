@@ -338,14 +338,7 @@ class DataStreamsProcessor {
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
       hash,
-      // Reset the edge start to now: the edge latency emitted above is measured
-      // from the *previous* checkpoint, but the context we hand to the next hop
-      // must start its edge clock here so the next hop's edge latency is per-hop.
-      // Inheriting the parent's edgeStartNs (the old behavior) pins it at the
-      // pathway origin, making every hop's edge latency cumulative (edge latency
-      // == pathway latency) and double-counting when per-hop latencies are summed
-      // (e.g. the Measure tab). This matches dd-trace-go, which stores
-      // edgeStart: now on the child pathway.
+      // start the next hop's edge clock here so edge latency stays per-hop
       edgeStartNs: nowNs,
       pathwayStartNs,
       previousDirection: direction,

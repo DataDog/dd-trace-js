@@ -364,42 +364,77 @@ describe('DataStreamsProcessor', () => {
     assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
   })
 
-  it('resets the edge start per hop so edge latency is per-hop, not cumulative', () => {
-    // Serial pipeline reported by real tracers: produce(topic-a) ->
-    // consume(topic-a) -> produce(topic-b) -> consume(topic-b), with a 1s
-    // processing gap at the middle service and near-zero queue waits.
-    //
-    // Each hop's edge latency must be measured from the *previous* checkpoint
-    // (per-hop). If the context handed to the next hop keeps the parent's
-    // edgeStartNs (the pre-fix behavior), edgeStart stays pinned at the pathway
-    // origin and every hop's edge latency becomes cumulative (== pathway
-    // latency), which double-counts when per-hop latencies are summed (e.g. the
-    // DSM Measure tab). Here the downstream topic-b edge must be the ~3ms queue
-    // wait, not the cumulative ~1008ms.
-    //
-    // A small fake epoch is used so Date.now() * 1e6 stays within safe-integer
-    // range and the nanosecond deltas are exact.
+  // A small fake epoch keeps Date.now() * 1e6 within safe-integer range so the
+  // nanosecond deltas are exact.
+  const MS = 1e6
+
+  const captureCheckpoints = () => {
     const recorded = []
     sinon.stub(processor, 'recordCheckpoint').callsFake((checkpoint) => recorded.push(checkpoint))
+    return recorded
+  }
+
+  it('resets the edge start per hop so edge latency is per-hop, not cumulative', () => {
+    // produce(a) -> consume(a) -> produce(b) -> consume(b), 1s processing at the
+    // middle hop. The downstream topic-b edge must be the 3ms queue wait, not
+    // the cumulative 1008ms.
+    const recorded = captureCheckpoints()
     const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
-    const MS = 1e6 // nanoseconds per millisecond
     try {
       const produceA = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, null)
-      clock.tick(5) // topic-a queue wait
+      clock.tick(5)
       const consumeA = processor.setCheckpoint(['direction:in', 'group:g2', 'topic:a', 'type:kafka'], null, produceA)
-      clock.tick(1000) // in-service processing at the middle service
+      clock.tick(1000)
       const produceB = processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, consumeA)
-      clock.tick(3) // topic-b queue wait
+      clock.tick(3)
       processor.setCheckpoint(['direction:in', 'group:g3', 'topic:b', 'type:kafka'], null, produceB)
     } finally {
       clock.restore()
     }
 
     const [, consumeACp, produceBCp, consumeBCp] = recorded
-    assert.strictEqual(consumeACp.edgeLatencyNs, 5 * MS, 'topic-a edge latency should be the queue wait')
-    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS, 'middle service internal latency = processing time')
-    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS, 'topic-b edge = queue wait, not cumulative')
-    assert.strictEqual(consumeBCp.pathwayLatencyNs, 1008 * MS, 'pathway latency should remain cumulative (end-to-end)')
+    assert.strictEqual(consumeACp.edgeLatencyNs, 5 * MS)
+    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS)
+    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS)
+    assert.strictEqual(consumeBCp.pathwayLatencyNs, 1008 * MS)
+  })
+
+  it('measures same-direction (fan-out) hops from the closest opposite-direction checkpoint', () => {
+    // consume -> produce(a), produce(b): both fan-out produces measure their
+    // edge from the shared consume, not from each other.
+    const recorded = captureCheckpoints()
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    try {
+      const origin = processor.setCheckpoint(['direction:out', 'topic:in', 'type:kafka'], null, null)
+      clock.tick(5)
+      const consume = processor.setCheckpoint(['direction:in', 'group:g', 'topic:in', 'type:kafka'], null, origin)
+      clock.tick(2)
+      const fanoutA = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, consume)
+      clock.tick(3)
+      processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, fanoutA)
+    } finally {
+      clock.restore()
+    }
+
+    const [, , fanoutACp, fanoutBCp] = recorded
+    assert.strictEqual(fanoutACp.edgeLatencyNs, 2 * MS)
+    assert.strictEqual(fanoutBCp.edgeLatencyNs, 5 * MS)
+  })
+
+  it('restarts the pathway for a produce loop with no consume (same direction, entry parent)', () => {
+    const recorded = captureCheckpoints()
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    try {
+      const p1 = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, null)
+      clock.tick(4)
+      processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, p1)
+    } finally {
+      clock.restore()
+    }
+
+    const [, loop] = recorded
+    assert.strictEqual(loop.edgeLatencyNs, 0)
+    assert.strictEqual(loop.pathwayLatencyNs, 0)
   })
 })
 
