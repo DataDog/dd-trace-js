@@ -822,10 +822,8 @@ describe('RemoteConfig', () => {
     })
   })
 
-  describe('live state getters', () => {
-    it('should reflect clientId changes immediately via state.client.id getter', () => {
-      // state.client.id is a live getter so that in-flight RC polls pick up
-      // a refreshed id without the RemoteConfig instance being recreated.
+  describe('identity state refresh', () => {
+    it('should replace state.client.id when identity is updated', () => {
       const originalId = rc.state.client.id
 
       uuid.returns('refreshed-client-id')
@@ -835,22 +833,25 @@ describe('RemoteConfig', () => {
       assert.notStrictEqual(rc.state.client.id, originalId)
     })
 
-    it('should reflect runtime-id tag changes immediately via client_tracer.runtime_id getter', () => {
+    it('should replace client_tracer.runtime_id when identity is updated', () => {
       assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
 
       config.tags['runtime-id'] = 'refreshed-runtime-id'
+      channel('datadog:identity:update').publish(config)
 
       assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
 
       config.tags['runtime-id'] = 'runtimeId' // restore for other tests
     })
 
-    it('should include live runtime_id and id in the JSON payload', () => {
+    it('should include refreshed runtime_id and id in the JSON payload', () => {
+      uuid.returns('refreshed-client-id')
       config.tags['runtime-id'] = 'live-runtime-id'
+      channel('datadog:identity:update').publish(config)
       const payload = JSON.parse(rc.getPayload())
 
       assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
-      assert.strictEqual(payload.client.id, '1234-5678')
+      assert.strictEqual(payload.client.id, 'refreshed-client-id')
 
       config.tags['runtime-id'] = 'runtimeId'
     })
@@ -902,10 +903,7 @@ describe('RemoteConfig', () => {
       })
     })
 
-    it('should update state.client.id on the live instance immediately after refresh', () => {
-      // state.client.id is a live getter — the existing instance reflects the
-      // update without being recreated, so all in-flight RC polls pick up the
-      // new id on the next getPayload() call.
+    it('should update state.client.id on the existing instance after refresh', () => {
       const rcInstance = new RemoteConfigWithId(config)
       assert.strictEqual(rcInstance.state.client.id, '1234-5678')
 
@@ -915,9 +913,6 @@ describe('RemoteConfig', () => {
     })
 
     it('should rebuild client_tracer.tags to reflect the refreshed _dd.rc.client_id', () => {
-      // client_tracer.tags is a live getter (like state.client.id) — the existing instance
-      // reflects the refreshed _dd.rc.client_id without being recreated, instead of serializing
-      // a snapshot built once at construction time.
       const rcConfig = {
         url: new URL('http://127.0.0.1:1337'),
         tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old-client-id' },
