@@ -208,7 +208,7 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
-      assert.deepStrictEqual(coverage, {})
+      assert.strictEqual(coverage, undefined)
       done()
     })
   })

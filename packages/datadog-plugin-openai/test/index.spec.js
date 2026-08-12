@@ -6,6 +6,7 @@ const assert = require('node:assert/strict')
 const Path = require('path')
 const { inspect } = require('node:util')
 
+const nock = require('nock')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -158,6 +159,30 @@ describe('Plugin', () => {
         sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.tokens')
         sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.requests')
         sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.tokens')
+      })
+
+      it('logs edit instructions', async function () {
+        if (semver.satisfies(realVersion, '>=4.0.0')) {
+          this.skip()
+        }
+
+        const instruction = 'Fix the spelling mistakes.'
+        const scope = nock('http://127.0.0.1:9126')
+          .post('/vcr/openai/edits')
+          .reply(200, {
+            choices: [{ index: 0, text: 'What day of the week is it?' }],
+          })
+
+        const checkTrace = agent.assertFirstTraceSpan({ error: 0 })
+        await openai.createEdit({
+          input: 'What day of the wek is it?',
+          instruction,
+          model: 'text-davinci-edit-001',
+        })
+        await checkTrace
+
+        scope.done()
+        sinon.assert.calledWithMatch(externalLoggerStub, { instruction })
       })
 
       describe('maintains context', () => {
