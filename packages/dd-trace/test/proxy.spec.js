@@ -1196,7 +1196,19 @@ describe('TracerProxy', () => {
 
       sinon.assert.calledTwice(channelMock.publish)
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.notCalled(storeConfig)
       sinon.assert.calledOnceWithExactly(log.error, 'Error initializing tracer', error)
+    })
+
+    it('should not store tracer metadata when tracing is disabled', () => {
+      config.DD_TRACE_ENABLED = false
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.notCalled(storeConfig)
+      sinon.assert.calledTwice(channelMock.publish)
     })
 
     it('should publish datadog:identity:update with the tracer config on POST .../run', () => {

@@ -15,8 +15,8 @@ const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 let clientId = uuid()
-/** @type {{ tags: string[] } | undefined} */
-let clientTracer
+/** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
+let client
 
 channel('datadog:identity:update').subscribe(refreshIdentity)
 
@@ -72,11 +72,11 @@ class RemoteConfig {
           error: '',
           backend_client_state: '',
         },
-        get id () { return clientId },
+        id: clientId,
         products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
         is_tracer: true,
         client_tracer: {
-          get runtime_id () { return config.tags['runtime-id'] },
+          runtime_id: config.tags['runtime-id'],
           language: 'node',
           tracer_version: tracerVersion,
           service: config.service,
@@ -91,7 +91,7 @@ class RemoteConfig {
       cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]), // updated by `parseConfig()`
     }
 
-    clientTracer = this.state.client.client_tracer
+    client = this.state.client
   }
 
   /**
@@ -604,9 +604,11 @@ function refreshIdentity (config) {
   if (config.tags['_dd.rc.client_id']) {
     config.tags['_dd.rc.client_id'] = clientId
   }
-  if (clientTracer !== undefined) {
+  if (client !== undefined) {
+    client.id = clientId
+    client.client_tracer.runtime_id = config.tags['runtime-id']
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    clientTracer.tags = getTagsString(config, repositoryUrl, commitSHA)
+    client.client_tracer.tags = getTagsString(config, repositoryUrl, commitSHA)
   }
 }
 

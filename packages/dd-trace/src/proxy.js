@@ -293,7 +293,6 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
-
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
@@ -324,9 +323,11 @@ class Tracer extends NoopProxy {
         ch.unsubscribe(onHttpRequest)
         drainUuidPool()
         channel('datadog:identity:update').publish(config)
-        const metadata = require('./tracer_metadata')(config)
-        if (metadata === undefined) {
-          log.warn('Could not store tracer configuration for service discovery')
+        if (this._tracingInitialized) {
+          const metadata = require('./tracer_metadata')(config)
+          if (metadata === undefined) {
+            log.warn('Could not store tracer configuration for service discovery')
+          }
         }
         channel('datadog:identity:refresh').publish(config)
       }
