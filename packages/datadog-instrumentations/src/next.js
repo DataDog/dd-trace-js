@@ -30,12 +30,17 @@ const queryParsedChannel = channel('apm:next:query-parsed')
  * @property {NextNodeRequest} req
  * @property {NextNodeResponse} res
  * @property {boolean} [finishOnResponse]
+ * @property {boolean} [handlerFinished]
+ * @property {boolean} [responseFinished]
  * @property {unknown} [error]
  * @property {NextRequest} [nextRequest]
  *
+ * @typedef {object} ResponseGeneratorContext
+ * @property {boolean} [hasResolved]
+ *
  * @typedef {object} HandleResponseOptions
  * @property {NextNodeRequest} req
- * @property {(...args: unknown[]) => Promise<unknown>} responseGenerator
+ * @property {(context?: ResponseGeneratorContext) => Promise<unknown>} responseGenerator
  *
  * @typedef {object} ResponseCacheEntry
  * @property {{ status?: number }} [value]
@@ -44,6 +49,7 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
+const backgroundRevalidationRequests = new WeakSet()
 
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
@@ -203,6 +209,16 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
   requests.add(req)
 
   const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
+  if (finishOnResponse) {
+    const onResponseFinish = () => {
+      res.removeListener('finish', onResponseFinish)
+      res.removeListener('close', onResponseFinish)
+      ctx.responseFinished = true
+      if (ctx.handlerFinished) publishFinish(ctx, ctx.error)
+    }
+    res.once('finish', onResponseFinish)
+    res.once('close', onResponseFinish)
+  }
   if (queryParsedChannel.hasSubscribers && req.url) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
@@ -250,8 +266,8 @@ function wrapServeStatic (serveStatic) {
   }
 }
 
-function finish (ctx, result, err) {
-  publishError(ctx.req, ctx, err)
+function publishFinish (ctx, error) {
+  publishError(ctx.req, ctx, error)
   requestErrors.delete(ctx.req)
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
@@ -260,6 +276,16 @@ function finish (ctx, result, err) {
   }
 
   finishChannel.publish(ctx)
+}
+
+function finish (ctx, result, error) {
+  if (ctx.finishOnResponse) {
+    ctx.handlerFinished = true
+    if (error) ctx.error = error
+    if (!ctx.responseFinished) return
+  }
+
+  publishFinish(ctx, error)
 }
 
 /**
@@ -317,7 +343,8 @@ const activeRouteRequests = new WeakMap()
 const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
-    if (error) {
+    const nodeRequest = req.originalRequest || req
+    if (error && !backgroundRevalidationRequests.has(nodeRequest)) {
       publishError(req, undefined, error)
     }
     return onRequestError.apply(this, arguments)
@@ -370,13 +397,20 @@ function wrapPrepare (prepare) {
 }
 
 /**
- * @param {(...args: unknown[]) => unknown} responseGenerator
- * @param {object} routeModule
+ * @param {(context?: ResponseGeneratorContext) => unknown} responseGenerator
+ * @param {object | undefined} routeModule
  * @param {NextNodeRequest} req
- * @returns {(...args: unknown[]) => unknown}
+ * @returns {(context?: ResponseGeneratorContext) => unknown}
  */
 function wrapResponseGenerator (responseGenerator, routeModule, req) {
-  return function () {
+  return function (context) {
+    if (context?.hasResolved) {
+      backgroundRevalidationRequests.add(req.originalRequest || req)
+    }
+    if (!routeModule) {
+      return responseGenerator.apply(this, arguments)
+    }
+
     // Next calls the route module before the generator's first await. Limit the association to that
     // synchronous call so concurrent requests can share the route module instance safely.
     activeRouteRequests.set(routeModule, req)
@@ -403,9 +437,8 @@ function wrapHandleResponse (handleResponse, finishOnResponse) {
       return handleResponse.apply(this, arguments)
     }
 
-    if (!finishOnResponse) {
-      options.responseGenerator = wrapResponseGenerator(options.responseGenerator, this, req)
-    }
+    const routeModule = finishOnResponse ? undefined : this
+    options.responseGenerator = wrapResponseGenerator(options.responseGenerator, routeModule, req)
 
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, undefined, true)
@@ -424,7 +457,7 @@ function wrapHandleResponse (handleResponse, finishOnResponse) {
 
         throw error
       })
-    }, undefined, finishOnResponse)
+    }, undefined, finishOnResponse && finishChannel.hasSubscribers)
   }
 }
 
