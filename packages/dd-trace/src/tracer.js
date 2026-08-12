@@ -13,6 +13,7 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
+const { flushAll } = require('./flush')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
 // DD_TRACE_DEBUG.
@@ -141,6 +142,14 @@ class DatadogTracer extends Tracer {
   setUrl (url) {
     this._exporter.setUrl(url)
     this._dataStreamsProcessor.setUrl(url)
+  }
+
+  /**
+   * Flushes every configured telemetry pipeline.
+   * @param {Function} [done] Called after every configured export completes
+   */
+  flushAll (done) {
+    flushAll(this, done)
   }
 
   scope () {

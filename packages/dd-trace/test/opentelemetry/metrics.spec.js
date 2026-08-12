@@ -13,6 +13,8 @@ require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
+const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
+const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -661,6 +663,27 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
+    it('waits for an in-flight export during forceFlush', () => {
+      let exportDone
+      let flushDone
+      const reader = new PeriodicMetricReader({
+        export: (metrics, done) => { exportDone = done },
+        flush: (done) => { flushDone = done },
+      }, 60_000, 'DELTA', 1024)
+      const meter = new MeterProvider({ reader }).getMeter('test')
+      const done = sinon.spy()
+
+      meter.createCounter('in-flight').add(1)
+      reader.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      exportDone({ code: 0 })
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+      reader.shutdown()
+    })
+
     it('handles shutdown gracefully', async () => {
       setupMetrics()
       const provider = metrics.getMeterProvider()
