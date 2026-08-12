@@ -166,23 +166,30 @@ describe('Plugin', () => {
         }
 
         const nock = require('nock')
-        const instruction = 'Fix the spelling mistakes.'
-        const scope = nock('http://127.0.0.1:9126')
-          .post('/vcr/openai/edits')
-          .reply(200, {
-            choices: [{ index: 0, text: 'What day of the week is it?' }],
+        if (!nock.isActive()) nock.activate()
+
+        try {
+          const instruction = 'Fix the spelling mistakes.'
+          const scope = nock('http://127.0.0.1:9126')
+            .post('/vcr/openai/edits')
+            .reply(200, {
+              choices: [{ index: 0, text: 'What day of the week is it?' }],
+            })
+
+          const checkTrace = agent.assertFirstTraceSpan({ error: 0 })
+          await openai.createEdit({
+            input: 'What day of the wek is it?',
+            instruction,
+            model: 'text-davinci-edit-001',
           })
+          await checkTrace
 
-        const checkTrace = agent.assertFirstTraceSpan({ error: 0 })
-        await openai.createEdit({
-          input: 'What day of the wek is it?',
-          instruction,
-          model: 'text-davinci-edit-001',
-        })
-        await checkTrace
-
-        scope.done()
-        sinon.assert.calledWithMatch(externalLoggerStub, { instruction })
+          scope.done()
+          sinon.assert.calledWithMatch(externalLoggerStub, { instruction })
+        } finally {
+          nock.cleanAll()
+          nock.restore()
+        }
       })
 
       describe('maintains context', () => {
