@@ -556,7 +556,13 @@ class CiVisibilityExporter extends BufferingExporter {
       finalFlush.error = error
       const callbacks = finalFlush.callbacks
       finalFlush.callbacks = []
-      for (const callback of callbacks) callback(error)
+      for (const callback of callbacks) {
+        try {
+          callback(error)
+        } catch (callbackError) {
+          log.error('Error completing Test Optimization flush callback', callbackError)
+        }
+      }
     }
 
     const flushWriters = () => {

@@ -985,6 +985,36 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledOnceWithExactly(secondDone, undefined)
     })
 
+    it('completes every coalesced final flush when a callback throws', () => {
+      let flushWriter
+      const callbackError = new Error('framework callback error')
+      const logError = sinon.stub(ciVisibilityLog, 'error')
+      const writer = {
+        append: sinon.spy(),
+        flush: sinon.spy(done => { flushWriter = done }),
+        setUrl: sinon.spy(),
+      }
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      ciVisibilityExporter._isInitialized = true
+      ciVisibilityExporter._canUseCiVisProtocol = true
+      ciVisibilityExporter._writer = writer
+      const firstDone = sinon.spy(() => { throw callbackError })
+      const secondDone = sinon.spy()
+
+      ciVisibilityExporter.flush(firstDone)
+      ciVisibilityExporter.flush(secondDone)
+
+      sinon.assert.calledOnce(writer.flush)
+      flushWriter()
+      sinon.assert.calledOnceWithExactly(firstDone, undefined)
+      sinon.assert.calledOnceWithExactly(secondDone, undefined)
+      sinon.assert.calledOnceWithExactly(
+        logError,
+        'Error completing Test Optimization flush callback',
+        callbackError
+      )
+    })
+
     it('reuses an expired final flush when exporter initialization never completes', () => {
       const clock = sinon.useFakeTimers()
       const logError = sinon.stub(ciVisibilityLog, 'error')
