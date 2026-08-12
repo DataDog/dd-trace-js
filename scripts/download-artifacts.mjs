@@ -6,6 +6,8 @@ import { promisify } from 'node:util'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { Semaphore } from './semaphore.mjs'
+
 /* eslint-disable no-console */
 
 const execFileAsync = promisify(execFile)
@@ -21,36 +23,8 @@ const execFileAsync = promisify(execFile)
 // runs each open their own 10, recreating the exact burst this exists to prevent.
 const MAX_CONCURRENT_DOWNLOADS = 10
 
-/**
- * Bounds how many downloads run at once across every concurrent `downloadArtifacts` call in this
- * process, instead of per call.
- */
-class Semaphore {
-  #permits
-  #queue = []
-
-  constructor (permits) {
-    this.#permits = permits
-  }
-
-  acquire () {
-    if (this.#permits > 0) {
-      this.#permits--
-      return Promise.resolve()
-    }
-    return new Promise(resolve => this.#queue.push(resolve))
-  }
-
-  release () {
-    const next = this.#queue.shift()
-    if (next) {
-      next()
-    } else {
-      this.#permits++
-    }
-  }
-}
-
+// Shared (not per-call) so every concurrently processed sibling workflow's downloads draw from the
+// same pool of permits — see the comment above `MAX_CONCURRENT_DOWNLOADS`.
 const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
 /**
@@ -136,5 +110,3 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs, re
 
   return { downloaded: toDownload.length - failed, failed }
 }
-
-export { Semaphore }
