@@ -339,16 +339,17 @@ declare namespace tracer {
   export interface PluginOptions extends Plugins {}
   export type PluginName = keyof PluginOptions;
 
-  export type SpanTagValue<T = SpanTagScalar | Error | Record<string, SpanTagScalar>> =
-    T extends SpanTagScalar | Error ? T :
+  export type SpanTagValue<T = SpanTagScalar | Record<string, SpanTagScalar>> =
+    T extends SpanTagScalar ? T :
+    T extends Error ? never :
     T extends readonly unknown[] ? never :
     T extends (...args: never[]) => unknown ? never :
-    T extends object ? T extends {
+    T extends object ? keyof T extends never ? never : T extends {
       [K in keyof T]: Exclude<T[K], undefined> extends SpanTagScalar ? T[K] : never
     } ? T : never :
     never
   export type SpanTags<T extends object = Record<string, SpanTagValue>> = {
-    [K in keyof T]: SpanTagValue<T[K]>
+    [K in keyof T]: K extends 'error' ? T[K] extends Error ? T[K] : SpanTagValue<T[K]> : SpanTagValue<T[K]>
   }
 
   export type SpanOptions<Tags extends object = SpanTags> = Omit<opentracing.SpanOptions, 'childOf' | 'tags'> & {
@@ -409,6 +410,7 @@ declare namespace tracer {
      * @param key The tag name.
      * @param value The tag value.
      */
+    setTag (key: 'error', value: Error): this;
     setTag<T> (key: string, value: T & SpanTagValue<T>): this;
 
     /**

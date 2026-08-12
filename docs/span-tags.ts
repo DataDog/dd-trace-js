@@ -29,6 +29,7 @@ interface Tags {
 }
 
 declare const span: Span
+declare const opaqueObject: object
 declare const tagObject: TagObject
 declare const tags: Tags
 declare const v5Span: ReturnType<typeof tracerV5.startSpan>
@@ -40,6 +41,7 @@ span.setTag('error', new Error('boom'))
 span.setTag('buffer', Buffer.from('value'))
 span.setTag('url', new URL('https://example.com'))
 span.setTag('object', tagObject)
+span.addTags({ error: new Error('boom') })
 span.addTags(tags)
 tracer.startSpan('test', { tags })
 tracer.trace('test', { tags }, () => {})
@@ -62,6 +64,12 @@ span.setTag('array', ['value'])
 span.setTag('function', () => {})
 // @ts-expect-error Date tag values are not supported.
 span.setTag('date', new Date())
+// @ts-expect-error Values typed only as object may contain unsupported nested values.
+span.setTag('object', opaqueObject)
+// @ts-expect-error Error objects are only supported by the error tag.
+span.setTag('error.details', new Error('boom'))
+// @ts-expect-error Error objects are only supported by the error tag.
+span.addTags({ 'error.details': new Error('boom') })
 // @ts-expect-error Null tag values are not supported.
 span.setTag('null', null)
 // @ts-expect-error Undefined tag values are not supported.
@@ -80,6 +88,7 @@ tracer.wrap('test', () => ({ tags: { nested: { child: { value: 'value' } } } }),
 tracer.init({ tags: { nested: { child: { value: 'value' } } } })
 
 v5Span.setTag('object', tagObject)
+v5Span.addTags({ error: new Error('boom') })
 v5Span.addTags(tags)
 tracerV5.startSpan('test', { tags })
 tracerV5.trace('test', { tags }, () => {})
@@ -89,6 +98,12 @@ tracerV5.init({ customOption: true, tags })
 
 // @ts-expect-error Nested object tag values are not supported.
 v5Span.setTag('nested', { child: { value: 'value' } })
+// @ts-expect-error Values typed only as object may contain unsupported nested values.
+v5Span.setTag('object', opaqueObject)
+// @ts-expect-error Error objects are only supported by the error tag.
+v5Span.setTag('error.details', new Error('boom'))
+// @ts-expect-error Error objects are only supported by the error tag.
+v5Span.addTags({ 'error.details': new Error('boom') })
 // @ts-expect-error Nested object tag values are not supported.
 v5Span.addTags({ nested: { child: { value: 'value' } } })
 // @ts-expect-error Nested object tag values are not supported.
