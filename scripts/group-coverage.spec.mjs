@@ -148,6 +148,17 @@ describe('group-coverage', () => {
         'SF:shared.js\nDA:1,5\nLF:1\nLH:1\nend_of_record\n'
       )
     })
+
+    it('merges the same file across a Windows and a POSIX cell instead of splitting the record', () => {
+      const a = join(dir, 'a.info')
+      const b = join(dir, 'b.info')
+      writeFileSync(a, 'SF:packages\\dd-trace\\src\\shared.js\nDA:1,1\nLF:1\nLH:1\nend_of_record\n')
+      writeFileSync(b, 'SF:packages/dd-trace/src/shared.js\nDA:1,2\nLF:1\nLH:1\nend_of_record\n')
+      assert.equal(
+        mergeLcov([a, b]),
+        'SF:packages/dd-trace/src/shared.js\nDA:1,3\nLF:1\nLH:1\nend_of_record\n'
+      )
+    })
   })
 
   describe('mergeRunCoverage', () => {

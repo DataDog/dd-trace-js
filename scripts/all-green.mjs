@@ -109,6 +109,12 @@ async function getRuns () {
 const dispatchedRunIds = new Set()
 const processingPromises = []
 
+// Set when any run's artifact download exhausts its retries. A partial download still lets
+// `processRun` merge and upload whatever files did land, so this has to gate the Codecov
+// notification the same way `hasUploadFailed()` does — otherwise a transient GitHub artifact
+// outage on an otherwise-green run still reports a complete coverage status.
+let hasIncompleteDownload = false
+
 /**
  * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
  * the coverage merge to Codecov.
@@ -118,6 +124,10 @@ const processingPromises = []
  */
 async function processRun (run) {
   const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
+  if (failed > 0) {
+    hasIncompleteDownload = true
+    process.exitCode = 1
+  }
 
   const coverageResults = await uploadCoverage(run, {
     sha: HEAD_SHA,
@@ -286,10 +296,13 @@ async function checkAllGreen () {
   // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
   // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
   // artifacts are skipped) — notifying then would target a report that was never created. And skip
-  // when any report-upload call failed (tracked separately from `failedRuns`, which only reflects
-  // GitHub's own workflow-run conclusions) — notifying then would post a status computed from a
-  // report Codecov never fully received.
-  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0 && !hasUploadFailed() && hasCodecovCommit()) {
+  // when any report-upload call failed, or any run's artifact download did (both tracked separately
+  // from `failedRuns`, which only reflects GitHub's own workflow-run conclusions) — notifying then
+  // would post a status computed from a report Codecov never fully received.
+  if (
+    process.env.GITHUB_ACTIONS && failedRuns.length === 0 &&
+    !hasUploadFailed() && !hasIncompleteDownload && hasCodecovCommit()
+  ) {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 
