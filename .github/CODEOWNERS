@@ -399,6 +399,8 @@
 /benchmark/sirun/startup/ @DataDog/lang-platform-js
 /benchmark/sirun/tracing-channel/ @DataDog/lang-platform-js
 
+/docs/ @DataDog/lang-platform-js
+
 /ext/scopes.* @DataDog/lang-platform-js
 
 /integration-tests/bun/ @DataDog/lang-platform-js
