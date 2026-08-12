@@ -57,6 +57,17 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
+const FINAL_FLUSH_TIMEOUT = 10_000
+const FINAL_FLUSH_FALLBACK_DELAY = 100
+
+/**
+ * @returns {Error}
+ */
+function createFinalFlushTimeoutError () {
+  const error = new Error('Timed out waiting for Test Optimization to flush')
+  error.code = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
+  return error
+}
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
@@ -87,6 +98,9 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 }
 
 class CiVisibilityExporter extends BufferingExporter {
+  #finalFlush
+  #deferredHierarchyTraces = []
+
   constructor (config, options = {}) {
     super(config)
     this._timer = undefined
@@ -137,18 +151,7 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    const flush = () => {
-      if (this._writer) {
-        this._writer.flush()
-      }
-      if (this._coverageWriter) {
-        this._coverageWriter.flush()
-      }
-      if (this._logsWriter) {
-        this._logsWriter.flush()
-      }
-    }
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush.bind(this))
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
   }
 
   shouldRequestSkippableSuites () {
@@ -399,18 +402,53 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   export (trace) {
+    this.#resetFinalFlush()
+    this.#exportTrace(trace)
+  }
+
+  /**
+   * Exports spans that are not retained for late hierarchy updates.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
       this._traceBuffer.push(trace)
       return
     }
-    if (!this.canReportSessionTraces() && getIsTestSessionTrace(trace)) {
+    const isHierarchyTrace = getIsTestSessionTrace(trace)
+    if (!this.canReportSessionTraces() && isHierarchyTrace) {
       return
     }
-    this._export(trace)
+    if (this._export(trace, undefined, undefined, isHierarchyTrace) === false && isHierarchyTrace) {
+      this.#deferredHierarchyTraces.push(trace)
+    }
+  }
+
+  /**
+   * Retries hierarchy traces rejected by writer backpressure within the final deadline.
+   *
+   * @param {{ deadline?: number }} options final-flush options
+   * @returns {void}
+   */
+  #exportDeferredHierarchyTraces (options) {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    let retainedCount = 0
+
+    for (const trace of this.#deferredHierarchyTraces) {
+      if (this._writer.append(trace, options) === false) {
+        this.#deferredHierarchyTraces[retainedCount++] = trace
+      }
+    }
+    this.#deferredHierarchyTraces.length = retainedCount
   }
 
   exportCoverage (formattedCoverage) {
+    this.#resetFinalFlush()
+
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {
       this._coverageBuffer.push(formattedCoverage)
@@ -455,6 +493,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
+    this.#resetFinalFlush()
     this._export(
       this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
@@ -462,32 +501,126 @@ class CiVisibilityExporter extends BufferingExporter {
     )
   }
 
-  flush (done = () => {}) {
-    if (!this._isInitialized) {
-      return done()
+  flush (done) {
+    const isFinalFlush = typeof done === 'function'
+    const onDone = done || (() => {})
+    let finalFlush
+
+    if (isFinalFlush && this.#finalFlush) {
+      if (this.#finalFlush.completed) onDone(this.#finalFlush.error)
+      else this.#finalFlush.callbacks.push(onDone)
+      return
     }
 
-    // TODO: safe to do them at once? Or do we want to do them one by one?
-    const writers = [
-      this._writer,
-      this._coverageWriter,
-      this._logsWriter,
-    ].filter(Boolean)
-
-    let remaining = writers.length
-
-    if (remaining === 0) {
-      return done()
+    if (isFinalFlush && !this._isInitialized &&
+      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
+      this.#deferredHierarchyTraces.length === 0) {
+      onDone()
+      return
     }
 
-    const onFlushComplete = () => {
-      remaining -= 1
-      if (remaining === 0) {
-        done()
+    if (isFinalFlush) {
+      finalFlush = {
+        callbacks: [onDone],
+        completed: false,
+        error: undefined,
       }
+      this.#finalFlush = finalFlush
     }
 
-    for (const writer of writers) writer.flush(onFlushComplete)
+    const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
+    let hasCompleted = false
+    let initializationTimeoutId
+
+    const fallbackTimeoutId = isFinalFlush
+      ? setTimeout(() => {
+        complete(createFinalFlushTimeoutError())
+      }, FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
+      : undefined
+
+    const complete = (error) => {
+      if (hasCompleted) return
+      hasCompleted = true
+      clearTimeout(fallbackTimeoutId)
+      clearTimeout(initializationTimeoutId)
+      if (error) log.error('Error flushing Test Optimization data', error)
+      if (!isFinalFlush) {
+        onDone(error)
+        return
+      }
+
+      finalFlush.completed = true
+      finalFlush.error = error
+      const callbacks = finalFlush.callbacks
+      finalFlush.callbacks = []
+      for (const callback of callbacks) callback(error)
+    }
+
+    const flushWriters = () => {
+      const options = deadline === undefined ? undefined : { deadline }
+      if (isFinalFlush) {
+        this.#exportDeferredHierarchyTraces(options)
+      }
+
+      const writers = [
+        this._writer,
+        this._coverageWriter,
+        this._logsWriter,
+      ].filter(Boolean)
+
+      let remaining = writers.length
+      let flushError
+
+      if (remaining === 0) {
+        complete()
+        return
+      }
+
+      const onFlushComplete = (error) => {
+        flushError ||= error
+        remaining -= 1
+        if (remaining === 0) complete(flushError)
+      }
+
+      for (const writer of writers) writer.flush(onFlushComplete, options)
+    }
+
+    if (isFinalFlush && this._initializationRequest) {
+      const initializationRequest = this._initializationRequest
+      const { controller, options } = initializationRequest
+      initializationRequest.finalFlush = finalFlush
+      options.deadline = deadline
+      initializationTimeoutId = setTimeout(() => {
+        const error = createFinalFlushTimeoutError()
+        if (initializationRequest.finalFlush === finalFlush) controller.abort(error)
+        complete(error)
+      }, Math.max(0, deadline - Date.now()))
+    }
+
+    if (!isFinalFlush) {
+      if (this._isInitialized) flushWriters()
+      else complete()
+      return
+    }
+
+    if (this._isInitialized) {
+      flushWriters()
+      return
+    }
+
+    this._canUseCiVisProtocolPromise.then(() => {
+      clearTimeout(initializationTimeoutId)
+      if (!hasCompleted) flushWriters()
+    })
+  }
+
+  /**
+   * Allows later test activity to establish a new finalization boundary.
+   *
+   * @returns {void}
+   */
+  #resetFinalFlush () {
+    this.#finalFlush = undefined
   }
 
   exportUncodedCoverages () {
@@ -572,9 +705,10 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    */
-  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
+  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
     if (!this._testScreenshotUploadUrl) {
       return callback(new Error('Test screenshot upload URL not configured'))
     }
@@ -587,6 +721,7 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
+      signal,
     }, callback)
   }
 }

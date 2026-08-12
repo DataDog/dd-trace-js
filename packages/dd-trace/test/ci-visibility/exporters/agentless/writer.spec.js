@@ -51,7 +51,7 @@ describe('CI Visibility Writer', () => {
     }
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
-      '../../../exporters/common/request': request,
+      '../request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../log': log,

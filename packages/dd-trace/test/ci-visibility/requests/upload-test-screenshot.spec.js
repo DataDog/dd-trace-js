@@ -80,6 +80,14 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
+    it('forwards the AbortSignal to the media request', () => {
+      const abortController = new AbortController()
+
+      uploadForFile('screenshot.png', { signal: abortController.signal })
+
+      assert.strictEqual(requestStub.getCall(0).args[1].signal, abortController.signal)
+    })
+
     it('reports an error when the request helper drops the upload', () => {
       const basename = 'screenshot.png'
       const filePath = join(tmpDir, basename)
