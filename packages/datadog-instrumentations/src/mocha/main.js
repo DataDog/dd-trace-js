@@ -64,6 +64,13 @@ require('./common')
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
+const runnerEndHandlers = new WeakMap()
+const runnerHookMethods = new WeakMap()
+const runnerTestEndHandlers = new WeakMap()
+const runnerFailuresAdjusted = new WeakSet()
+const runnerFrameworkErrors = new WeakMap()
+const runnerStarted = new WeakSet()
+const wrappedRunnerEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -292,12 +299,12 @@ function getOnStartHandler (frameworkVersion) {
 /**
  * @param {boolean} isParallel
  * @param {() => void} onDone
- * @returns {() => void}
+ * @returns {(frameworkError?: unknown, onFrameworkErrorDone?: () => void) => void}
  */
 function getOnEndHandler (isParallel, onDone) {
-  return function () {
+  return function (frameworkError, onFrameworkErrorDone) {
     let status = 'pass'
-    let error
+    let error = frameworkError
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
       if (this.stats.tests === 0) {
@@ -307,18 +314,9 @@ function getOnEndHandler (isParallel, onDone) {
       status = 'fail'
     }
 
-    adjustRunnerFailuresForTestOptimization(this, config)
-
-    // Recompute status after EFD and quarantine adjustments have reduced failure counts
-    if (status === 'fail') {
-      if (this.stats) {
-        status = this.stats.failures === 0 ? 'pass' : 'fail'
-      } else {
-        status = this.failures === 0 ? 'pass' : 'fail'
-      }
-    }
-
-    if (status === 'fail') {
+    if (frameworkError) {
+      status = 'fail'
+    } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
 
@@ -363,7 +361,11 @@ function getOnEndHandler (isParallel, onDone) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
-    }, onDone)
+      isFrameworkError: !!frameworkError,
+    }, () => {
+      onDone()
+      onFrameworkErrorDone?.()
+    })
 
     logTestOptimizationSummary({
       attemptToFixExecutions,
@@ -372,6 +374,259 @@ function getOnEndHandler (isParallel, onDone) {
     })
     loggedAttemptToFixTests.clear()
   }
+}
+
+/**
+ * Applies Test Optimization failure suppression once per runner execution.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function adjustRunnerFailuresOnce (runner) {
+  if (runnerFailuresAdjusted.has(runner)) return
+
+  runnerFailuresAdjusted.add(runner)
+  adjustRunnerFailuresForTestOptimization(runner, config)
+}
+
+/**
+ * Prevents Mocha from entering hooks or the test body after a test-start reporter error.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function stopCurrentTest (runner, test) {
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+
+  test.pending = true
+  test._ddReporterStartFailed = true
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
+ * Prevents Mocha from entering a hook after its hook-start reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ * @param {Error} error
+ * @returns {void}
+ */
+function stopCurrentHook (runner, hook, error) {
+  const hookMethod = runner.hook
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+  const run = hook.run
+
+  runner.hook = function (name, onDone) {
+    runner.hook = hookMethod
+    onDone()
+  }
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+  hook.run = function (onDone) {
+    hook.run = run
+    onDone(error)
+  }
+}
+
+/**
+ * Prevents Mocha from running after-each hooks after a terminal test reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function stopAfterEachHooks (runner, test) {
+  const hookUp = runner.hookUp
+
+  test._ddReporterTerminalFailed = true
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
+ * Prevents Mocha from entering any subsequent user hooks after a reporter error.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function stopFutureHooks (runner) {
+  if (runnerHookMethods.has(runner)) return
+
+  runnerHookMethods.set(runner, runner.hook)
+  runner.hook = function (name, onDone) {
+    onDone()
+  }
+}
+
+/**
+ * Restores the runner hook method after reporter-error finalization.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function restoreFutureHooks (runner) {
+  const hook = runnerHookMethods.get(runner)
+  if (!hook) return
+
+  runnerHookMethods.delete(runner)
+  runner.hook = hook
+}
+
+/**
+ * Stops hooks remaining in the currently executing hook array.
+ *
+ * @param {object} hook
+ * @returns {boolean} whether the completed hook was a before-each hook
+ */
+function stopRemainingCurrentHooks (hook) {
+  const hookLists = [hook.parent?._beforeAll, hook.parent?._beforeEach, hook.parent?._afterEach, hook.parent?._afterAll]
+
+  for (const hooks of hookLists) {
+    const hookIndex = hooks?.indexOf(hook) ?? -1
+    if (hookIndex === -1) continue
+
+    for (let index = hookIndex + 1; index < hooks.length; index++) {
+      const remainingHook = hooks[index]
+      const run = remainingHook.run
+      remainingHook.run = function (onDone) {
+        remainingHook.run = run
+        onDone()
+      }
+    }
+    return hooks === hook.parent._beforeEach
+  }
+  return false
+}
+
+/**
+ * Prevents a completed before-each hook from continuing into the test body.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ * @returns {void}
+ */
+function stopAfterHookEnd (runner, hook) {
+  if (!stopRemainingCurrentHooks(hook) || !runner.test) return
+
+  runner.test.pending = true
+  runner.test._ddReporterStartFailed = true
+}
+
+/**
+ * Prevents Mocha from entering the root suite after a run-start reporter error.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function stopRootSuite (runner) {
+  const runSuite = runner.runSuite
+
+  runner.runSuite = function (suite, onDone) {
+    runner.runSuite = runSuite
+    onDone()
+  }
+}
+
+/**
+ * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
+ * runs Datadog's end handler and propagates the original error after finalization.
+ *
+ * @param {Function} Runner
+ * @returns {void}
+ */
+function wrapRunnerEmit (Runner) {
+  if (wrappedRunnerEmitPrototypes.has(Runner.prototype)) return
+
+  wrappedRunnerEmitPrototypes.add(Runner.prototype)
+  shimmer.wrap(Runner.prototype, 'emit', emit => function (event) {
+    const endHandler = runnerEndHandlers.get(this)
+    if (!endHandler) return emit.apply(this, arguments)
+
+    if (event === 'start') runnerStarted.add(this)
+
+    if (!runnerStarted.has(this)) return emit.apply(this, arguments)
+
+    const pendingFrameworkError = runnerFrameworkErrors.get(this)
+    if (event !== 'end') {
+      try {
+        return emit.apply(this, arguments)
+      } catch (error) {
+        if (!pendingFrameworkError) {
+          runnerFrameworkErrors.set(this, error)
+          this.abort()
+          stopFutureHooks(this)
+          if (event === 'start') stopRootSuite(this)
+          else if (event === 'test') stopCurrentTest(this, arguments[1])
+          else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
+          else if (event === 'hook end') stopAfterHookEnd(this, arguments[1])
+          else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
+            const test = arguments[1]
+            stopAfterEachHooks(this, test)
+            if (event === 'test end' && !test._ddTestFinishPublished) {
+              runnerTestEndHandlers.get(this)?.(test)
+            }
+          }
+        }
+        return
+      }
+    }
+
+    runnerEndHandlers.delete(this)
+    restoreFutureHooks(this)
+    runnerTestEndHandlers.delete(this)
+    runnerStarted.delete(this)
+    let result
+    let frameworkError = pendingFrameworkError
+    try {
+      result = emit.apply(this, arguments)
+    } catch (error) {
+      frameworkError ||= error
+    }
+    runnerFrameworkErrors.delete(this)
+
+    adjustRunnerFailuresOnce(this)
+
+    if (frameworkError) {
+      let hasPropagatedFrameworkError = false
+      const propagateFrameworkError = () => {
+        if (hasPropagatedFrameworkError) return
+
+        hasPropagatedFrameworkError = true
+        process.removeListener('uncaughtException', this.uncaught)
+        process.nextTick(() => { throw frameworkError })
+      }
+
+      try {
+        endHandler.call(this, frameworkError, propagateFrameworkError)
+      } catch (finalizerError) {
+        log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
+        propagateFrameworkError()
+      }
+
+      return result
+    }
+
+    endHandler.call(this)
+    return result
+  })
 }
 
 function applyKnownTestsResponse ({ err, knownTests }) {
@@ -707,6 +962,7 @@ addHook({
   if (patched.has(Runner)) return Runner
 
   patched.add(Runner)
+  wrapRunnerEmit(Runner)
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
@@ -716,7 +972,14 @@ addHook({
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
-    args[0] = onRunDone
+    runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
+    args[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
+      onRunDone(this.failures)
+    }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
@@ -733,6 +996,8 @@ addHook({
     let hasEnded = false
     let hasFinishedRun = false
     let endRunner
+    let endError
+    let onFrameworkErrorDone
 
     function updateRootTestForFinalAttempt (test) {
       if (!test._retriedTest) return
@@ -750,7 +1015,7 @@ addHook({
       if (hasFinishedRun) return
       if (hasEnded && pendingRootFinalizations === 0) {
         hasFinishedRun = true
-        onEnd.call(endRunner)
+        onEnd.call(endRunner, endError, onFrameworkErrorDone)
       }
     }
 
@@ -831,11 +1096,13 @@ addHook({
 
     const onEnd = getOnEndHandler(false, onFlushDone)
 
-    this.once('start', getOnStartHandler(frameworkVersion))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
 
-    this.once('end', function () {
+    runnerEndHandlers.set(this, function (frameworkError, frameworkErrorDone) {
       hasEnded = true
       endRunner = this
+      endError = frameworkError
+      onFrameworkErrorDone = frameworkErrorDone
       finishRunIfReady()
     })
 
@@ -845,7 +1112,10 @@ addHook({
     // instead of suiteA -> suiteB -> testA -> ... -> testB)
     // when the suite has tests that are in the top level
     // (no describe(...))
-    this.on('test', function (test) {
+    this.prependListener('test', getOnTestHandler(true))
+    // Reporters are registered before Runner#run, so prepend this after the test handler
+    // to start the suite first and preserve the test event if a reporter throws.
+    this.prependListener('test', function (test) {
       const ctx = testFileToSuiteCtx.get(test.file)
       if (ctx?._pendingRootStart) {
         ctx._pendingRootStart = false
@@ -853,45 +1123,46 @@ addHook({
       }
     })
 
-    this.on('test', getOnTestHandler(true))
-
-    this.on('test end', getOnTestEndHandler(config, {
+    // Reporters are registered before this run wrapper. Prepend terminal handlers
+    // so a reporter error cannot strand a test span that Mocha already completed.
+    const onTestEnd = getOnTestEndHandler(config, {
       onStart: incrementPendingRootFinalization,
       onFinish: function (test) {
         finishRootSuiteAfterFinalAttempt(test)
         decrementPendingRootFinalization(test)
       },
-    }))
+    })
+    runnerTestEndHandlers.set(this, onTestEnd)
+    this.prependListener('test end', onTestEnd)
 
-    this.on('retry', getOnTestRetryHandler(config))
+    this.prependListener('retry', getOnTestRetryHandler(config))
 
-    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler(config, {
-      onStart: incrementPendingRootFinalization,
-      onFinish: function (test) {
-        finishRootSuiteAfterFinalAttempt(test)
-        decrementPendingRootFinalization(test)
-      },
-    }))
-
-    this.on('hook end', function (hook) {
+    this.prependListener('hook end', function (hook) {
       const test = hook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
     })
 
-    this.on('fail', getOnFailHandler(true, config))
+    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted.
+    this.prependListener('hook end', getOnHookEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
+    }))
 
-    this.on('fail', function (testOrHook) {
+    this.prependListener('fail', function (testOrHook) {
       if (testOrHook.type !== 'hook') return
       const test = testOrHook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
     })
+    this.prependListener('fail', getOnFailHandler(true, config))
 
-    this.on('pending', getOnPendingHandler())
+    this.prependListener('pending', getOnPendingHandler())
 
-    this.on('suite', function (suite) {
+    this.prependListener('suite', function (suite) {
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be
@@ -940,7 +1211,8 @@ addHook({
       }
     })
 
-    this.on('suite end', function (suite) {
+    // Reporters are registered before Runner#run, so this must run first when one throws.
+    this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
         // listeners via finishRootSuiteForFile. Two edge cases remain here:
@@ -1115,16 +1387,25 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
+  wrapRunnerEmit(ParallelBufferedRunner)
+
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
-    arguments[0] = onRunDone
+    runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
+    arguments[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
+      onRunDone(this.failures)
+    }
 
-    this.once('start', getOnStartHandler(frameworkVersion))
-    this.once('end', getOnEndHandler(true, onFlushDone))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
+    runnerEndHandlers.set(this, getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
     for (const filePath of files) {

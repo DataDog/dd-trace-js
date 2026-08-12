@@ -703,7 +703,12 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     }
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
-    const shouldFinishTest = ctx && (!getAfterEachHooks(test).length || (test._ddIsDisabled && !test._ddIsAttemptToFix))
+    const shouldFinishTest = ctx && (
+      test._ddReporterStartFailed ||
+      test._ddReporterTerminalFailed ||
+      !getAfterEachHooks(test).length ||
+      (test._ddIsDisabled && !test._ddIsAttemptToFix)
+    )
     let testFinishInfo
     let isFinalAttempt = false
 
@@ -734,6 +739,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     }
 
     if (shouldFinishTest) {
+      test._ddTestFinishPublished = true
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
