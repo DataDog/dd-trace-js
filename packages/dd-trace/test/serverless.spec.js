@@ -222,7 +222,7 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('registers retention through tracer configuration when tracing is disabled', async () => {
+  it('registers retention through tracer configuration', async () => {
     let retained
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
