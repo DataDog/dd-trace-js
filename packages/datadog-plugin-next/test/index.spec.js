@@ -1177,6 +1177,7 @@ describe('compiled Next runtimes', () => {
         },
       })
       assert.strictEqual(response.value.status, 201)
+      nodeResponse.emit('finish')
       await trace
       assert.deepStrictEqual(lifecycle, ['start', 'page', 'finish'])
       dc.channel('apm:next:request:start').unsubscribe(onStart)
@@ -1220,6 +1221,7 @@ describe('compiled Next runtimes', () => {
         req: request,
         responseGenerator: () => { throw new Error('synchronous generator error') },
       })
+      response.emit('finish')
       await trace
     })
 
@@ -1316,7 +1318,7 @@ describe('compiled Next runtimes', () => {
               req: request,
               responseGenerator: () => assert.fail('a cache hit should not invoke the response generator'),
             })
-            if (runtime === 'app-page') response.emit('finish')
+            response.emit('finish')
             return result
           }),
           tracePromise,
@@ -1395,12 +1397,67 @@ describe('compiled Next runtimes', () => {
           tracer.trace(parentResource, revalidate),
           tracePromise,
         ])
+        response.emit('finish')
         if (runtime === 'app-page') {
-          response.emit('finish')
           await foregroundTrace
         }
       })
     }
+
+    it('records a foreground App Page error while stale revalidation is pending', async () => {
+      let responseGenerator
+      let continueRevalidation
+      let reportForegroundError
+      let foregroundErrorReported
+      const foregroundError = new Error('foreground postponed render error')
+      const backgroundError = new Error('stale revalidation error')
+      const foregroundErrorTrigger = new Promise(resolve => { reportForegroundError = resolve })
+      const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/interleaved-error' }
+
+        /** @param {{responseGenerator: () => Promise<unknown>}} options */
+        handleResponse (options) {
+          responseGenerator = options.responseGenerator
+          foregroundErrorReported = foregroundErrorTrigger.then(() => this.onRequestError(options.req, foregroundError))
+          return Promise.resolve({ isMiss: false, isStale: true })
+        }
+
+        onRequestError () {
+          return Promise.resolve()
+        }
+      }
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      const nodeRequest = { headers: {}, method: 'GET', url: '/interleaved-error' }
+      const request = { ...nodeRequest, originalRequest: nodeRequest }
+      const response = new http.ServerResponse(nodeRequest)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assert.strictEqual(span.error, 1)
+        assert.strictEqual(span.meta['error.message'], foregroundError.message)
+      })
+
+      await routeModule.prepare(request, response, {})
+      await routeModule.handleResponse({
+        req: request,
+        responseGenerator: async () => {
+          await revalidationContinuation
+          await routeModule.onRequestError(request, backgroundError)
+          throw backgroundError
+        },
+      })
+
+      const revalidation = responseGenerator({ hasResolved: true })
+      reportForegroundError()
+      await foregroundErrorReported
+      continueRevalidation()
+      await assert.rejects(revalidation, backgroundError)
+      response.emit('finish')
+      await trace
+    })
 
     for (const { cacheStatus, label, responseStatus } of [
       { cacheStatus: 307, label: 'RSC redirect', responseStatus: 200 },
@@ -1553,8 +1610,9 @@ describe('compiled Next runtimes', () => {
       await trace
     })
 
-    it('passes Node responses to hooks without propagating deferred hook errors', async () => {
+    it('passes final Node responses to hooks without propagating deferred hook errors', async () => {
       const hookResponses = []
+      const hookCacheStatuses = []
       /**
        * @param {import('../../dd-trace/src/opentracing/span')} _span
        * @param {import('node:http').IncomingMessage} request
@@ -1562,6 +1620,7 @@ describe('compiled Next runtimes', () => {
        */
       const requestHook = (_span, request, response) => {
         hookResponses.push(response)
+        hookCacheStatuses.push(response.getHeader('x-nextjs-cache'))
         response.getHeader('content-type')
         if (request.url === '/app-page-hook-error') throw new Error('request hook error')
       }
@@ -1603,6 +1662,8 @@ describe('compiled Next runtimes', () => {
         req: routeRequest,
         responseGenerator: () => routeModule.handle({ headers: {}, method: 'GET' }, {}),
       })
+      routeResponse.setHeader('x-nextjs-cache', 'HIT')
+      routeResponse.emit('finish')
 
       const sentinelRequest = { headers: {}, method: 'GET', url: '/api/response-hook-sentinel' }
       const sentinelResponse = new http.ServerResponse(sentinelRequest)
@@ -1632,6 +1693,7 @@ describe('compiled Next runtimes', () => {
         tracePromise,
       ])
       assert.deepStrictEqual(hookResponses, [routeResponse, sentinelResponse])
+      assert.deepStrictEqual(hookCacheStatuses, ['HIT', undefined])
 
       const pageRequest = { headers: {}, method: 'GET', url: '/app-page-hook-error' }
       const pageResponse = new http.ServerResponse(pageRequest)
