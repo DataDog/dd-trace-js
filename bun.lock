@@ -76,7 +76,7 @@
         "@datadog/native-iast-taint-tracking": "4.2.0",
         "@datadog/native-metrics": "3.1.2",
         "@datadog/openfeature-node-server": "2.0.2",
-        "@datadog/pprof": "5.17.0",
+        "@datadog/pprof": "5.18.0",
         "@datadog/wasm-js-rewriter": "5.0.1",
         "@opentelemetry/api": ">=1.0.0 <1.10.0",
         "@opentelemetry/api-logs": "<1.0.0",
@@ -148,7 +148,7 @@
 
     "@datadog/openfeature-node-server": ["@datadog/openfeature-node-server@2.0.2", "", { "dependencies": { "@datadog/flagging-core": "2.0.2" }, "peerDependencies": { "@openfeature/server-sdk": ">=1.15.1" } }, "sha512-647eJuiOVzCEk50His94wjSlOgJCbHIJv4cAW425eW3GqQJC2Y73qGBYV1/s9oBsAmsUNa90tc+ETunfUH2hKQ=="],
 
-    "@datadog/pprof": ["@datadog/pprof@5.17.0", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.2.1", "source-map": "^0.8.0" } }, "sha512-BuedZ4vHzmQkitMMdIhVLQ+nPpHl7WRwcuumJeXt0ylhwGGwt7Kf+4CoS1tDB0FljJXi4izweFfFFTirrijP5w=="],
+    "@datadog/pprof": ["@datadog/pprof@5.18.0", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.3.1", "source-map": "^0.8.0" } }, "sha512-KSXy+kD8Ofl7etRL42vHnKjFcHNMwOcC12Il+2HLbekHo3wy6RQ3CFoSTDFU/xqZw8PdcxCJURYF60BuWKegfw=="],
 
     "@datadog/wasm-js-rewriter": ["@datadog/wasm-js-rewriter@5.0.1", "", { "dependencies": { "js-yaml": "^4.1.0", "lru-cache": "^7.14.0", "module-details-from-path": "^1.0.3", "node-gyp-build": "^4.5.0" } }, "sha512-EzbV3Lrdt3udQEsbDOVC5gB1y7yxfpBbrSIk4jaEsGjyj0Dbv2HGj7tZjs+qXzIzNonHc8h5El2bYZOGfC2wwg=="],
 
@@ -1010,7 +1010,7 @@
 
     "pluralize": ["pluralize@8.0.0", "", {}, "sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA=="],
 
-    "pprof-format": ["pprof-format@2.2.1", "", {}, "sha512-p4tVN7iK19ccDqQv8heyobzUmbHyds4N2FI6aBMcXz6y99MglTWDxIyhFkNaLeEXs6IFUEzT0zya0icbSLLY0g=="],
+    "pprof-format": ["pprof-format@2.3.1", "", {}, "sha512-y51Z83qG2vEQBACPu6lkGFREVkHwQaCaNDdSFEMLIqSo3bmpADsbP6J3F2SSk7tYB741oTQ9Kt5YAdQsmiCRkA=="],
 
     "prelude-ls": ["prelude-ls@1.2.1", "", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
 
