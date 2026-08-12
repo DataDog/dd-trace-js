@@ -12,8 +12,8 @@ const COMPILE_OBJECT_TYPE = 'FunctionDeclaration[id.name="compileObjectType"]' +
   '[params.0.name="context"][params.1.name="type"][params.2.name="fieldNodes"]' +
   '[params.3.name="originPaths"][params.5.name="responsePath"][params.8.name="alwaysDefer"]' +
   ':has(VariableDeclarator[id.name="field"])'
-const GET_EXECUTION_INFO = 'FunctionDeclaration[id.name="getExecutionInfo"]' +
-  '[params.0.name="context"][params.5.name="responsePath"]'
+const COMPILE_DEFERRED_FIELD = 'FunctionDeclaration[id.name="compileDeferredField"]' +
+  '[params.0.name="context"][params.1.name="deferredField"]'
 
 /**
  * @typedef {{
@@ -46,13 +46,13 @@ function addInstrumentations (instrumentations, versionRange, filePath) {
     },
     {
       module: moduleDefinition,
-      astQuery: CREATE_BOUND_QUERY,
-      transform: 'configureGraphqlJitRuntime',
+      astQuery: COMPILE_DEFERRED_FIELD,
+      transform: 'configureGraphqlJitDeferredField',
     },
     {
       module: moduleDefinition,
-      astQuery: GET_EXECUTION_INFO,
-      transform: 'configureGraphqlJitExecutionInfo',
+      astQuery: CREATE_BOUND_QUERY,
+      transform: 'configureGraphqlJitRuntime',
     },
     {
       module: moduleDefinition,
@@ -73,9 +73,9 @@ function addInstrumentations (instrumentations, versionRange, filePath) {
  * @type {GraphqlJitInstrumentation[]}
  */
 const instrumentations = []
-// graphql-jit 0.8.0 uses this layout and remains compatible with GraphQL 15 and 16.
-// Its GraphQL 17 compatibility starts at 0.8.1.
-addInstrumentations(instrumentations, '>=0.8.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js')
+// graphql-jit 0.7 and 0.8.0 use this layout and remain compatible with GraphQL 15 and 16.
+// GraphQL 17 compatibility starts at 0.8.1.
+addInstrumentations(instrumentations, '>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js')
 addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/cjs/execution.js')
 addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/esm/execution.js')
 addInstrumentations(instrumentations, '>=0.8.7 <0.9.0', 'dist/execution.mjs')

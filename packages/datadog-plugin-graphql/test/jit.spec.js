@@ -223,7 +223,7 @@ describe('Plugin', () => {
       )
     }
 
-    withVersions('graphql', 'graphql-jit', '>=0.8.0', version => {
+    withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
       const packageRoot = join(__dirname, '../../../versions', `graphql-jit@${version}`, 'node_modules/graphql-jit')
 
       before(() => {
@@ -342,6 +342,57 @@ describe('Plugin', () => {
           }
         )
         assert.deepStrictEqual(result.data, { defaultHello: 'default world' })
+      })
+
+      it('preserves getter reads in compiled default field completion', async () => {
+        const User = new graphql.GraphQLObjectType({
+          name: 'GetterUser',
+          fields: {
+            value: { type: graphql.GraphQLString },
+          },
+        })
+        const getterSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'GetterQuery',
+            fields: {
+              user: { type: User },
+            },
+          }),
+        })
+        const document = graphql.parse('query GetterReads { user { value } }')
+        let baselineReads = 0
+        const baselineSource = {
+          user: {
+            get value () {
+              baselineReads++
+              return `value-${baselineReads}`
+            },
+          },
+        }
+
+        agent.reload('graphql', { enabled: false })
+        const baseline = compileQuery(getterSchema, document).query(baselineSource, {}, {})
+
+        let tracedReads = 0
+        const tracedSource = {
+          user: {
+            get value () {
+              tracedReads++
+              return `value-${tracedReads}`
+            },
+          },
+        }
+
+        agent.reload('graphql', { enabled: true })
+        try {
+          const { query } = compileQuery(getterSchema, document)
+          const result = await executeWithTrace(() => query(tracedSource, {}, {}), /GetterReads/)
+
+          assertSameExecutionResult(result, baseline)
+          assert.strictEqual(tracedReads, baselineReads)
+        } finally {
+          agent.reload('graphql', { variables: ['id', 'name'] })
+        }
       })
 
       it('traces nested defaults when the document omits empty argument lists', async () => {
@@ -966,10 +1017,11 @@ describe('Plugin', () => {
         const enrichedValues = []
         let enrichmentReads = 0
         const enrichedInfo = {
-          __ddTraceField: 'preserved',
+          __datadogGraphqlJitField: 'preserved',
+          dynamic: 'first',
           get enriched () {
             enrichmentReads++
-            return `value-${enrichmentReads}`
+            return `${this.dynamic}-${enrichmentReads}`
           },
         }
         const enrichedSchema = new graphql.GraphQLSchema({
@@ -982,12 +1034,14 @@ describe('Plugin', () => {
                  * @param {unknown} _source
                  * @param {object} _args
                  * @param {unknown} _context
-                 * @param {{ __ddTraceField?: string, enriched?: string }} info
+                 * @param {{ __datadogGraphqlJitField?: unknown, dynamic?: string, enriched?: string }} info
                  * @returns {string}
                  */
                 resolve (_source, _args, _context, info) {
                   enrichedValues.push({
-                    collision: info.__ddTraceField,
+                    argumentCount: arguments.length,
+                    collision: info.__datadogGraphqlJitField === 'preserved',
+                    dynamic: info.dynamic,
                     value: info.enriched,
                   })
                   return 'value'
@@ -1006,13 +1060,15 @@ describe('Plugin', () => {
         )
 
         for (let execution = 0; execution < 2; execution++) {
+          if (execution === 1) enrichedInfo.dynamic = 'second'
           const result = await executeWithTrace(() => query({}, {}, {}), /Enriched/)
           assert.deepStrictEqual(result.data, { value: 'value' })
         }
         assert.deepStrictEqual(enrichedValues, [
-          { collision: 'preserved', value: 'value-1' },
-          { collision: 'preserved', value: 'value-2' },
+          { argumentCount: 4, collision: true, dynamic: 'first', value: 'first-1' },
+          { argumentCount: 4, collision: true, dynamic: 'second', value: 'second-2' },
         ])
+        assert.strictEqual(enrichedInfo.__datadogGraphqlJitField, 'preserved')
         assert.strictEqual(enrichmentReads, 2)
       })
 

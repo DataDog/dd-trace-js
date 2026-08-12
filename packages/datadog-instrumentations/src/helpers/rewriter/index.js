@@ -8,8 +8,8 @@ const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-trans
 const {
   awaitContextCallback,
   configureGraphqlJitCompileObject,
+  configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
-  configureGraphqlJitExecutionInfo,
   configureGraphqlJitRuntime,
   configureMercuriusRequest,
   waitForAsyncEnd,
@@ -48,8 +48,8 @@ for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
+  matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
-  matcher.addTransform('configureGraphqlJitExecutionInfo', configureGraphqlJitExecutionInfo)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
 }

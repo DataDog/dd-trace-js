@@ -1,63 +1,108 @@
 'use strict'
 
 /**
- * @typedef {{ prev?: CompilerPath, key: string, type: 'literal' | 'meta' | 'variable' }} CompilerPath
  * @typedef {{
- *   descriptorKey: string,
- *   fieldNodes: import('graphql').FieldNode[],
+ *   collapsedPath: string,
+ *   collapsedPathSegments: string[],
+ *   parentPathKey: string | undefined,
+ *   pathDepth: number,
+ *   pathKey: string,
+ *   runtimePath: string,
+ *   selectionDepth: number
+ * }} CompilerPathAnalysis
+ * @typedef {{
+ *   fieldName: string,
+ *   fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
  *   returnType: import('graphql').GraphQLOutputType,
  *   parentType: import('graphql').GraphQLCompositeType,
  *   arguments?: import('graphql').GraphQLArgument[]
- * }} ResolverInfoInput
+ * }} DescriptorInput
+ * @typedef {{
+ *   fixed: Record<string, unknown>,
+ *   variables: string[] | undefined,
+ *   dynamic: import('graphql').ArgumentNode[] | undefined
+ * }} ArgumentTemplate
+ * @typedef {{
+ *   baseTypeName: string,
+ *   resource: string,
+ *   tags: Record<string, string | undefined>
+ * }} FieldMetadata
  * @typedef {{
  *   id: number,
  *   arguments: import('graphql').GraphQLArgument[],
- *   baseTypeName?: string,
+ *   argumentTemplate?: ArgumentTemplate,
+ *   baseTypeName: string,
  *   collapsedPath: string,
+ *   collapsedPathSegments: string[],
  *   fieldName: string,
  *   fieldNode: import('graphql').FieldNode,
+ *   fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
  *   parentId?: number,
  *   parentPathKey?: string,
  *   parentTypeName: string,
  *   pathDepth: number,
- *   resource?: string,
+ *   resource: string,
  *   returnType: import('graphql').GraphQLOutputType,
  *   selectionDepth: number,
- *   tags?: Record<string, string | undefined>
+ *   tags: Record<string, string | undefined>
  * }} JitFieldDescriptor
  * @typedef {{
  *   fields: JitFieldDescriptor[],
- *   fieldsByPath?: Map<string, JitFieldDescriptor>,
- *   finalized: boolean
- * }} JitPlan
+ *   fieldsByPath: Map<string, JitFieldDescriptor>
+ * }} BuildingJitPlan
+ * @typedef {{ fields: JitFieldDescriptor[] }} JitPlan
+ * @typedef {Record<string, import('graphql').GraphQLFieldResolver<unknown, unknown>>} GraphQLResolverMap
  * @typedef {{
  *   ddTraceDefaultResolvers?: boolean,
- *   ddTracePlan?: JitPlan,
+ *   ddTracePlan?: BuildingJitPlan,
  *   ddTraceRuntime?: GraphqlJitRuntime,
- *   options: { resolverInfoEnricher?: (input: ResolverInfoInput) => object },
+ *   resolvers: GraphQLResolverMap
  * }} JitCompilationContext
- * @typedef {(descriptor: JitFieldDescriptor) => void} FinalizeFieldDescriptor
+ * @typedef {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} ConfiguredJitCompilationContext
+ * @typedef {(
+ *   parentTypeName: string,
+ *   fieldName: string,
+ *   returnType: import('graphql').GraphQLOutputType,
+ *   collapsedPath: string
+ * ) => FieldMetadata} CreateFieldMetadata
  * @typedef {(
  *   rootCtx: object,
  *   descriptorId: number,
- *   source: unknown,
+ *   source: Record<string, unknown>,
  *   path: (string | number)[] | undefined
  * ) => unknown} ResolveDefaultInvocation
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
+ * @typedef {(
+ *   resolver: import('graphql').GraphQLFieldResolver<unknown, unknown>
+ * ) => import('graphql').GraphQLFieldResolver<unknown, unknown>} WrapResolver
  * @typedef {{
- *   fieldName: string,
- *   finalizeFieldDescriptor: FinalizeFieldDescriptor,
+ *   createFieldMetadata: CreateFieldMetadata,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
- *   startExecution: StartExecution
+ *   startExecution: StartExecution,
+ *   wrapResolver: WrapResolver
  * }} GraphqlJitRuntimeOptions
  * @typedef {{
- *   compileDefaultField: typeof compileDefaultField,
- *   createResolverInfoEnricher: (
- *     context: JitCompilationContext,
- *     responsePath: CompilerPath,
- *     userEnricher?: (input: ResolverInfoInput) => object
- *   ) => (input: ResolverInfoInput) => object,
- *   getPlan: (context: JitCompilationContext) => JitPlan | undefined,
+ *   compileDefaultField: (
+ *     context: ConfiguredJitCompilationContext,
+ *     responsePath: unknown,
+ *     parentType: import('graphql').GraphQLCompositeType,
+ *     field: {
+ *       name: string,
+ *       type: import('graphql').GraphQLOutputType,
+ *       args: import('graphql').GraphQLArgument[]
+ *     },
+ *     fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
+ *     originPaths: string[],
+ *     compiledField: string
+ *   ) => string,
+ *   finalizeCompilation: (
+ *     context: JitCompilationContext & { ddTracePlan: BuildingJitPlan }
+ *   ) => JitPlan,
+ *   registerField: (
+ *     context: ConfiguredJitCompilationContext,
+ *     responsePath: unknown,
+ *     input: DescriptorInput
+ *   ) => number | undefined,
  *   resolveDefaultInvocation: ResolveDefaultInvocation,
  *   startExecution: StartExecution
  * }} GraphqlJitRuntime
@@ -71,15 +116,15 @@
  * }}
  */
 function createGraphqlJitRuntime ({
-  descriptorKey,
-  finalizeFieldDescriptor,
+  createFieldMetadata,
   resolveDefaultInvocation,
   startExecution,
+  wrapResolver,
 }) {
   const runtime = Object.freeze({
     compileDefaultField,
-    createResolverInfoEnricher,
-    getPlan,
+    finalizeCompilation,
+    registerField,
     resolveDefaultInvocation,
     startExecution,
   })
@@ -95,290 +140,195 @@ function createGraphqlJitRuntime ({
     context.ddTracePlan = {
       fields: [],
       fieldsByPath: new Map(),
-      finalized: false,
     }
   }
 
   /**
-   * @param {JitCompilationContext} context
-   * @param {CompilerPath} responsePath
-   * @param {(input: ResolverInfoInput) => object} [userEnricher]
-   * @returns {(input: ResolverInfoInput) => object}
+   * @param {ConfiguredJitCompilationContext} context
+   * @param {unknown} responsePath
+   * @param {DescriptorInput} input
+   * @returns {number | undefined}
    */
-  function createResolverInfoEnricher (context, responsePath, userEnricher) {
-    /**
-     * @param {ResolverInfoInput} input
-     * @returns {object}
-     */
-    function enrichResolverInfo (input) {
-      const enriched = userEnricher?.(input)
-      const userFields = enriched && typeof enriched === 'object' && !Array.isArray(enriched) ? enriched : undefined
-      const fieldNode = input.fieldNodes?.[0]
-      if (fieldNode?.name.value !== input.fieldName) return userFields ?? {}
+  function registerField (context, responsePath, input) {
+    const [fieldNode] = input.fieldNodes
+    const compilerPath = analyzeCompilerPath(responsePath)
+    /* istanbul ignore next: a future graphql-jit version may change its private response-path shape. */
+    if (compilerPath === undefined) return
 
-      const descriptor = createDescriptor(context, responsePath, input, fieldNode)
-      /* c8 ignore next: graphql-jit compiles every field before the plan closes. */
-      if (descriptor === undefined) return userFields ?? {}
-      if (userFields === undefined) return { [descriptorKey]: descriptor }
-      return addJitField(userFields, descriptor, descriptorKey)
-    }
-
-    return enrichResolverInfo
+    return createDescriptor(context, compilerPath, input, fieldNode, createFieldMetadata).id
   }
 
   /**
-   * @param {JitCompilationContext} context
-   * @returns {JitPlan | undefined}
+   * @param {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} context
+   * @returns {JitPlan}
    */
-  function getPlan (context) {
+  function finalizeCompilation (context) {
     const plan = context.ddTracePlan
-    if (!plan || plan.finalized) return plan
 
-    const fieldsByPath = plan.fieldsByPath
     for (const field of plan.fields) {
-      field.parentId = fieldsByPath?.get(field.parentPathKey)?.id
-      field.parentPathKey = undefined
-      finalizeFieldDescriptor(field)
+      if (field.parentPathKey !== undefined) {
+        field.parentId = plan.fieldsByPath.get(field.parentPathKey)?.id
+        field.parentPathKey = undefined
+      }
     }
-    plan.fieldsByPath = undefined
-    plan.finalized = true
-    return plan
+    for (const name of Object.keys(context.resolvers)) {
+      context.resolvers[name] = wrapResolver(context.resolvers[name])
+    }
+
+    return {
+      fields: plan.fields,
+    }
+  }
+
+  /**
+   * @param {ConfiguredJitCompilationContext} context
+   * @param {unknown} responsePath
+   * @param {import('graphql').GraphQLCompositeType} parentType
+   * @param {{
+   *   name: string,
+   *   type: import('graphql').GraphQLOutputType,
+   *   args: import('graphql').GraphQLArgument[]
+   * }} field
+   * @param {[import('graphql').FieldNode, ...import('graphql').FieldNode[]]} fieldNodes
+   * @param {string[]} originPaths
+   * @param {string} compiledField
+   * @returns {string}
+   */
+  function compileDefaultField (
+    context,
+    responsePath,
+    parentType,
+    field,
+    fieldNodes,
+    originPaths,
+    compiledField
+  ) {
+    const parentPath = originPaths.join('.')
+    const sourcePath = `${parentPath}.${field.name}`
+    const sourceIndex = compiledField.indexOf(sourcePath)
+    /* istanbul ignore next: a future compiler may stop emitting the source path in its completion expression. */
+    if (sourceIndex === -1) return compiledField
+
+    const compilerPath = analyzeCompilerPath(responsePath)
+    /* istanbul ignore next: a future graphql-jit version may change its private response-path shape. */
+    if (compilerPath === undefined) return compiledField
+
+    const descriptor = createDescriptor(context, compilerPath, {
+      arguments: field.args,
+      fieldName: field.name,
+      fieldNodes,
+      returnType: field.type,
+      parentType,
+    }, fieldNodes[0], createFieldMetadata)
+
+    const shouldTrace = '__context.ddTrace !== undefined && ' +
+      '(__context.ddTrace.jitTraceAll || ' +
+      `(__context.ddTrace.jitTraceFirst && __context.ddTrace.jitFields[${descriptor.id}] === undefined))`
+    const resolveDefault = '__context.ddTrace.jitRuntime.resolveDefaultInvocation(' +
+      `__context.ddTrace, ${descriptor.id}, ${parentPath}, ` +
+      `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath})`
+    const tracedRead = `(${shouldTrace} ? ${resolveDefault} : ${sourcePath})`
+
+    return compiledField.slice(0, sourceIndex) + tracedRead + compiledField.slice(sourceIndex + sourcePath.length)
   }
 
   return { configureCompilationContext, runtime }
 }
 
 /**
- * @param {JitCompilationContext} context
- * @param {CompilerPath} responsePath
- * @param {import('graphql').GraphQLCompositeType} parentType
- * @param {{
- *   name: string,
- *   type: import('graphql').GraphQLOutputType,
- *   args: import('graphql').GraphQLArgument[]
- * }} field
- * @param {[import('graphql').FieldNode, ...import('graphql').FieldNode[]]} fieldNodes
- * @param {string[]} originPaths
- * @param {string} compiledField
- * @returns {string}
- */
-function compileDefaultField (
-  context,
-  responsePath,
-  parentType,
-  field,
-  fieldNodes,
-  originPaths,
-  compiledField
-) {
-  const descriptor = createDescriptor(context, responsePath, {
-    arguments: field.args,
-    fieldName: field.name,
-    fieldNodes,
-    returnType: field.type,
-    parentType,
-  }, fieldNodes[0])
-  const parentPath = originPaths.join('.')
-  const directRead = `${parentPath}?.${field.name}`
-  /* c8 ignore next: graphql-jit compiles every field before the plan closes. */
-  if (descriptor === undefined) return `((__ddValue) => ${compiledField})(${directRead})`
-
-  const runtimePath = getRuntimePath(responsePath)
-
-  // Field names, response keys, and graphql-jit's index segments already conform to identifier grammar.
-  // The repeated `__context.ddTrace` loads are deliberate: binding it in an enclosing arrow
-  // costs more than re-reading it.
-  return `((__ddValue) => ${compiledField})(
-    __context.ddTrace === undefined
-      ? ${directRead}
-      : (
-        __context.ddTrace.jitTraceAll ||
-        (__context.ddTrace.jitTraceFirst && __context.ddTrace.jitFields[${descriptor.id}] === undefined)
-      )
-        ? __context.ddTrace.jitRuntime.resolveDefaultInvocation(
-          __context.ddTrace,
-          ${descriptor.id},
-          ${parentPath},
-          __context.ddTrace.config.collapse ? undefined : ${runtimePath}
-        )
-        : ${directRead}
-  )`
-}
-
-/**
- * Preserve the caller's enrichment object and its property access timing. graphql-jit
- * enumerates it at compilation and reads each value when constructing resolve info.
- *
- * @param {object} userFields
- * @param {JitFieldDescriptor} descriptor
- * @param {string} descriptorKey
- * @returns {object}
- */
-function addJitField (userFields, descriptor, descriptorKey) {
-  return new Proxy(Object.create(null), {
-    /**
-     * @returns {(string | symbol)[]}
-     */
-    ownKeys () {
-      const userKeys = Reflect.ownKeys(userFields)
-      const keys = []
-      for (const key of userKeys) {
-        if (key !== descriptorKey) keys.push(key)
-      }
-      keys.push(descriptorKey)
-      return keys
-    },
-    /**
-     * @param {object} _target
-     * @param {string | symbol} key
-     * @returns {ReturnType<typeof Reflect.getOwnPropertyDescriptor>}
-     */
-    getOwnPropertyDescriptor (_target, key) {
-      if (key === descriptorKey) {
-        return {
-          configurable: true,
-          enumerable: true,
-          value: descriptor,
-          writable: false,
-        }
-      }
-
-      const property = Reflect.getOwnPropertyDescriptor(userFields, key)
-      return property && { ...property, configurable: true }
-    },
-    /**
-     * @param {object} _target
-     * @param {string | symbol} key
-     * @returns {unknown}
-     */
-    get (_target, key) {
-      if (key === descriptorKey) return descriptor
-      return Reflect.get(userFields, key, userFields)
-    },
-  })
-}
-
-/**
- * graphql-jit compiles queries before subscriptions, so a descriptor requested after the plan
- * closed cannot be tracked; the field then compiles and resolves exactly as it would untraced.
- *
- * @param {JitCompilationContext} context
- * @param {CompilerPath} responsePath
- * @param {ResolverInfoInput} input
+ * @param {ConfiguredJitCompilationContext} context
+ * @param {CompilerPathAnalysis} compilerPath
+ * @param {DescriptorInput} input
  * @param {import('graphql').FieldNode} fieldNode
- * @returns {JitFieldDescriptor | undefined}
+ * @param {CreateFieldMetadata} createFieldMetadata
+ * @returns {JitFieldDescriptor}
  */
-function createDescriptor (context, responsePath, input, fieldNode) {
+function createDescriptor (context, compilerPath, input, fieldNode, createFieldMetadata) {
   const plan = context.ddTracePlan
-  const fieldsByPath = plan.fieldsByPath
-  /* c8 ignore next: graphql-jit compiles every field before the plan closes. */
-  if (fieldsByPath === undefined) return
 
-  const pathKey = serializeCompilerPath(responsePath)
-  let parentPath = responsePath.prev
-  while (parentPath && parentPath.type !== 'literal') parentPath = parentPath.prev
-
-  const collapsedPath = getCollapsedPath(responsePath)
-  const baseTypeName = getBaseTypeName(input.returnType)
+  const parentTypeName = input.parentType.name
+  const { baseTypeName, resource, tags } = createFieldMetadata(
+    parentTypeName,
+    input.fieldName,
+    input.returnType,
+    compilerPath.collapsedPath
+  )
   const descriptor = {
     id: plan.fields.length,
     arguments: input.arguments ?? [],
     argumentTemplate: undefined,
     baseTypeName,
-    collapsedPath,
-    // Precomputed so the inlined default field allocates neither per execution.
-    collapsedPathSegments: collapsedPath.split('.'),
+    collapsedPath: compilerPath.collapsedPath,
+    collapsedPathSegments: compilerPath.collapsedPathSegments,
     fieldName: input.fieldName,
     fieldNode,
-    fieldNodes: [fieldNode],
-    parentPathKey: parentPath ? serializeCompilerPath(parentPath) : undefined,
-    parentTypeName: input.parentType.name,
-    pathDepth: getPathDepth(responsePath, true),
-    resource: `${input.fieldName}:${input.returnType}`,
+    fieldNodes: input.fieldNodes,
+    parentId: undefined,
+    parentPathKey: compilerPath.parentPathKey,
+    parentTypeName,
+    pathDepth: compilerPath.pathDepth,
+    resource,
     returnType: input.returnType,
-    selectionDepth: getPathDepth(responsePath, false),
-    // Reused verbatim as the resolve span's meta under collapse. graphql.source is absent because
-    // it varies per field slice, so the consumer rebuilds meta when source reporting is on.
-    tags: {
-      'graphql.field.coordinates': `${input.parentType.name}.${input.fieldName}`,
-      'graphql.field.name': input.fieldName,
-      'graphql.field.path': collapsedPath,
-      'graphql.field.type': baseTypeName,
-    },
+    selectionDepth: compilerPath.selectionDepth,
+    tags,
   }
 
   plan.fields.push(descriptor)
-  fieldsByPath.set(pathKey, descriptor)
+  plan.fieldsByPath.set(compilerPath.pathKey, descriptor)
   return descriptor
 }
 
 /**
- * @param {CompilerPath | undefined} path
- * @returns {string}
+ * @param {unknown} path
+ * @returns {CompilerPathAnalysis | undefined}
  */
-function serializeCompilerPath (path) {
-  let key = ''
-  for (let current = path; current; current = current.prev) {
-    key = `${current.type}:${current.key}/${key}`
-  }
-  return key
-}
-
-/**
- * @param {CompilerPath | undefined} path
- * @returns {string}
- */
-function getRuntimePath (path) {
+function analyzeCompilerPath (path) {
   const segments = []
-  for (let current = path; current; current = current.prev) {
-    if (current.type === 'literal') {
-      segments.push(JSON.stringify(current.key))
-    } else if (current.type === 'variable') {
-      segments.push(current.key)
+  let current = path
+  while (current !== undefined) {
+    /* istanbul ignore next: only a future graphql-jit path representation can exercise this fallback. */
+    if (current === null || typeof current !== 'object') return
+
+    const key = Reflect.get(current, 'key')
+    const type = Reflect.get(current, 'type')
+    /* istanbul ignore next: only a future graphql-jit path segment can exercise this fallback. */
+    if (typeof key !== 'string' || (type !== 'literal' && type !== 'meta' && type !== 'variable')) return
+
+    segments.push({ key, type })
+    current = Reflect.get(current, 'prev')
+  }
+
+  const collapsedPathSegments = []
+  const literalPathKeys = []
+  const runtimePathSegments = []
+  let pathDepth = 0
+  let pathKey = ''
+  let selectionDepth = 0
+  for (let index = segments.length - 1; index >= 0; index--) {
+    const { key, type } = segments[index]
+    pathKey += `${type}:${key}/`
+    if (type === 'literal') {
+      collapsedPathSegments.push(key)
+      literalPathKeys.push(pathKey)
+      runtimePathSegments.push(`'${key}'`)
+      pathDepth++
+      selectionDepth++
+    } else if (type === 'variable') {
+      collapsedPathSegments.push('*')
+      runtimePathSegments.push(key)
+      pathDepth++
     }
   }
-  segments.reverse()
-  return `[${segments.join(',')}]`
-}
 
-/**
- * @param {CompilerPath | undefined} path
- * @returns {string}
- */
-function getCollapsedPath (path) {
-  const segments = []
-  for (let current = path; current; current = current.prev) {
-    if (current.type === 'literal') {
-      segments.push(current.key)
-    } else if (current.type === 'variable') {
-      segments.push('*')
-    }
+  return {
+    collapsedPath: collapsedPathSegments.join('.'),
+    collapsedPathSegments,
+    parentPathKey: literalPathKeys.at(-2),
+    pathDepth,
+    pathKey,
+    runtimePath: `[${runtimePathSegments.join(', ')}]`,
+    selectionDepth,
   }
-  segments.reverse()
-  return segments.join('.')
-}
-
-/**
- * @param {CompilerPath | undefined} path
- * @param {boolean} countListIndices
- * @returns {number}
- */
-function getPathDepth (path, countListIndices) {
-  let depth = 0
-  for (let current = path; current; current = current.prev) {
-    if (current.type === 'literal' || (countListIndices && current.type === 'variable')) depth++
-  }
-  return depth
-}
-
-/**
- * @param {import('graphql').GraphQLOutputType} type
- * @returns {string | undefined}
- */
-function getBaseTypeName (type) {
-  let current = type
-  while ('ofType' in current) current = current.ofType
-  return current.name
 }
 
 module.exports = createGraphqlJitRuntime

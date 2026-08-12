@@ -3,32 +3,14 @@
 const { storage } = require('../../datadog-core')
 const createGraphqlJitRuntime = require('../../datadog-instrumentations/src/helpers/graphql-jit-runtime')
 const GraphQLExecutePlugin = require('./execute')
+const { getBaseTypeName } = require('./utils')
 
-const { JIT_FIELD_NAME, resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
+const { resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
 
 /**
  * @typedef {import('graphql').ExecutionArgs} ExecutionArguments
+ * @typedef {import('../../datadog-instrumentations/src/helpers/graphql-jit-runtime').JitPlan} JitPlan
  * @typedef {Record<string, import('graphql').GraphQLFieldResolver<unknown, unknown>>} GraphQLResolverMap
- * @typedef {{
- *   id: number,
- *   arguments: import('graphql').GraphQLArgument[],
- *   baseTypeName?: string,
- *   collapsedPath: string,
- *   fieldName: string,
- *   fieldNode: import('graphql').FieldNode,
- *   parentId?: number,
- *   parentTypeName: string,
- *   pathDepth: number,
- *   resource?: string,
- *   returnType: import('graphql').GraphQLOutputType,
- *   selectionDepth: number,
- *   tags?: Record<string, string | undefined>
- * }} JitFieldDescriptor
- * @typedef {{
- *   fields: JitFieldDescriptor[],
- *   fieldsByPath?: Map<string, JitFieldDescriptor>,
- *   finalized: boolean
- * }} JitPlan
  * @typedef {{
  *   arguments: [unknown, unknown, Record<string, unknown> | undefined],
  *   currentStore: Record<string, unknown>,
@@ -46,10 +28,10 @@ const legacyStorage = storage('legacy')
 const patchedResolverMaps = new WeakSet()
 
 const { configureCompilationContext, runtime: jitRuntime } = createGraphqlJitRuntime({
-  descriptorKey: JIT_FIELD_NAME,
-  finalizeFieldDescriptor,
+  createFieldMetadata,
   resolveDefaultInvocation: resolveJitDefaultInvocation,
   startExecution,
+  wrapResolver: wrapJitResolve,
 })
 
 class GraphQLJitExecutePlugin extends GraphQLExecutePlugin {
@@ -83,7 +65,7 @@ class GraphQLJitExecutePlugin extends GraphQLExecutePlugin {
    */
   wrapExecutionResolvers (ctx, args) {
     const { ddResolvers: resolvers } = ctx
-    if (resolvers && !patchedResolverMaps.has(resolvers)) {
+    if (ctx.ddPlan === undefined && resolvers && !patchedResolverMaps.has(resolvers)) {
       patchedResolverMaps.add(resolvers)
       for (const name of Object.keys(resolvers)) {
         resolvers[name] = wrapJitResolve(resolvers[name])
@@ -123,16 +105,27 @@ function startExecution (variableValues) {
 }
 
 /**
- * @param {JitFieldDescriptor} descriptor
+ * @param {string} parentTypeName
+ * @param {string} fieldName
+ * @param {import('graphql').GraphQLOutputType} returnType
+ * @param {string} collapsedPath
+ * @returns {{
+ *   baseTypeName: string,
+ *   resource: string,
+ *   tags: Record<string, string>
+ * }}
  */
-function finalizeFieldDescriptor (descriptor) {
-  const { baseTypeName, collapsedPath, fieldName, parentTypeName, returnType } = descriptor
-  descriptor.resource = `${fieldName}:${returnType}`
-  descriptor.tags = {
-    'graphql.field.coordinates': `${parentTypeName}.${fieldName}`,
-    'graphql.field.name': fieldName,
-    'graphql.field.path': collapsedPath,
-    'graphql.field.type': baseTypeName,
+function createFieldMetadata (parentTypeName, fieldName, returnType, collapsedPath) {
+  const baseTypeName = getBaseTypeName(returnType)
+  return {
+    baseTypeName,
+    resource: `${fieldName}:${returnType}`,
+    tags: {
+      'graphql.field.coordinates': `${parentTypeName}.${fieldName}`,
+      'graphql.field.name': fieldName,
+      'graphql.field.path': collapsedPath,
+      'graphql.field.type': baseTypeName,
+    },
   }
 }
 

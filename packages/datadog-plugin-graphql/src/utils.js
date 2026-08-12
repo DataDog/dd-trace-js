@@ -365,6 +365,16 @@ function isApolloHealthCheck (operation) {
     selection.directives?.length === 0
 }
 
+/**
+ * @param {import('graphql').GraphQLOutputType} type
+ * @returns {string}
+ */
+function getBaseTypeName (type) {
+  let current = type
+  while ('ofType' in current) current = current.ofType
+  return current.name
+}
+
 let tools
 
 function getSignature (document, operationName, operationType, calculate) {
@@ -395,6 +405,7 @@ function getSignature (document, operationName, operationType, calculate) {
 
 module.exports = {
   extractErrorIntoSpanEvent,
+  getBaseTypeName,
   getCachedRequestOperation,
   getOperation,
   getRequestCache,
