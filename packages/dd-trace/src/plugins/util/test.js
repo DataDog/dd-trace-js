@@ -851,7 +851,7 @@ function getTestTypeFromFramework (testFramework) {
  */
 function finishAllTraceSpans (span) {
   for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span && !traceSpan._finished) {
+    if (traceSpan !== span && traceSpan._duration === undefined) {
       traceSpan.finish()
     }
   }

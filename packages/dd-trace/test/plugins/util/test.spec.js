@@ -70,15 +70,22 @@ const {
 
 describe('finishAllTraceSpans', () => {
   it('does not finish completed spans twice', () => {
-    const completedSpan = { _finished: true, finish: sinon.spy() }
-    const activeSpan = { _finished: false, finish: sinon.spy() }
-    const rootSpan = {
-      context: () => ({
-        _trace: {
-          started: [rootSpan, completedSpan, activeSpan],
-        },
-      }),
-    }
+    const tracer = { _config: getConfig() }
+    const processor = { process () {} }
+    const prioritySampler = { sample () {} }
+    const rootSpan = new Span(tracer, processor, prioritySampler, { operationName: 'root' })
+    const completedSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'completed',
+      parent: rootSpan.context(),
+    })
+    const activeSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'active',
+      parent: rootSpan.context(),
+    })
+    sinon.spy(completedSpan, 'finish')
+    sinon.spy(activeSpan, 'finish')
+    completedSpan.finish()
+    completedSpan.finish.resetHistory()
 
     finishAllTraceSpans(rootSpan)
 
