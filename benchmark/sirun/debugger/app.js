@@ -143,7 +143,7 @@ function doSomeWork (n) {
  */
 function createData () {
   const str = 'a'.repeat(1000)
-  const arr = Array.from({ length: 100 }, (_, i) => i)
+  const arr = Array.from({ length: 1000 }, (_, i) => i)
 
   const data = {
     n: 0,
