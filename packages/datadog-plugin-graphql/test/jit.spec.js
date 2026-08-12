@@ -16,7 +16,36 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema } = require('./naming')
 
+const generatedCodeLinter = semifies(process.version, require('eslint/package.json').engines.node)
+  ? new (require('eslint').ESLint)({ cwd: join(__dirname, '../../..') })
+  : undefined
+
 function noop () {}
+
+/**
+ * @param {string} compilation
+ * @param {string[]} expectedStatements
+ * @returns {Promise<void>}
+ */
+async function assertGeneratedArgumentFactory (compilation, expectedStatements) {
+  const declaration = /^function (ddTraceArguments\d+) \(args, variableValues\) \{$/m.exec(compilation)
+  assert.ok(declaration, 'expected a named generated argument factory')
+
+  const end = compilation.indexOf('\n}\n', declaration.index)
+  assert.notStrictEqual(end, -1, 'expected the generated argument factory to close')
+  const factory = compilation.slice(declaration.index, end + 2)
+  for (const statement of expectedStatements) assert.ok(factory.includes(statement), statement)
+  assert.doesNotMatch(factory, /=>|\(function/)
+  assert.ok(compilation.includes(`, ${declaration[1]})`))
+
+  if (generatedCodeLinter === undefined) return
+
+  const source = `'use strict'\n\n${factory}\n${declaration[1]}({}, {})\n`
+  const [{ messages }] = await generatedCodeLinter.lintText(source, {
+    filePath: join(__dirname, '../src/generated-argument-factory.js'),
+  })
+  assert.deepStrictEqual(messages, [])
+}
 
 /**
  * @template T
