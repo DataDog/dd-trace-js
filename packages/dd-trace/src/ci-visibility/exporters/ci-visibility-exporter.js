@@ -99,7 +99,7 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
-  #deferredHierarchyTraces = []
+  #deferredTestSessionTraces = []
 
   constructor (config, options = {}) {
     super(config)
@@ -407,7 +407,7 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   /**
-   * Exports spans that are not retained for late hierarchy updates.
+   * Exports spans that are not retained for late updates to session, module, or suite events.
    *
    * @param {Array<object>} trace
    * @returns {void}
@@ -418,32 +418,32 @@ class CiVisibilityExporter extends BufferingExporter {
       this._traceBuffer.push(trace)
       return
     }
-    const isHierarchyTrace = getIsTestSessionTrace(trace)
-    if (!this.canReportSessionTraces() && isHierarchyTrace) {
+    const isTestSessionTrace = getIsTestSessionTrace(trace)
+    if (!this.canReportSessionTraces() && isTestSessionTrace) {
       return
     }
-    if (this._export(trace, undefined, undefined, isHierarchyTrace) === false && isHierarchyTrace) {
-      this.#deferredHierarchyTraces.push(trace)
+    if (this._export(trace, undefined, undefined, isTestSessionTrace) === false && isTestSessionTrace) {
+      this.#deferredTestSessionTraces.push(trace)
     }
   }
 
   /**
-   * Retries hierarchy traces rejected by writer backpressure within the final deadline.
+   * Retries session, module, and suite traces rejected by writer backpressure within the final deadline.
    *
    * @param {{ deadline?: number }} options final-flush options
    * @returns {void}
    */
-  #exportDeferredHierarchyTraces (options) {
+  #exportDeferredTestSessionTraces (options) {
     if (!this._writer || !this.canReportSessionTraces()) return
 
     let retainedCount = 0
 
-    for (const trace of this.#deferredHierarchyTraces) {
+    for (const trace of this.#deferredTestSessionTraces) {
       if (this._writer.append(trace, options) === false) {
-        this.#deferredHierarchyTraces[retainedCount++] = trace
+        this.#deferredTestSessionTraces[retainedCount++] = trace
       }
     }
-    this.#deferredHierarchyTraces.length = retainedCount
+    this.#deferredTestSessionTraces.length = retainedCount
   }
 
   exportCoverage (formattedCoverage) {
@@ -514,7 +514,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredHierarchyTraces.length === 0) {
+      this.#deferredTestSessionTraces.length === 0) {
       onDone()
       return
     }
@@ -559,7 +559,7 @@ class CiVisibilityExporter extends BufferingExporter {
     const flushWriters = () => {
       const options = deadline === undefined ? undefined : { deadline }
       if (isFinalFlush) {
-        this.#exportDeferredHierarchyTraces(options)
+        this.#exportDeferredTestSessionTraces(options)
       }
 
       const writers = [

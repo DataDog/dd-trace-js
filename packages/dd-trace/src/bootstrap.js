@@ -17,15 +17,7 @@ if (!global._ddtrace) {
   process.once('beforeExit', function mainBeforeExit () {
     if (globalThis[ddTraceSymbol]?.beforeExitHandlers) {
       for (const handler of globalThis[ddTraceSymbol].beforeExitHandlers) {
-        try {
-          handler()
-        } catch (error) {
-          try {
-            require('./log').error('Error running a beforeExit handler', error)
-          } catch {
-            // Never let one shutdown handler prevent the remaining handlers.
-          }
-        }
+        handler()
       }
     }
   })

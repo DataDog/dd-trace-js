@@ -74,16 +74,13 @@ class Writer extends BaseWriter {
         Date.now() - startRequestTime
       )
       if (err) {
-        const reason = err.code === 'ABORT_ERR' || err.code === 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-          ? 'final_flush_timeout'
-          : (statusCode ? 'http_error' : 'network_error')
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
           { endpoint: 'test_cycle', statusCode }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'test_cycle', reason }
+          { endpoint: 'test_cycle' }
         )
         log.error('Error sending CI agentless payload', err)
         done(err)

@@ -73,16 +73,13 @@ class Writer extends BaseWriter {
         Date.now() - startRequestTime
       )
       if (err) {
-        const reason = err.code === 'ABORT_ERR' || err.code === 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
-          ? 'final_flush_timeout'
-          : (statusCode ? 'http_error' : 'network_error')
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
           { endpoint: 'code_coverage', statusCode }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'code_coverage', reason }
+          { endpoint: 'code_coverage' }
         )
         log.error('Error sending CI coverage payload', err)
         done(err)
