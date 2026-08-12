@@ -42,12 +42,12 @@ function entityWrapper (method) {
 function activityWrapper (method) {
   return function (activityName, activityOptions) {
     if (activityOptions && typeof activityOptions.handler === 'function') {
-      shimmer.wrap(activityOptions, 'handler', handler => {
-        const isAsync = handler?.constructor?.name === 'AsyncFunction'
-        return isAsync
-          ? wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName)
-          : wrapSyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName)
-      })
+      // Always wrap activities with the async tracer so parent resolution can read
+      // the shared orchestration store (Azure Table) when the activity runs on a
+      // different worker than the HTTP trigger or orchestrator.
+      shimmer.wrap(activityOptions, 'handler', handler =>
+        wrapAsyncWithTraceContext(TRACER_NAME, 'durable-activity', handler, activityName),
+      )
     }
     return method.apply(this, arguments)
   }

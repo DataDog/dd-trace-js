@@ -70,15 +70,30 @@ function createOrchestrationMetaFromHttpParent (instanceId, httpParent, function
     spanId: normalizeSpanId(createId()),
     parentId: normalizeSpanId(httpParent.spanId),
     httpParentSpanId: normalizeSpanId(httpParent.spanId),
-    startTime: Date.now(),
-    // Replaced with the real start time on the first orchestration turn.
+    // Stamped on the first non-replay orchestration turn, not at startNew time.
     pendingStart: true,
     status: 'open',
   }
 }
 
+// Backfilled orchestration spans use the first turn start through instance completion.
+function resolveOrchestrationSpanBounds (meta, endTime) {
+  const resolvedEndTime = endTime ?? Date.now()
+  let startTime = meta?.startTime
+
+  if (startTime == null) {
+    startTime = resolvedEndTime
+  } else if (startTime > resolvedEndTime) {
+    startTime = resolvedEndTime
+  }
+
+  return { startTime, endTime: resolvedEndTime }
+}
+
 function exportOrchestrationSpanFromMeta (tracerName, meta, { error, endTime } = {}) {
   if (!meta?.traceId || !meta?.spanId) return false
+
+  const { startTime, endTime: resolvedEndTime } = resolveOrchestrationSpanBounds(meta, endTime)
 
   const tracer = getTracer(tracerName)
   const ddContext = new DatadogSpanContext({
@@ -94,14 +109,14 @@ function exportOrchestrationSpanFromMeta (tracerName, meta, { error, endTime } =
     new OtelSpanContext(ddContext),
     api.SpanKind.INTERNAL,
     [],
-    meta.startTime,
+    startTime,
     spanAttributes(meta.functionName || 'orchestration', 'durable-orchestration'),
   )
 
   if (error) {
     endSpan(span, error)
   } else {
-    span.end(endTime ?? Date.now())
+    span.end(resolvedEndTime)
   }
 
   return true
@@ -112,4 +127,5 @@ module.exports = {
   createOrchestrationMetaFromHttpParent,
   exportOrchestrationSpanFromMeta,
   getParentFromTraceContext,
+  resolveOrchestrationSpanBounds,
 }

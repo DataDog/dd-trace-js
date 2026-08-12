@@ -141,9 +141,23 @@ function publishOrchestrationSpanMetaSync (instanceId, span) {
   if (!meta) return
   publishOrchestrationMetaSync(instanceId, {
     ...meta,
-    startTime: Date.now(),
+    startTime: meta.startTime ?? Date.now(),
     status: 'open',
   })
+}
+
+// Record the first non-replay orchestration turn once; never move it on later turns.
+function stampOrchestrationStartTime (meta, functionName) {
+  if (meta.startTime != null && meta.pendingStart !== true) {
+    return meta
+  }
+
+  return {
+    ...meta,
+    functionName: meta.functionName || functionName,
+    startTime: Date.now(),
+    pendingStart: undefined,
+  }
 }
 
 function reconcileOrchestrationHttpParent (instanceId, httpParent) {
@@ -184,17 +198,17 @@ function ensureOrchestrationMeta (instanceId, invocationContext, functionName) {
   let meta = readOrchestrationSpanMetaSync(instanceId, traceContext)
 
   if (!meta?.traceId || !meta?.spanId) {
-    meta = createOrchestrationMeta(instanceId, invocationContext, functionName)
+    meta = stampOrchestrationStartTime(
+      createOrchestrationMeta(instanceId, invocationContext, functionName),
+      functionName,
+    )
     publishOrchestrationMetaSync(instanceId, meta)
-  } else if (meta.pendingStart) {
-    // Seeded at startNew time; the orchestration is only starting now.
-    meta = {
-      ...meta,
-      functionName: meta.functionName || functionName,
-      startTime: Date.now(),
-      pendingStart: undefined,
+  } else {
+    const stamped = stampOrchestrationStartTime(meta, functionName)
+    if (stamped.startTime !== meta.startTime || stamped.pendingStart !== meta.pendingStart) {
+      meta = stamped
+      publishOrchestrationMetaSync(instanceId, meta)
     }
-    publishOrchestrationMetaSync(instanceId, meta)
   }
 
   const httpParent = resolveHttpParentForOrchestration(instanceId, traceContext)
@@ -294,10 +308,15 @@ function completeOrchestrationSpan (tracerName, instanceId, invocationContext, f
 
   if (!markOrchestrationMetaCompleted(instanceId)) return false
 
+  const endTime = Date.now()
   const exported = exportOrchestrationSpanFromMeta(
     tracerName,
-    { ...meta, functionName: meta.functionName || functionName },
-    { error, endTime: Date.now() },
+    {
+      ...meta,
+      functionName: meta.functionName || functionName,
+      startTime: meta.startTime ?? endTime,
+    },
+    { error, endTime },
   )
 
   clearOrchestrationSpanMeta(instanceId)
@@ -324,4 +343,5 @@ module.exports = {
   readOrchestrationSpanMetaSync,
   reconcileOrchestrationHttpParent,
   seedOrchestrationMetaFromHttpParent,
+  stampOrchestrationStartTime,
 }
