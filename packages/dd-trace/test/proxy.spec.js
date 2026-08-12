@@ -268,6 +268,9 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
+      './serverless': {
+        IS_SERVERLESS: false,
+      },
     })
 
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')

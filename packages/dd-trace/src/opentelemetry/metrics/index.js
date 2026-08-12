@@ -6,9 +6,12 @@ const { metrics } = require('@opentelemetry/api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
+const { registerTelemetryFlusher } = require('../../flush')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
+
+let unregisterTelemetryFlusher
 
 /**
  * @typedef {import('../../config')} Config
@@ -76,6 +79,8 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+  unregisterTelemetryFlusher?.()
+  unregisterTelemetryFlusher = registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
 
 function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {

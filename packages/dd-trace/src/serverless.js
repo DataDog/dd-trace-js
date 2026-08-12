@@ -1,6 +1,15 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+
+const VERCEL_REQUEST_CONTEXTS = [
+  Symbol.for('@next/request-context'),
+  Symbol.for('@vercel/request-context'),
+]
+const httpRequestFinishChannel = channel('apm:http:server:request:finish')
+const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
+const vercelRetentionHandlers = new WeakMap()
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -45,12 +54,89 @@ function isInServerlessEnvironment () {
 /**
  * Gets tags describing the serverless platform where the tracer is running.
  *
+ * @param {{ isVercel: boolean }} [platform] Detected serverless platform.
  * @returns {string[]|undefined}
  */
-function getServerlessPlatformTags () {
-  if (getEnvironmentVariable('VERCEL') === '1') {
+function getServerlessPlatformTags (platform = getServerlessPlatform()) {
+  if (platform.isVercel) {
     return getVercelPlatformTags()
   }
+}
+
+/**
+ * Detects the serverless platform once while configuration is built.
+ * @returns {{ isVercel: boolean }}
+ */
+function getServerlessPlatform () {
+  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+}
+
+/**
+ * @typedef {{ flushAll?: (done: () => void) => void }} TelemetryFlusher
+ */
+
+/**
+ * @param {TelemetryFlusher} tracer
+ * @returns {(() => boolean)|undefined}
+ */
+function getVercelRequestEndHandler (tracer) {
+  if (typeof tracer?.flushAll !== 'function') return
+
+  return function onVercelRequestEnd () {
+    for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
+      try {
+        const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+        if (typeof waitUntil !== 'function') continue
+
+        let done
+        const pending = new Promise(resolve => { done = resolve })
+        waitUntil(pending)
+        try {
+          tracer.flushAll(done)
+        } catch {
+          done()
+        }
+        return true
+      } catch {
+        // The other request-context implementation may still be available.
+      }
+    }
+    return false
+  }
+}
+
+/**
+ * @param {TelemetryFlusher} tracer
+ * @returns {(() => void)|undefined}
+ */
+function registerVercelTelemetryRetention (tracer) {
+  const existing = vercelRetentionHandlers.get(tracer)
+  if (existing) return existing
+
+  const onRequestEnd = getVercelRequestEndHandler(tracer)
+  if (!onRequestEnd) return
+
+  const onHttp2ResponseEmit = ({ eventName }) => {
+    if (eventName === 'close') onRequestEnd()
+  }
+  httpRequestFinishChannel.subscribe(onRequestEnd)
+  http2ResponseEmitChannel.subscribe(onHttp2ResponseEmit)
+
+  const unregister = () => {
+    httpRequestFinishChannel.unsubscribe(onRequestEnd)
+    http2ResponseEmitChannel.unsubscribe(onHttp2ResponseEmit)
+    vercelRetentionHandlers.delete(tracer)
+  }
+  vercelRetentionHandlers.set(tracer, unregister)
+  return unregister
+}
+
+/**
+ * Registers the lifecycle adapter selected by the detected serverless platform.
+ * @param {TelemetryFlusher} tracer
+ */
+function initializeServerlessTelemetry (tracer) {
+  if (getServerlessPlatform().isVercel) registerVercelTelemetryRetention(tracer)
 }
 
 /**
@@ -80,9 +166,13 @@ function getVercelPlatformTags () {
 
 module.exports = {
   getServerlessPlatformTags,
+  getServerlessPlatform,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  getVercelRequestEndHandler,
+  registerVercelTelemetryRetention,
+  initializeServerlessTelemetry,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

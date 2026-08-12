@@ -15,6 +15,7 @@ require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -142,6 +143,25 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Logs Export', () => {
+    it('waits for an in-flight export during forceFlush', () => {
+      let exportDone
+      let flushDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: (done) => { flushDone = done },
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      exportDone({ code: 0 })
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]

@@ -50,6 +50,27 @@ describe('Tracer', () => {
     })
   })
 
+  describe('flushAll', () => {
+    it('flushes registered telemetry pipelines with the configured trace exporter', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const tracer = {
+        _exporter: {
+          flush: sinon.stub().callsFake(done => done()),
+        },
+      }
+      const telemetryFlusher = sinon.stub().callsFake(done => done())
+      const unregister = registerTelemetryFlusher(telemetryFlusher)
+      let completed = false
+
+      flushAll(tracer, () => { completed = true })
+
+      sinon.assert.calledOnce(tracer._exporter.flush)
+      sinon.assert.calledOnce(telemetryFlusher)
+      assert.strictEqual(completed, true)
+      unregister()
+    })
+  })
+
   describe('trace', () => {
     it('should run the callback with a new span', () => {
       tracer.trace('name', {}, span => {
