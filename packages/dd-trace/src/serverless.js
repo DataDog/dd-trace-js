@@ -1,6 +1,11 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+
+const nextRequestFinishChannel = channel('apm:next:request:finish')
+const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
+const vercelRetentionHandlers = new WeakMap()
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -45,12 +50,87 @@ function isInServerlessEnvironment () {
 /**
  * Gets tags describing the serverless platform where the tracer is running.
  *
+ * @param {{ isVercel: boolean }} [platform] Detected serverless platform.
  * @returns {string[]|undefined}
  */
-function getServerlessPlatformTags () {
-  if (getEnvironmentVariable('VERCEL') === '1') {
+function getServerlessPlatformTags (platform = getServerlessPlatform()) {
+  if (platform.isVercel) {
     return getVercelPlatformTags()
   }
+}
+
+/**
+ * Detects the serverless platform once while configuration is built.
+ * @returns {{ isVercel: boolean }}
+ */
+function getServerlessPlatform () {
+  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+}
+
+/**
+ * @typedef {{ flushAll?: (done: () => void) => void }} TelemetryFlusher
+ */
+
+/**
+ * @param {TelemetryFlusher} tracer
+ * @param {() => void} done
+ * @returns {void}
+ */
+function flushVercelTelemetry (tracer, done) {
+  setImmediate(() => {
+    try {
+      tracer.flushAll(done)
+    } catch {
+      done()
+    }
+  })
+}
+
+function registerVercelRequestFlush (tracer) {
+  const waitUntil = getVercelRequestContext()?.waitUntil
+  if (typeof waitUntil !== 'function') return
+
+  // Retain the invocation synchronously, then flush after Next finishes its root span.
+  let done
+  const pending = new Promise(resolve => { done = resolve })
+  try {
+    waitUntil(pending)
+    flushVercelTelemetry(tracer, done)
+  } catch {
+    done()
+  }
+}
+
+function getVercelRequestContext () {
+  return globalThis[VERCEL_REQUEST_CONTEXT]?.get?.()
+}
+
+/**
+ * @param {TelemetryFlusher} tracer
+ * @returns {(() => void)|undefined}
+ */
+function registerVercelTelemetryRetention (tracer) {
+  const existing = vercelRetentionHandlers.get(tracer)
+  if (existing) return existing
+
+  if (typeof tracer?.flushAll !== 'function') return
+  const flushRequest = () => registerVercelRequestFlush(tracer)
+  nextRequestFinishChannel.subscribe(flushRequest)
+
+  const unregister = () => {
+    nextRequestFinishChannel.unsubscribe(flushRequest)
+    vercelRetentionHandlers.delete(tracer)
+  }
+  vercelRetentionHandlers.set(tracer, unregister)
+  return unregister
+}
+
+/**
+ * Registers the lifecycle adapter selected by the detected serverless platform.
+ * @param {TelemetryFlusher} tracer
+ */
+function initializeServerlessTelemetry (tracer) {
+  if (getServerlessPlatform().isVercel) registerVercelTelemetryRetention(tracer)
 }
 
 /**
@@ -80,9 +160,12 @@ function getVercelPlatformTags () {
 
 module.exports = {
   getServerlessPlatformTags,
+  getServerlessPlatform,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  registerVercelTelemetryRetention,
+  initializeServerlessTelemetry,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

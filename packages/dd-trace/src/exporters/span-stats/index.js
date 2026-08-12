@@ -8,9 +8,9 @@ class SpanStatsExporter {
     this._writer = new Writer({ url: this._url })
   }
 
-  export (payload) {
+  export (payload, done) {
     this._writer.append(payload)
-    this._writer.flush()
+    this._writer.flush(done)
   }
 }
 

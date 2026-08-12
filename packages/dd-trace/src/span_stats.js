@@ -235,6 +235,18 @@ class SpanStatsProcessor {
   }
 
   onInterval () {
+    this.#flush()
+  }
+
+  /**
+   * Drains pending span statistics and waits for their export.
+   * @param {Function} [done]
+   */
+  forceFlush (done) {
+    this.#flush(done)
+  }
+
+  #flush (done) {
     const drained = this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
@@ -248,10 +260,16 @@ class SpanStatsProcessor {
         RuntimeID: this.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
-      })
+      }, done)
     } else if (this.otlpExporter && drained.length > 0) {
-      this.otlpExporter.export(drained, this.bucketSizeNs)
-    }
+      this.otlpExporter.export(drained, this.bucketSizeNs, () => {
+        if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
+        else done?.()
+      })
+    } else if (this.otlpExporter) {
+      if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
+      else done?.()
+    } else done?.()
   }
 
   onSpanFinished (span) {

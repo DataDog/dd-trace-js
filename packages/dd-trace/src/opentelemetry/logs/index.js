@@ -27,9 +27,12 @@ const os = require('os')
  * @package
  */
 
+const { registerTelemetryFlusher } = require('../../flush')
 const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
+
+let unregisterTelemetryFlusher
 
 /**
  * Initializes OpenTelemetry Logs support
@@ -79,6 +82,9 @@ function initializeOpenTelemetryLogs (config) {
 
   // Register the logger provider globally with OpenTelemetry API
   loggerProvider.register()
+  // Retain only the current global provider when the tracer reinitializes.
+  unregisterTelemetryFlusher?.()
+  unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }
 
 module.exports = {

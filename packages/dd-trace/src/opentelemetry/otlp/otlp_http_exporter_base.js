@@ -20,6 +20,8 @@ const legacyStorage = storage('legacy')
  */
 class OtlpHttpExporterBase {
   #transport = https
+  #activeRequests = 0
+  #flushCallbacks = []
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -88,39 +90,76 @@ class OtlpHttpExporterBase {
       },
     }
 
-    legacyStorage.run({ noop: true }, () => {
-      const req = this.#transport.request(options, (res) => {
-        let data = ''
+    this.#activeRequests++
+    let completed = false
+    const complete = result => {
+      if (completed) return
+      completed = true
+      this.#activeRequests--
+      resultCallback(result)
+      if (this.#activeRequests === 0) this.#completeFlush()
+    }
 
-        res.on('data', (chunk) => {
-          data += chunk
+    try {
+      legacyStorage.run({ noop: true }, () => {
+        const req = this.#transport.request(options, (res) => {
+          let data = ''
+
+          res.on('data', (chunk) => {
+            data += chunk
+          })
+
+          res.once('error', (error) => {
+            complete({ code: 1, error })
+          })
+
+          res.once('end', () => {
+            // @ts-expect-error - res.statusCode can be undefined
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              complete({ code: 0 })
+            } else {
+              const error = new Error(`HTTP ${res.statusCode}: ${data}`)
+              complete({ code: 1, error })
+            }
+          })
         })
 
-        res.once('end', () => {
-          // @ts-expect-error - res.statusCode can be undefined
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resultCallback({ code: 0 })
-          } else {
-            const error = new Error(`HTTP ${res.statusCode}: ${data}`)
-            resultCallback({ code: 1, error })
-          }
+        req.on('error', (error) => {
+          log.error('Error sending OTLP %s:', this.signalType, error)
+          complete({ code: 1, error })
         })
-      })
 
-      req.on('error', (error) => {
-        log.error('Error sending OTLP %s:', this.signalType, error)
-        resultCallback({ code: 1, error })
-      })
+        req.once('timeout', () => {
+          req.destroy()
+          const error = new Error('Request timeout')
+          complete({ code: 1, error })
+        })
 
-      req.once('timeout', () => {
-        req.destroy()
-        const error = new Error('Request timeout')
-        resultCallback({ code: 1, error })
+        req.write(payload)
+        req.end()
       })
+    } catch (error) {
+      complete({ code: 1, error })
+    }
+  }
 
-      req.write(payload)
-      req.end()
-    })
+  /**
+   * Calls back once all started OTLP requests have completed.
+   * @param {Function} [done]
+   */
+  flush (done) {
+    if (!done) return
+    if (this.#activeRequests === 0) {
+      done()
+      return
+    }
+    this.#flushCallbacks.push(done)
+  }
+
+  #completeFlush () {
+    const callbacks = this.#flushCallbacks
+    this.#flushCallbacks = []
+    for (const callback of callbacks) callback()
   }
 
   /**

@@ -12,7 +12,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const { IS_SERVERLESS } = require('./serverless')
+const { IS_SERVERLESS, initializeServerlessTelemetry } = require('./serverless')
 const processTags = require('./process-tags')
 const { isTrue } = require('./util')
 const {
@@ -389,6 +389,7 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
+      initializeServerlessTelemetry(this._tracer)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
