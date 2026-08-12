@@ -191,6 +191,46 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
+    typecheckIt('reports a failed typecheck suite when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose ' +
+          '--reporter=./ci-visibility/vitest-reporter-throws.mjs',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule, testSuite } = assertCompleteTestSessionTrace(events, testOutput)
+
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule, testSuite]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     poolConfig.forEach((poolConfig) => {
       it(`can run and report tests with pool=${poolConfig}`, async () => {
         childProcess = exec(

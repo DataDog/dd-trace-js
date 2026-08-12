@@ -1684,6 +1684,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   }
 
   await getChannelPromise(testSuiteFinishCh, {
+    deferFlush: true,
     frameworkVersion,
     status: getTypecheckTaskStatus(file),
     ...testSuiteCtx.currentStore,
