@@ -17,10 +17,10 @@ class Writer {
 
   #isFirstFlush = true
 
-  flush (done = () => {}) {
+  flush (done = () => {}, options) {
     const count = this._encoder.count()
 
-    if (!request.writable) {
+    if (!request.writable && options?.deadline === undefined) {
       this._encoder.reset()
       done()
     } else if (count > 0) {
@@ -44,23 +44,28 @@ class Writer {
         done()
         return
       }
-      this._sendPayload(payload, count, done)
+      if (options === undefined) {
+        this._sendPayload(payload, count, done)
+      } else {
+        this._sendPayload(payload, count, done, options)
+      }
     } else {
       done()
     }
   }
 
-  append (payload) {
-    if (!request.writable) {
+  append (payload, options) {
+    if (!request.writable && options?.deadline === undefined) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
-      return
+      return false
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)
+    return true
   }
 
   _encode (payload) {
