@@ -57,9 +57,14 @@ class DogStatsDClient {
 
   /**
    * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
-   * change, e.g. a MicroVM clone resume. Lines already buffered have the old prefix baked in
-   * (`distribution()`, and mid-write overflow in `_write()`, serialize synchronously ahead of the
-   * next `flush()`), so they're only dropped if the prefix actually changed.
+   * change, e.g. a MicroVM clone resume.
+   *
+   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
+   * the image build, so every clone holds the same bytes — flushing them would submit one identical
+   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
+   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
+   * before the swap.
+   *
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
