@@ -15,6 +15,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
@@ -597,6 +598,12 @@ class Config extends ConfigBase {
       this.tags.version = this.version
     }
     this.tags['runtime-id'] = RUNTIME_ID
+    const platformTags = getServerlessPlatformTags()
+    if (platformTags) {
+      for (let i = 0; i < platformTags.length; i += 2) {
+        this.tags[platformTags[i]] ??= platformTags[i + 1]
+      }
+    }
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)

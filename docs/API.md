@@ -21,6 +21,15 @@ tracer.use('pg', {
 })
 ```
 
+The `langchain` and `modelcontextprotocol-sdk` integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:
+
+```javascript
+// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.
+tracer.use('modelcontextprotocol-sdk', {
+  llmobs: false
+})
+```
+
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
