@@ -3,7 +3,7 @@ import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
-import { logUploads } from './run-upload.mjs'
+import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
 import {
   uploadAllCoverageToDatadog, uploadCoverage, sendCodecovNotifications, hasCodecovCommit,
@@ -285,8 +285,11 @@ async function checkAllGreen () {
   // Only notify when every sibling workflow passed — a failing suite's coverage is expected to be
   // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
   // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
-  // artifacts are skipped) — notifying then would target a report that was never created.
-  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0 && hasCodecovCommit()) {
+  // artifacts are skipped) — notifying then would target a report that was never created. And skip
+  // when any report-upload call failed (tracked separately from `failedRuns`, which only reflects
+  // GitHub's own workflow-run conclusions) — notifying then would post a status computed from a
+  // report Codecov never fully received.
+  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0 && !hasUploadFailed() && hasCodecovCommit()) {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 

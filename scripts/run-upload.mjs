@@ -3,6 +3,18 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 /* eslint-disable no-console */
 
+// Set whenever any report-upload CLI call exits non-zero, so callers that gate a downstream action
+// on "did every upload succeed" (e.g. All Green only notifying Codecov once every upload landed)
+// don't have to duplicate that tracking themselves.
+let anyUploadFailed = false
+
+/**
+ * @returns {boolean} whether any `runUpload`/`runUploadWithRetry` call has failed so far.
+ */
+export function hasUploadFailed () {
+  return anyUploadFailed
+}
+
 /**
  * @typedef {object} UploadResult
  * @property {string} step
@@ -50,7 +62,10 @@ function spawnUpload (command, args, env) {
  */
 export async function runUpload (command, args, env) {
   const result = await spawnUpload(command, args, env)
-  if (result.code !== 0) process.exitCode = 1
+  if (result.code !== 0) {
+    process.exitCode = 1
+    anyUploadFailed = true
+  }
   return result
 }
 
@@ -85,7 +100,10 @@ async function attemptUpload (command, args, retries, delayMs, attempt) {
  */
 export async function runUploadWithRetry (command, args, retries = 2, delayMs = 2000) {
   const result = await attemptUpload(command, args, retries, delayMs, 1)
-  if (result.code !== 0) process.exitCode = 1
+  if (result.code !== 0) {
+    process.exitCode = 1
+    anyUploadFailed = true
+  }
   return result
 }
 
