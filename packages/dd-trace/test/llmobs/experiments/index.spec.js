@@ -587,6 +587,7 @@ describe('LLMObs Experiments facade', () => {
       await recorder.submitEvaluationMetrics(span, [
         { label: 'valid_metric', value: 1 },
         { label: 'null_metric', value: null },
+        { label: 'undefined_metric', value: undefined },
         { label: 'score' },
       ])
       sinon.assert.calledOnce(ExperimentsClient.prototype.postExperimentEvents)
@@ -598,8 +599,13 @@ describe('LLMObs Experiments facade', () => {
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
       await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
-      sinon.assert.calledTwice(warn)
-      sinon.assert.alwaysCalledWith(
+      sinon.assert.calledThrice(warn)
+      sinon.assert.calledWith(
+        warn,
+        'LLMObs experiments: skipping external metric %s because it has neither value nor error',
+        'undefined_metric'
+      )
+      sinon.assert.calledWith(
         warn,
         'LLMObs experiments: skipping external metric %s because it has neither value nor error',
         'score'
