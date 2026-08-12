@@ -15,10 +15,45 @@ const {
 const { parseUrl } = require('../../exporters/common/url')
 
 const legacyStorage = storage('legacy')
+const EPOCH_SECONDS_THRESHOLD = 1_000_000_000
+
+/**
+ * Returns the delay requested by a Test Optimization intake rate-limit response.
+ *
+ * @param {import('node:http').IncomingHttpHeaders} [headers]
+ * @returns {number}
+ */
+function getRateLimitResetDelay (headers) {
+  let retryAfter = headers?.['retry-after']
+  if (Array.isArray(retryAfter)) retryAfter = retryAfter[0]
+  if (typeof retryAfter === 'string' && retryAfter.trim() !== '') {
+    const delaySeconds = Number(retryAfter)
+    if (Number.isFinite(delaySeconds)) {
+      if (delaySeconds >= 0) return delaySeconds * 1000
+    } else {
+      const resetTimestamp = Date.parse(retryAfter)
+      if (Number.isFinite(resetTimestamp)) return Math.max(0, resetTimestamp - Date.now())
+    }
+  }
+
+  let reset = headers?.['x-ratelimit-reset']
+  if (Array.isArray(reset)) reset = reset[0]
+  if (typeof reset !== 'string' || reset.trim() === '') return NaN
+
+  const resetSeconds = Number(reset)
+  if (!Number.isFinite(resetSeconds) || resetSeconds < 0) return NaN
+
+  // Datadog defines this header as delay seconds. Preserve compatibility with
+  // realistic Unix timestamps without confusing ordinary durations with epochs.
+  if (resetSeconds >= EPOCH_SECONDS_THRESHOLD) {
+    return Math.max(0, resetSeconds * 1000 - Date.now())
+  }
+  return resetSeconds * 1000
+}
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
- * Retries: 429 (with X-ratelimit-reset, max 30s wait),
+ * Retries: 429 (with Retry-After or X-RateLimit-Reset, max 30s wait),
  * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.
@@ -98,11 +133,7 @@ function request (data, options, callback) {
           }
 
           if (res.statusCode === 429 && !hasRetried) {
-            const resetHeader = res.headers['x-ratelimit-reset']
-            const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? NaN
-              : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
+            const waitMs = getRateLimitResetDelay(res.headers)
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true
