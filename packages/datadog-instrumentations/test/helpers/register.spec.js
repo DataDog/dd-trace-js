@@ -3,12 +3,15 @@
 const Module = require('module')
 const assert = require('node:assert/strict')
 
+const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 
 describe('register', () => {
   let hooksMock
   let HookMock
+  let instrumentationsMock
   let originalModuleProtoRequire
+  let telemetryMock
 
   const clearRegisterCache = () => {
     const registerPath = require.resolve('../../src/helpers/register')
@@ -29,6 +32,8 @@ describe('register', () => {
     }
 
     HookMock = sinon.stub()
+    instrumentationsMock = {}
+    telemetryMock = sinon.stub()
 
     const registerPath = require.resolve('../../src/helpers/register')
     originalModuleProtoRequire = Module.prototype.require
@@ -38,6 +43,8 @@ describe('register', () => {
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
+          './instrumentations': instrumentationsMock,
+          '../../../dd-trace/src/guardrails/telemetry': telemetryMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -81,5 +88,73 @@ describe('register', () => {
 
     sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
     sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
+  })
+
+  for (const disabledName of ['fs', 'node:fs']) {
+    it(`should disable both builtin hook names when ${disabledName} is disabled`, () => {
+      hooksMock.fs = { fn: sinon.stub() }
+      hooksMock['node:fs'] = { fn: sinon.stub() }
+
+      loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
+
+      const registeredNames = []
+      for (const [names] of HookMock.args) {
+        registeredNames.push(names[0])
+      }
+      assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
+    })
+  }
+
+  it('should report the name and version correctly for scoped integration names', () => {
+    loadRegisterWithEnv()
+
+    const integrationName = '@confluentinc/kafka-javascript'
+    const moduleVersion = '0.1.0'
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === integrationName)
+    const hook = hookCall.args[2]
+
+    hook('original', integrationName, '/path/to/module', moduleVersion)
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'abort.integration', [
+      `integration:${integrationName}`,
+      `integration_version:${moduleVersion}`,
+    ], {
+      result: 'abort',
+      result_class: 'incompatible_library',
+      result_reason: `Incompatible integration version: ${integrationName}@${moduleVersion}`,
+    })
+  })
+
+  it('should only unwrap an IITM default export after its instrumentation matches', () => {
+    const patch = sinon.stub()
+    hooksMock.mariadb = { esmFirst: true, fn: sinon.stub() }
+    instrumentationsMock.mariadb = [{
+      file: 'lib/cmd/query.js',
+      versions: ['>=3.5.1'],
+      patchDefault: true,
+      hook: patch,
+    }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'mariadb')
+    const hook = hookCall.args[2]
+    const moduleExports = { default: class Execute {} }
+
+    const result = hook(moduleExports, 'mariadb/lib/cmd/execute.js', '/path/to/mariadb', '3.5.1', true)
+
+    assert.strictEqual(result, moduleExports)
+    sinon.assert.notCalled(patch)
+
+    const Query = class Query {}
+    patch.returns('patched')
+
+    const patched = hook({ default: Query }, 'mariadb/lib/cmd/query.js', '/path/to/mariadb', '3.5.1', true)
+
+    assert.strictEqual(patched, 'patched')
+    sinon.assert.calledOnceWithExactly(patch, Query, '3.5.1', true, {
+      moduleBaseDir: '/path/to/mariadb',
+      moduleName: 'mariadb/lib/cmd/query.js',
+    })
   })
 })

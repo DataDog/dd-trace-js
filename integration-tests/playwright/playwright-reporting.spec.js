@@ -48,8 +48,8 @@ const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
 const SCREENSHOT_CAPTURE_DISABLED_WARNING =
@@ -198,8 +198,21 @@ versions.forEach((version) => {
             ? '/api/v2/citestcycle'
             : '/evp_proxy/v2/api/v2/citestcycle'
 
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                DD_TEST_SESSION_NAME: 'my-test-session',
+                DD_SERVICE: undefined,
+              },
+            }
+          )
           const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url === reportUrl, payloads => {
               const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
               metadataDicts.forEach(metadata => {
@@ -324,22 +337,9 @@ versions.forEach((version) => {
                 },
               })
               assert.ok(!('test.invalid' in annotatedTest.content.meta))
-            })
+            }, { hardTimeout: 60000 })
 
-          const proc = run(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_TEST_SESSION_NAME: 'my-test-session',
-                DD_SERVICE: undefined,
-              },
-            }
-          )
-          await Promise.all([eventsPromise, once(proc, 'exit')])
+          await eventsPromise
         })
       })
     })
@@ -813,6 +813,24 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 1)
       })
     })
+
+    if (version === latest) {
+      it('finishes if the plugin is re-enabled after test start', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-plugin-lifecycle',
+            },
+          }
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 0)
+      })
+    }
 
     const fullyParallelConfigValue = [true, false]
 

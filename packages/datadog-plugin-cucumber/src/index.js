@@ -72,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       const {
@@ -127,7 +128,7 @@ class CucumberPlugin extends CiPlugin {
       })
 
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:cucumber:test-suite:start', ({
@@ -307,6 +308,7 @@ class CucumberPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isFlakyRetry,
+      isExternalRetry,
       isAttemptToFix,
       isAttemptToFixRetry,
       hasFailedAllRetries,
@@ -347,9 +349,12 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
-      if (isFlakyRetry > 0) {
+      if (isFlakyRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+      } else if (isExternalRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
       }
 
       if (hasFailedAllRetries) {

@@ -305,7 +305,7 @@ describe('log', () => {
         sinon.assert.calledOnce(console.debug)
         const debugMessage = console.debug.firstCall.args[0]
         assert.match(debugMessage,
-          /^Trace: Context.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
+          /^Trace: Context.foo\('argument', \{ hello: 'world' \}, Foo \{ bar: 'baz' \}\)/
         )
         const lineCount = debugMessage.split('\n').length
         assert.ok(lineCount >= 3, `Expected at least 3 lines in trace, got ${lineCount}: ${inspect(debugMessage)}`)

@@ -5,7 +5,7 @@ const shellParser = require('../../../vendor/dist/shell-quote').parse
 const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
 const PROCESS_DENYLIST = new Set(['md5'])
 
-const VARNAMES_REGEX = /\$(\w*)(?:[^\w]|$)/gmi
+const VARNAMES_REGEX = /\$(\w*)(?:[^\w]|$)/gm
 // eslint-disable-next-line @stylistic/max-len
 const PARAM_PATTERN = '^-{0,2}(?:p(?:ass(?:w(?:or)?d)?)?|address|api[-_]?key|e?mail|secret(?:[-_]?key)?|a(?:ccess|uth)[-_]?token|mysql_pwd|credentials|(?:stripe)?token)$'
 const regexParam = new RegExp(PARAM_PATTERN, 'i')
@@ -14,18 +14,15 @@ const envVarRegex = new RegExp(ENV_PATTERN)
 const REDACTED = '?'
 
 function extractVarNames (expression) {
-  const varNames = new Set()
+  const varNames = {}
   let match
 
   while ((match = VARNAMES_REGEX.exec(expression))) {
-    varNames.add(match[1])
+    const name = match[1]
+    varNames[name] = `$${name}`
   }
 
-  const varNamesObject = {}
-  for (const varName of varNames.keys()) {
-    varNamesObject[varName] = `$${varName}`
-  }
-  return varNamesObject
+  return varNames
 }
 
 function getTokensByExpression (expressionTokens) {
@@ -61,9 +58,7 @@ function scrubChildProcessCmd (expression) {
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
 
-      if (token === null) {
-        continue
-      } else if (typeof token === 'object') {
+      if (token !== null && typeof token === 'object') {
         if (token.pattern) {
           result.push(token.pattern)
         } else if (token.op) {

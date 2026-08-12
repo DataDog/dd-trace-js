@@ -80,6 +80,8 @@ class NoopLLMObs {
 
   submitEvaluation (llmobsSpanContext, options) {}
 
+  submitFeedback (options) {}
+
   flush () {}
 
   registerProcessor (processor) {}

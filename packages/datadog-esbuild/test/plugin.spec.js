@@ -17,7 +17,37 @@ function captureOptionalPeerOnLoad () {
   return onLoad
 }
 
+function captureOnResolve () {
+  let onResolve
+  ddPlugin.setup({
+    initialOptions: {},
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
+    onResolve (options, callback) {
+      onResolve = callback
+    },
+    onLoad () {},
+  })
+  return onResolve
+}
+
 describe('datadog-esbuild plugin', () => {
+  it('ignores builtins without a package path', () => {
+    const onResolve = captureOnResolve()
+
+    const result = onResolve({
+      path: 'fs',
+      resolveDir: process.cwd(),
+      kind: 'require-call',
+      namespace: 'file',
+      importer: '/app/index.js',
+    })
+
+    assert.strictEqual(result, undefined)
+  })
+
   describe('optional peer bundling', () => {
     it('rewrites the installed peer load in require-provider into a literal require', () => {
       const onLoad = captureOptionalPeerOnLoad()

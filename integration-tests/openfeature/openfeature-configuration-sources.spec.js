@@ -135,9 +135,9 @@ describe('OpenFeature configuration source contract', () => {
 
     assert.strictEqual(configurationCases.length, 63)
     assert.deepStrictEqual(countDeliveries(configurationCases), {
-      agentless: 16,
-      remote_config: 16,
-      disabled: 31,
+      agentless: 12,
+      remote_config: 12,
+      disabled: 39,
     })
 
     await runCases(configurationCases)
@@ -341,7 +341,7 @@ function assertDeliveryTraffic (testCase) {
     for (const request of cdnRequests) {
       assert.strictEqual(request.url, `${AGENTLESS_PATH}?case=${testCase.identifier}`, testCase.label)
       assert.strictEqual(request.headers['accept-encoding'], 'gzip', testCase.label)
-      assert.strictEqual(request.headers['dd-api-key'], 'integration-api-key', testCase.label)
+      assert.strictEqual(request.headers['dd-api-key'], undefined, testCase.label)
       assert.strictEqual(request.headers['dd-client-library-language'], 'nodejs', testCase.label)
       assert.strictEqual(request.headers['dd-client-library-version'], VERSION, testCase.label)
     }
@@ -677,6 +677,7 @@ function expectedDelivery (stable, source, legacy) {
   if (stable === 'false') return 'disabled'
   if (source.name === 'agentless') return 'agentless'
   if (source.name === 'remote_config') return 'remote_config'
+  if (source.name === 'offline' || source.name === 'invalid') return 'disabled'
   if (legacy === 'true') return 'remote_config'
   if (legacy === 'false') return 'disabled'
   return 'agentless'

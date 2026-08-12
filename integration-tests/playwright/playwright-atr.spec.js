@@ -23,8 +23,8 @@ const {
 
 const { PLAYWRIGHT_VERSION } = process.env
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -267,9 +267,14 @@ versions.forEach((version) => {
         proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
         proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-        await once(proc, 'exit')
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), () => {
+            assert.match(testOutput, /detected as new but their names contain dynamic data/)
+          })
 
-        assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        // Dynamic names differ between discovery and worker processes, so Playwright cannot find these tests.
+        assert.strictEqual(exitCode, 1, testOutput)
       })
     })
   })

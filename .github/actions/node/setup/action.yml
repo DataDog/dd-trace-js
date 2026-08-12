@@ -5,6 +5,10 @@ inputs:
     description: "Version identifier of the version to use."
     required: false
     default: 'latest'
+  registry-url:
+    description: "npm registry URL to configure for publishing. Leave unset for jobs that don't publish."
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -41,10 +45,14 @@ runs:
         esac
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+    # registry-url is left empty for jobs that don't publish: setup-node only writes an
+    # .npmrc auth placeholder when it's set, and since v7.0.0 no longer backstops that
+    # placeholder with a dummy NODE_AUTH_TOKEN, so an always-on registry-url broke Yarn
+    # Classic (it hard-errors on an unresolved ${NODE_AUTH_TOKEN} env reference in .npmrc).
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: ${{ steps.node-version.outputs.version }}
-        registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
+        registry-url: ${{ inputs.registry-url }}
 
     # The shipped package.json pins engines.node to the supported runtime range, but CI keeps
     # running the full suite on Node 18/20. Widen the field to >=18 for this checkout so the

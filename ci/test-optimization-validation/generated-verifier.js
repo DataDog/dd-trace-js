@@ -3,17 +3,17 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { BLOCKER_CATEGORIES, getBlockerDomain } = require('./blocker-category')
+const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
   writeGeneratedFiles,
 } = require('./generated-files')
-const {
-  getDatadogCleanCommand,
-  getLocalValidationCommand,
-} = require('./local-command')
+const { getGeneratedCommand } = require('./runner-command')
 const { frameworkOutDir } = require('./scenarios/helpers')
 const { getObservedTestCount } = require('./test-output')
+const { getValidationBlockerEvidence } = require('./validation-blocker')
 
 const GENERATED_SCENARIO_BY_FEATURE = {
   efd: 'basic-pass',
@@ -42,11 +42,11 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
 
   try {
     cleanupGeneratedRuntimeFiles(framework)
-    writeGeneratedFiles(framework)
 
     for (const scenario of getScenariosToVerify(strategy.scenarios, options.scenarios)) {
       cleanupGeneratedRuntimeFiles(framework)
-      const command = getDatadogCleanCommand(getLocalValidationCommand(framework, scenario.runCommand))
+      writeGeneratedFiles(framework, scenario)
+      const command = getGeneratedCommand(framework, scenario)
       const outDir = frameworkOutDir(out, framework, `generated-verification-${scenario.id}`)
       // Generated commands run serially because fail-once state and cleanup are scenario-local.
       // eslint-disable-next-line no-await-in-loop
@@ -62,7 +62,7 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
       const expected = scenario.expectedWithoutDatadog
       const failOnceStateCreated = scenario.id === 'atr-fail-once'
-        ? hasGeneratedRuntimeFile(strategy)
+        ? getGeneratedRuntimeFileStatus(strategy)
         : undefined
       const scenarioEvidence = {
         id: scenario.id,
@@ -77,10 +77,19 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       evidence.scenarios.push(scenarioEvidence)
       artifacts.push(...Object.values(result.artifacts))
 
+      const observedWrongTestCount = observedTestCount !== null &&
+        observedTestCount !== expected.observedTestCount
       if (result.timedOut || result.exitCode !== expected.exitCode ||
-        observedTestCount !== expected.observedTestCount || failOnceStateCreated === false) {
+        observedWrongTestCount || failOnceStateCreated === false) {
         cleanupGeneratedRuntimeFiles(framework)
-        return getVerificationFailure(framework, evidence, artifacts, scenarioEvidence, result.timedOut)
+        return getVerificationFailure(
+          framework,
+          evidence,
+          artifacts,
+          scenarioEvidence,
+          result,
+          observedTestCount
+        )
       }
     }
 
@@ -96,15 +105,16 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
     return { ok: true }
   } catch (error) {
     cleanupGeneratedRuntimeFiles(framework)
+    const blockerEvidence = getValidationBlockerEvidence(error)
     return {
       ok: false,
       failure: {
         frameworkId: framework.id,
         scenario: 'generated-test-verification',
-        status: 'error',
+        status: blockerEvidence ? 'blocked' : 'error',
         diagnosis: 'The validator could not run the temporary validation test as expected. No advanced-feature ' +
           `conclusion was reached: ${error.message || error}`,
-        evidence,
+        evidence: { ...evidence, ...blockerEvidence },
         artifacts,
       },
     }
@@ -138,12 +148,34 @@ function getScenariosToVerify (scenarios, selectedFeatures) {
  * @param {object} evidence collected verification evidence
  * @param {string[]} artifacts command artifacts
  * @param {object} scenario failed scenario evidence
- * @param {boolean} timedOut whether the scenario timed out
+ * @param {object} result command result
+ * @param {number|null} observedTestCount observed generated test count
  * @returns {{ok: false, failure: object}} generated verification failure
  */
-function getVerificationFailure (framework, evidence, artifacts, scenario, timedOut) {
+function getVerificationFailure (framework, evidence, artifacts, scenario, result, observedTestCount) {
+  const commandFailure = getCommandBlocker(result, {
+    browserRequired: framework.browserRequired,
+    framework: framework.framework,
+    packageJson: framework.project.packageJson,
+    testsRan: Number.isInteger(observedTestCount) && observedTestCount > 0,
+  })
+  if (commandFailure) {
+    const blockerCategory = commandFailure.blockerCategory
+    const domain = getBlockerDomain(blockerCategory)
+    return {
+      ok: false,
+      failure: {
+        frameworkId: framework.id,
+        scenario: 'generated-test-verification',
+        status: 'blocked',
+        diagnosis: `${commandFailure.summary} Advanced-feature validation could not start reliably.`,
+        evidence: { ...evidence, blockerCategory, commandFailure, domain, validationIncomplete: true },
+        artifacts,
+      },
+    }
+  }
   let reason
-  if (timedOut) {
+  if (result.timedOut) {
     reason = 'timed out'
   } else if (scenario.id === 'atr-fail-once' && scenario.failOnceStateCreated === false) {
     reason = 'failed without creating its declared fail-once state file, so it failed for an unrelated reason'
@@ -158,29 +190,37 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, timed
       scenario: 'generated-test-verification',
       status: 'error',
       diagnosis: `Temporary validation test "${scenario.id}" ${reason}. No advanced-feature conclusion was reached.`,
-      evidence,
+      evidence: {
+        ...evidence,
+        blockerCategory: BLOCKER_CATEGORIES.VALIDATOR_LIMITATION,
+        validationIncomplete: true,
+      },
       artifacts,
     },
   }
 }
 
 /**
- * Checks whether the generated fail-once scenario created a declared runtime state file.
+ * Checks a declared generated runtime state file when the adapter uses one.
  *
  * @param {object} strategy generated test strategy
- * @returns {boolean} whether a regular declared runtime file exists
+ * @returns {boolean|undefined} whether a declared runtime file exists, or undefined when none is required
  */
-function hasGeneratedRuntimeFile (strategy) {
+function getGeneratedRuntimeFileStatus (strategy) {
   const generatedFiles = new Set((strategy.files || []).map(file => path.resolve(file.path)))
-  for (const cleanupPath of strategy.cleanupPaths || []) {
-    const filename = path.resolve(cleanupPath)
-    if (generatedFiles.has(filename)) continue
-    try {
-      const stat = fs.lstatSync(filename)
-      if (!stat.isSymbolicLink() && stat.isFile()) return true
-    } catch {}
+  let expectsRuntimeFile = false
+  if (strategy.cleanupPaths) {
+    for (const cleanupPath of strategy.cleanupPaths) {
+      const filename = path.resolve(cleanupPath)
+      if (generatedFiles.has(filename)) continue
+      expectsRuntimeFile = true
+      try {
+        const stat = fs.lstatSync(filename)
+        if (!stat.isSymbolicLink() && stat.isFile()) return true
+      } catch {}
+    }
   }
-  return false
+  return expectsRuntimeFile ? false : undefined
 }
 
 /**

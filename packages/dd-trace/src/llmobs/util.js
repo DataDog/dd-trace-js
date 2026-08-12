@@ -1,11 +1,20 @@
 'use strict'
 
+const id = require('../id')
 const log = require('../log')
 const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
+  SPAN_KIND,
+  NAME,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
 } = require('./constants/tags')
+
+const DECIMAL_TRACE_ID_REGEX = /^\d+$/
+const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
+const MAX_UINT_64 = (1n << 64n) - 1n
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
@@ -289,6 +298,76 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+// The `x-datadog-tags` tagset encoder rejects commas (the entry delimiter) and any byte
+// outside 0x20-0x7E, and a raise there drops the ENTIRE header (taking ml_app,
+// llmobs_trace_id, parent_id, sampling with it). An agent name is arbitrary user text, so it
+// must be skipped rather than sanitized when unsafe: only the digit-safe id then propagates and
+// the backend resolves the real name by span id. `=` is legal in tagset values (illegal only in
+// keys), so a name containing `=` is safe and must not be dropped.
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function agentNameWireSafe (name) {
+  // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
+  if (Buffer.byteLength(name, 'utf8') > 256) return false
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code < 0x20 || code > 0x7E || code === 0x2C /* comma */) return false
+  }
+  return true
+}
+
+/**
+ * Resolve the nearest agent that a *child* of `span` should be attributed to.
+ *
+ * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
+ * already resolved its own nearest agent at registration, so the child inherits that with a
+ * single lookup rather than walking the ancestor chain. An agent never attributes itself.
+ *
+ * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
+ * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
+ * @returns {{ name: string | undefined, spanId: string | undefined }}
+ */
+function resolveAgentAttribution (tags, span) {
+  if (!tags) return { name: undefined, spanId: undefined }
+  if (tags[SPAN_KIND] === 'agent') {
+    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+  }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
+}
+
+/**
+ * Removes all `key=value` entries for the given key from a comma-separated tagset string.
+ *
+ * @param {string} tags - Existing tagset string (may be empty).
+ * @param {string} key
+ * @returns {string}
+ */
+function stripTagsetEntry (tags, key) {
+  if (!tags.includes(key)) return tags
+  return tags.split(',').filter(entry => !entry.startsWith(`${key}=`)).join(',')
+}
+
+/**
+ * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
+ * truthy, passes the optional `safeguard` predicate, and fits within `maxTagSetLength`. Returns
+ * the original `tags` unchanged when the value is absent, unsafe, or would overflow the budget.
+ *
+ * @param {string} tags - Existing tagset string (may be empty).
+ * @param {string} key
+ * @param {string | undefined} value
+ * @param {((v: string) => boolean) | null} [safeguard]
+ * @param {number} [maxTagSetLength]
+ * @returns {string}
+ */
+function appendOptionalPropagatedTag (tags, key, value, safeguard, maxTagSetLength) {
+  if (!value || (safeguard && !safeguard(value))) return tags
+  const entry = `${tags ? ',' : ''}${key}=${value}`
+  if (maxTagSetLength != null && tags.length + entry.length > maxTagSetLength) return tags
+  return `${tags}${entry}`
+}
+
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -312,12 +391,12 @@ function safeJsonParse (value, fallback) {
 // LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
 /**
  * @param {import('../opentracing/span')} span
- * @param {{ includeParentId?: boolean }} [opts]
+ * @param {{ includeParentId?: boolean, llmobsTraceId?: string }} [opts]
  */
-function writeBridgeTags (span, { includeParentId = true } = {}) {
+function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) {
   const traceTags = span?.context?.()._trace?.tags
   if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
-  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = llmobsTraceId ?? span.context().toTraceId(true)
   if (includeParentId) {
     traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
   }
@@ -362,6 +441,51 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+/**
+ * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
+ * @param {number} startTime
+ * @returns {string}
+ */
+function generateLlmObsTraceId (startTime) {
+  const identifier = id()
+  const traceIdHigh = Math.floor(startTime / 1000)
+    .toString(16)
+    .padStart(8, '0')
+    .padEnd(16, '0')
+
+  return identifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
+}
+
+/**
+ * Convert an internally stored hexadecimal LLMObs trace ID to its distributed wire representation.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function llmObsTraceIdToWire (traceId) {
+  if (!traceId) return
+  if (!HEX_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  return BigInt(`0x${traceId}`).toString(10)
+}
+
+/**
+ * Normalize a distributed LLMObs trace ID to the representation expected by LLMObs span events.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function normalizeLlmObsTraceId (traceId) {
+  if (!traceId) return
+
+  if (HEX_TRACE_ID_REGEX.test(traceId) && (traceId[0] === '0' || !DECIMAL_TRACE_ID_REGEX.test(traceId))) {
+    return traceId
+  }
+
+  if (!DECIMAL_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  const identifier = BigInt(traceId)
+  return identifier > MAX_UINT_64 ? identifier.toString(16).padStart(32, '0') : traceId
+}
+
 // Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to `audio/wav` when the
 // format is missing. Provider-specific overrides (e.g. OpenAI's mp3 -> audio/mpeg) are passed in
 // via `mimeTypeLookup` so this stays provider-agnostic. A non-string `format` is treated as missing
@@ -393,10 +517,17 @@ function formatAudioPart (data, mimeType) {
 }
 
 module.exports = {
+  agentNameWireSafe,
+  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
+  normalizeLlmObsTraceId,
   formatAudioPart,
+  resolveAgentAttribution,
+  stripTagsetEntry,
   validateCostTags,
   validateKind,
   getFunctionArguments,

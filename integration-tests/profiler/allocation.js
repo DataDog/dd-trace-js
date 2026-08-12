@@ -2,7 +2,7 @@
 
 require('dd-trace').init({ profiling: true })
 
-const durationMs = Number.parseInt(process.env.TEST_DURATION_MS ?? '5000')
+const durationMs = Number.parseInt(process.env.TEST_DURATION_MS ?? '5000', 10)
 
 function runAllocations (ms) {
   return new Promise(resolve => {

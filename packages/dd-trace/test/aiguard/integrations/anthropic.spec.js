@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const { anthropic: anthropicIntegration } = require('../../../src/aiguard/integrations')
 const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
+const log = require('../../../src/log')
 
 const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
 const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
@@ -31,6 +32,21 @@ describe('AIGuard Anthropic integration', () => {
     lifecycleChannel.publish(ctx)
     return ctx
   }
+
+  it('ignores duplicate enable and disable calls', async () => {
+    const otherEvaluate = sinon.stub().resolves()
+    anthropicIntegration.enable({ evaluate: otherEvaluate }, false)
+    const ctx = publish(messagesBeforeChannel, {
+      args: [{ messages: [{ role: 'user', content: 'Hello' }] }],
+    })
+
+    await Promise.all(ctx.pending)
+
+    sinon.assert.calledOnce(evaluate)
+    sinon.assert.notCalled(otherEvaluate)
+    anthropicIntegration.disable()
+    anthropicIntegration.disable()
+  })
 
   it('evaluates messages.create input messages', async () => {
     const args = [{
@@ -161,6 +177,17 @@ describe('AIGuard Anthropic integration', () => {
     sinon.assert.notCalled(evaluate)
   })
 
+  it('declines after-payloads without input messages', () => {
+    const body = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hi' }],
+    }
+    const ctx = publish(messagesAfterChannel, { args: [{}], body })
+
+    assert.strictEqual(ctx.pending.length, 0)
+    sinon.assert.notCalled(evaluate)
+  })
+
   it('evaluates after-payloads where body is a JSON string (from response.text())', async () => {
     const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
     const body = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
@@ -179,12 +206,14 @@ describe('AIGuard Anthropic integration', () => {
     })
   })
 
-  it('declines after-payloads where body is an invalid JSON string', () => {
+  it('fails open when an after-payload body is an invalid JSON string', () => {
     const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
+    const logError = sinon.stub(log, 'error')
     const ctx = publish(messagesAfterChannel, { args, body: 'not-json' })
 
     assert.strictEqual(ctx.pending.length, 0)
     sinon.assert.notCalled(evaluate)
+    sinon.assert.calledOnceWithExactly(logError, 'AIGuard: unable to decode Anthropic response body')
   })
 
   it('aborts with the original AIGuardAbortError', async () => {

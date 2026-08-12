@@ -7,6 +7,7 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 const {
@@ -62,7 +63,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const host = port ? `${hostname}:${port}` : hostname
     const base = `${protocol}//${host}`
-    const pathname = path.split(/[?#]/)[0]
+    const pathname = stripQueryAndFragment(path)
     const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
