@@ -5,6 +5,9 @@ const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const cypressPlugin = require('./cypress-plugin')
 
+const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
+const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
+
 const noopTask = {
   'dd:testSuiteStart': () => {
     return null
@@ -41,8 +44,12 @@ module.exports = function CypressPlugin (on, config) {
 
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
   on('after:screenshot', cypressPlugin.getAfterScreenshotHandler())
-  on('after:spec', cypressPlugin.afterSpec.bind(cypressPlugin))
-  on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
+  const afterSpecHandler = cypressPlugin.afterSpec.bind(cypressPlugin)
+  afterSpecHandler[DD_CYPRESS_AFTER_SPEC_HANDLER] = true
+  on('after:spec', afterSpecHandler)
+  const afterRunHandler = cypressPlugin.afterRun.bind(cypressPlugin)
+  afterRunHandler[DD_CYPRESS_AFTER_RUN_HANDLER] = true
+  on('after:run', afterRunHandler)
   on('task', cypressPlugin.getTasks())
 
   return cypressPlugin.init(tracer, config)
