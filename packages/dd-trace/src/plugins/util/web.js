@@ -333,15 +333,26 @@ const web = {
       // GET / POST / etc. case. Node's http module passes `req.method`
       // through unchanged, so all standard methods are uppercase; the
       // `toLowerCase` fallback covers any non-standard caller.
+      let headersModified = false
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
         headers = typeof statusMessage === 'string' ? headers : statusMessage
-        headers = { ...res.getHeaders(), ...headers }
-
-        if (isOriginAllowed(req, headers)) {
-          addAllowHeaders(req, res, headers)
+        const headersObj = Array.isArray(headers) ? flatHeadersToObject(headers) : headers
+        const mergedHeaders = { ...res.getHeaders(), ...headersObj }
+        if (isOriginAllowed(req, mergedHeaders)) {
+          const allowedHeaders = computeAllowedHeaders(req, mergedHeaders)
+          if (allowedHeaders) {
+            headers = { ...headersObj, 'access-control-allow-headers': allowedHeaders }
+            headersModified = true
+          }
         }
       }
 
+      if (headersModified) {
+        if (typeof statusMessage === 'string') {
+          return writeHead.call(this, statusCode, statusMessage, headers)
+        }
+        return writeHead.call(this, statusCode, headers)
+      }
       return writeHead.apply(this, arguments)
     }
   },
@@ -372,7 +383,7 @@ function normalizeHeadersCarrier (headers) {
   return carrier
 }
 
-function addAllowHeaders (req, res, headers) {
+function computeAllowedHeaders (req, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
@@ -393,9 +404,7 @@ function addAllowHeaders (req, res, headers) {
     }
   }
 
-  if (allowHeaders.length > 0) {
-    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
-  }
+  return uniq(allowHeaders).join(',')
 }
 
 function isOriginAllowed (req, headers) {
@@ -407,6 +416,14 @@ function isOriginAllowed (req, headers) {
 
 function splitHeader (str) {
   return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
+}
+
+function flatHeadersToObject (headers) {
+  const result = {}
+  for (let i = 0; i < headers.length; i += 2) {
+    result[headers[i]] = headers[i + 1]
+  }
+  return result
 }
 
 function addRequestTags (context, spanType) {
