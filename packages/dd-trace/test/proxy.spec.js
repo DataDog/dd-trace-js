@@ -1168,6 +1168,20 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnce(channelMock.subscribe)
     })
 
+    it('should keep the MicroVM identity refresh when tracer initialization fails', () => {
+      const error = new Error('tracer initialization failed')
+      DatadogTracer.throws(error)
+
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(log.error, 'Error initializing tracer', error)
+    })
+
     it('should publish datadog:identity:update with the tracer config on POST .../run', () => {
       microProxy.init()
 
