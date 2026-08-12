@@ -307,6 +307,7 @@ function getGenerationMetadataFromEvent (event) {
     metadata[transformedKey] = value
   }
 
+  // eslint-disable-next-line no-restricted-syntax -- manual tracking would duplicate Object.assign semantics
   return Object.keys(metadata).length ? metadata : null
 }
 
