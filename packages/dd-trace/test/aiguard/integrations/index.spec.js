@@ -64,6 +64,10 @@ describe('AIGuard integration wiring', () => {
   })
 
   it('enables and disables providers through the integrations index', () => {
+    const anthropicIntegration = {
+      enable: sinon.stub(),
+      disable: sinon.stub(),
+    }
     const openaiIntegration = {
       enable: sinon.stub(),
       disable: sinon.stub(),
@@ -73,6 +77,7 @@ describe('AIGuard integration wiring', () => {
       disable: sinon.stub(),
     }
     const integrations = proxyquire('../../../src/aiguard/integrations', {
+      './anthropic': anthropicIntegration,
       './openai': openaiIntegration,
       './vercel-ai': vercelAiIntegration,
     })
@@ -81,15 +86,19 @@ describe('AIGuard integration wiring', () => {
     integrations.enable(aiguard, true)
     integrations.disable()
 
+    sinon.assert.calledOnceWithExactly(anthropicIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnce(anthropicIntegration.disable)
     sinon.assert.calledOnce(openaiIntegration.disable)
     sinon.assert.calledOnce(vercelAiIntegration.disable)
     sinon.assert.callOrder(
+      anthropicIntegration.enable,
       openaiIntegration.enable,
       vercelAiIntegration.enable,
       vercelAiIntegration.disable,
       openaiIntegration.disable,
+      anthropicIntegration.disable,
     )
   })
 })
