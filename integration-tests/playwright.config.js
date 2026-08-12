@@ -40,7 +40,11 @@ const config = {
   timeout: Number(process.env.TEST_TIMEOUT) || 30000,
   fullyParallel: process.env.FULLY_PARALLEL === 'true',
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
-  reporter: 'line',
+  reporter: process.env.PLAYWRIGHT_THROWING_REPORTER
+    ? './ci-visibility/playwright-reporter-throws.js'
+    : process.env.PLAYWRIGHT_LOGGING_REPORTER
+      ? './ci-visibility/playwright-reporter-logs-error.js'
+      : 'line',
   /* Configure projects for major browsers */
   projects,
   testMatch: '**/*-test.js',
