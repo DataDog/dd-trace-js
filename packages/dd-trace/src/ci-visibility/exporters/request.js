@@ -9,7 +9,7 @@ const {
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
-const { getRateLimitResetDelay } = require('../requests/retry')
+const { getRateLimitResetDelay } = require('../requests/rate-limit')
 
 /**
  * @param {AbortSignal} signal
