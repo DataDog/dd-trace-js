@@ -29,6 +29,7 @@ const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 let formatSpan = actualSpanFormat
+let incrementCountMetric
 const formatSpanStub = (...args) => formatSpan(...args)
 formatSpanStub.addError = actualSpanFormat.addError
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
@@ -41,6 +42,12 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
     uploadTestScreenshot (...args) {
       return uploadTestScreenshotRequest(...args)
     },
+  },
+  '../telemetry': {
+    incrementCountMetric (...args) {
+      return incrementCountMetric?.(...args)
+    },
+    TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION: 'events_enqueued_for_serialization',
   },
   '../../span_format': formatSpanStub,
 })
@@ -68,6 +75,7 @@ describe('CI Visibility Exporter', () => {
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
     formatSpan = actualSpanFormat
+    incrementCountMetric = sinon.stub()
   })
 
   afterEach(() => {
@@ -998,7 +1006,7 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy(done => done?.()),
           setUrl: sinon.spy(),
         }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0, isCiVisibility: true })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -1029,6 +1037,10 @@ describe('CI Visibility Exporter', () => {
           [suiteEvent],
           sinon.match({ deadline: sinon.match.number })
         )
+        sinon.assert.calledOnceWithExactly(
+          incrementCountMetric,
+          'events_enqueued_for_serialization'
+        )
         sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
         sinon.assert.calledOnceWithExactly(firstDone, undefined)
 
@@ -1048,7 +1060,7 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy(done => done?.()),
           setUrl: sinon.spy(),
         }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0, isCiVisibility: true })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -1070,12 +1082,17 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.exportDeferredTestSuiteSpans()
 
         sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
+        sinon.assert.notCalled(incrementCountMetric)
         const done = sinon.spy()
         ciVisibilityExporter.flush(done)
 
         sinon.assert.calledTwice(writer.append)
         assert.strictEqual(writer.append.secondCall.args[0][0], suiteEvent)
         assert.strictEqual(typeof writer.append.secondCall.args[1].deadline, 'number')
+        sinon.assert.calledOnceWithExactly(
+          incrementCountMetric,
+          'events_enqueued_for_serialization'
+        )
         sinon.assert.calledOnceWithExactly(done, undefined)
 
         ciVisibilityExporter.exportDeferredTestSuiteSpans()

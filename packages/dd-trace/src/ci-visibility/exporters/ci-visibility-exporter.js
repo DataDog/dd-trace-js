@@ -12,6 +12,7 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
+const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../telemetry')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
@@ -520,9 +521,14 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {boolean|undefined}
    */
   #appendDeferredTestSuiteSpan (formattedSpan, options) {
-    if (options === undefined) return this._writer.append([formattedSpan])
+    const appended = options === undefined
+      ? this._writer.append([formattedSpan])
+      : this._writer.append([formattedSpan], options)
 
-    return this._writer.append([formattedSpan], options)
+    if (appended !== false && this._config.isCiVisibility) {
+      incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION)
+    }
+    return appended
   }
 
   /**
