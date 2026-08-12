@@ -77,6 +77,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_OWNER_NAME',
   'WEBSITE_OS',
   'WEBSITE_RESOURCE_GROUP',
+  // durable orchestration span store (shared table client, cached at first read)
+  'AzureWebJobsStorage',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
   'JEST_WORKER_ID',
