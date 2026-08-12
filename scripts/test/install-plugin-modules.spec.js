@@ -227,6 +227,13 @@ externals.express.push({ name: 'axios', overrides: ${override} })
     assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
   })
 
+  it('makes the sqlite build dependency direct in knex sandboxes', () => {
+    runInstall('knex')
+
+    const manifest = require(path.join(versionsDir, 'knex@1', 'package.json'))
+    assert.strictEqual(manifest.dependencies.tar, '7.5.4')
+  })
+
   it('pins the Claude Agent SDK to its compatible zod major', () => {
     runInstall('claude-agent-sdk')
 
@@ -364,6 +371,8 @@ if (result.error) throw result.error
 process.exit(result.status ?? 1)
 `)
   fs.chmodSync(bunWrapper, 0o755)
+
+  fs.linkSync(process.execPath, path.join(directory, path.basename(process.execPath)))
 
   const npmWrapper = path.join(directory, 'npm')
   fs.writeFileSync(npmWrapper, String.raw`#!${process.execPath}

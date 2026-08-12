@@ -472,6 +472,13 @@ module.exports = {
       versions: ['5.1.12-vscode'],
     },
     {
+      // Bun runs @vscode/sqlite3's node-gyp script before its package-local tar dependency is available.
+      name: 'tar',
+      version: '7.5.4',
+      dep: true,
+      forced: true,
+    },
+    {
       name: 'pg',
       dep: true,
       versions: [
