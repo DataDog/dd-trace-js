@@ -127,7 +127,7 @@ class TestWorkerCiVisibilityExporter {
   }
 
   /**
-   * @param {() => void} [onDone]
+   * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
     if (!onDone) {
@@ -141,9 +141,11 @@ class TestWorkerCiVisibilityExporter {
     }
 
     let pendingWriters = this._telemetryWriter ? 4 : 3
-    const onWriterFlushed = () => {
+    let flushError
+    const onWriterFlushed = (error) => {
+      flushError ||= error
       pendingWriters--
-      if (pendingWriters === 0) onDone()
+      if (pendingWriters === 0) onDone(flushError)
     }
 
     this._writer.flush(onWriterFlushed)
