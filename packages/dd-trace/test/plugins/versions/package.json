@@ -126,7 +126,7 @@
     "ejs": "6.0.1",
     "elasticsearch": "16.7.3",
     "electron": "43.3.0",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "express": "5.2.1",
     "express-mongo-sanitize": "2.2.0",
     "express-session": "1.19.0",
