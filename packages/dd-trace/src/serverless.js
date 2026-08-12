@@ -88,6 +88,7 @@ function getVercelRequestEndHandler (tracer) {
         const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
         if (typeof waitUntil !== 'function') continue
 
+        // Vercel's waitUntil contract accepts a Promise; tracer flushing is callback-based.
         let done
         const pending = new Promise(resolve => { done = resolve })
         waitUntil(pending)

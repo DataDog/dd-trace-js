@@ -82,6 +82,7 @@ function initializeOpenTelemetryLogs (config) {
 
   // Register the logger provider globally with OpenTelemetry API
   loggerProvider.register()
+  // Retain only the current global provider when the tracer reinitializes.
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }

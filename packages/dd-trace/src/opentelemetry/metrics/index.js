@@ -79,6 +79,7 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
+  // Retain only the current global provider when the tracer reinitializes.
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
