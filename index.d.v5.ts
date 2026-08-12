@@ -4074,7 +4074,6 @@ declare namespace tracer {
     }
 
     interface ExternalExperimentSpanInput {
-      id?: string | number
       name?: string
       input?: JSONType
       output?: JSONType

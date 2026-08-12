@@ -178,12 +178,12 @@ function buildTags (userTags, autoTags) {
 }
 
 /**
- * @param {Record<string, unknown> | undefined} userTags
- * @param {Record<string, unknown>} autoTags
+ * @param {Record<string, unknown> | undefined} baseTags
+ * @param {Record<string, unknown> | undefined} overrideTags
  * @returns {Record<string, unknown>}
  */
-function buildExperimentTagObject (userTags, autoTags) {
-  return userTags ? { ...userTags, ...autoTags } : { ...autoTags }
+function mergeTags (baseTags, overrideTags) {
+  return { ...baseTags, ...overrideTags }
 }
 
 /**
@@ -241,12 +241,12 @@ function buildSpanMetadata (recordMetadata, config) {
 }
 
 module.exports = {
-  buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
   durationNs,
   hasEntries,
   inferMetricType,
+  mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
   sleep,

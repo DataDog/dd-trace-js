@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { ExternalExperiment } = require('./experiment')
 
 class NoopDataset {
   #name
@@ -142,7 +143,7 @@ class NoopExperiments {
 
   /**
    * @param {object} options
-   * @returns {Promise<NoopExperiment>}
+   * @returns {Promise<ExternalExperiment>}
    */
   startExperiment (options = {}) {
     if (this.#startExperiment !== undefined && options.projectName) {
@@ -150,7 +151,7 @@ class NoopExperiments {
     }
 
     this.#warn()
-    return Promise.resolve(new NoopExperiment(options.name))
+    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name)))
   }
 }
 

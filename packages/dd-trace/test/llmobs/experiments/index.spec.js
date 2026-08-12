@@ -452,9 +452,10 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(recorder.experimentId(), 'exp')
       assert.equal(recorder.name(), 'eve-run')
       assert.equal(recorder.url(), 'https://app.datadoghq.com/llm/experiments/exp')
+      assert.equal(typeof recorder.start, 'undefined')
+      assert.equal(typeof recorder.run, 'undefined')
 
       const span = await recorder.submitSpan({
-        id: 'smoke',
         name: 'smoke eval',
         input: 'Say hello.',
         output: { message: 'hello' },
@@ -718,6 +719,8 @@ describe('LLMObs Experiments facade', () => {
       const recorder = await experiments.startExperiment({ name: 'disabled' })
       assert.equal(recorder.name(), 'disabled')
       assert.equal(recorder.url(), null)
+      assert.equal(typeof recorder.start, 'undefined')
+      assert.equal(typeof recorder.run, 'undefined')
       assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
       await recorder.submitEvaluationMetrics({ spanId: 'span', traceId: null }, [{ label: 'score', value: 1 }])
       await recorder.close({ status: 'completed' })

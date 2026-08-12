@@ -5,30 +5,19 @@ const log = require('../../log')
 
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
-  buildExperimentTagObject,
   buildSpanMetadata,
   buildTags,
   durationNs,
   hasEntries,
   inferMetricType,
   normalizeEvaluators,
+  mergeTags,
   normalizeJsonMetricValue,
   sleep,
   stringify,
   timestampMs,
   validateEvaluatorName,
 } = require('./util')
-
-function mergeTags (baseTags, overrideTags) {
-  const tags = {}
-  if (baseTags != null) {
-    for (const [key, value] of Object.entries(baseTags)) tags[key] = value
-  }
-  if (overrideTags != null) {
-    for (const [key, value] of Object.entries(overrideTags)) tags[key] = value
-  }
-  return tags
-}
 
 // One span per experiment row (LLM Obs experiment span wire format).
 function toSpan (row, metadata, ids, spanName, userTags) {
@@ -105,7 +94,7 @@ function createFallbackSpanContext (startNs) {
 }
 
 function normalizeError (error) {
-  if (error === null || error === undefined) {
+  if (error == null) {
     return { errorType: null, errorMessage: null, errorStack: '' }
   }
 
@@ -121,7 +110,7 @@ function normalizeError (error) {
 }
 
 function errorMessage (error) {
-  if (error === null || error === undefined) return null
+  if (error == null) return null
   if (typeof error === 'string') return error
   return error.message ?? String(error)
 }
@@ -262,7 +251,6 @@ class Experiment {
     const { spanId, traceId } = createFallbackSpanContext(startNs)
     const error = normalizeError(input.error)
     const row = new Row({
-      index: input.id ?? '',
       spanId,
       traceId,
       startNs,
@@ -532,7 +520,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = buildExperimentTagObject(this.#tags, autoTags)
+    const tags = mergeTags(this.#tags, autoTags)
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),
@@ -687,4 +675,62 @@ class Experiment {
   }
 }
 
-module.exports = { Experiment, normalizeEvaluators, validateEvaluatorName }
+class ExternalExperiment {
+  #experiment
+
+  /**
+   * @param {Pick<Experiment, 'name' | 'experimentId' | 'url' | 'submitSpan' | 'submitEvaluationMetrics' |
+   *   'close'>} experiment
+   */
+  constructor (experiment) {
+    this.#experiment = experiment
+  }
+
+  /**
+   * @returns {string}
+   */
+  name () {
+    return this.#experiment.name()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  experimentId () {
+    return this.#experiment.experimentId()
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  url () {
+    return this.#experiment.url()
+  }
+
+  /**
+   * @param {object} [input]
+   * @returns {Promise<object>}
+   */
+  submitSpan (input) {
+    return this.#experiment.submitSpan(input)
+  }
+
+  /**
+   * @param {object} span
+   * @param {object[]} metrics
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics (span, metrics) {
+    return this.#experiment.submitEvaluationMetrics(span, metrics)
+  }
+
+  /**
+   * @param {object} [options]
+   * @returns {Promise<void>}
+   */
+  close (options) {
+    return this.#experiment.close(options)
+  }
+}
+
+module.exports = { Experiment, ExternalExperiment, normalizeEvaluators, validateEvaluatorName }

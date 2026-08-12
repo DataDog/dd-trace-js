@@ -9,6 +9,7 @@ const log = require('../../../src/log')
 const {
   durationNs,
   inferMetricType,
+  mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
   timestampMs,
@@ -50,6 +51,16 @@ describe('LLMObs Experiments util', () => {
       'row',
       'duplicate'
     )
+  })
+
+  it('merges tags with override values taking precedence', () => {
+    assert.deepEqual(mergeTags({ shared: 'base', base: true }, { shared: 'override', override: true }), {
+      shared: 'override',
+      base: true,
+      override: true,
+    })
+    assert.deepEqual(mergeTags(undefined, { tag: 'value' }), { tag: 'value' })
+    assert.deepEqual(mergeTags({ tag: 'value' }, undefined), { tag: 'value' })
   })
 
   it('infers metric types with a normalized JSON fallback', () => {
