@@ -286,13 +286,13 @@
   dependencies:
     "@datadog/flagging-core" "2.0.2"
 
-"@datadog/pprof@5.17.0":
-  version "5.17.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.17.0.tgz#1a40cb77243cbfccd1684c70992512f533addb67"
-  integrity sha512-BuedZ4vHzmQkitMMdIhVLQ+nPpHl7WRwcuumJeXt0ylhwGGwt7Kf+4CoS1tDB0FljJXi4izweFfFFTirrijP5w==
+"@datadog/pprof@5.18.0":
+  version "5.18.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.18.0.tgz#fd522e2ba354aa979e51bec67539aaee0d73aeb3"
+  integrity sha512-KSXy+kD8Ofl7etRL42vHnKjFcHNMwOcC12Il+2HLbekHo3wy6RQ3CFoSTDFU/xqZw8PdcxCJURYF60BuWKegfw==
   dependencies:
     node-gyp-build "^4.8.4"
-    pprof-format "^2.2.1"
+    pprof-format "^2.3.1"
     source-map "^0.8.0"
 
 "@datadog/wasm-js-rewriter@5.0.1":
@@ -3552,10 +3552,10 @@ pluralize@^8.0.0:
   resolved "https://registry.yarnpkg.com/pluralize/-/pluralize-8.0.0.tgz#1a6fa16a38d12a1901e0320fa017051c539ce3b1"
   integrity sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==
 
-pprof-format@^2.2.1:
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.2.1.tgz#64d32207fb46990349eb52825defb449d6ccc9b4"
-  integrity sha512-p4tVN7iK19ccDqQv8heyobzUmbHyds4N2FI6aBMcXz6y99MglTWDxIyhFkNaLeEXs6IFUEzT0zya0icbSLLY0g==
+pprof-format@^2.3.1:
+  version "2.3.1"
+  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.3.1.tgz#990201155cf6d720bfbf5e50f2def3b77c004843"
+  integrity sha512-y51Z83qG2vEQBACPu6lkGFREVkHwQaCaNDdSFEMLIqSo3bmpADsbP6J3F2SSk7tYB741oTQ9Kt5YAdQsmiCRkA==
 
 prelude-ls@^1.2.1:
   version "1.2.1"
