@@ -104,8 +104,9 @@ function planCoverageGroups (files) {
 /**
  * @typedef {object} LcovFileRecord
  * @property {Map<string, number>} lines line number -> summed hit count
- * @property {Map<string, { line: string, count: number }>} functions function name -> declaration
- *   line and summed hit count
+ * @property {Map<string, { name: string, line: string, count: number }>} functions `line,name` ->
+ *   name, declaration line, and summed hit count — keyed by line as well as name because distinct
+ *   functions can share a name (e.g. two nested closures both named `shared`)
  * @property {Map<string, { hits: number, reached: boolean }>} branches `line,block,branch` -> summed
  *   hit count and whether any cell reported the enclosing block as reached (lcov uses `-` for a
  *   branch whose block was never reached, distinct from a reached block whose branch was never taken)
@@ -125,6 +126,9 @@ function splitLcovLine (line) {
 /**
  * Fold one `SF:`-delimited record's `DA:`/`FN:`/`FNDA:`/`BRDA:` lines into the running per-file
  * merge state, summing hit counts for lines/functions/branches already seen from earlier cells.
+ * `FNDA:` lines carry only a function name, not its declaration line, so a same-named function
+ * declared at two different lines can't be told apart by name alone; lcov writers emit `FNDA:` lines
+ * in the same order as their `FN:` declarations, so they're paired positionally instead.
  *
  * @param {string[]} recordLines
  * @param {Map<string, LcovFileRecord>} files source file path -> merge state
@@ -142,6 +146,8 @@ function mergeLcovRecord (recordLines, files, order) {
   }
   const record = files.get(path)
 
+  const declaredFunctionKeys = []
+  let functionDeclarationIndex = 0
   for (const line of recordLines) {
     const [tag, rest] = splitLcovLine(line)
     if (tag === 'DA') {
@@ -149,12 +155,14 @@ function mergeLcovRecord (recordLines, files, order) {
       record.lines.set(lineNumber, (record.lines.get(lineNumber) ?? 0) + Number(count))
     } else if (tag === 'FN') {
       const [lineNumber, name] = rest.split(',')
-      if (!record.functions.has(name)) record.functions.set(name, { line: lineNumber, count: 0 })
+      const key = `${lineNumber},${name}`
+      declaredFunctionKeys.push(key)
+      if (!record.functions.has(key)) record.functions.set(key, { name, line: lineNumber, count: 0 })
     } else if (tag === 'FNDA') {
-      const [count, name] = rest.split(',')
-      const fn = record.functions.get(name) ?? { line: '0', count: 0 }
-      fn.count += Number(count)
-      record.functions.set(name, fn)
+      const [count] = rest.split(',')
+      const key = declaredFunctionKeys[functionDeclarationIndex++]
+      if (key === undefined) continue
+      record.functions.get(key).count += Number(count)
     } else if (tag === 'BRDA') {
       const [lineNumber, block, branch, count] = rest.split(',')
       const key = `${lineNumber},${block},${branch}`
@@ -179,8 +187,8 @@ function mergeLcovRecord (recordLines, files, order) {
 function serializeLcovRecord (path, record) {
   const lines = [`SF:${path}`]
 
-  for (const [name, fn] of record.functions) lines.push(`FN:${fn.line},${name}`)
-  for (const [name, fn] of record.functions) lines.push(`FNDA:${fn.count},${name}`)
+  for (const fn of record.functions.values()) lines.push(`FN:${fn.line},${fn.name}`)
+  for (const fn of record.functions.values()) lines.push(`FNDA:${fn.count},${fn.name}`)
   if (record.functions.size > 0) {
     const hit = [...record.functions.values()].filter(fn => fn.count > 0).length
     lines.push(`FNF:${record.functions.size}`, `FNH:${hit}`)

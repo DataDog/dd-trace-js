@@ -112,6 +112,18 @@ describe('group-coverage', () => {
       )
     })
 
+    it('keeps same-named functions declared at different lines distinct', () => {
+      const a = join(dir, 'a.info')
+      writeFileSync(
+        a,
+        'SF:shared.js\nFN:4,shared\nFN:9,shared\nFNF:2\nFNDA:2,shared\nFNDA:0,shared\nFNH:1\nend_of_record\n'
+      )
+      assert.equal(
+        mergeLcov([a]),
+        'SF:shared.js\nFN:4,shared\nFN:9,shared\nFNDA:2,shared\nFNDA:0,shared\nFNF:2\nFNH:1\nend_of_record\n'
+      )
+    })
+
     it('sums BRDA hit counts for the same branch, treating "-" as an unreached block', () => {
       const a = join(dir, 'a.info')
       const b = join(dir, 'b.info')
