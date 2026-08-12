@@ -1,10 +1,15 @@
 'use strict'
 
 const api = require('@opentelemetry/api')
-const { getSpanMeta, normalizeTraceId } = require('./otel-orchestration-meta')
+const {
+  getSpanStartTimeMs,
+  normalizeTraceId,
+  resolveActiveSpanMeta,
+} = require('./otel-orchestration-meta')
 
 const httpParentByInstance = new Map()
 const pendingHttpParentByTraceId = new Map()
+const instanceStartByInstance = new Map()
 
 function traceIdsEquivalent (left, right) {
   if (!left || !right) return false
@@ -14,7 +19,7 @@ function traceIdsEquivalent (left, right) {
   return a.slice(-16) === b.slice(-16)
 }
 
-function publishHttpParentMeta (instanceId, meta) {
+function publishHttpParentMeta (instanceId, meta, instanceStartTime) {
   if (!instanceId || !meta?.traceId || !meta?.spanId) return
 
   const key = String(instanceId)
@@ -25,6 +30,10 @@ function publishHttpParentMeta (instanceId, meta) {
 
   httpParentByInstance.set(key, normalized)
   pendingHttpParentByTraceId.set(normalized.traceId, normalized)
+
+  if (instanceStartTime != null) {
+    recordHttpInstanceStartTime(instanceId, instanceStartTime)
+  }
 
   const { reconcileOrchestrationHttpParent } = require('./otel-orchestration-store')
   reconcileOrchestrationHttpParent(key, normalized)
@@ -38,6 +47,29 @@ function publishPendingHttpParent (meta) {
     spanId: meta.spanId,
   }
   pendingHttpParentByTraceId.set(normalized.traceId, normalized)
+}
+
+function recordHttpInstanceStartTime (instanceId, startTime) {
+  if (!instanceId || startTime == null) return
+
+  const key = String(instanceId)
+  const current = instanceStartByInstance.get(key)
+  if (current != null && current <= startTime) return
+
+  instanceStartByInstance.set(key, startTime)
+
+  const { mergeInstanceStartTime } = require('./otel-orchestration-store')
+  mergeInstanceStartTime(instanceId, startTime)
+}
+
+function peekHttpInstanceStartTime (instanceId) {
+  if (!instanceId) return
+  return instanceStartByInstance.get(String(instanceId))
+}
+
+function clearHttpInstanceStartTime (instanceId) {
+  if (!instanceId) return
+  instanceStartByInstance.delete(String(instanceId))
 }
 
 function peekHttpParentForInstance (instanceId) {
@@ -91,7 +123,8 @@ function patchDurableClient (DurableClient) {
   shimmer.wrap(DurableClient.prototype, 'startNew', startNew => {
     return async function (...args) {
       const activeSpan = api.trace.getActiveSpan()
-      const spanMeta = activeSpan ? getSpanMeta(activeSpan) : undefined
+      const spanMeta = resolveActiveSpanMeta(activeSpan)
+      const instanceStartTime = getSpanStartTimeMs(activeSpan) ?? Date.now()
 
       if (spanMeta) {
         publishPendingHttpParent(spanMeta)
@@ -99,18 +132,22 @@ function patchDurableClient (DurableClient) {
 
       const instanceId = await startNew.apply(this, args)
 
-      if (instanceId && spanMeta) {
-        publishHttpParentMeta(instanceId, spanMeta)
+      if (instanceId) {
+        recordHttpInstanceStartTime(instanceId, instanceStartTime)
 
-        // The orchestration usually runs in another worker process, which cannot see
-        // the in-process maps above, so persist its identity to the shared store now.
-        const { seedOrchestrationMetaFromHttpParent } = require('./otel-orchestration-store')
-        seedOrchestrationMetaFromHttpParent(
-          instanceId,
-          spanMeta,
-          typeof args[0] === 'string' ? args[0] : undefined,
-          Date.now(),
-        )
+        if (spanMeta) {
+          publishHttpParentMeta(instanceId, spanMeta, instanceStartTime)
+
+          // The orchestration usually runs in another worker process, which cannot see
+          // the in-process maps above, so persist its identity to the shared store now.
+          const { seedOrchestrationMetaFromHttpParent } = require('./otel-orchestration-store')
+          seedOrchestrationMetaFromHttpParent(
+            instanceId,
+            spanMeta,
+            typeof args[0] === 'string' ? args[0] : undefined,
+            instanceStartTime,
+          )
+        }
       }
 
       return instanceId
@@ -120,11 +157,14 @@ function patchDurableClient (DurableClient) {
 
 module.exports = {
   applyHttpParentToMeta,
+  clearHttpInstanceStartTime,
   patchDurableClient,
+  peekHttpInstanceStartTime,
   peekHttpParentForInstance,
   peekPendingHttpParent,
   publishHttpParentMeta,
   publishPendingHttpParent,
+  recordHttpInstanceStartTime,
   resolveHttpParentForOrchestration,
   traceIdsEquivalent,
 }

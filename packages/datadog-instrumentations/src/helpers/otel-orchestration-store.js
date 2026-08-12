@@ -23,6 +23,7 @@ const {
 const TABLE_NAME = 'DDAzureOrchestrationSpans'
 const TABLE_PARTITION_KEY = 'orch'
 const META_CACHE = new Map()
+const earliestChildStartByInstance = new Map()
 
 let tableClient
 let tableClientResolved = false
@@ -168,16 +169,57 @@ function stampOrchestrationStartTime (meta, functionName) {
 function recordEarliestChildStartTime (instanceId, startTime) {
   if (!instanceId || startTime == null) return
 
-  const meta = readOrchestrationSpanMetaSync(instanceId)
-  if (!meta) return
+  const key = String(instanceId)
+  const current = earliestChildStartByInstance.get(key)
+  if (current != null && current <= startTime) {
+    return
+  }
 
-  const earliest = meta.earliestChildStartTime
-  if (earliest != null && earliest <= startTime) return
+  earliestChildStartByInstance.set(key, startTime)
+
+  const meta = readOrchestrationSpanMetaSync(instanceId)
+  if (!meta?.traceId || !meta?.spanId) return
 
   publishOrchestrationMetaSync(instanceId, {
     ...meta,
     earliestChildStartTime: startTime,
   })
+}
+
+function peekEarliestChildStartTime (instanceId) {
+  if (!instanceId) return
+  return earliestChildStartByInstance.get(String(instanceId))
+}
+
+function mergeInstanceStartTime (instanceId, startTime) {
+  if (!instanceId || startTime == null) return
+
+  const meta = readOrchestrationSpanMetaSync(instanceId)
+  if (!meta?.traceId || !meta?.spanId) return
+
+  if (meta.startTime != null && meta.startTime <= startTime) return
+
+  publishOrchestrationMetaSync(instanceId, {
+    ...meta,
+    startTime,
+  })
+}
+
+function resolveExportStartTime (meta, instanceId, endTime) {
+  let startTime = meta?.startTime
+
+  const { peekHttpInstanceStartTime } = require('./otel-orchestration-http-link')
+  const httpStart = peekHttpInstanceStartTime(instanceId)
+  if (httpStart != null) {
+    startTime = startTime == null ? httpStart : Math.min(startTime, httpStart)
+  }
+
+  const childStart = peekEarliestChildStartTime(instanceId) ?? meta?.earliestChildStartTime
+  if (childStart != null) {
+    startTime = startTime == null ? childStart : Math.min(startTime, childStart)
+  }
+
+  return startTime ?? endTime
 }
 
 function reconcileOrchestrationHttpParent (instanceId, httpParent) {
@@ -319,7 +361,11 @@ function markOrchestrationMetaCompleted (instanceId) {
 function clearOrchestrationSpanMeta (instanceId) {
   if (!instanceId) return
   META_CACHE.delete(instanceId)
+  earliestChildStartByInstance.delete(String(instanceId))
   deleteMetaFileSync(instanceId)
+
+  const { clearHttpInstanceStartTime } = require('./otel-orchestration-http-link')
+  clearHttpInstanceStartTime(instanceId)
 }
 
 function completeOrchestrationSpan (tracerName, instanceId, invocationContext, functionName, error) {
@@ -340,7 +386,7 @@ function completeOrchestrationSpan (tracerName, instanceId, invocationContext, f
     {
       ...meta,
       functionName: meta.functionName || functionName,
-      startTime: meta.startTime ?? endTime,
+      startTime: resolveExportStartTime(meta, instanceId, endTime),
     },
     { error, endTime },
   )
@@ -363,12 +409,14 @@ module.exports = {
   completeOrchestrationSpan,
   ensureOrchestrationMeta,
   injectOrchestrationMetaIntoTraceState,
+  mergeInstanceStartTime,
   publishOrchestrationMetaSync,
   publishOrchestrationSpanMetaSync,
   readOrchestrationSpanMetaAsync,
   readOrchestrationSpanMetaSync,
   reconcileOrchestrationHttpParent,
   recordEarliestChildStartTime,
+  resolveExportStartTime,
   seedOrchestrationMetaFromHttpParent,
   stampOrchestrationStartTime,
 }

@@ -42,6 +42,23 @@ function getSpanMeta (span) {
   }
 }
 
+function getSpanStartTimeMs (span) {
+  const ddSpan = span?._ddSpan
+  if (ddSpan?._startTime != null) {
+    return ddSpan._startTime
+  }
+
+  const hrStartTime = span?.startTime
+  if (Array.isArray(hrStartTime)) {
+    const { hrTimeToMilliseconds } = require('../../../dd-trace/src/opentelemetry/time')
+    return hrTimeToMilliseconds(hrStartTime)
+  }
+}
+
+function resolveActiveSpanMeta (span) {
+  return getSpanMeta(span)
+}
+
 function parseOrchestrationMetaFromTraceContext (traceContext) {
   const traceState = traceContext?.traceState
   if (!traceState || typeof traceState !== 'string') return
@@ -84,8 +101,10 @@ function traceContextFromMeta (meta) {
 module.exports = {
   appendOrchestrationSpanToTraceState,
   getSpanMeta,
+  getSpanStartTimeMs,
   normalizeSpanId,
   normalizeTraceId,
   parseOrchestrationMetaFromTraceContext,
+  resolveActiveSpanMeta,
   traceContextFromMeta,
 }
