@@ -139,7 +139,11 @@ function mergeLcovRecord (recordLines, files, order) {
   const sourceFileLine = recordLines.find(line => line.startsWith('SF:'))
   if (!sourceFileLine) return
 
-  const path = splitLcovLine(sourceFileLine)[1]
+  // istanbul-reports' lcov writer derives SF: from `path.relative()`, which uses backslashes on
+  // Windows; a workflow run mixing a Windows matrix cell with Linux/macOS cells (e.g. AppSec) would
+  // otherwise key the same source file under two different SF: strings and split its coverage
+  // across two records instead of summing it into one.
+  const path = splitLcovLine(sourceFileLine)[1].replaceAll('\\', '/')
   if (!files.has(path)) {
     files.set(path, { lines: new Map(), functions: new Map(), branches: new Map() })
     order.push(path)
