@@ -58,6 +58,8 @@ if (globalSnapshotCap) {
   const cap = Number(globalSnapshotCap)
   assert(Number.isInteger(cap) && cap > 0, 'MAX_SNAPSHOTS_PER_SECOND_GLOBALLY must be a positive integer')
 
+  // The application-thread sampler loads this value after the override, then passes accepted probe indexes to the
+  // debugger worker through shared memory.
   require('../../../packages/dd-trace/src/debugger/devtools_client/defaults').MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = cap
 }
 
@@ -80,6 +82,7 @@ assert.equal(
 )
 
 const breakpoint = { sourceFile, line }
+// WARNING: Keep this fixture aligned with dd-trace's default config, apart from benchmark-specific overrides.
 const config = {
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
   DD_TRACE_GIT_METADATA_ENABLED: false,
