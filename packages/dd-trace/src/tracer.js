@@ -12,7 +12,7 @@ const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
-const { IS_SERVERLESS, initializeServerlessTelemetry } = require('./serverless')
+const { IS_SERVERLESS } = require('./serverless')
 const { flushAll } = require('./flush')
 const log = require('./log')
 // Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
@@ -54,8 +54,6 @@ class DatadogTracer extends Tracer {
   }
 
   configure (config) {
-    initializeServerlessTelemetry(this)
-
     const { env, sampler } = config
     this._prioritySampler.configure(env, sampler, config)
   }

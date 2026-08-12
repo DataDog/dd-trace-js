@@ -3,12 +3,8 @@
 const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
-const VERCEL_REQUEST_CONTEXTS = [
-  Symbol.for('@next/request-context'),
-  Symbol.for('@vercel/request-context'),
-]
-const httpRequestFinishChannel = channel('apm:http:server:request:finish')
-const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
+const nextRequestFinishChannel = channel('apm:next:request:finish')
+const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 const vercelRetentionHandlers = new WeakMap()
 
 function getIsGCPFunction () {
@@ -77,33 +73,36 @@ function getServerlessPlatform () {
 
 /**
  * @param {TelemetryFlusher} tracer
- * @returns {(() => boolean)|undefined}
+ * @param {() => void} done
+ * @returns {void}
  */
-function getVercelRequestEndHandler (tracer) {
-  if (typeof tracer?.flushAll !== 'function') return
-
-  return function onVercelRequestEnd () {
-    for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
-      try {
-        const waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
-        if (typeof waitUntil !== 'function') continue
-
-        // Vercel's waitUntil contract accepts a Promise; tracer flushing is callback-based.
-        let done
-        const pending = new Promise(resolve => { done = resolve })
-        waitUntil(pending)
-        try {
-          tracer.flushAll(done)
-        } catch {
-          done()
-        }
-        return true
-      } catch {
-        // The other request-context implementation may still be available.
-      }
+function flushVercelTelemetry (tracer, done) {
+  setImmediate(() => {
+    try {
+      tracer.flushAll(done)
+    } catch {
+      done()
     }
-    return false
+  })
+}
+
+function registerVercelRequestFlush (tracer) {
+  const waitUntil = getVercelRequestContext()?.waitUntil
+  if (typeof waitUntil !== 'function') return
+
+  // Retain the invocation synchronously, then flush after Next finishes its root span.
+  let done
+  const pending = new Promise(resolve => { done = resolve })
+  try {
+    waitUntil(pending)
+    flushVercelTelemetry(tracer, done)
+  } catch {
+    done()
   }
+}
+
+function getVercelRequestContext () {
+  return globalThis[VERCEL_REQUEST_CONTEXT]?.get?.()
 }
 
 /**
@@ -114,18 +113,12 @@ function registerVercelTelemetryRetention (tracer) {
   const existing = vercelRetentionHandlers.get(tracer)
   if (existing) return existing
 
-  const onRequestEnd = getVercelRequestEndHandler(tracer)
-  if (!onRequestEnd) return
-
-  const onHttp2ResponseEmit = ({ eventName }) => {
-    if (eventName === 'close') onRequestEnd()
-  }
-  httpRequestFinishChannel.subscribe(onRequestEnd)
-  http2ResponseEmitChannel.subscribe(onHttp2ResponseEmit)
+  if (typeof tracer?.flushAll !== 'function') return
+  const flushRequest = () => registerVercelRequestFlush(tracer)
+  nextRequestFinishChannel.subscribe(flushRequest)
 
   const unregister = () => {
-    httpRequestFinishChannel.unsubscribe(onRequestEnd)
-    http2ResponseEmitChannel.unsubscribe(onHttp2ResponseEmit)
+    nextRequestFinishChannel.unsubscribe(flushRequest)
     vercelRetentionHandlers.delete(tracer)
   }
   vercelRetentionHandlers.set(tracer, unregister)
@@ -172,7 +165,6 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
-  getVercelRequestEndHandler,
   registerVercelTelemetryRetention,
   initializeServerlessTelemetry,
   IS_SERVERLESS: isInServerlessEnvironment(),

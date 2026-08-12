@@ -14,8 +14,8 @@ const {
   getServerlessPlatformTags,
   getServerlessPlatform,
   enableGCPPubSubPushSubscription,
-  getVercelRequestEndHandler,
   registerVercelTelemetryRetention,
+  initializeServerlessTelemetry,
 } = require('../src/serverless')
 const Tracer = require('../src/tracer')
 const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
@@ -174,14 +174,18 @@ describe('Vercel telemetry retention', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const received = new Set()
     let intakeReceived
+    let metricPayloads = 0
     const intake = http.createServer((req, res) => {
       req.resume()
       req.once('end', () => {
         if (req.url === '/v1/logs') received.add('logs')
-        if (req.url === '/v1/metrics') received.add('metrics')
+        if (req.url === '/v1/metrics') {
+          received.add('metrics')
+          metricPayloads++
+        }
         if (req.url === '/v1/traces') received.add('traces')
         res.end()
-        if (received.size === 3) intakeReceived()
+        if (received.size === 3 && metricPayloads === 2) intakeReceived()
       })
     })
     await new Promise(resolve => intake.listen(0, '127.0.0.1', resolve))
@@ -197,6 +201,7 @@ describe('Vercel telemetry retention', () => {
     }
     const intakeRequests = new Promise(resolve => { intakeReceived = resolve })
 
+    let unregister
     try {
       const config = getConfigFresh({ service: 'serverless-flush' })
       const tracer = new Tracer(config)
@@ -207,59 +212,41 @@ describe('Vercel telemetry retention', () => {
       logs.getLogger('serverless-flush').emit({ body: 'flush me' })
       metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
 
-      const onRequestEnd = getVercelRequestEndHandler(tracer)
-      assert.strictEqual(onRequestEnd(), true)
+      unregister = registerVercelTelemetryRetention(tracer)
+      channel('apm:next:request:finish').publish({})
       await Promise.race([
         intakeRequests,
         new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Missing intake signals')), 1000)),
       ])
       await retained
       assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
+      assert.strictEqual(metricPayloads, 2)
     } finally {
+      unregister?.()
       metrics.getMeterProvider()?.reader?.shutdown()
       logs.getLoggerProvider()?.shutdown?.()
       await new Promise(resolve => intake.close(resolve))
     }
   })
 
-  it('registers retention through tracer configuration', async () => {
-    let retained
-    globalThis[requestContext] = {
-      get: () => ({ waitUntil: promise => { retained = promise } }),
-    }
-    const config = getConfigFresh({ service: 'serverless-disabled' })
+  it('defers flushing until after Next request finish subscribers return', async () => {
     process.env.VERCEL = '1'
-    const tracer = new Tracer(config)
-    tracer.flushAll = done => done()
-    tracer.configure(config)
-    const server = http.createServer((req, res) => res.end())
-
-    try {
-      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-      await new Promise((resolve, reject) => http.get(`http://127.0.0.1:${server.address().port}`, res => {
-        res.resume()
-        res.once('end', resolve)
-      }).once('error', reject))
-      await retained
-    } finally {
-      server.closeAllConnections?.()
-      server.close()
-    }
-  })
-
-  it('registers retention through the HTTP/2 response close event', async () => {
     let retained
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
     }
-    const tracer = { flushAll: done => done() }
-    const unregister = registerVercelTelemetryRetention(tracer)
-
-    try {
-      channel('apm:http2:server:response:emit').publish({ eventName: 'close' })
-      await retained
-    } finally {
-      unregister()
+    const finishChannel = channel('apm:next:request:finish')
+    let finished = false
+    const tracer = {
+      flushAll (done) {
+        assert.ok(finished)
+        done()
+      },
     }
+
+    initializeServerlessTelemetry(tracer)
+    finishChannel.publish({})
+    finished = true
+    await retained
   })
 })
