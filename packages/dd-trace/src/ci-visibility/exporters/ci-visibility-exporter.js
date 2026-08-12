@@ -100,6 +100,8 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
   #deferredTestSessionTraces = []
+  #pendingScreenshotUploads = new Set()
+  #screenshotFlushWaiters = new Set()
 
   constructor (config, options = {}) {
     super(config)
@@ -514,7 +516,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSessionTraces.length === 0) {
+      this.#deferredTestSessionTraces.length === 0 && this.#pendingScreenshotUploads.size === 0) {
       onDone()
       return
     }
@@ -543,6 +545,7 @@ class CiVisibilityExporter extends BufferingExporter {
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
       clearTimeout(initializationTimeoutId)
+      this.#screenshotFlushWaiters.delete(flushWriters)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
         onDone(error)
@@ -557,6 +560,11 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     const flushWriters = () => {
+      if (isFinalFlush && this.#pendingScreenshotUploads.size !== 0) {
+        this.#screenshotFlushWaiters.add(flushWriters)
+        return
+      }
+
       const options = deadline === undefined ? undefined : { deadline }
       if (isFinalFlush) {
         this.#exportDeferredTestSessionTraces(options)
@@ -705,12 +713,53 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
-   * @param {AbortSignal} [options.signal] - Signal used to cancel the upload
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    */
   uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
     if (!this._testScreenshotUploadUrl) {
       return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    this.#resetFinalFlush()
+    const controller = new AbortController()
+    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
+    let settled = false
+    const complete = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+
+      try {
+        callback(error)
+      } finally {
+        this.#pendingScreenshotUploads.delete(controller)
+        if (this.#pendingScreenshotUploads.size === 0) {
+          const waiters = [...this.#screenshotFlushWaiters]
+          this.#screenshotFlushWaiters.clear()
+          for (const waiter of waiters) queueMicrotask(waiter)
+        }
+      }
+    }
+    const onAbort = () => {
+      const error = signal.reason || Object.assign(new Error('Test screenshot upload aborted'), { code: 'ABORT_ERR' })
+      controller.abort(error)
+      complete(error)
+    }
+
+    this.#pendingScreenshotUploads.add(controller)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    const timeoutId = setTimeout(() => {
+      const error = createFinalFlushTimeoutError()
+      controller.abort(error)
+      complete(error)
+    }, FINAL_FLUSH_TIMEOUT)
+    timeoutId.unref?.()
+
+    if (signal?.aborted) {
+      onAbort()
+      return
     }
 
     uploadTestScreenshotRequest({
@@ -721,8 +770,9 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
-      signal,
-    }, callback)
+      deadline,
+      signal: controller.signal,
+    }, complete)
   }
 }
 

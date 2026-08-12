@@ -22,12 +22,20 @@ const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
+const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
+  require('../../../src/ci-visibility/requests/upload-test-screenshot')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
+let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
+    },
+  },
+  '../requests/upload-test-screenshot': {
+    uploadTestScreenshot (...args) {
+      return uploadTestScreenshotRequest(...args)
     },
   },
 })
@@ -53,6 +61,7 @@ describe('CI Visibility Exporter', () => {
     config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
+    uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
   })
 
   afterEach(() => {
@@ -1652,6 +1661,116 @@ describe('CI Visibility Exporter', () => {
       })
       ciVisibilityExporter._testScreenshotUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+    })
+  })
+
+  describe('uploadTestScreenshot', () => {
+    const screenshotOptions = {
+      filePath: '/tmp/test-failed-1.png',
+      traceId: '1',
+      idempotencyKey: '1:test-failed-1.png',
+      capturedAtMs: 1,
+    }
+
+    function createScreenshotExporter () {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      exporter._isInitialized = true
+      exporter._canUseCiVisProtocol = true
+      exporter._writer = { append: sinon.stub(), flush: sinon.stub().yields() }
+      return exporter
+    }
+
+    it('bounds a pending screenshot and lets final flush complete', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        uploadTestScreenshotRequest = sinon.stub()
+        const exporter = createScreenshotExporter()
+        const screenshotCallback = sinon.spy()
+        const flushCallback = sinon.spy()
+
+        exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
+        exporter.flush(flushCallback)
+        const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
+        assert.strictEqual(requestOptions.deadline, 10_000)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(exporter._writer.flush)
+        sinon.assert.notCalled(flushCallback)
+
+        clock.tick(9_999)
+        sinon.assert.notCalled(screenshotCallback)
+        sinon.assert.notCalled(flushCallback)
+
+        clock.tick(1)
+        assert.strictEqual(requestOptions.signal.aborted, true)
+        sinon.assert.calledOnce(screenshotCallback)
+        assert.strictEqual(screenshotCallback.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+        sinon.assert.calledOnce(exporter._writer.flush)
+        sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+
+        uploadTestScreenshotRequest.firstCall.args[1]()
+        sinon.assert.calledOnce(screenshotCallback)
+        sinon.assert.calledOnce(flushCallback)
+      } finally {
+        clock.restore()
+      }
+    })
+
+    it('waits for screenshot completion work before flushing writers', async () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const completed = []
+      const screenshotCallback = () => queueMicrotask(() => completed.push('screenshot'))
+      const flushCallback = sinon.spy()
+
+      exporter.flush(sinon.spy())
+      exporter._writer.flush.resetHistory()
+      exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
+      exporter.flush(flushCallback)
+
+      sinon.assert.notCalled(exporter._writer.flush)
+      sinon.assert.notCalled(flushCallback)
+
+      uploadTestScreenshotRequest.firstCall.args[1](null)
+      await new Promise(resolve => queueMicrotask(resolve))
+
+      assert.deepStrictEqual(completed, ['screenshot'])
+      sinon.assert.calledOnce(exporter._writer.flush)
+      sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+    })
+
+    it('forwards caller cancellation and completes once', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const controller = new AbortController()
+      const callback = sinon.spy()
+      const error = new Error('framework stopped')
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, signal: controller.signal }, callback)
+      const requestSignal = uploadTestScreenshotRequest.firstCall.args[0].signal
+      controller.abort(error)
+
+      assert.strictEqual(requestSignal.aborted, true)
+      sinon.assert.calledOnceWithExactly(callback, error)
+      uploadTestScreenshotRequest.firstCall.args[1](error)
+      sinon.assert.calledOnce(callback)
+    })
+
+    it('does not start an upload when the caller signal is already aborted', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const controller = new AbortController()
+      const callback = sinon.spy()
+      const error = new Error('framework stopped')
+      controller.abort(error)
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, signal: controller.signal }, callback)
+
+      sinon.assert.notCalled(uploadTestScreenshotRequest)
+      sinon.assert.calledOnceWithExactly(callback, error)
     })
   })
 })
