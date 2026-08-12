@@ -5,6 +5,10 @@ inputs:
     description: 'Lower Node alias: oldest-maintenance-lts or newest-maintenance-lts.'
     required: false
     default: oldest-maintenance-lts
+  node-ceiling:
+    description: 'Upper Node version identifier.'
+    required: false
+    default: latest
   suffix:
     description: 'Unique suffix for artifact naming — required when called from a matrix job.'
     required: false
@@ -19,7 +23,9 @@ runs:
     - uses: ./.github/actions/install
     - run: npm run test:instrumentations:ci
       shell: bash
-    - uses: ./.github/actions/node/latest
+    - uses: ./.github/actions/node
+      with:
+        version: ${{ inputs.node-ceiling }}
     - run: npm run test:instrumentations:ci
       shell: bash
     - uses: ./.github/actions/coverage

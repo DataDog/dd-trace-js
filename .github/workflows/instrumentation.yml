@@ -111,6 +111,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
+  # The published native package has no Node 26 prebuild, and its fallback source build fails under Bun.
   instrumentation-confluentinc-kafka-javascript:
     runs-on: ubuntu-latest
     permissions:
@@ -120,6 +121,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
+        with:
+          node-ceiling: '24'
 
   instrumentation-connect:
     runs-on: ubuntu-latest
