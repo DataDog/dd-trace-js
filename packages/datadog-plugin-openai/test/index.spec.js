@@ -6,7 +6,6 @@ const assert = require('node:assert/strict')
 const Path = require('path')
 const { inspect } = require('node:util')
 
-const nock = require('nock')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -166,6 +165,7 @@ describe('Plugin', () => {
           this.skip()
         }
 
+        const nock = require('nock')
         const instruction = 'Fix the spelling mistakes.'
         const scope = nock('http://127.0.0.1:9126')
           .post('/vcr/openai/edits')
