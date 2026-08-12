@@ -16,7 +16,7 @@
       "env": { "VARIANT": "many-tags", "OPERATIONS": "3000000" }
     },
     "aggregated": {
-      "env": { "VARIANT": "aggregated", "OPERATIONS": "15000000" }
+      "env": { "VARIANT": "aggregated", "OPERATIONS": "24000000" }
     }
   }
 }
