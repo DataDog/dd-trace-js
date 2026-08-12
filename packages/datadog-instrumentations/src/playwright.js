@@ -1514,6 +1514,24 @@ function reportersHook (reportersPackage) {
   }, { replaceGetter: true })
 }
 
+/**
+ * Records errors from the reporter multiplexer used by Playwright before 1.38.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reporterMultiplexerHook (reportersPackage) {
+  shimmer.wrap(reportersPackage.Multiplexer.prototype, 'onEnd', onEnd => async function () {
+    try {
+      return await onEnd.apply(this, arguments)
+    } catch (error) {
+      reporterError ||= error
+      throw error
+    }
+  })
+  return reportersPackage
+}
+
 function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(
     runnerExport.Runner.prototype,
@@ -1669,6 +1687,12 @@ if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
     file: 'lib/runner/runner.js',
     versions: ['>=1.31.0 <1.38.0'],
   }, runnerHook)
+
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/reporters/multiplexer.js',
+    versions: ['>=1.18.0 <1.38.0'],
+  }, reporterMultiplexerHook)
 }
 
 addHook({

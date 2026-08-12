@@ -234,8 +234,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   const reporterEvents = [
-    'end', 'start', 'fail', 'pass', 'pending', 'retry', 'suite', 'test', 'test end', 'hook', 'hook end', 'suite end',
+    'end', 'start', 'fail', 'pass', 'pending', 'suite', 'test', 'test end', 'hook', 'hook end', 'suite end',
   ]
+  if (supportsMochaRetryEvents) reporterEvents.push('retry')
   for (const reporterEvent of reporterEvents) {
     it(`finalizes a failed hierarchy when a custom reporter throws during runner ${reporterEvent}`, async function () {
       this.timeout(20_000)
@@ -338,7 +339,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         once(childProcess, 'exit'),
         eventsPromise,
       ])
-      assert.match(testOutput, /custom Mocha reporter failed/)
+      // Mocha 5's uncaught-exception listener preserves the exit code but does not print the delayed error.
+      if (mochaMajor >= 8) assert.match(testOutput, /custom Mocha reporter failed/)
       if (reporterEvent === 'start' || reporterEvent === 'suite' || reporterEvent === 'test' ||
         reporterEvent === 'hook') {
         assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
@@ -390,7 +392,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       once(childProcess, 'exit'),
       eventsPromise,
     ])
-    assert.match(testOutput, /custom Mocha reporter failed/)
+    if (mochaMajor >= 8) assert.match(testOutput, /custom Mocha reporter failed/)
     assert.match(testOutput, /MOCHA BEFORE EACH EXECUTED/)
     assert.doesNotMatch(testOutput, /MOCHA (?:AFTER EACH|TEST BODY) EXECUTED/)
     assert.notStrictEqual(exitCode, 0, testOutput)
