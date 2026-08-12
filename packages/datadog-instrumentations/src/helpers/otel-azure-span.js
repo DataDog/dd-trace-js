@@ -65,6 +65,15 @@ function wrapAsyncWithTraceContext (tracerName, trigger, handler, functionName) 
     } = require('./azure-trace-context')
 
     return runWithInvocationContext(args, trigger, async () => {
+      if (trigger === 'durable-activity') {
+        const { getInstanceId, getInvocationContext } = require('./azure-trace-context')
+        const { recordEarliestChildStartTime } = require('./otel-orchestration-store')
+        const instanceId = getInstanceId(getInvocationContext(args, trigger))
+        if (instanceId) {
+          recordEarliestChildStartTime(instanceId, Date.now())
+        }
+      }
+
       const parentContext = await buildSpanParentContextAsync(args, trigger)
       return getTracer(tracerName).startActiveSpan(
         `${trigger} ${functionName}`,

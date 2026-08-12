@@ -131,6 +131,7 @@ function publishOrchestrationMetaSync (instanceId, meta) {
       functionName: normalized.functionName ?? '',
       pendingStart: normalized.pendingStart === true,
       startTime: normalized.startTime,
+      earliestChildStartTime: normalized.earliestChildStartTime,
       status: normalized.status || 'open',
     }, 'Replace'))
     .catch(() => {})
@@ -146,10 +147,14 @@ function publishOrchestrationSpanMetaSync (instanceId, span) {
   })
 }
 
-// Record the first non-replay orchestration turn once; never move it on later turns.
+// Record the instance start once; never move it on later turns.
 function stampOrchestrationStartTime (meta, functionName) {
-  if (meta.startTime != null && meta.pendingStart !== true) {
-    return meta
+  if (meta.startTime != null) {
+    return {
+      ...meta,
+      functionName: meta.functionName || functionName,
+      pendingStart: undefined,
+    }
   }
 
   return {
@@ -158,6 +163,21 @@ function stampOrchestrationStartTime (meta, functionName) {
     startTime: Date.now(),
     pendingStart: undefined,
   }
+}
+
+function recordEarliestChildStartTime (instanceId, startTime) {
+  if (!instanceId || startTime == null) return
+
+  const meta = readOrchestrationSpanMetaSync(instanceId)
+  if (!meta) return
+
+  const earliest = meta.earliestChildStartTime
+  if (earliest != null && earliest <= startTime) return
+
+  publishOrchestrationMetaSync(instanceId, {
+    ...meta,
+    earliestChildStartTime: startTime,
+  })
 }
 
 function reconcileOrchestrationHttpParent (instanceId, httpParent) {
@@ -178,7 +198,7 @@ function reconcileOrchestrationHttpParent (instanceId, httpParent) {
 // Record the orchestration span identity while the HTTP span that started the
 // instance is still available, so any worker that later runs the orchestration
 // reads the HTTP span as its parent.
-function seedOrchestrationMetaFromHttpParent (instanceId, httpParent, functionName) {
+function seedOrchestrationMetaFromHttpParent (instanceId, httpParent, functionName, instanceStartTime) {
   if (!instanceId || !httpParent?.spanId) return
 
   const existing = readOrchestrationSpanMetaSync(instanceId)
@@ -186,7 +206,12 @@ function seedOrchestrationMetaFromHttpParent (instanceId, httpParent, functionNa
     return reconcileOrchestrationHttpParent(instanceId, httpParent)
   }
 
-  const meta = createOrchestrationMetaFromHttpParent(instanceId, httpParent, functionName)
+  const meta = createOrchestrationMetaFromHttpParent(
+    instanceId,
+    httpParent,
+    functionName,
+    instanceStartTime,
+  )
   if (!meta) return
 
   publishOrchestrationMetaSync(instanceId, meta)
@@ -267,6 +292,7 @@ async function readOrchestrationSpanMetaAsync (instanceId, traceContext) {
         functionName: entity.functionName || undefined,
         pendingStart: entity.pendingStart === true ? true : undefined,
         startTime: entity.startTime,
+        earliestChildStartTime: entity.earliestChildStartTime,
         status: entity.status,
       }
       if (meta.traceId && meta.spanId) {
@@ -342,6 +368,7 @@ module.exports = {
   readOrchestrationSpanMetaAsync,
   readOrchestrationSpanMetaSync,
   reconcileOrchestrationHttpParent,
+  recordEarliestChildStartTime,
   seedOrchestrationMetaFromHttpParent,
   stampOrchestrationStartTime,
 }

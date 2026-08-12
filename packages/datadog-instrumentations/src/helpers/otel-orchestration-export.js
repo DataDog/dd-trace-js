@@ -60,7 +60,7 @@ function createOrchestrationMeta (instanceId, invocationContext, functionName) {
 // Build orchestration metadata from the HTTP span that called `startNew`. The
 // orchestration runs later, often in another worker process, so its identity has
 // to be decided here while the HTTP span is still known.
-function createOrchestrationMetaFromHttpParent (instanceId, httpParent, functionName) {
+function createOrchestrationMetaFromHttpParent (instanceId, httpParent, functionName, instanceStartTime) {
   if (!httpParent?.traceId || !httpParent.spanId) return
 
   return {
@@ -70,16 +70,23 @@ function createOrchestrationMetaFromHttpParent (instanceId, httpParent, function
     spanId: normalizeSpanId(createId()),
     parentId: normalizeSpanId(httpParent.spanId),
     httpParentSpanId: normalizeSpanId(httpParent.spanId),
-    // Stamped on the first non-replay orchestration turn, not at startNew time.
-    pendingStart: true,
+    // Anchor the backfilled orchestration span to startNew time so it aligns
+    // with the HTTP starter instead of the later orchestrator worker pickup.
+    startTime: instanceStartTime ?? Date.now(),
     status: 'open',
   }
 }
 
-// Backfilled orchestration spans use the first turn start through instance completion.
+// Backfilled orchestration spans use the instance start through completion.
 function resolveOrchestrationSpanBounds (meta, endTime) {
   const resolvedEndTime = endTime ?? Date.now()
   let startTime = meta?.startTime
+
+  if (meta?.earliestChildStartTime != null) {
+    startTime = startTime == null
+      ? meta.earliestChildStartTime
+      : Math.min(startTime, meta.earliestChildStartTime)
+  }
 
   if (startTime == null) {
     startTime = resolvedEndTime

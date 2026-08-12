@@ -105,7 +105,12 @@ function patchDurableClient (DurableClient) {
         // The orchestration usually runs in another worker process, which cannot see
         // the in-process maps above, so persist its identity to the shared store now.
         const { seedOrchestrationMetaFromHttpParent } = require('./otel-orchestration-store')
-        seedOrchestrationMetaFromHttpParent(instanceId, spanMeta, typeof args[0] === 'string' ? args[0] : undefined)
+        seedOrchestrationMetaFromHttpParent(
+          instanceId,
+          spanMeta,
+          typeof args[0] === 'string' ? args[0] : undefined,
+          Date.now(),
+        )
       }
 
       return instanceId

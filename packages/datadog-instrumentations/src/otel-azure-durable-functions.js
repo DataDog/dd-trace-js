@@ -72,7 +72,7 @@ function wrapOrchestrationHandler (handler, functionName) {
 
     const instanceId = getInstanceId(invocationContext)
 
-    if (instanceId && !invocationContext?.df?.isReplaying) {
+    if (instanceId) {
       ensureOrchestrationMeta(instanceId, invocationContext, functionName)
     }
 
