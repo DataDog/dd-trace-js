@@ -1,7 +1,5 @@
 'use strict'
 
-const { types } = require('node:util')
-
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
@@ -31,7 +29,8 @@ const {
  *   fieldResolver?: GraphQLFieldResolver
  * }} ExecutionArguments
  * @typedef {(value: unknown) => unknown} ThenableCallback
- * @typedef {{ then: (onFulfilled: ThenableCallback, onRejected: ThenableCallback) => unknown }} Thenable
+ * @typedef {{ then: (onFulfilled?: ThenableCallback, onRejected?: ThenableCallback) => unknown }} Thenable
+ * @typedef {import('../../datadog-instrumentations/src/helpers/graphql-jit-runtime').ArgumentFactory} ArgumentFactory
  */
 
 const legacyStorage = storage('legacy')
@@ -39,8 +38,6 @@ const legacyStorage = storage('legacy')
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
-const promiseThen = Promise.prototype.then
-
 // AppSec/WAF abort gate. Published synchronously from bindStart with a
 // payload carrying the abortController; subscribers that call
 // `payload.abortController.abort()` signal a pre-execute abort. bindStart
@@ -271,7 +268,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // Match the full gateway operation here so caller-owned AST transformations
     // cannot suppress execute/resolver AppSec and IAST channels.
     if (name === '__ApolloServiceHealthCheck__' &&
-        document.definitions.length === 1 &&
+        document?.definitions?.length === 1 &&
         isApolloHealthCheck(operation)) {
       ctx.ddSkipped = true
       return ctx.currentStore
@@ -501,8 +498,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
  */
 function wrapResolve (resolve, isJit = false) {
   /* istanbul ignore next: future GraphQL versions may expose a non-callable resolver entry. */
-  if (typeof resolve !== 'function') return resolve
-  if (!isJit && patchedResolvers.has(resolve)) return resolve
+  if (typeof resolve !== 'function' || (!isJit && patchedResolvers.has(resolve))) return resolve
 
   // Replace a schema wrapper with the execution-local JIT variant instead of nesting both.
   resolve = originalResolvers.get(resolve) ?? resolve
@@ -861,13 +857,13 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
  * @param {number} descriptorId
  * @param {Record<string, unknown>} source
  * @param {(string | number)[] | undefined} path
+ * @param {ArgumentFactory | undefined} argumentFactory
  * @returns {unknown}
  */
-function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
+function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argumentFactory) {
   const descriptor = rootCtx.jitPlan.fields[descriptorId]
   const pathString = path ? path.join('.') : descriptor.collapsedPath
   if (rootCtx.hasIastSub || rootCtx.hasResolverSub) {
-    const resolverArgs = getJitDefaultArguments(rootCtx, descriptor)
     const info = {
       fieldName: descriptor.fieldName,
       fieldNodes: descriptor.fieldNodes,
@@ -875,7 +871,7 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
     if (rootCtx.hasIastSub) {
       iastResolveCh.publish({
         rootCtx,
-        args: resolverArgs,
+        args: getJitDefaultArguments(rootCtx, descriptor, argumentFactory, true),
         info,
         path: path ?? descriptor.collapsedPathSegments,
         pathString,
@@ -884,7 +880,10 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
     if (rootCtx.hasResolverSub) {
       resolverStartCh.publish({
         abortController: rootCtx.abortController,
-        resolverInfo: getResolverInfo(info, resolverArgs),
+        resolverInfo: getResolverInfo(
+          info,
+          getJitDefaultArguments(rootCtx, descriptor, argumentFactory, false)
+        ),
       })
     }
   }
@@ -922,132 +921,43 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
 /**
  * @param {object} rootCtx
  * @param {JitDescriptor} descriptor
- * @returns {Record<string, unknown>}
+ * @param {ArgumentFactory | undefined} argumentFactory
+ * @param {boolean} mutable
+ * @returns {Record<string, unknown> | undefined}
  */
-function getJitDefaultArguments (rootCtx, descriptor) {
-  const template = descriptor.argumentTemplate ?? buildArgumentTemplate(descriptor)
-  const args = { ...template.fixed }
-  const { variableValues } = rootCtx
-
-  const { variables } = template
-  if (variables !== undefined && variableValues !== undefined) {
-    for (let index = 0; index < variables.length; index += 2) {
-      const variableName = variables[index + 1]
-      // A variable the operation never received leaves the argument's own default in place.
-      if (Object.hasOwn(variableValues, variableName)) {
-        args[variables[index]] = variableValues[variableName]
-      }
-    }
+function getJitDefaultArguments (rootCtx, descriptor, argumentFactory, mutable) {
+  if (mutable) {
+    return argumentFactory === undefined
+      ? {}
+      : argumentFactory(rootCtx.variableValues, cloneArgumentValue)
   }
-
-  const { dynamic } = template
-  if (dynamic !== undefined) {
-    for (const argument of dynamic) {
-      args[argument.name.value] = valueFromAstNode(argument.value, variableValues)
-    }
+  if (descriptor.hasArgumentVariables) {
+    return argumentFactory(rootCtx.variableValues)
   }
-
-  return args
+  return descriptor.staticArguments
 }
 
 /**
- * A list or object literal can embed a variable, so "not a Variable node" is not the same as fixed.
- *
- * @param {JitDescriptor} descriptor
- * @returns {{
- *   fixed: Record<string, unknown>,
- *   variables: string[] | undefined,
- *   dynamic: import('graphql').ArgumentNode[] | undefined
- * }}
+ * @param {unknown} value
+ * @param {WeakMap<object, object>} [clones]
+ * @returns {unknown}
  */
-function buildArgumentTemplate (descriptor) {
-  const fixed = {}
-  let variables
-  let dynamic
+function cloneArgumentValue (value, clones) {
+  if (value === null || typeof value !== 'object') return value
 
-  for (const definition of descriptor.arguments) {
-    if (definition.defaultValue !== undefined) fixed[definition.name] = definition.defaultValue
+  const keys = Object.keys(value)
+  if (keys[0] === undefined) return value
+
+  clones ??= new WeakMap()
+  const cached = clones.get(value)
+  if (cached !== undefined) return cached
+
+  const clone = Array.isArray(value) ? new Array(value.length) : {}
+  clones.set(value, clone)
+  for (const name of keys) {
+    clone[name] = cloneArgumentValue(value[name], clones)
   }
-
-  const fieldArguments = descriptor.fieldNode.arguments
-  if (fieldArguments) {
-    for (const argument of fieldArguments) {
-      if (argument.value.kind === 'Variable') {
-        variables ??= []
-        variables.push(argument.name.value, argument.value.name.value)
-      } else if (containsVariable(argument.value)) {
-        dynamic ??= []
-        dynamic.push(argument)
-      } else {
-        fixed[argument.name.value] = valueFromAstNode(argument.value)
-      }
-    }
-  }
-
-  const template = { fixed, variables, dynamic }
-  descriptor.argumentTemplate = template
-  return template
-}
-
-/**
- * @param {import('graphql').ValueNode} valueNode
- * @returns {boolean}
- */
-function containsVariable (valueNode) {
-  switch (valueNode.kind) {
-    case 'Variable':
-      return true
-    case 'ListValue':
-      for (const value of valueNode.values) {
-        if (containsVariable(value)) return true
-      }
-      return false
-    case 'ObjectValue':
-      for (const field of valueNode.fields) {
-        if (containsVariable(field.value)) return true
-      }
-      return false
-    default:
-      return false
-  }
-}
-
-/**
- * Mirrors graphql's `valueFromASTUntyped`: graphql-jit's inlined default path never coerces its
- * arguments, so reporting them must not run a custom scalar's `parseLiteral` either.
- *
- * @param {import('graphql').ValueNode} valueNode
- * @param {Record<string, unknown> | undefined} variableValues
- */
-function valueFromAstNode (valueNode, variableValues) {
-  switch (valueNode.kind) {
-    case 'StringValue':
-    case 'BooleanValue':
-    case 'EnumValue':
-      return valueNode.value
-    case 'IntValue':
-      return Number.parseInt(valueNode.value, 10)
-    case 'FloatValue':
-      return Number.parseFloat(valueNode.value)
-    case 'NullValue':
-      return null
-    case 'Variable':
-      return variableValues?.[valueNode.name.value]
-    case 'ListValue': {
-      const values = new Array(valueNode.values.length)
-      for (let index = 0; index < values.length; index++) {
-        values[index] = valueFromAstNode(valueNode.values[index], variableValues)
-      }
-      return values
-    }
-    case 'ObjectValue': {
-      const fields = {}
-      for (const field of valueNode.fields) {
-        fields[field.name.value] = valueFromAstNode(field.value, variableValues)
-      }
-      return fields
-    }
-  }
+  return clone
 }
 
 /**
@@ -1134,48 +1044,19 @@ function invokeResolver (resolve, self, args, isJit) {
  * @param {AbortController | undefined} abortController
  * @param {object} store
  * @param {(error: unknown, result?: unknown) => void} callback
- * @param {boolean} preserveResult
+ * @param {boolean} isJit
  * @returns {unknown}
  */
-function callInAsyncScope (fn, thisArg, args, abortController, store, callback, preserveResult) {
+function callInAsyncScope (fn, thisArg, args, abortController, store, callback, isJit) {
   if (abortController?.signal.aborted) {
     callback(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
-    const result = legacyStorage.run(store, () => invokeResolver(fn, thisArg, args, preserveResult))
-    if (preserveResult) {
-      if (types.isPromise(result)) {
-        promiseThen.call(
-          result,
-          /**
-           * @param {unknown} resultValue
-           */
-          resultValue => callback(null, resultValue),
-          /**
-           * @param {unknown} error
-           */
-          error => callback(error)
-        )
-      } else if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
-        return observeThenable(result, callback)
-      } else {
-        callback(null, result)
-      }
-      return result
-    }
-    if (typeof result?.then === 'function') {
-      return result.then(
-        /**
-         * @param {unknown} resultValue
-         */
-        resultValue => { callback(null, resultValue); return resultValue },
-        /**
-         * @param {unknown} error
-         */
-        error => { callback(error); throw error }
-      )
+    const result = legacyStorage.run(store, () => invokeResolver(fn, thisArg, args, isJit))
+    if (typeof result?.then === 'function' && (!isJit || (result !== null && typeof result === 'object'))) {
+      return observeThenable(result, callback)
     }
     callback(null, result)
     return result
@@ -1193,8 +1074,8 @@ function callInAsyncScope (fn, thisArg, args, abortController, store, callback, 
 function observeThenable (thenable, callback) {
   return {
     /**
-     * @param {ThenableCallback} onFulfilled
-     * @param {ThenableCallback} onRejected
+     * @param {ThenableCallback} [onFulfilled]
+     * @param {ThenableCallback} [onRejected]
      */
     // eslint-disable-next-line unicorn/no-thenable -- graphql-jit intentionally consumes this adapter as a thenable.
     then (onFulfilled, onRejected) {
@@ -1204,14 +1085,15 @@ function observeThenable (thenable, callback) {
          */
         result => {
           callback(null, result)
-          return onFulfilled(result)
+          return onFulfilled ? onFulfilled(result) : result
         },
         /**
          * @param {unknown} error
          */
         error => {
           callback(error)
-          return onRejected(error)
+          if (onRejected) return onRejected(error)
+          throw error
         }
       )
     },

@@ -28,7 +28,7 @@ function noop () {}
  * @returns {Promise<void>}
  */
 async function assertGeneratedArgumentFactory (compilation, expectedStatements) {
-  const declaration = /^function (ddTraceArguments\d+) \(args, variableValues\) \{$/m.exec(compilation)
+  const declaration = /^function (ddTraceArguments\d+) \(variableValues, cloneValue\) \{$/m.exec(compilation)
   assert.ok(declaration, 'expected a named generated argument factory')
 
   const end = compilation.indexOf('\n}\n', declaration.index)
@@ -40,7 +40,7 @@ async function assertGeneratedArgumentFactory (compilation, expectedStatements) 
 
   if (generatedCodeLinter === undefined) return
 
-  const source = `'use strict'\n\n${factory}\n${declaration[1]}({}, {})\n`
+  const source = `'use strict'\n\n${factory}\n${declaration[1]}({}, undefined)\n`
   const [{ messages }] = await generatedCodeLinter.lintText(source, {
     filePath: join(__dirname, '../src/generated-argument-factory.js'),
   })
@@ -700,7 +700,7 @@ describe('Plugin', () => {
         } finally {
           resolverStartChannel.unsubscribe(onResolver)
         }
-        assert.strictEqual(parseLiteralCalls, 0)
+        assert.strictEqual(parseLiteralCalls, 1)
       })
 
       it('still finishes JIT spans when completion hooks throw', async () => {
@@ -1562,6 +1562,7 @@ describe('Plugin', () => {
               type: graphql.GraphQLString,
               args: {
                 text: { type: graphql.GraphQLString, defaultValue: 'text-default' },
+                fixedText: { type: graphql.GraphQLString },
                 flag: { type: graphql.GraphQLBoolean, defaultValue: true },
                 count: { type: graphql.GraphQLInt, defaultValue: 42 },
                 nullable: { type: graphql.GraphQLString, defaultValue: 'nullable-default' },
@@ -1572,6 +1573,7 @@ describe('Plugin', () => {
                 fixedTags: { type: new graphql.GraphQLList(graphql.GraphQLString) },
                 filter: { type: Filter },
                 fixedFilter: { type: Filter },
+                emptyFilter: { type: Filter },
                 empty: { type: graphql.GraphQLString },
               },
             },
@@ -1595,7 +1597,7 @@ describe('Plugin', () => {
             },
           }),
         })
-        const { query } = compileQuery(
+        const compiled = compileQuery(
           listSchema,
           graphql.parse(`
             query ResolverList(
@@ -1608,22 +1610,39 @@ describe('Plugin', () => {
               items {
                 value(
                   text: $text
+                  fixedText: "it's \\\\ path\\nnext \\"quote\\""
                   flag: $flag
                   count: $count
                   nullable: $nullable
                   missing: $missing
-                  ratio: 1.5
+                  ratio: -0.0
                   kind: FAST
                   tags: ["a", $text]
                   fixedTags: ["fixed"]
                   filter: { name: $text, size: 7, exact: true }
                   fixedFilter: { name: "fixed", size: 8, exact: false }
+                  emptyFilter: {}
                   empty: null
                 )
                 plain
               }
             }
-          `)
+          `),
+          undefined,
+          { debug: true }
+        )
+        const { query } = compiled
+        await assertGeneratedArgumentFactory(
+          compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation,
+          [
+            "Object.hasOwn(variableValues, 'text')",
+            'const args = {',
+            '"ratio":0',
+            '"kind":"FAST"',
+            "args['tags']['1'] = ddTraceVariable0",
+            "args['filter']['name'] = ddTraceVariable0",
+            'return args',
+          ]
         )
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
@@ -1671,14 +1690,16 @@ describe('Plugin', () => {
           assertResolverArguments({
             count: 42,
             empty: null,
-            filter: { name: undefined, size: 7, exact: true },
+            emptyFilter: {},
+            filter: { name: null, size: 7, exact: true },
             flag: true,
             fixedFilter: { name: 'fixed', size: 8, exact: false },
             fixedTags: ['fixed'],
+            fixedText: "it's \\ path\nnext \"quote\"",
             kind: 'FAST',
             nullable: 'nullable-default',
-            ratio: 1.5,
-            tags: ['a', undefined],
+            ratio: 0,
+            tags: ['a', null],
             text: 'text-default',
           })
           assert.strictEqual(updateCalls.size, 0)
@@ -1716,13 +1737,15 @@ describe('Plugin', () => {
         assertResolverArguments({
           count: 0,
           empty: null,
+          emptyFilter: {},
           filter: { name: '', size: 7, exact: true },
           flag: false,
           fixedFilter: { name: 'fixed', size: 8, exact: false },
           fixedTags: ['fixed'],
+          fixedText: "it's \\ path\nnext \"quote\"",
           kind: 'FAST',
           nullable: null,
-          ratio: 1.5,
+          ratio: 0,
           tags: ['a', ''],
           text: '',
         })
@@ -1730,19 +1753,46 @@ describe('Plugin', () => {
         assert.strictEqual(updateCalls.get('value'), 3)
       })
 
-      it('publishes coerced arguments for inline default resolvers', async () => {
+      it('publishes coerced arguments without exposing caller-owned values to mutation', async () => {
+        const Filter = new graphql.GraphQLInputObjectType({
+          name: 'CompiledArgumentFilter',
+          fields: {
+            name: { type: graphql.GraphQLString, defaultValue: 'input-default' },
+          },
+        })
+        const Speed = new graphql.GraphQLEnumType({
+          name: 'CompiledArgumentSpeed',
+          values: {
+            FAST: { value: 17 },
+          },
+        })
+        const Opaque = new graphql.GraphQLScalarType({
+          name: 'CompiledArgumentOpaque',
+          serialize: value => value,
+          parseValue: value => value,
+          parseLiteral: node => ({ parsed: node.value }),
+        })
         const Item = new graphql.GraphQLObjectType({
-          name: 'CoercedArgumentItem',
+          name: 'CompiledArgumentItem',
           fields: {
             value: {
               type: graphql.GraphQLString,
-              args: { identifier: { type: graphql.GraphQLID, defaultValue: 'field-default' } },
+              args: {
+                cyclic: { type: Opaque },
+                filter: { type: Filter },
+                fixedFilter: { type: Filter },
+                identifier: { type: graphql.GraphQLID, defaultValue: 'field-default' },
+                keyless: { type: Opaque },
+                opaque: { type: Opaque },
+                speed: { type: Speed },
+                tags: { type: new graphql.GraphQLList(graphql.GraphQLString) },
+              },
             },
           },
         })
         const argumentSchema = new graphql.GraphQLSchema({
           query: new graphql.GraphQLObjectType({
-            name: 'CoercedArgumentQuery',
+            name: 'CompiledArgumentQuery',
             fields: {
               items: {
                 type: new graphql.GraphQLList(Item),
@@ -1754,39 +1804,117 @@ describe('Plugin', () => {
         const { query } = compileQuery(
           argumentSchema,
           graphql.parse(`
-            query CoercedArguments($identifier: ID = "operation-default") {
-              items { value(identifier: $identifier) }
+            query CompiledArguments(
+              $cyclic: CompiledArgumentOpaque
+              $filter: CompiledArgumentFilter
+              $identifier: ID = "operation-default"
+              $keyless: CompiledArgumentOpaque
+              $tags: [String]
+            ) {
+              items {
+                value(
+                  cyclic: $cyclic
+                  filter: $filter
+                  fixedFilter: {}
+                  identifier: $identifier
+                  keyless: $keyless
+                  opaque: "literal"
+                  speed: FAST
+                  tags: $tags
+                )
+              }
             }
           `)
         )
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
         const resolverArguments = []
-        /** @param {{ resolverInfo: { value?: { identifier: unknown } } }} message */
+        /** @param {{ resolverInfo: { value?: Record<string, unknown> } }} message */
         const onResolverStart = ({ resolverInfo }) => {
-          if (resolverInfo.value) resolverArguments.push(resolverInfo.value.identifier)
+          if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
         }
+        const cyclic = { name: 'caller-owned' }
+        cyclic.self = cyclic
+        Object.freeze(cyclic)
+        const filter = Object.freeze({ name: 'caller-owned' })
+        const keyless = Object.freeze(new Date(0))
+        const tags = Object.freeze(['caller-owned'])
+        const variableValues = Object.freeze(Object.defineProperties({}, {
+          cyclic: { enumerable: true, value: cyclic },
+          filter: { enumerable: true, value: filter },
+          identifier: { enumerable: true, get: () => 123 },
+          keyless: { enumerable: true, value: keyless },
+          tags: { enumerable: true, value: tags },
+        }))
 
         resolverStartChannel.subscribe(onResolverStart)
         try {
-          const defaultResult = await executeWithTrace(() => query({}, {}, {}), /CoercedArguments/)
-          assert.deepStrictEqual(defaultResult.data, { items: [{ value: 'ok' }] })
-
-          const variableValues = Object.freeze(Object.defineProperty({}, 'identifier', {
-            enumerable: true,
-            get () {
-              return 123
-            },
-          }))
-          const providedResult = await executeWithTrace(
-            () => query({}, {}, variableValues),
-            /CoercedArguments/
-          )
-          assert.deepStrictEqual(providedResult.data, { items: [{ value: 'ok' }] })
+          for (const variables of [{}, variableValues]) {
+            const result = await executeWithTrace(() => query({}, {}, variables), /CompiledArguments/)
+            assert.deepStrictEqual(result.data, { items: [{ value: 'ok' }] })
+          }
         } finally {
           resolverStartChannel.unsubscribe(onResolverStart)
         }
 
-        assert.deepStrictEqual(resolverArguments, ['operation-default', '123'])
+        assert.strictEqual(resolverArguments.length, 2)
+        assert.strictEqual(Object.hasOwn(resolverArguments[0], 'filter'), false)
+        assert.strictEqual(resolverArguments[0].identifier, 'operation-default')
+        assert.strictEqual(resolverArguments[1].identifier, '123')
+        assert.strictEqual(resolverArguments[1].cyclic, cyclic)
+        assert.deepStrictEqual({ ...resolverArguments[1].filter }, { name: 'caller-owned' })
+        assert.strictEqual(resolverArguments[1].keyless, keyless)
+        assert.deepStrictEqual(resolverArguments[1].tags, tags)
+        for (const argumentsValue of resolverArguments) {
+          assert.deepStrictEqual({ ...argumentsValue.fixedFilter }, { name: 'input-default' })
+          assert.deepStrictEqual(argumentsValue.opaque, { parsed: 'literal' })
+          assert.strictEqual(argumentsValue.speed, 17)
+        }
+
+        const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
+        let resolverCyclic
+        let resolverFilter
+        let resolverTags
+        /**
+         * @param {{
+         *   args: {
+         *     cyclic: { name: string, self: object },
+         *     filter: { name: string },
+         *     keyless: Date,
+         *     tags: string[]
+         *   },
+         *   info: { fieldName: string }
+         * }} message
+         */
+        const onResolveStart = ({ args, info }) => {
+          if (info.fieldName !== 'value') return
+
+          resolverCyclic = args.cyclic
+          resolverFilter = args.filter
+          resolverTags = args.tags
+          args.cyclic.name = 'subscriber-owned'
+          args.filter.name = 'subscriber-owned'
+          args.tags[0] = 'subscriber-owned'
+        }
+
+        resolveStartChannel.subscribe(onResolveStart)
+        try {
+          const result = await executeWithTrace(
+            () => query(Object.freeze({ items: Object.freeze([Object.freeze({ value: 'ok' })]) }),
+              Object.freeze({}), variableValues),
+            /CompiledArguments/
+          )
+          assert.deepStrictEqual(result.data, { items: [{ value: 'ok' }] })
+        } finally {
+          resolveStartChannel.unsubscribe(onResolveStart)
+        }
+
+        assert.notStrictEqual(resolverCyclic, cyclic)
+        assert.strictEqual(resolverCyclic.self, resolverCyclic)
+        assert.notStrictEqual(resolverFilter, filter)
+        assert.notStrictEqual(resolverTags, resolverArguments[1].tags)
+        assert.deepStrictEqual(cyclic, { name: 'caller-owned', self: cyclic })
+        assert.deepStrictEqual(filter, { name: 'caller-owned' })
+        assert.deepStrictEqual(tags, ['caller-owned'])
       })
 
       it('shares frozen defaults unless a subscriber may mutate them', async () => {
@@ -1819,10 +1947,10 @@ describe('Plugin', () => {
           )
         )
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        let sharedArguments
+        const readOnlyArguments = []
         /** @param {{ resolverInfo: { value?: Record<string, unknown> } }} message */
         const onResolverStart = ({ resolverInfo }) => {
-          if (resolverInfo.value) sharedArguments = resolverInfo.value
+          if (resolverInfo.value) readOnlyArguments.push(resolverInfo.value)
         }
 
         resolverStartChannel.subscribe(onResolverStart)
@@ -1838,10 +1966,10 @@ describe('Plugin', () => {
           resolverStartChannel.unsubscribe(onResolverStart)
         }
 
-        assert.ok(sharedArguments)
-        assert.strictEqual(sharedArguments.opaqueObject, opaqueObjectDefault)
-        assert.strictEqual(sharedArguments.schemaFilter, schemaFilterDefault)
-        assert.strictEqual(sharedArguments.schemaTags, schemaTagsDefault)
+        assert.strictEqual(readOnlyArguments.length, 1)
+        assert.strictEqual(readOnlyArguments[0].opaqueObject, opaqueObjectDefault)
+        assert.strictEqual(readOnlyArguments[0].schemaFilter, schemaFilterDefault)
+        assert.strictEqual(readOnlyArguments[0].schemaTags, schemaTagsDefault)
 
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverArguments = []
@@ -1863,6 +1991,7 @@ describe('Plugin', () => {
           resolverArguments.push(args)
           if (resolverArguments.length === 1) {
             args.filter.name = 'mutated'
+            args.opaqueObject.kind = 'mutated'
             args.schemaFilter.name = 'mutated'
             args.schemaTags[0] = 'mutated'
             args.tags[0] = 'mutated'
@@ -1870,6 +1999,7 @@ describe('Plugin', () => {
         }
 
         resolveStartChannel.subscribe(onResolveStart)
+        resolverStartChannel.subscribe(onResolverStart)
         try {
           for (let execution = 0; execution < 2; execution++) {
             const result = await executeWithTrace(
@@ -1880,6 +2010,7 @@ describe('Plugin', () => {
           }
         } finally {
           resolveStartChannel.unsubscribe(onResolveStart)
+          resolverStartChannel.unsubscribe(onResolverStart)
         }
 
         assert.deepStrictEqual(resolverArguments[1], {
@@ -1890,13 +2021,19 @@ describe('Plugin', () => {
           tags: ['fresh'],
         })
         assert.notStrictEqual(resolverArguments[0].filter, resolverArguments[1].filter)
-        assert.strictEqual(resolverArguments[0].opaqueObject, opaqueObjectDefault)
-        assert.strictEqual(resolverArguments[1].opaqueObject, opaqueObjectDefault)
+        assert.notStrictEqual(resolverArguments[0].opaqueObject, resolverArguments[1].opaqueObject)
         assert.notStrictEqual(resolverArguments[0].schemaFilter, resolverArguments[1].schemaFilter)
         assert.notStrictEqual(resolverArguments[0].schemaTags, resolverArguments[1].schemaTags)
         assert.notStrictEqual(resolverArguments[0].tags, resolverArguments[1].tags)
         assert.deepStrictEqual(schemaFilterDefault, { extra: 'preserved', name: 'schema' })
         assert.deepStrictEqual(schemaTagsDefault, ['schema'])
+        assert.deepStrictEqual(opaqueObjectDefault, { kind: 'opaque' })
+        assert.strictEqual(readOnlyArguments.length, 3)
+        for (const argumentsValue of readOnlyArguments.slice(1)) {
+          assert.deepStrictEqual(argumentsValue.opaqueObject, { kind: 'opaque' })
+          assert.deepStrictEqual(argumentsValue.schemaFilter, { extra: 'preserved', name: 'schema' })
+          assert.deepStrictEqual(argumentsValue.schemaTags, ['schema'])
+        }
       })
 
       it('publishes resolver completion when an inline default getter throws', async () => {

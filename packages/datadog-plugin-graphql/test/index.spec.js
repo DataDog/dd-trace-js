@@ -3665,6 +3665,13 @@ describe('Plugin', () => {
           assert.strictEqual(starts, 0, 'the cached health-check document must skip its execute span')
         })
 
+        it('should preserve GraphQL errors for a missing health-check document', () => {
+          assert.throws(() => graphql.execute({
+            schema: createHealthCheckSchema(),
+            operationName: '__ApolloServiceHealthCheck__',
+          }), { message: 'Must provide document.' })
+        })
+
         it('should trace a health-check document changed after parsing', async () => {
           const schema = createHealthCheckSchema()
           const document = graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')

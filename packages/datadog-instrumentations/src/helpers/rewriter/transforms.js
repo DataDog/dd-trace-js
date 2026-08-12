@@ -128,10 +128,18 @@ function configureGraphqlJitCompileObject (_state, node) {
   const [resolverCondition] = resolverConditions
   const [compileTypeCall] = compileTypeCalls
   const inlineCompileCall = clone(compileTypeCall)
+  const argumentProperties = query(resolverCondition.consequent, 'Property[key.name="args"]')
+  assert.strictEqual(
+    argumentProperties.length,
+    1,
+    'configureGraphqlJitCompileObject: argument compiler not found'
+  )
 
-  const [defaultMarker] = parse(`
+  const defaultSetup = parse(`
     const ddTraceDefault = context.ddTraceDefaultResolvers && !resolver && alwaysDefer === false
+    const ddTraceArguments = ddTraceDefault ? DD_ARGUMENTS : undefined
   `).body
+  replaceIdentifier(defaultSetup[1], 'DD_ARGUMENTS', argumentProperties[0].value)
   const [inlineField] = parse(`
     const ddTraceInline = ddTraceDefault
       ? context.ddTraceRuntime.compileDefaultField(
@@ -141,6 +149,8 @@ function configureGraphqlJitCompileObject (_state, node) {
         field,
         DD_FIELD_NODES,
         originPaths,
+        ddTraceArguments,
+        objectStringify(ddTraceArguments.values),
         DD_COMPILED
       )
       : undefined
@@ -150,7 +160,7 @@ function configureGraphqlJitCompileObject (_state, node) {
   replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
 
   assert(
-    insertBeforeStatement(node.body, resolverCondition, [defaultMarker, inlineField]),
+    insertBeforeStatement(node.body, resolverCondition, [...defaultSetup, inlineField]),
     'configureGraphqlJitCompileObject: could not insert default field setup'
   )
   resolverCondition.test = parse('resolver || ddTraceDefault').body[0].expression

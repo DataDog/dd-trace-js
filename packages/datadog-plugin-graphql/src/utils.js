@@ -145,7 +145,6 @@ function isCacheableSource (source) {
  * @returns {import('graphql').OperationDefinitionNode | undefined}
  */
 function getOperation (document, operationName) {
-  /* istanbul ignore if: validate/execute only call this with a parsed GraphQL document. */
   if (!document || !Array.isArray(document.definitions)) return
 
   for (const definition of document.definitions) {

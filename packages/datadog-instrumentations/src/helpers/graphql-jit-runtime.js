@@ -14,14 +14,16 @@
  *   fieldName: string,
  *   fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
  *   returnType: import('graphql').GraphQLOutputType,
- *   parentType: import('graphql').GraphQLCompositeType,
- *   arguments?: import('graphql').GraphQLArgument[]
+ *   parentType: import('graphql').GraphQLCompositeType
  * }} DescriptorInput
  * @typedef {{
- *   fixed: Record<string, unknown>,
- *   variables: string[] | undefined,
- *   dynamic: import('graphql').ArgumentNode[] | undefined
- * }} ArgumentTemplate
+ *   key: string,
+ *   prev?: ArgumentPath
+ * }} ArgumentPath
+ * @typedef {{
+ *   missing: { path: ArgumentPath, valueNode: { name: { value: string } } }[],
+ *   values: Record<string, unknown>
+ * }} CompiledArguments
  * @typedef {{
  *   baseTypeName: string,
  *   resource: string,
@@ -29,11 +31,11 @@
  * }} FieldMetadata
  * @typedef {{
  *   id: number,
- *   arguments: import('graphql').GraphQLArgument[],
- *   argumentTemplate?: ArgumentTemplate,
  *   baseTypeName: string,
  *   collapsedPath: string,
  *   collapsedPathSegments: string[],
+ *   staticArguments?: Record<string, unknown>,
+ *   hasArgumentVariables?: boolean,
  *   fieldName: string,
  *   fieldNode: import('graphql').FieldNode,
  *   fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
@@ -56,6 +58,7 @@
  *   ddTraceDefaultResolvers?: boolean,
  *   ddTracePlan?: BuildingJitPlan,
  *   ddTraceRuntime?: GraphqlJitRuntime,
+ *   hoistedFunctions: string[],
  *   resolvers: GraphQLResolverMap
  * }} JitCompilationContext
  * @typedef {JitCompilationContext & { ddTracePlan: BuildingJitPlan }} ConfiguredJitCompilationContext
@@ -66,10 +69,15 @@
  *   collapsedPath: string
  * ) => FieldMetadata} CreateFieldMetadata
  * @typedef {(
+ *   variableValues: Record<string, unknown> | undefined,
+ *   cloneValue?: (value: unknown) => unknown
+ * ) => Record<string, unknown>} ArgumentFactory
+ * @typedef {(
  *   rootCtx: object,
  *   descriptorId: number,
  *   source: Record<string, unknown>,
- *   path: (string | number)[] | undefined
+ *   path: (string | number)[] | undefined,
+ *   argumentFactory: ArgumentFactory | undefined
  * ) => unknown} ResolveDefaultInvocation
  * @typedef {(variableValues: Record<string, unknown> | undefined) => object | undefined} StartExecution
  * @typedef {(
@@ -93,6 +101,8 @@
  *     },
  *     fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
  *     originPaths: string[],
+ *     args: CompiledArguments,
+ *     argumentSource: string,
  *     compiledField: string
  *   ) => string,
  *   finalizeCompilation: (
@@ -191,6 +201,8 @@ function createGraphqlJitRuntime ({
    * }} field
    * @param {[import('graphql').FieldNode, ...import('graphql').FieldNode[]]} fieldNodes
    * @param {string[]} originPaths
+   * @param {CompiledArguments} args
+   * @param {string} argumentSource
    * @param {string} compiledField
    * @returns {string}
    */
@@ -201,6 +213,8 @@ function createGraphqlJitRuntime ({
     field,
     fieldNodes,
     originPaths,
+    args,
+    argumentSource,
     compiledField
   ) {
     const parentPath = originPaths.join('.')
@@ -220,13 +234,16 @@ function createGraphqlJitRuntime ({
       returnType: field.type,
       parentType,
     }, fieldNodes[0], createFieldMetadata)
+    descriptor.staticArguments = args.values
+    descriptor.hasArgumentVariables = args.missing.length !== 0
+    const argumentFactory = compileArgumentFactory(context, descriptor, args.missing, argumentSource)
 
     const shouldTrace = '__context.ddTrace !== undefined && ' +
       '(__context.ddTrace.jitTraceAll || ' +
       `(__context.ddTrace.jitTraceFirst && __context.ddTrace.jitFields[${descriptor.id}] === undefined))`
     const resolveDefault = '__context.ddTrace.jitRuntime.resolveDefaultInvocation(' +
       `__context.ddTrace, ${descriptor.id}, ${parentPath}, ` +
-      `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath})`
+      `__context.ddTrace.config.collapse ? undefined : ${compilerPath.runtimePath}, ${argumentFactory})`
     const tracedRead = `(${shouldTrace} ? ${resolveDefault} : ${sourcePath})`
 
     return compiledField.slice(0, sourceIndex) + tracedRead + compiledField.slice(sourceIndex + sourcePath.length)
@@ -255,14 +272,13 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
   )
   const descriptor = {
     id: plan.fields.length,
-    arguments: input.arguments ?? [],
-    argumentTemplate: undefined,
     baseTypeName,
     collapsedPath: compilerPath.collapsedPath,
     collapsedPathSegments: compilerPath.collapsedPathSegments,
     fieldName: input.fieldName,
     fieldNode,
     fieldNodes: input.fieldNodes,
+    hasArgumentVariables: undefined,
     parentId: undefined,
     parentPathKey: compilerPath.parentPathKey,
     parentTypeName,
@@ -270,12 +286,80 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
     resource,
     returnType: input.returnType,
     selectionDepth: compilerPath.selectionDepth,
+    staticArguments: undefined,
     tags,
   }
 
   plan.fields.push(descriptor)
   plan.fieldsByPath.set(compilerPath.pathKey, descriptor)
   return descriptor
+}
+
+/**
+ * @param {ConfiguredJitCompilationContext} context
+ * @param {JitFieldDescriptor} descriptor
+ * @param {CompiledArguments['missing']} missing
+ * @param {string} argumentSource
+ * @returns {string}
+ */
+function compileArgumentFactory (context, descriptor, missing, argumentSource) {
+  if (missing.length === 0 && Object.keys(descriptor.staticArguments)[0] === undefined) return 'undefined'
+
+  const name = `ddTraceArguments${descriptor.id}`
+  let source = `function ${name} (variableValues, cloneValue) {\n  const args = ${argumentSource}\n`
+  const pathsByVariable = new Map()
+
+  for (const { path, valueNode } of missing) {
+    const variableName = valueNode.name.value
+    let paths = pathsByVariable.get(variableName)
+    if (paths === undefined) {
+      paths = []
+      pathsByVariable.set(variableName, paths)
+    }
+    paths.push(path)
+  }
+
+  let variableIndex = 0
+  for (const [variableName, paths] of pathsByVariable) {
+    const variableSource = `ddTraceVariable${variableIndex++}`
+    const quotedName = quoteString(variableName)
+    source += `  if (variableValues !== undefined && Object.hasOwn(variableValues, ${quotedName})) {\n`
+    source += `    const ${variableSource} = cloneValue === undefined\n`
+    source += `      ? variableValues[${quotedName}]\n`
+    source += `      : cloneValue(variableValues[${quotedName}])\n`
+    for (const path of paths) {
+      source += `    ${compileArgumentPath(path)} = ${variableSource}\n`
+    }
+    source += '  }\n'
+  }
+
+  source += '  return args\n}\n'
+  context.hoistedFunctions.push(source)
+  return name
+}
+
+/**
+ * @param {ArgumentPath} path
+ * @returns {string}
+ */
+function compileArgumentPath (path) {
+  let source = 'args'
+  for (let current = path; current !== undefined; current = current.prev) {
+    source += `[${quoteString(current.key)}]`
+  }
+  return source
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function quoteString (value) {
+  const json = JSON.stringify(value)
+  const content = json.slice(1, -1)
+    .replaceAll("'", String.raw`\'`)
+    .replaceAll(String.raw`\"`, '"')
+  return `'${content}'`
 }
 
 /**
