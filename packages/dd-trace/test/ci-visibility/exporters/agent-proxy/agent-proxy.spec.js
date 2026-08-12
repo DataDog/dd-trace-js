@@ -125,6 +125,27 @@ describe('AgentProxyCiVisibilityExporter', () => {
     }
   })
 
+  it('exports deferred suite events before buffered module and session events after initialization', async () => {
+    const controlled = createControlledExporter()
+    const suiteEvent = { type: 'test_suite_end', span_id: '1' }
+    const moduleAndSessionEvents = [
+      { type: 'test_module_end' },
+      { type: 'test_session_end' },
+    ]
+    const done = sinon.spy()
+
+    controlled.exporter.exportTraceWithDeferredTestSuite([suiteEvent])
+    controlled.exporter.export(moduleAndSessionEvents)
+    controlled.exporter.flush(done)
+
+    controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+    await Promise.resolve()
+
+    sinon.assert.calledWithExactly(controlled.writers[0].append.firstCall, [suiteEvent])
+    sinon.assert.calledWithExactly(controlled.writers[0].append.secondCall, moduleAndSessionEvents)
+    sinon.assert.calledOnceWithExactly(done, undefined)
+  })
+
   it('aborts initialization and uses the fallback writer for later sessions', async () => {
     const clock = sinon.useFakeTimers()
     try {

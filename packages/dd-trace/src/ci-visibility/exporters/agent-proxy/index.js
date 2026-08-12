@@ -112,7 +112,8 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this.resetDeferredTestSuiteSpans()
         return
       }
-      if (!isEvpCompatible) this.resetDeferredTestSuiteSpans()
+      if (isEvpCompatible) this.exportDeferredTestSuiteSpans()
+      else this.resetDeferredTestSuiteSpans()
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     }, initializationOptions, request)
