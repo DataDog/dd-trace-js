@@ -16,9 +16,11 @@ const { uploadCoverageReport: uploadCoverageReportRequest } = require('../reques
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const spanFormat = require('../../span_format')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
+const { TEST_STATUS } = require('../../plugins/util/test')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
@@ -102,6 +104,7 @@ class CiVisibilityExporter extends BufferingExporter {
   #deferredTestSessionTraces = []
   #pendingScreenshotUploads = new Set()
   #screenshotFlushWaiters = new Set()
+  #deferredTestSuiteSpans = new Map()
 
   constructor (config, options = {}) {
     super(config)
@@ -405,7 +408,34 @@ class CiVisibilityExporter extends BufferingExporter {
 
   export (trace) {
     this.#resetFinalFlush()
-    this.#exportTrace(trace)
+
+    if (this.#deferredTestSuiteSpans.size === 0) {
+      this.#exportTrace(trace)
+      return
+    }
+
+    let hasDeferredTestSuiteSpan = false
+    let immediateTrace
+    for (let index = 0; index < trace.length; index++) {
+      const formattedSpan = trace[index]
+      const spanId = formattedSpan.span_id?.toString()
+      const deferredTestSuiteSpan = this.#deferredTestSuiteSpans.get(spanId)
+      if (deferredTestSuiteSpan) {
+        if (!hasDeferredTestSuiteSpan && index > 0) immediateTrace = trace.slice(0, index)
+        hasDeferredTestSuiteSpan = true
+        if (deferredTestSuiteSpan.emitted || (this._isInitialized && !this.canReportSessionTraces())) {
+          this.#deferredTestSuiteSpans.delete(spanId)
+        } else {
+          deferredTestSuiteSpan.formattedSpan = formattedSpan
+        }
+      } else if (hasDeferredTestSuiteSpan) {
+        immediateTrace ??= []
+        immediateTrace.push(formattedSpan)
+      }
+    }
+
+    if (!hasDeferredTestSuiteSpan) this.#exportTrace(trace)
+    else if (immediateTrace) this.#exportTrace(immediateTrace)
   }
 
   /**
@@ -427,6 +457,110 @@ class CiVisibilityExporter extends BufferingExporter {
     if (this._export(trace, undefined, undefined, isTestSessionTrace) === false && isTestSessionTrace) {
       this.#deferredTestSessionTraces.push(trace)
     }
+  }
+
+  /**
+   * Retains a completed suite until finalization so a later framework error can still update it.
+   *
+   * @param {import('../../opentracing/span')} testSuiteSpan
+   * @returns {void}
+   */
+  deferTestSuiteSpan (testSuiteSpan) {
+    this.#resetFinalFlush()
+    this.#deferredTestSuiteSpans.set(testSuiteSpan.context()._spanId.toString(), {
+      span: testSuiteSpan,
+      formattedSpan: undefined,
+      emitted: false,
+    })
+  }
+
+  /**
+   * Retains formatted test suite events received from test framework workers until finalization.
+   *
+   * @param {Array<object>} trace
+   * @returns {void}
+   */
+  exportTraceWithDeferredTestSuite (trace) {
+    for (const formattedSpan of trace) {
+      if (formattedSpan.type !== 'test_suite_end') continue
+
+      this.#deferredTestSuiteSpans.set(formattedSpan.span_id.toString(), {
+        span: undefined,
+        formattedSpan,
+        emitted: false,
+      })
+    }
+    this.export(trace)
+  }
+
+  /**
+   * Applies a late framework error to every completed suite retained by the current finalization boundary.
+   *
+   * @param {Error} error
+   * @returns {void}
+   */
+  setDeferredTestSuiteError (error) {
+    for (const { span, formattedSpan, emitted } of this.#deferredTestSuiteSpans.values()) {
+      if (emitted) continue
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag('error', error)
+      } else if (formattedSpan) {
+        formattedSpan.meta[TEST_STATUS] = 'fail'
+        spanFormat.addError(formattedSpan, error)
+      }
+    }
+  }
+
+  /**
+   * Appends a completed suite while preserving the ordinary writer call shape outside finalization.
+   *
+   * @param {object} formattedSpan
+   * @param {{ deadline?: number }} [options]
+   * @returns {boolean|undefined}
+   */
+  #appendDeferredTestSuiteSpan (formattedSpan, options) {
+    if (options === undefined) return this._writer.append([formattedSpan])
+
+    return this._writer.append([formattedSpan], options)
+  }
+
+  /**
+   * Appends completed suites before their module and session parents are exported.
+   *
+   * @param {{ deadline?: number }} [options]
+   * @returns {void}
+   */
+  exportDeferredTestSuiteSpans (options) {
+    if (!this._writer || !this.canReportSessionTraces()) return
+
+    for (const [spanId, deferredTestSuiteSpan] of this.#deferredTestSuiteSpans) {
+      const { span, formattedSpan, emitted } = deferredTestSuiteSpan
+      if (emitted) continue
+      const updatedSpan = span && spanFormat(span)
+      if (span && formattedSpan) {
+        formattedSpan.error = updatedSpan.error
+        Object.assign(formattedSpan.meta, updatedSpan.meta)
+        Object.assign(formattedSpan.metrics, updatedSpan.metrics)
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else if (formattedSpan) {
+        if (this.#appendDeferredTestSuiteSpan(formattedSpan, options) === false) continue
+        this.#deferredTestSuiteSpans.delete(spanId)
+      } else {
+        if (this.#appendDeferredTestSuiteSpan(updatedSpan, options) === false) continue
+        deferredTestSuiteSpan.emitted = true
+      }
+    }
+  }
+
+  /**
+   * Discards completed suites that the selected transport cannot deliver.
+   *
+   * @returns {void}
+   */
+  resetDeferredTestSuiteSpans () {
+    this.#deferredTestSuiteSpans.clear()
   }
 
   /**
@@ -516,7 +650,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSessionTraces.length === 0 && this.#pendingScreenshotUploads.size === 0) {
+      this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
+      this.#pendingScreenshotUploads.size === 0) {
       onDone()
       return
     }
@@ -573,6 +708,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
       const options = deadline === undefined ? undefined : { deadline }
       if (isFinalFlush) {
+        this.exportDeferredTestSuiteSpans(options)
         this.#exportDeferredTestSessionTraces(options)
       }
 
