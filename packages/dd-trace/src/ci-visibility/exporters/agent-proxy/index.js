@@ -52,6 +52,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     }
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
+      const initializationFinalFlush = this._initializationRequest?.finalFlush
       this._initializationRequest = undefined
       const initializationAborted = initializationController.signal.aborted
       const agentInfoError = err || (initializationAborted ? initializationController.signal.reason : undefined)
@@ -112,8 +113,11 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this.resetDeferredTestSuiteSpans()
         return
       }
-      if (isEvpCompatible) this.exportDeferredTestSuiteSpans()
-      else this.resetDeferredTestSuiteSpans()
+      if (isEvpCompatible) {
+        if (initializationFinalFlush) this.exportDeferredTestSuiteSpans()
+      } else {
+        this.resetDeferredTestSuiteSpans()
+      }
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     }, initializationOptions, request)

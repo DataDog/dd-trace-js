@@ -146,6 +146,38 @@ describe('AgentProxyCiVisibilityExporter', () => {
     sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
+  it('retains deferred suites for reporter errors when initialization finishes before finalization', async () => {
+    const controlled = createControlledExporter()
+    const suiteEvent = {
+      type: 'test_suite_end',
+      span_id: '1',
+      error: 0,
+      meta: { 'test.status': 'pass' },
+      metrics: {},
+    }
+    const reporterError = new Error('custom reporter failed')
+    const moduleAndSessionEvents = [
+      { type: 'test_module_end' },
+      { type: 'test_session_end' },
+    ]
+
+    controlled.exporter.exportTraceWithDeferredTestSuite([suiteEvent])
+    controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+    await Promise.resolve()
+
+    sinon.assert.notCalled(controlled.writers[0].append)
+
+    controlled.exporter.setDeferredTestSuiteError(reporterError)
+    controlled.exporter.exportDeferredTestSuiteSpans()
+    controlled.exporter.export(moduleAndSessionEvents)
+
+    sinon.assert.calledWithExactly(controlled.writers[0].append.firstCall, [suiteEvent])
+    assert.strictEqual(suiteEvent.meta['test.status'], 'fail')
+    assert.strictEqual(suiteEvent.error, 1)
+    assert.strictEqual(suiteEvent.meta['error.message'], reporterError.message)
+    sinon.assert.calledWithExactly(controlled.writers[0].append.secondCall, moduleAndSessionEvents)
+  })
+
   it('aborts initialization and uses the fallback writer for later sessions', async () => {
     const clock = sinon.useFakeTimers()
     try {
