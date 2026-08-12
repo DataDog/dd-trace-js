@@ -1,11 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { extractContext } = require('./helpers/azure-trace-context')
 const {
-  endSpan,
-  getTracer,
-  spanAttributes,
   wrapAsyncWithTraceContext,
   wrapSyncWithTraceContext,
 } = require('./helpers/otel-azure-span')
@@ -67,30 +63,44 @@ function orchestrationWrapper (method) {
 function wrapOrchestrationHandler (handler, functionName) {
   return function * (...args) {
     const invocationContext = args[0]
-    if (invocationContext?.df?.isReplaying) {
-      yield * handler.apply(this, args)
-      return
-    }
+    const { getInstanceId } = require('./helpers/azure-trace-context')
+    const {
+      completeOrchestrationSpan,
+      ensureOrchestrationMeta,
+    } = require('./helpers/otel-orchestration-store')
+    const { unregisterOrchestrationSpan } = require('./helpers/otel-orchestration-registry')
 
-    const parentContext = extractContext(invocationContext?.traceContext)
-    const span = getTracer(TRACER_NAME).startSpan(
-      `orchestration ${functionName}`,
-      { attributes: spanAttributes(functionName, 'durable-orchestration') },
-      parentContext,
-    )
+    const instanceId = getInstanceId(invocationContext)
+
+    if (instanceId && !invocationContext?.df?.isReplaying) {
+      ensureOrchestrationMeta(instanceId, invocationContext, functionName)
+    }
 
     try {
       const gen = handler.apply(this, args)
       let step = gen.next()
       while (!step.done) {
+        if (instanceId) {
+          unregisterOrchestrationSpan(instanceId)
+        }
         const input = yield step.value
         step = gen.next(input)
       }
-      endSpan(span)
+
+      if (instanceId) {
+        completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName)
+      }
+
       return step.value
     } catch (error) {
-      endSpan(span, error)
+      if (instanceId) {
+        completeOrchestrationSpan(TRACER_NAME, instanceId, invocationContext, functionName, error)
+      }
       throw error
+    } finally {
+      if (instanceId) {
+        unregisterOrchestrationSpan(instanceId)
+      }
     }
   }
 }
