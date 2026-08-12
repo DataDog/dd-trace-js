@@ -46,11 +46,23 @@ if (!patched.has(Runner.prototype)) {
    * @param {(err?: Error) => void} fn
    */
   Hook.prototype.run = function patchedRunHook (fn) {
+    let hookCompleted = false
+    let hookRunReturned = false
+
     try {
-      return runHook.call(this, (err) => {
-        return fn(err && shouldSuppress(this) ? undefined : err)
+      const result = runHook.call(this, (err) => {
+        hookCompleted = true
+        try {
+          return fn(err && shouldSuppress(this) ? undefined : err)
+        } catch (err) {
+          if (!hookRunReturned) throw err
+          process.nextTick(() => { throw err })
+        }
       })
+      hookRunReturned = true
+      return result
     } catch (err) {
+      if (hookCompleted) throw err
       return this.callback(shouldSuppress(this) ? undefined : Runnable.toValueOrError(err))
     }
   }

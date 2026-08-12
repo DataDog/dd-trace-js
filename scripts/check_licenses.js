@@ -1,192 +1,293 @@
 /* eslint-disable no-console */
 'use strict'
 
-const { createReadStream, existsSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
-const readline = require('node:readline')
-const { execSync } = require('node:child_process')
-const { name: rootPackageName } = require('../package.json')
 
-const filePath = join(__dirname, '..', 'LICENSE-3rdparty.csv')
-const aliasMap = getAliasMap()
-const deps = getProdDeps()
+const { parse: parseYarnLock } = require('@yarnpkg/lockfile')
+const { parse: parseJsonc, printParseErrorCode } = require('jsonc-parser')
+
+/**
+ * @typedef {object} DependencyManifest
+ * @property {string} [name]
+ * @property {Record<string, string>} [dependencies]
+ * @property {Record<string, string>} [optionalDependencies]
+ * @property {Record<string, string>} [peerDependencies]
+ * @property {string[]} [optionalPeers]
+ * @property {boolean} [dev]
+ * @property {boolean} [devOptional]
+ * @property {boolean} [link]
+ */
+
+/**
+ * @typedef {object} BunPackageContext
+ * @property {string} packagePath
+ * @property {BunPackageContext} [parent]
+ */
+
+/**
+ * @typedef {object} DependencyPattern
+ * @property {boolean} [allowMissing]
+ * @property {BunPackageContext} [context]
+ * @property {string} name
+ * @property {string} range
+ */
+
+const rootDirectory = process.cwd()
+const dependencies = getProductionDependencies(rootDirectory)
 const licenses = new Set()
-let isHeader = true
 
-const lineReader = readline.createInterface({
-  input: createReadStream(filePath),
-})
+addCsvComponents(licenses, join(rootDirectory, 'LICENSE-3rdparty.csv'), true)
 
-lineReader.on('line', line => {
-  if (isHeader) {
-    isHeader = false
-    return
+if (!checkLicenses(dependencies)) process.exitCode = 1
+
+/**
+ * @param {string} directory
+ */
+function getProductionDependencies (directory) {
+  const packageJson = require(join(directory, 'package.json'))
+  const dependencies = new Set([packageJson.name])
+  const bunLockPath = join(directory, 'bun.lock')
+
+  if (existsSync(bunLockPath)) {
+    addBunProductionDependencies(dependencies, bunLockPath, packageJson)
+  } else {
+    addYarnProductionDependencies(dependencies, directory, packageJson)
   }
+  addNpmProductionDependencies(dependencies, join(directory, 'vendor', 'package-lock.json'))
 
-  const trimmed = line.trim()
-  if (!trimmed) return // Skip empty lines
-  const columns = line.split(',')
-  const component = columns[0]
+  const vendoredDependenciesPath = join(directory, '.github', 'vendored-dependencies.csv')
+  if (existsSync(vendoredDependenciesPath)) addCsvComponents(dependencies, vendoredDependenciesPath, false)
 
-  // Strip quotes from the component name
-  licenses.add(component.replaceAll(/^"|"$/g, ''))
-})
-
-lineReader.on('close', () => {
-  if (!checkLicenses(deps)) {
-    process.exit(1)
-  }
-})
-
-function getProdDeps () {
-  // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
-  const deps = new Set([normalizeDepName(rootPackageName)])
-
-  addYarnProdDeps(deps, process.cwd())
-  addNpmProdDeps(deps, join(process.cwd(), 'vendor'))
-
-  // Add vendored dependencies
-  addVendoredDeps(deps)
-
-  return deps
+  return dependencies
 }
 
-function addYarnProdDeps (deps, cwd) {
-  // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
-  const stdout = execSync('yarn list --production --json', {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    cwd,
-  })
+/**
+ * @param {Set<string>} dependencies
+ * @param {string} directory
+ * @param {DependencyManifest} packageJson
+ */
+function addYarnProductionDependencies (dependencies, directory, packageJson) {
+  const { object: lock, type } = parseYarnLock(readFileSync(join(directory, 'yarn.lock'), 'utf8'))
+  if (type !== 'success') throw new Error(`Cannot parse yarn.lock: ${type}`)
 
-  for (const line of stdout.split('\n')) {
-    if (!line) continue
-    const parsed = JSON.parse(line)
-    if (parsed.type === 'tree' && Array.isArray(parsed.data?.trees)) {
-      collectFromTrees(parsed.data.trees, deps)
+  /** @type {DependencyPattern[]} */
+  const patterns = []
+  const visited = new Set()
+  addDependencyPatterns(patterns, packageJson)
+
+  for (let i = 0; i < patterns.length; i++) {
+    const { name, range } = patterns[i]
+    const pattern = `${name}@${range}`
+    if (visited.has(pattern)) continue
+
+    const dependency = lock[pattern]
+    if (!dependency) throw new Error(`Missing yarn.lock entry for ${pattern}`)
+
+    visited.add(pattern)
+    dependencies.add(normalizeDependencyName(name, range))
+    addDependencyPatterns(patterns, dependency)
+  }
+}
+
+/**
+ * @param {Set<string>} dependencies
+ * @param {string} bunLockPath
+ * @param {DependencyManifest} packageJson
+ */
+function addBunProductionDependencies (dependencies, bunLockPath, packageJson) {
+  const parseErrors = []
+  const lock = parseJsonc(readFileSync(bunLockPath, 'utf8'), parseErrors, { allowTrailingComma: true })
+  if (parseErrors.length) {
+    const { error, offset } = parseErrors[0]
+    throw new Error(`Cannot parse bun.lock: ${printParseErrorCode(error)} at offset ${offset}`)
+  }
+  if (!lock || typeof lock !== 'object' || Array.isArray(lock)) {
+    throw new Error('bun.lock does not contain an object')
+  }
+
+  const { lockfileVersion, packages, workspaces } = lock
+  if (!Number.isInteger(lockfileVersion) || lockfileVersion < 0 || lockfileVersion > 2) {
+    throw new Error(`Unsupported bun.lock version: ${lockfileVersion}`)
+  }
+  if (!packages || typeof packages !== 'object' || Array.isArray(packages)) {
+    throw new Error('bun.lock does not contain package metadata')
+  }
+  const rootWorkspace = workspaces?.['']
+  if (!rootWorkspace || typeof rootWorkspace !== 'object' || Array.isArray(rootWorkspace)) {
+    throw new Error('bun.lock does not contain a root workspace')
+  }
+
+  /** @type {DependencyPattern[]} */
+  const patterns = []
+  const visited = new Set()
+  addDependencyPatterns(patterns, packageJson)
+
+  for (let i = 0; i < patterns.length; i++) {
+    const { allowMissing, context, name } = patterns[i]
+    const packagePath = getBunPackagePath(packages, name, context)
+    if (packagePath === undefined) {
+      if (allowMissing) continue
+      throw new Error(`Missing bun.lock entry for ${name}`)
+    }
+    if (visited.has(packagePath)) continue
+
+    const entry = packages[packagePath]
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
+      throw new TypeError(`Invalid bun.lock entry for ${packagePath}`)
+    }
+
+    visited.add(packagePath)
+    const resolution = entry[0]
+    const versionIndex = resolution.indexOf('@', resolution.startsWith('@') ? 1 : 0)
+    if (versionIndex <= 0) throw new Error(`Invalid bun.lock resolution for ${packagePath}`)
+
+    const packageName = resolution.slice(0, versionIndex)
+    const source = resolution.slice(versionIndex + 1)
+    const childContext = { packagePath, parent: context }
+    if (source.startsWith('workspace:')) {
+      const workspace = workspaces[source.slice('workspace:'.length)]
+      if (!workspace || typeof workspace !== 'object' || Array.isArray(workspace)) {
+        throw new Error(`Missing bun.lock workspace for ${packagePath}`)
+      }
+
+      addDependencyPatterns(patterns, workspace, childContext, true)
+      continue
+    }
+
+    if (!source.startsWith('link:')) dependencies.add(packageName)
+    for (let entryIndex = 1; entryIndex < entry.length; entryIndex++) {
+      const manifest = entry[entryIndex]
+      if (typeof manifest === 'object' && manifest !== null && !Array.isArray(manifest)) {
+        addDependencyPatterns(patterns, manifest, childContext, true)
+        break
+      }
     }
   }
 }
 
-function addNpmProdDeps (deps, cwd) {
-  // Use npm to get full tree of production (non-dev) dependencies
-  const stdout = execSync('npm list --omit=dev --json --depth=10', {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    cwd,
-  })
-
-  const parsed = JSON.parse(stdout)
-
-  collectDependencies(deps, parsed)
+/**
+ * @param {Record<string, unknown>} packages
+ * @param {string} name
+ * @param {BunPackageContext} [context]
+ */
+function getBunPackagePath (packages, name, context) {
+  for (let current = context; current !== undefined; current = current.parent) {
+    const packagePath = `${current.packagePath}/${name}`
+    if (Object.hasOwn(packages, packagePath)) return packagePath
+  }
+  if (Object.hasOwn(packages, name)) return name
 }
 
-function collectDependencies (deps, obj) {
-  if (!obj.dependencies) return
+/**
+ * @param {Set<string>} dependencies
+ * @param {string} packageLockPath
+ */
+function addNpmProductionDependencies (dependencies, packageLockPath) {
+  const { packages } = require(packageLockPath)
+  if (!packages) throw new Error('package-lock.json does not contain package metadata')
 
-  for (const dep of Object.keys(obj.dependencies)) {
-    const resolved = obj.dependencies[dep].resolved
+  for (const [packagePath, dependency] of Object.entries(packages)) {
+    if (!packagePath || dependency.link || (dependency.dev && !dependency.devOptional)) continue
 
-    if (!resolved) continue
-
-    // Get the actual dependency name even when aliased in the package.json
-    const name = resolved.split('/-')[0].split('npmjs.org/').reverse()[0]
-
-    deps.add(name)
-
-    collectDependencies(deps, obj.dependencies[dep])
+    dependencies.add(dependency.name ?? getNameFromPackagePath(packagePath))
   }
 }
 
-function collectFromTrees (trees, deps) {
-  for (const node of trees) {
-    if (typeof node?.name !== 'string') continue
+/**
+ * @param {DependencyPattern[]} patterns
+ * @param {DependencyManifest} manifest
+ * @param {BunPackageContext} [context]
+ * @param {boolean} [includePeers]
+ */
+function addDependencyPatterns (patterns, manifest, context, includePeers = false) {
+  const optionalDependencies = manifest.optionalDependencies ?? {}
 
-    // Remove version from the package name (e.g. `@protobufjs/pool@1.1.0` -> `@protobufjs/pool`)
-    deps.add(normalizeDepName(node.name.slice(0, node.name.lastIndexOf('@'))))
-
-    if (Array.isArray(node.children) && node.children.length) {
-      collectFromTrees(node.children, deps)
+  if ((manifest.dependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.dependencies)) {
+      if (!Object.hasOwn(optionalDependencies, name)) {
+        addDependencyPattern(patterns, name, range, context)
+      }
+    }
+  }
+  for (const [name, range] of Object.entries(optionalDependencies)) {
+    addDependencyPattern(patterns, name, range, context)
+  }
+  if (includePeers && (manifest.peerDependencies) != null) {
+    for (const [name, range] of Object.entries(manifest.peerDependencies)) {
+      addDependencyPattern(patterns, name, range, context, manifest.optionalPeers?.includes(name))
     }
   }
 }
 
-function addVendoredDeps (deps) {
-  const vendoredDepsPath = join(__dirname, '..', '.github', 'vendored-dependencies.csv')
-
-  // If the vendored dependencies file doesn't exist, skip
-  if (!existsSync(vendoredDepsPath)) {
-    return
-  }
-
-  const fs = require('node:fs')
-  const content = fs.readFileSync(vendoredDepsPath, 'utf8')
-
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue // Skip empty lines
-
-    const columns = line.split(',')
-    const component = columns[0]
-
-    // Strip quotes from the component name and add to deps
-    deps.add(normalizeDepName(component.replaceAll(/^"|"$/g, '')))
-  }
+/**
+ * @param {DependencyPattern[]} patterns
+ * @param {string} name
+ * @param {string} range
+ * @param {BunPackageContext} [context]
+ * @param {boolean} [allowMissing]
+ */
+function addDependencyPattern (patterns, name, range, context, allowMissing = false) {
+  /** @type {DependencyPattern} */
+  const pattern = { name, range }
+  if (context !== undefined) pattern.context = context
+  if (allowMissing) pattern.allowMissing = true
+  patterns.push(pattern)
 }
 
-function getAliasMap () {
-  const rootPackagePath = join(__dirname, '..', 'package.json')
-  const vendorPackagePath = join(__dirname, '..', 'vendor', 'package.json')
-  const map = new Map()
+/**
+ * @param {string} name
+ * @param {string} range
+ */
+function normalizeDependencyName (name, range) {
+  if (!range.startsWith('npm:')) return name
 
-  collectAliasesFromPackageJson(rootPackagePath, map)
-  collectAliasesFromPackageJson(vendorPackagePath, map)
-
-  return map
+  const target = range.slice('npm:'.length)
+  const versionIndex = target.lastIndexOf('@')
+  return versionIndex > 0 ? target.slice(0, versionIndex) : target
 }
 
-function collectAliasesFromPackageJson (packagePath, map) {
-  if (!existsSync(packagePath)) return
+/**
+ * @param {string} packagePath
+ */
+function getNameFromPackagePath (packagePath) {
+  const nodeModulesIndex = packagePath.lastIndexOf('node_modules/')
+  if (nodeModulesIndex === -1) throw new Error(`Cannot determine package name from ${packagePath}`)
 
-  const packageJson = require(packagePath)
-  const deps = packageJson?.dependencies ?? {}
-  const optionalDeps = packageJson?.optionalDependencies ?? {}
-
-  collectAliasesFromDeps(deps, map)
-  collectAliasesFromDeps(optionalDeps, map)
+  return packagePath.slice(nodeModulesIndex + 'node_modules/'.length)
 }
 
-function collectAliasesFromDeps (deps, map) {
-  for (const [alias, spec] of Object.entries(deps)) {
-    if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
+/**
+ * @param {Set<string>} components
+ * @param {string} filePath
+ * @param {boolean} hasHeader
+ */
+function addCsvComponents (components, filePath, hasHeader) {
+  const lines = readFileSync(filePath, 'utf8').split('\n')
 
-    const rawTarget = spec.slice('npm:'.length)
-    const atIndex = rawTarget.lastIndexOf('@')
-    const target = atIndex > 0 ? rawTarget.slice(0, atIndex) : rawTarget
+  for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
+    if (!lines[i].trim()) continue
 
-    if (target) {
-      map.set(alias, target)
-    }
+    components.add(lines[i].split(',', 1)[0].replaceAll(/^"|"$/g, ''))
   }
 }
 
-function normalizeDepName (name) {
-  return aliasMap.get(name) ?? name
-}
-
-function checkLicenses (typeDeps) {
+/**
+ * @param {Set<string>} dependencies
+ */
+function checkLicenses (dependencies) {
   const missing = []
   const extraneous = []
 
-  for (const dep of typeDeps) {
-    if (!licenses.has(dep)) {
-      missing.push(dep)
+  for (const dependency of dependencies) {
+    if (!licenses.has(dependency)) {
+      missing.push(dependency)
     }
   }
 
-  for (const dep of licenses) {
-    if (!typeDeps.has(dep)) {
-      extraneous.push(dep)
+  for (const dependency of licenses) {
+    if (!dependencies.has(dependency)) {
+      extraneous.push(dependency)
     }
   }
 

@@ -16,7 +16,6 @@ const { withAwsSdkV2Versions } = require('../spec_helpers')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withAwsSdkV2Versions(version => {
     useSandbox([`'aws-sdk@${version}'`], false, [
@@ -26,8 +25,11 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'AWS', undefined, 'aws-sdk')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'AWS',
+      packageName: 'aws-sdk',
+      defaultExport: true,
+      namedExports: [],
     })
 
     afterEach(async () => {
@@ -35,7 +37,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

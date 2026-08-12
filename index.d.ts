@@ -71,7 +71,7 @@ interface Tracer extends opentracing.Tracer {
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends tracer.PluginName> (plugin: P, config?: tracer.PluginOptions[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -156,12 +156,12 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * OpenFeature Provider with Remote Config integration.
+   * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed.
    *
-   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+   * @env DD_FEATURE_FLAGS_ENABLED
+   * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -291,6 +291,7 @@ interface Plugins {
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
+  "openai-agents": tracer.plugins.openai_agents;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
   "playwright": tracer.plugins.playwright;
@@ -313,6 +314,9 @@ interface Plugins {
 }
 
 declare namespace tracer {
+  export interface PluginOptions extends Plugins {}
+  export type PluginName = keyof PluginOptions;
+
   export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
@@ -799,9 +803,9 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
-         * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
-         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
+         * Legacy feature flagging provider switch.
+         * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
+         * the provider.
          *
          * @default false
          * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
@@ -1620,7 +1624,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
@@ -1935,6 +1939,18 @@ declare namespace tracer {
 
     /** @hidden */
     interface Instrumentation extends Integration, Analyzable {}
+
+    /** @hidden */
+    interface LLMObsIntegration extends Integration {
+      /**
+       * Whether to capture LLM Observability spans for this integration. When set to `false`,
+       * the integration keeps emitting APM spans and propagating trace context, but no LLM
+       * Observability spans are produced. Useful when another integration already captures the
+       * same operation and the payloads would otherwise be stored twice.
+       * @default true
+       */
+      llmobs?: boolean;
+    }
 
     /** @hidden */
     interface DatabaseInstrumentation extends Instrumentation {
@@ -2800,7 +2816,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langchain](https://js.langchain.com/) module
      */
-    interface langchain extends Instrumentation {}
+    interface langchain extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2842,7 +2858,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
      */
-    interface modelcontextprotocol_sdk extends Instrumentation {}
+    interface modelcontextprotocol_sdk extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2967,6 +2983,12 @@ declare namespace tracer {
      * in the agent.
      */
     interface openai extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -3569,6 +3591,12 @@ declare namespace tracer {
       enabled: boolean,
 
       /**
+       * Datasets & Experiments API. Requires LLM Observability to be enabled and
+       * `DD_API_KEY` / `DD_APP_KEY` to be set.
+       */
+      experiments: Experiments,
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3698,6 +3726,13 @@ declare namespace tracer {
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
+      /**
+       * Submits end-user feedback for a span, trace, session, or customer-defined entity.
+       * Exactly one target must be provided in the options.
+       * @param options An object containing the label, metric type, value, submitter and target of the feedback.
+       */
+      submitFeedback (options: llmobs.FeedbackOptions): void
+
 
       /**
        * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
@@ -3719,6 +3754,158 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    /** JSON-serializable value accepted by LLMObs Experiments. */
+    type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
+    /**
+     * A task run over each dataset record during an experiment.
+     */
+    type ExperimentTask = (
+      input: JSONType,
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores a single task output. The return type selects the metric:
+     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
+     */
+    type ExperimentEvaluator = (
+      input: JSONType,
+      output: JSONType,
+      expectedOutput: JSONType
+    ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
+
+    interface CreateDatasetOptions {
+      description?: string
+      records?: Array<{
+        id?: string,
+        inputData: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>
+      }>
+    }
+
+    interface ExperimentOptions {
+      name: string
+      dataset: Dataset
+      task: ExperimentTask
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
+      description?: string
+      config?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      throwOnErrors?: boolean
+    }
+
+    interface PullDatasetOptions {
+      /** Dataset version to pull. Defaults to latest. */
+      version?: number
+      /** Wait until at least this many records are readable (absorbs write lag). */
+      expectedRecordCount?: number
+      /** Maximum total time to wait, in ms. Default 30000. */
+      maxWaitMs?: number
+    }
+
+    interface ExperimentResultRow {
+      index: number
+      spanId: string
+      traceId: string
+      startNs: number
+      durationNs: number
+      input: JSONType
+      output: JSONType
+      expectedOutput: JSONType
+      readonly isError: boolean
+      errorType: string | null
+      errorMessage: string | null
+      evaluations: Record<string, JSONType>
+      evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+    }
+
+    interface ExperimentResult {
+      experimentId: string
+      rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
+      /** Dashboard URL for the experiment. */
+      url: string
+    }
+
+    interface DatasetPushResult {
+      /** Number of records from this push that were confirmed with a record id. */
+      pushedCount: number
+      /** Number of records attempted in this push. */
+      totalCount: number
+    }
+
+    interface Dataset {
+      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      /** Creates the dataset remotely if needed and pushes any unpushed records. */
+      push (): Promise<DatasetPushResult>
+      name (): string
+      description (): string
+      id (): string | null
+      projectId (): string | null
+      version (): number | null
+      latestVersion (): number | null
+      records (): Array<{
+        id: string | null,
+        input: JSONType,
+        expectedOutput: JSONType,
+        metadata: Record<string, JSONType>
+      }>
+      /** Dashboard URL for the dataset, or null until pushed. */
+      url (): string | null
+    }
+
+    interface Experiment {
+      name (): string
+      experimentId (): string | null
+      url (): string | null
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
+    }
+
+    interface Experiments {
+      /** Create a local dataset buffer; pushed on the first experiment run. */
+      createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+      /** Pull an existing dataset (with records) by name. */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+      /** Build an experiment to run over a dataset. */
+      experiment (options: ExperimentOptions): Experiment
     }
 
     interface LLMObservabilitySpan {
@@ -3793,6 +3980,93 @@ declare namespace tracer {
       metadata?: { [key: string]: any }
     }
 
+    interface FeedbackSubmitter {
+      /**
+       * The identifier of the end user who submitted the feedback.
+       */
+      id: string,
+
+      /**
+       * The type of submitter, e.g. 'user'.
+       */
+      type?: string
+    }
+
+    interface FeedbackOptions {
+      /**
+       * The name of the feedback metric
+       */
+      label: string,
+
+      /**
+       * The type of feedback metric, one of 'categorical', 'score', 'boolean', 'json' or 'text'
+       */
+      metricType: 'categorical' | 'score' | 'boolean' | 'json' | 'text',
+
+      /**
+       * The value of the feedback metric.
+       * Must be string for 'categorical' and 'text' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
+       */
+      value: string | number | boolean | { [key: string]: any },
+
+      /**
+       * Who submitted the feedback.
+       */
+      submitter: llmobs.FeedbackSubmitter,
+
+      /**
+       * The span context of the span to attach the feedback to, as returned by `llmobs.exportSpan()`.
+       * Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` must be provided.
+       */
+      span?: llmobs.ExportedLLMObsSpan,
+
+      /**
+       * The ID of the span to attach the feedback to.
+       */
+      spanId?: string,
+
+      /**
+       * The ID of the trace to attach the feedback to.
+       */
+      traceId?: string,
+
+      /**
+       * The ID of the session to attach the feedback to.
+       */
+      sessionId?: string,
+
+      /**
+       * A customer-defined key to attach the feedback to.
+       */
+      feedbackJoinKey?: string,
+
+      /**
+       * An object of string key-value pairs to tag the feedback with.
+       * A `null` or `undefined` value is sent as the string `"null"` or `"undefined"`.
+       */
+      tags?: { [key: string]: string | null | undefined },
+
+      /**
+       * The name of the ML application
+       */
+      mlApp?: string,
+
+      /**
+       * The timestamp in milliseconds when the feedback was generated.
+       */
+      timestampMs?: number,
+
+      /**
+       * Reasoning for the feedback.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the feedback passed or failed. Valid values are pass and fail.
+       */
+      assessment?: 'pass' | 'fail'
+    }
+
     interface Document {
       /**
        * Document text
@@ -3833,6 +4107,68 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Audio segments attached to the message (e.g. speech input/output)
+       */
+      audioParts?: AudioPart[],
+
+      /**
+       * Images attached to the message (e.g. vision input, generated output)
+       */
+      imageParts?: ImagePart[],
+    }
+
+    /**
+     * Represents an audio segment attached to an LLM chat model message.
+     */
+    interface AudioPart {
+      /**
+       * The MIME type of the audio (e.g. "audio/wav", "audio/mpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The audio content as a base64-encoded string
+       */
+      content: string,
+    }
+
+    /**
+     * Represents an image attached to an LLM chat model message, carrying exactly
+     * one of inline `content` or an `attachmentKey`. Supplying neither or both is
+     * rejected by the tagger, and the union keeps both shapes from type-checking.
+     */
+    type ImagePart = {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The image content as a base64-encoded string
+       */
+      content: string,
+
+      /**
+       * Explicitly excluded when inline content is present to maintain type safety.
+       */
+      attachmentKey?: never,
+    } | {
+      /**
+       * The MIME type of the image (e.g. "image/png", "image/jpeg")
+       */
+      mimeType: string,
+
+      /**
+       * Key of an already-uploaded image, in place of inline content
+       */
+      attachmentKey: string,
+
+      /**
+       * Explicitly excluded when an attachment key is present to maintain type safety.
+       */
+      content?: never,
     }
 
     /**

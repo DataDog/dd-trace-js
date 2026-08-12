@@ -11,7 +11,7 @@ const transforms = require('./transforms')
 const cache = new WeakMap()
 
 function defaultEngineReportingSignature (ast, operationName) {
-  const key = operationName == null ? '' : operationName
+  const key = operationName ?? ''
   let inner = cache.get(ast)
   if (inner !== undefined) {
     const cached = inner.get(key)

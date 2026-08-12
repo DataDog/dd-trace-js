@@ -14,6 +14,8 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+
+const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -108,10 +110,26 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
-    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
-    this.rpcStatusCode = typeof grpcCode === 'number'
-      ? (GRPC_STATUS_NAMES[grpcCode] ?? String(grpcCode))
-      : (grpcCode ?? '')
+    // Normalize to numeric string to match the Agent's parseGRPCStatusString convention.
+    // Also check OTel semantic aliases (rpc.grpc.status_code, rpc.response.status_code) as
+    // the OTel bridge stores attributes under their original key without remapping.
+    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE] ??
+      span.meta['rpc.grpc.status_code'] ?? span.metrics?.['rpc.grpc.status_code'] ??
+      span.meta['rpc.response.status_code'] ?? span.metrics?.['rpc.response.status_code']
+    if (typeof grpcCode === 'number') {
+      this.rpcStatusCode = String(grpcCode)
+    } else if (grpcCode) {
+      const upper = String(grpcCode).toUpperCase()
+      const numeric = GRPC_STATUS_CODE_MAP[upper]
+      if (numeric === undefined) {
+        const n = Number(grpcCode)
+        this.rpcStatusCode = Number.isInteger(n) && n >= 0 ? String(n) : ''
+      } else {
+        this.rpcStatusCode = numeric
+      }
+    } else {
+      this.rpcStatusCode = ''
+    }
   }
 
   toString () {

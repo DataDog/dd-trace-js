@@ -11,6 +11,7 @@ const path = require('node:path')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
@@ -26,9 +27,29 @@ const { CiValidationSink, MAX_OUTPUT_FILES, SUMMARY_PREFIX } =
   require('../../../src/ci-visibility/exporters/ci-validation/sink')
 const CiValidationWriter = require('../../../src/ci-visibility/exporters/ci-validation/writer')
 const CiValidationExporter = require('../../../src/ci-visibility/exporters/ci-validation')
+const { createWindowsFileReferenceFs } = require('../validation-test-helpers')
 
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const IN_MEMORY_DIRECTORY_STAT = {
+  dev: 1n,
+  ino: 1n,
+  isDirectory: () => true,
+  isSymbolicLink: () => false,
+}
+const IN_MEMORY_FILE_STAT = {
+  isFile: () => true,
+  nlink: 1,
+}
+const IN_MEMORY_OUTPUT_FS = {
+  closeSync: () => {},
+  fstatSync: () => IN_MEMORY_FILE_STAT,
+  lstatSync: () => IN_MEMORY_DIRECTORY_STAT,
+  mkdirSync: () => {},
+  openSync: () => 1,
+  renameSync: () => {},
+  writeFileSync: () => {},
+}
 
 describe('CI validation offline output', () => {
   let outputRoot
@@ -139,6 +160,28 @@ describe('CI validation offline output', () => {
     assert.deepStrictEqual(summary.errors, ['output_write_failed'])
   })
 
+  it('fails closed when a swapped payload directory reuses a file reference above 2^53', () => {
+    const { CiValidationSink: WindowsCiValidationSink } =
+      proxyquire('../../../src/ci-visibility/exporters/ci-validation/sink', {
+        'node:fs': createWindowsFileReferenceFs(),
+      })
+
+    const sink = new WindowsCiValidationSink(outputRoot)
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    const testsDirectory = path.join(outputRoot, 'payloads', 'tests')
+    fs.renameSync(testsDirectory, `${testsDirectory}-original`)
+    fs.mkdirSync(testsDirectory)
+
+    writer.append([createTestSpan()])
+    writer.flush()
+    sink.writeSummary()
+
+    assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 0)
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_write_failed'])
+  })
+
   it('reports bounded cache input results in one summary', () => {
     const sink = new CiValidationSink(outputRoot)
 
@@ -206,7 +249,11 @@ describe('CI validation offline output', () => {
   })
 
   it('accepts the last output file and rejects the first file beyond the limit', () => {
-    const sink = new CiValidationSink(outputRoot)
+    const { CiValidationSink: InMemoryCiValidationSink } =
+      proxyquire('../../../src/ci-visibility/exporters/ci-validation/sink', {
+        'node:fs': IN_MEMORY_OUTPUT_FS,
+      })
+    const sink = new InMemoryCiValidationSink(outputRoot)
     const payload = Buffer.from(msgpack.encode({ version: 1, events: [] }))
     for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeTestCycle(payload)
     sink.writeSummary()
@@ -233,7 +280,7 @@ describe('CI validation offline output', () => {
     }
   })
 
-  it('retains bounded early and late lifecycle evidence for a large sampled CI replay', () => {
+  it('retains bounded early and late lifecycle evidence for a large sampled export', () => {
     const sink = new CiValidationSink(outputRoot, { captureMode: 'sample' })
     const writer = new CiValidationWriter({ sink, tags: {} })
     const spans = []

@@ -4,6 +4,7 @@ const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
+const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -15,11 +16,25 @@ const { uploadCoverageReport: uploadCoverageReportRequest } = require('../reques
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
+const EMPTY_SETTINGS = Object.freeze({})
+
+/**
+ * Test session identity sent with every request. Fields are optional because the CI provider,
+ * the git repository or the runtime may not expose them.
+ *
+ * @typedef {{
+ *   repositoryUrl?: string, sha?: string, branch?: string, tag?: string, testLevel?: string,
+ *   osVersion?: string, osPlatform?: string, osArchitecture?: string,
+ *   runtimeName?: string, runtimeVersion?: string, commitMessage?: string,
+ *   pullRequestBaseSha?: string, commitHeadSha?: string, commitHeadMessage?: string,
+ * }} TestConfiguration
+ */
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -27,8 +42,7 @@ function getTestConfigurationTags (tags) {
   }
   return Object.keys(tags).reduce((acc, key) => {
     if (key.startsWith('test.configuration.')) {
-      const [, configKey] = key.split('test.configuration.')
-      acc[configKey] = tags[key]
+      acc[getSegment(key, 'test.configuration.', 1)] = tags[key]
     }
     return acc
   }, {})
@@ -189,6 +203,7 @@ class CiVisibilityExporter extends BufferingExporter {
     const cachedSkippableSuites = this._testOptimizationHttpCache.readSkippableSuites({
       testLevel: requestConfiguration.testLevel,
       isCoverageReportUploadEnabled: requestConfiguration.isCoverageReportUploadEnabled,
+      isLineCoverageSupported: requestConfiguration.isLineCoverageSupported,
     })
     if (cachedSkippableSuites !== CACHE_MISS) {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
@@ -237,6 +252,10 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * We can't request library configuration until we know whether we can use the
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
+   *
+   * @param {TestConfiguration} testConfiguration
+   * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
+   * @returns {void}
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
@@ -308,60 +327,50 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   // Takes into account potential kill switches
-  filterConfiguration (remoteConfiguration) {
-    if (!remoteConfiguration) {
-      return {}
-    }
-    const {
-      isCodeCoverageEnabled,
-      isSuitesSkippingEnabled,
-      isItrEnabled,
-      requireGit,
-      isEarlyFlakeDetectionEnabled,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
-      earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled,
-      isDiEnabled,
-      isKnownTestsEnabled,
-      isTestManagementEnabled,
-      testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled,
-      isCoverageReportUploadEnabled,
-    } = remoteConfiguration
+  filterConfiguration (remoteConfiguration = EMPTY_SETTINGS) {
     const { testOptimization } = this._config
-    const earlyFlakeDetectionRetryCount =
-      testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
-    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
-    return {
-      isCodeCoverageEnabled,
-      isSuitesSkippingEnabled,
-      isItrEnabled,
-      requireGit,
+    const {
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: isEarlyFlakeDetectionAllowed,
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: flakyTestRetriesCount = 0,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: isFlakyTestRetriesAllowed,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: isImpactedTestsAllowed,
+      DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: earlyFlakeDetectionRetryCount,
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED: isFailedTestReplayAllowed,
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
+      DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
+    } = testOptimization
+    const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
+      ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+      : createEfdRetryPolicy({
+        '5s': earlyFlakeDetectionRetryCount,
+        '10s': earlyFlakeDetectionRetryCount,
+        '30s': earlyFlakeDetectionRetryCount,
+        '5m': earlyFlakeDetectionRetryCount,
+      })
+    const testManagementAttemptToFixRetries =
+      remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
+
+    return Object.freeze({
+      isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
+      isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
+      isItrEnabled: remoteConfiguration.isItrEnabled === true,
+      requireGit: remoteConfiguration.requireGit === true,
       isEarlyFlakeDetectionEnabled:
-        isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      earlyFlakeDetectionNumRetries:
-        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
-        ? {
-            '5s': earlyFlakeDetectionRetryCount,
-            '10s': earlyFlakeDetectionRetryCount,
-            '30s': earlyFlakeDetectionRetryCount,
-            '5m': earlyFlakeDetectionRetryCount,
-          }
-        : earlyFlakeDetectionSlowTestRetries,
-      earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
-      flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
-      isDiEnabled: isDiEnabled && testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
-      isKnownTestsEnabled,
-      isTestManagementEnabled: isTestManagementEnabled && testOptimization.DD_TEST_MANAGEMENT_ENABLED,
-      testManagementAttemptToFixRetries:
-        testManagementAttemptToFixRetries ?? testOptimization.DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
+        remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
+      earlyFlakeDetectionRetryPolicy,
+      earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
+      isFlakyTestRetriesEnabled:
+        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      flakyTestRetriesCount,
+      isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
+      isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
+      isTestManagementEnabled:
+        remoteConfiguration.isTestManagementEnabled === true && isTestManagementAllowed === true,
+      testManagementAttemptToFixRetries,
       isImpactedTestsEnabled:
-        isImpactedTestsEnabled && testOptimization.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED,
-      isCoverageReportUploadEnabled,
-    }
+        remoteConfiguration.isImpactedTestsEnabled === true && isImpactedTestsAllowed === true,
+      isCoverageReportUploadEnabled: remoteConfiguration.isCoverageReportUploadEnabled === true,
+    })
   }
 
   sendGitMetadata (repositoryUrl) {
@@ -522,17 +531,21 @@ class CiVisibilityExporter extends BufferingExporter {
    * Uploads a single coverage report to the CI intake.
    * @param {object} options - Upload options
    * @param {string} options.filePath - Path to the coverage report file
+   * @param {bigint} options.fileDevice - Device containing the discovered report
+   * @param {bigint} options.fileInode - Inode of the discovered report
    * @param {string} options.format - Format of the coverage report
    * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
    * @param {(error: Error|null) => void} callback - Callback function
    */
-  uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
+  uploadCoverageReport ({ filePath, fileDevice, fileInode, format, testEnvironmentMetadata }, callback) {
     if (!this._codeCoverageReportUrl) {
       return callback(new Error('Coverage report upload URL not configured'))
     }
 
     uploadCoverageReportRequest({
       filePath,
+      fileDevice,
+      fileInode,
       format,
       flags: this._coverageReportFlags,
       testEnvironmentMetadata,

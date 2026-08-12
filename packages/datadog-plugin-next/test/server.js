@@ -5,6 +5,8 @@ const { URL } = require('node:url')
 
 const next = require('next')
 
+const tracer = require('../../..')
+
 const { PORT, HOSTNAME } = process.env
 
 const app = next({ dir: __dirname, dev: false, quiet: true, hostname: HOSTNAME, port: PORT })
@@ -18,6 +20,14 @@ app.prepare().then(() => {
     if (url.pathname === '/exit') {
       server.close()
     } else {
+      const upstreamRoute = req.headers['x-test-upstream-route']
+      if (typeof upstreamRoute === 'string') {
+        tracer.scope().active()?.addTags({
+          'http.route': upstreamRoute,
+          'resource.name': `GET ${upstreamRoute}`,
+        })
+      }
+
       handle(req, res, {
         pathname: url.pathname,
         path: url.pathname + url.search,

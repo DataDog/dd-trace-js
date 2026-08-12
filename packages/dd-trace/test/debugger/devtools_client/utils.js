@@ -81,7 +81,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
 /**
  * Get the request options from a request spy call
  *
- * @param {sinon.SinonSpy} request - The request spy to get the options from.
+ * @param {import('sinon').SinonSpy} request - The request spy to get the options from.
  * @returns {RequestOptions} - The 2nd argument to the `request` function (i.e. the request options).
  */
 function getRequestOptions (request) {

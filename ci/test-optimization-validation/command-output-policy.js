@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { createValidationBlocker } = require('./validation-blocker')
+
 /**
  * Returns command-created paths that must be declared and removed after validation.
  *
@@ -10,11 +12,7 @@ const path = require('node:path')
  * @returns {string[]} absolute output paths
  */
 function getCommandOutputPaths (command) {
-  const paths = new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))
-  const tokens = command.usesShell ? tokenizeShell(command.shellCommand) : command.argv || []
-  const coverageDirectory = getCoverageDirectory(tokens)
-  if (coverageDirectory) paths.add(path.resolve(command.cwd, coverageDirectory))
-  return [...paths]
+  return [...new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))]
 }
 
 /**
@@ -36,9 +34,14 @@ function prepareCommandOutputs ({ command, artifactRoot, repositoryRoot }) {
   }
   for (const outputPath of outputPaths) {
     if (pathExists(outputPath)) {
-      throw new Error(
+      throw createValidationBlocker(
         `Command output path already exists and will not be moved or overwritten: ${outputPath}. ` +
-        'Remove it or choose a command that writes to a fresh output path, then render a new approval plan.'
+        'The validator will not delete pre-existing output.',
+        {
+          kind: 'command-output-exists',
+          recommendation: `Inspect ${outputPath}. Remove it manually only if it is disposable validator or test ` +
+            'output, or choose a fresh output path, then render and approve a fresh plan.',
+        }
       )
     }
     states.push({
@@ -74,21 +77,21 @@ function cleanupCommandOutputs (states) {
  *
  * @param {string} outputPath output path
  * @param {string} repositoryRoot repository root
- * @returns {{path: string, dev: number, ino: number}[]} parent identities
+ * @returns {{path: string, dev: bigint, ino: bigint}[]} parent identities
  */
 function captureExistingParentIdentities (outputPath, repositoryRoot) {
   const identities = []
   const relative = path.relative(repositoryRoot, path.dirname(outputPath))
   let current = repositoryRoot
   for (const segment of relative ? relative.split(path.sep) : []) {
-    const stat = fs.lstatSync(current)
+    const stat = fs.lstatSync(current, { bigint: true })
     assertRegularDirectory(stat, current)
     identities.push({ path: current, dev: stat.dev, ino: stat.ino })
     current = path.join(current, segment)
     if (!pathExists(current)) return identities
   }
 
-  const stat = fs.lstatSync(current)
+  const stat = fs.lstatSync(current, { bigint: true })
   assertRegularDirectory(stat, current)
   identities.push({ path: current, dev: stat.dev, ino: stat.ino })
   return identities
@@ -101,14 +104,14 @@ function captureExistingParentIdentities (outputPath, repositoryRoot) {
  */
 function assertOutputParentsUnchanged (state) {
   for (const identity of state.parentIdentities) {
-    const stat = fs.lstatSync(identity.path)
+    const stat = fs.lstatSync(identity.path, { bigint: true })
     assertRegularDirectory(stat, identity.path)
     if (stat.dev !== identity.dev || stat.ino !== identity.ino) {
       throw new Error(`Refusing command output cleanup because a parent directory changed: ${identity.path}`)
     }
   }
 
-  const lastExisting = state.parentIdentities[state.parentIdentities.length - 1].path
+  const lastExisting = state.parentIdentities.at(-1).path
   const relative = path.relative(lastExisting, path.dirname(state.outputPath))
   let current = lastExisting
   for (const segment of relative ? relative.split(path.sep) : []) {
@@ -121,7 +124,7 @@ function assertOutputParentsUnchanged (state) {
 /**
  * Refuses symbolic links and non-directory parent components.
  *
- * @param {fs.Stats} stat path status
+ * @param {fs.Stats | fs.BigIntStats} stat path status
  * @param {string} directory directory path
  */
 function assertRegularDirectory (stat, directory) {
@@ -138,26 +141,6 @@ function pathExists (filename) {
     if (error.code === 'ENOENT') return false
     throw error
   }
-}
-
-function getCoverageDirectory (tokens) {
-  let coverageEnabled = false
-  for (let index = 0; index < tokens.length; index++) {
-    const token = String(tokens[index])
-    if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
-    const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
-    if (inline) return inline[1]
-    if (['--coverageDirectory', '--coverage-directory', '--coverage.reportsDirectory'].includes(token)) {
-      return tokens[index + 1]
-    }
-  }
-  return coverageEnabled ? 'coverage' : undefined
-}
-
-function tokenizeShell (source) {
-  return String(source || '').match(/"[^"]*"|'[^']*'|[^\s]+/g)?.map(token => {
-    return token.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
-  }) || []
 }
 
 function assertSafeOutputPath ({ outputPath, repositoryRoot, artifactRoot, command }) {

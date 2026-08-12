@@ -46,8 +46,10 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
+  #mediaResponseDelayMs = 0
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -102,6 +104,16 @@ class FakeCiVisIntake extends FakeAgent {
     this.#settings = newSettings
   }
 
+  /**
+   * Delays settings responses to exercise initialization ordering.
+   *
+   * @param {number} delayMs
+   * @returns {void}
+   */
+  setSettingsResponseDelay (delayMs) {
+    this.#settingsResponseDelayMs = delayMs
+  }
+
   setSettingsResponseCode (statusCode) {
     this.#settingsResponseStatusCode = statusCode
   }
@@ -117,6 +129,14 @@ class FakeCiVisIntake extends FakeAgent {
   // cypress run still completes and reports normally when an upload fails.
   setMediaResponseStatusCode (statusCode) {
     this.#mediaResponseStatusCode = statusCode
+  }
+
+  /**
+   * @param {number} delayMs - Delay before responding to screenshot uploads
+   * @returns {void}
+   */
+  setMediaResponseDelay (delayMs) {
+    this.#mediaResponseDelayMs = delayMs
   }
 
   setWaitingTime (newWaitingTime) {
@@ -241,42 +261,60 @@ class FakeCiVisIntake extends FakeAgent {
     })
 
     app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
-      res.status(this.#mediaResponseStatusCode).send()
-      this.emit('message', {
-        headers: req.headers,
-        media: {
-          traceId: req.params.traceId,
-          contentType: req.headers['content-type'],
-          // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
-          // evp_proxy, which forwards only an allow-listed header set.
-          idempotencyKey: req.query.idempotency_key,
-          capturedAt: req.query.captured_at_ms,
-          content: req.body,
-        },
-        url: req.url,
-      })
+      const receivedAtMs = Date.now()
+      const respond = () => {
+        res.status(this.#mediaResponseStatusCode).send()
+        this.emit('message', {
+          headers: req.headers,
+          media: {
+            traceId: req.params.traceId,
+            contentType: req.headers['content-type'],
+            // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
+            // evp_proxy, which forwards only an allow-listed header set.
+            idempotencyKey: req.query.idempotency_key,
+            capturedAt: req.query.captured_at_ms,
+            content: req.body,
+            receivedAtMs,
+          },
+          url: req.url,
+        })
+      }
+
+      if (this.#mediaResponseDelayMs > 0) {
+        setTimeout(respond, this.#mediaResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
-        this.#settingsResponseStatusCode
-      res.status(settingsResponseStatusCode)
-      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
-        res.send(JSON.stringify({
-          data: {
-            attributes: this.#settings,
-          },
-        }))
-      } else {
-        res.send(JSON.stringify({ errors: ['error'] }))
+      const respond = () => {
+        const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
+          this.#settingsResponseStatusCode
+        res.status(settingsResponseStatusCode)
+        if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+          res.send(JSON.stringify({
+            data: {
+              attributes: this.#settings,
+            },
+          }))
+        } else {
+          res.send(JSON.stringify({ errors: ['error'] }))
+        }
+        this.emit('message', {
+          headers: req.headers,
+          url: req.url,
+        })
       }
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url,
-      })
+
+      if (this.#settingsResponseDelayMs > 0) {
+        setTimeout(respond, this.#settingsResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
@@ -398,6 +436,7 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []
     this.#suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -406,6 +445,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
+    this.#mediaResponseDelayMs = 0
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
     this.#skippableSuitesResponseStatusCode = 200
@@ -422,7 +462,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
@@ -527,7 +567,7 @@ class FakeCiVisIntake extends FakeAgent {
             clearTimeout(timeoutId)
             this.off('message', messageHandler)
             resolve()
-          } catch (e) {
+          } catch {
             // Assertion not yet satisfied — we'll try again when a new payload arrives.
             // The timeout handler will re-run onPayload and reject with the actual error.
           }

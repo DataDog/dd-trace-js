@@ -10,7 +10,13 @@ const sinon = require('sinon')
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const LLMObsTagger = require('../../src/llmobs/tagger')
-const { SAMPLE_RATE, SAMPLING_DECISION, SESSION_ID } = require('../../src/llmobs/constants/tags')
+const {
+  PROPAGATED_TRACE_ID_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SESSION_ID,
+  TRACE_ID,
+} = require('../../src/llmobs/constants/tags')
 const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
@@ -186,6 +192,51 @@ describe('module', () => {
       assert.strictEqual(
         carrier['x-datadog-tags'],
         '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=trace-session'
+      )
+    })
+
+    it('converts the local LLMObs trace id to decimal for propagation', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            _trace: { tags: {} },
+            toSpanId () { return 'parent-id' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [TRACE_ID]: '6a5f76e7000000001973227978d8110b',
+      })
+
+      const carrier = { 'x-datadog-tags': '' }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        // eslint-disable-next-line @stylistic/max-len
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_trace_id=141393847380800662846519802803680448779'
+      )
+    })
+
+    it('forwards an extracted LLMObs trace id without reinterpreting it', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      const wireTraceId = '12345678901234567890123456789012'
+      store.span = {
+        context () {
+          return {
+            _trace: { tags: { [PROPAGATED_TRACE_ID_KEY]: wireTraceId } },
+            toSpanId () { return 'parent-id' },
+          }
+        },
+      }
+
+      const carrier = { 'x-datadog-tags': '' }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        `_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_trace_id=${wireTraceId}`
       )
     })
 

@@ -31,6 +31,12 @@ module.exports = defineConfig({
         on('after:spec', (...args) => ddAfterSpec(...args))
       }
       const resolvedConfig = ddTracePlugin(on, config)
+      if (process.env.CYPRESS_ENABLE_AFTER_SPEC_USER) {
+        on('after:spec', () => {
+          // eslint-disable-next-line no-console
+          console.log('[custom:after:spec:manual]')
+        })
+      }
       if (process.env.CYPRESS_ENABLE_AFTER_SCREENSHOT_CUSTOM) {
         on('after:screenshot', renameScreenshot)
       }

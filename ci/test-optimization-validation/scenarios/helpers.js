@@ -4,7 +4,8 @@ const fs = require('node:fs')
 const path = require('path')
 
 const { getArtifactId } = require('../artifact-id')
-const { buildCiWiringEnv, buildDatadogEnv, runCommand } = require('../command-runner')
+const { BLOCKER_CATEGORIES } = require('../blocker-category')
+const { buildDatadogEnv, buildOfflineCaptureEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
   findGeneratedScenario,
@@ -14,13 +15,15 @@ const {
   eventsOfType,
   findTestsByIdentity,
 } = require('../payload-normalizer')
-const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
 const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport, sanitizeString } = require('../redaction')
+const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
+const { getValidationBlockerEvidence } = require('../validation-blocker')
 
-const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+const ANSI_PATTERN =
+  new RegExp(`${String.fromCharCode(27)}${String.raw`\[[\u0030-\u003F]*[\u0020-\u002F]*[\u0040-\u007E]`}`, 'g')
 
 function frameworkOutDir (out, framework, scenario) {
   return path.join(out, 'runs', getArtifactId(framework.id), scenario)
@@ -34,7 +37,7 @@ async function runInstrumentedCommand ({
   options,
   extraEnv,
   fixtureConfig,
-  ciWiring = false,
+  injectInitialization = true,
   allowMissingInitialization = false,
 }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
@@ -52,9 +55,9 @@ async function runInstrumentedCommand ({
       scenarioName,
       ...fixtureConfig,
     })
-    const validationEnv = ciWiring
-      ? buildCiWiringEnv({ fixture, outputRoot: rawOutputRoot })
-      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+    const validationEnv = injectInitialization
+      ? buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+      : buildOfflineCaptureEnv({ fixture, outputRoot: rawOutputRoot })
     result = await runCommand(command, {
       env: {
         ...validationEnv,
@@ -82,7 +85,7 @@ async function runInstrumentedCommand ({
       `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
       'scenario result artifact'
     )
-    if (!offline.initialized && !ciWiring && !allowMissingInitialization) {
+    if (!offline.initialized && injectInitialization && !allowMissingInitialization) {
       const stderr = sanitizeString(result.stderr).trim().slice(-2000)
       throw new Error(
         'Offline Test Optimization exporter did not initialize or write completion evidence. ' +
@@ -180,11 +183,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) return { scenario: null, written: [] }
   cleanupGeneratedRuntimeFiles(framework)
-  const written = await writeGeneratedFiles(framework)
+  const written = await writeGeneratedFiles(framework, scenario)
   return {
     scenario: {
       ...scenario,
-      runCommand: getLocalValidationCommand(framework, scenario.runCommand),
+      runCommand: getGeneratedCommand(framework, scenario),
     },
     written,
   }
@@ -193,10 +196,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
 function requireGeneratedScenario (framework, scenarioId, scenarioName) {
   const strategy = framework.generatedTestStrategy
   if (strategy?.status === 'not_possible') {
-    return skip(
+    return incomplete(
       framework,
       scenarioName,
-      `Skipped because this advanced feature is not eligible: ${strategy.reason}`,
+      `The validator cannot create a collectible test for this advanced feature: ${strategy.reason} ` +
+        'No conclusion was reached for this advanced feature.',
       getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
     )
   }
@@ -254,9 +258,9 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
     reasonCode = 'generated-test-strategy-not-verified'
   }
 
-  return {
+  const evidence = {
     featureEligibility: {
-      eligible: false,
+      ...(reasonCode === 'generated-test-strategy-not-possible' ? {} : { eligible: false }),
       blockedBy: 'generated-test-strategy',
       reason: strategy?.reason,
       reasonCode,
@@ -265,6 +269,12 @@ function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) 
       requiredGeneratedScenario: scenarioId,
     },
   }
+  if (reasonCode === 'generated-test-strategy-not-possible') {
+    evidence.blockerCategory = BLOCKER_CATEGORIES.VALIDATOR_LIMITATION
+    evidence.recommendation = 'Report that the selected runner configuration cannot collect validator-generated ' +
+      'tests to validator engineering. Basic Reporting remains valid; project setup changes are not required.'
+  }
+  return evidence
 }
 
 function basicEventEvidence (events) {
@@ -312,6 +322,63 @@ async function discoverScenarioTests ({ framework, out, scenarioName, scenario, 
     tests,
     testIdentities: tests.map(testToIdentity),
   }
+}
+
+/**
+ * Reports a missing generated test without blaming dd-trace when clean execution was unproven.
+ *
+ * @param {object} input missing-test evidence
+ * @param {object} input.command generated scenario command
+ * @param {string} input.diagnosis diagnosis used when clean execution was proven
+ * @param {object} input.discovery instrumented baseline result
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.options execution options
+ * @param {string} input.out validation output root
+ * @param {object} input.scenario generated scenario
+ * @param {string} input.scenarioName advanced scenario name
+ * @returns {object|Promise<object>} incomplete or confirmed failure result
+ */
+function reportMissingGeneratedTest ({
+  command,
+  diagnosis,
+  discovery,
+  framework,
+  options,
+  out,
+  scenario,
+  scenarioName,
+}) {
+  const verification = framework.generatedTestStrategy?.verification?.observedScenarios
+    ?.find(observed => observed.id === scenario.id)
+  const evidence = {
+    ...discoveryEvidence(discovery),
+    generatedVerificationObservedTestCount: verification?.observedTestCount,
+  }
+  if (verification?.observedTestCount === null) {
+    return inconclusive(
+      framework,
+      scenarioName,
+      'The clean temporary validation command exited as expected without a parseable test count, and the ' +
+        'instrumented baseline emitted no matching test event. The validator cannot prove that the generated test ' +
+        'executed, so no advanced-feature conclusion was reached.',
+      {
+        ...evidence,
+        reasonCode: 'generated-test-execution-unproven',
+      },
+      discovery.outDir
+    )
+  }
+
+  return failWithDebugRerun({
+    command,
+    diagnosis,
+    evidence,
+    framework,
+    options,
+    out,
+    outDir: discovery.outDir,
+    scenarioName,
+  })
 }
 
 function testsForDiscoveredScenario (events, scenario, discovery) {
@@ -385,6 +452,8 @@ function copy (target, source, key) {
 
 function summarizeDebugRerun ({ result, events, offline, outDir }) {
   const output = `${result.stdout}\n${result.stderr}`
+  const testEvents = eventsOfType(events, 'test')
+  const sourceFiles = new Set(testEvents.map(test => test.testSourceFile).filter(Boolean))
 
   return {
     ran: true,
@@ -392,8 +461,12 @@ function summarizeDebugRerun ({ result, events, offline, outDir }) {
     commandTimedOut: result.timedOut,
     debugCommandFailed: result.exitCode !== 0 || result.timedOut === true,
     offlineExporterInitialized: offline.initialized,
+    settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
     artifactDirectory: outDir,
     ...basicEventEvidence(events),
+    testEventsWithoutSourceFile: testEvents.length - testEvents.filter(test => test.testSourceFile).length,
+    testSourceFileCount: sourceFiles.size,
+    testSourceFiles: [...sourceFiles].slice(0, 5),
     debugLines: findInterestingLines(output, [
       /dd-trace/i,
       /test optimization/i,
@@ -484,7 +557,15 @@ function inconclusive (framework, scenario, diagnosis, evidence = {}, outDir, ex
 }
 
 function error (framework, scenario, err, outDir = err?.artifactDirectory) {
-  return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
+  const blockerEvidence = getValidationBlockerEvidence(err)
+  return result(
+    framework,
+    scenario,
+    blockerEvidence ? 'blocked' : 'error',
+    blockerEvidence ? err.message : (err && err.stack ? err.stack : String(err)),
+    blockerEvidence || {},
+    outDir
+  )
 }
 
 function result (framework, scenario, status, diagnosis, evidence, outDir, extraArtifacts) {
@@ -528,6 +609,7 @@ module.exports = {
   inconclusive,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runDebugInstrumentedCommand,
   runInstrumentedCommand,

@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { randomUUID } = require('crypto')
+const { randomUUID } = require('node:crypto')
+const { EventEmitter, once } = require('node:events')
 const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
@@ -176,16 +177,27 @@ describe('Plugin', () => {
               DataStreamsProcessor.prototype.recordCheckpoint.restore()
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-            await sendMessages(kafka, testTopic, messages)
-            await consumer.run({
-              eachMessage: async () => {
-                assert.ok(
-                  Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
-                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
-                )
-                recordCheckpointSpy.restore()
-              },
-            })
+            const consumption = new EventEmitter()
+            try {
+              await consumer.run({
+                eachMessage: async () => consumption.emit('complete', recordCheckpointSpy.lastCall?.args[0]),
+              })
+              const [[checkpoint]] = await Promise.all([
+                once(consumption, 'complete'),
+                sendMessages(kafka, testTopic, messages),
+              ])
+              assert.ok(checkpoint, 'Expected a consume checkpoint')
+              assert.ok(
+                checkpoint.edgeTags.includes('direction:in'),
+                `Available tags: ${inspect(checkpoint.edgeTags)}`
+              )
+              assert.ok(
+                Object.hasOwn(checkpoint, 'payloadSize'),
+                `Available keys: ${inspect(Object.keys(checkpoint))}`
+              )
+            } finally {
+              recordCheckpointSpy.restore()
+            }
           })
         })
 

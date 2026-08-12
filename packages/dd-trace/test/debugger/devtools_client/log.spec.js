@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { MessageChannel } = require('node:worker_threads')
 
 const { describe, it } = require('mocha')
@@ -53,6 +53,19 @@ describe('worker thread logger', function () {
     log.debug('test4')
 
     setImmediate(done)
+  })
+
+  it('should not log without a message port', function () {
+    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+      'node:worker_threads': {
+        workerData: { config: { debug: true, logLevel: 'debug' } },
+      },
+    })
+
+    log.error('test1')
+    log.warn('test2')
+    log.info('test3')
+    log.debug('test4')
   })
 
   it('should should resolve the function argument', function (done) {

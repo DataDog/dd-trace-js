@@ -7,14 +7,34 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runInstrumentedCommand,
+  skip,
   testEventSamples,
   testsForDiscoveredScenario,
 } = require('./helpers')
 
 async function runAutoTestRetries ({ framework, out, options }) {
   const scenarioName = 'atr'
+  if (isUnsupportedCucumberVersion(framework)) {
+    return skip(
+      framework,
+      scenarioName,
+      'Auto Test Retries validation requires @cucumber/cucumber >=8.0.0. Basic Reporting and other eligible ' +
+        `checks remain available for detected version ${framework.frameworkVersion}.`,
+      {
+        featureEligibility: {
+          eligible: false,
+          blockedBy: 'framework-version',
+          reasonCode: 'cucumber-atr-version-unsupported',
+          requiredVersion: '>=8.0.0',
+          detectedVersion: framework.frameworkVersion,
+          scenario: scenarioName,
+        },
+      }
+    )
+  }
   const skipResult = requireGeneratedScenario(framework, 'atr-fail-once', scenarioName)
   if (skipResult) return skipResult
 
@@ -23,14 +43,14 @@ async function runAutoTestRetries ({ framework, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'atr-fail-once')
     const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return failWithDebugRerun({
+      return reportMissingGeneratedTest({
         command: scenario.runCommand,
         diagnosis: 'The fail-once generated test was not reported during baseline identity discovery.',
-        evidence: discoveryEvidence(discovery),
+        discovery,
         framework,
         options,
         out,
-        outDir: discovery.outDir,
+        scenario,
         scenarioName,
       })
     }
@@ -118,6 +138,12 @@ async function runAutoTestRetries ({ framework, out, options }) {
   } catch (err) {
     return error(framework, scenarioName, err, outDir)
   }
+}
+
+function isUnsupportedCucumberVersion (framework) {
+  if (framework.framework !== 'cucumber') return false
+  const major = Number.parseInt(String(framework.frameworkVersion || '').split('.')[0], 10)
+  return Number.isInteger(major) && major < 8
 }
 
 function getAutoTestRetriesFailureDiagnosis (framework, evidence) {

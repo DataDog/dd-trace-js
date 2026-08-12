@@ -7,11 +7,25 @@ const log = require('../../log')
 const { getEnvironmentVariables } = require('../../config/helper')
 const getDebuggerConfig = require('../../debugger/config')
 
-const probeIdToResolveBreakpointSet = new Map()
-const probeIdToResolveBreakpointRemove = new Map()
 const drainRequestIdToResolveBreakpointHit = new Map()
 
+/**
+ * @typedef {object} ProbeState
+ * @property {string} locationKey
+ * @property {(breakpoint: object) => void} onHitBreakpoint
+ * @property {Promise<void>|undefined} removePromise
+ * @property {(() => void)|undefined} resolveRemove
+ * @property {(() => void)|undefined} resolveSet
+ * @property {Promise<void>} setPromise
+ * @property {boolean} setPosted
+ */
+
 class TestVisDynamicInstrumentation {
+  /** @type {Map<string, Promise<void>>} */
+  #pendingProbeRemovalByLocation = new Map()
+  /** @type {Map<string, ProbeState>} */
+  #probeStateById = new Map()
+
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration
    */
@@ -24,37 +38,88 @@ class TestVisDynamicInstrumentation {
     this.breakpointSetChannel = new MessageChannel()
     this.breakpointHitChannel = new MessageChannel()
     this.breakpointRemoveChannel = new MessageChannel()
-    this.onHitBreakpointByProbeId = new Map()
   }
 
+  /**
+   * @param {string|undefined} probeId
+   */
   removeProbe (probeId) {
-    return new Promise(resolve => {
-      this.breakpointRemoveChannel.port2.postMessage(probeId)
+    const probeState = probeId === undefined ? undefined : this.#probeStateById.get(probeId)
+    if (!probeState) return Promise.resolve()
+    if (probeState.removePromise) return probeState.removePromise
 
-      probeIdToResolveBreakpointRemove.set(probeId, resolve)
+    if (!probeState.setPosted) {
+      this.#probeStateById.delete(probeId)
+      probeState.resolveSet?.()
+      probeState.resolveSet = undefined
+      return Promise.resolve()
+    }
+
+    const postRemoval = () => new Promise(resolve => {
+      probeState.resolveRemove = resolve
+      this.breakpointRemoveChannel.port2.postMessage(probeId)
     })
+    const removeAcknowledgedPromise = probeState.setPromise.then(postRemoval)
+    const removePromise = removeAcknowledgedPromise.then(() => this.waitForInFlightBreakpointHits())
+    probeState.removePromise = removePromise
+    this.#pendingProbeRemovalByLocation.set(probeState.locationKey, removeAcknowledgedPromise)
+    removeAcknowledgedPromise.then(() => {
+      if (this.#pendingProbeRemovalByLocation.get(probeState.locationKey) === removeAcknowledgedPromise) {
+        this.#pendingProbeRemovalByLocation.delete(probeState.locationKey)
+      }
+    })
+    removePromise.then(() => {
+      if (this.#probeStateById.get(probeId) === probeState) {
+        this.#probeStateById.delete(probeId)
+      }
+    })
+    return removePromise
   }
 
-  // Return 2 elements:
-  // 1. Probe ID
-  // 2. Promise that's resolved when the breakpoint is set
+  /**
+   * @param {{ file: string, line: number }} location
+   * @param {(breakpoint: object) => void} onHitBreakpoint
+   */
   addLineProbe ({ file, line }, onHitBreakpoint) {
     if (!this.worker) { // not init yet
       this.start()
     }
     const probeId = randomUUID()
+    const locationKey = `${file}:${line}`
+    const pendingRemoval = this.#pendingProbeRemovalByLocation.get(locationKey)
 
-    this.breakpointSetChannel.port2.postMessage(
-      { id: probeId, file, line }
-    )
+    let resolveSet
+    const setProbePromise = new Promise(resolve => {
+      resolveSet = resolve
+    })
+    const probeState = {
+      locationKey,
+      onHitBreakpoint,
+      removePromise: undefined,
+      resolveRemove: undefined,
+      resolveSet,
+      setPromise: setProbePromise,
+      setPosted: false,
+    }
+    this.#probeStateById.set(probeId, probeState)
 
-    this.onHitBreakpointByProbeId.set(probeId, onHitBreakpoint)
+    const setProbe = () => {
+      if (this.#probeStateById.get(probeId) === probeState) {
+        probeState.setPosted = true
+        this.breakpointSetChannel.port2.postMessage(
+          { id: probeId, file, line }
+        )
+      }
+    }
+    if (pendingRemoval) {
+      pendingRemoval.then(setProbe)
+    } else {
+      setProbe()
+    }
 
     return [
       probeId,
-      new Promise(resolve => {
-        probeIdToResolveBreakpointSet.set(probeId, resolve)
-      }),
+      setProbePromise,
     ]
   }
 
@@ -139,10 +204,10 @@ class TestVisDynamicInstrumentation {
     this.worker.unref?.()
 
     this.breakpointSetChannel.port2.on('message', (probeId) => {
-      const resolve = probeIdToResolveBreakpointSet.get(probeId)
-      if (resolve) {
-        resolve()
-        probeIdToResolveBreakpointSet.delete(probeId)
+      const probeState = this.#probeStateById.get(probeId)
+      if (probeState?.resolveSet) {
+        probeState.resolveSet()
+        probeState.resolveSet = undefined
       }
     }).unref?.()
 
@@ -157,19 +222,19 @@ class TestVisDynamicInstrumentation {
       }
 
       const { probe: { id: probeId } } = snapshot
-      const onHit = this.onHitBreakpointByProbeId.get(probeId)
-      if (onHit) {
-        onHit({ snapshot })
+      const probeState = this.#probeStateById.get(probeId)
+      if (probeState) {
+        probeState.onHitBreakpoint({ snapshot })
       } else {
         log.warn('Received a breakpoint hit for an unknown probe')
       }
     }).unref?.()
 
     this.breakpointRemoveChannel.port2.on('message', (probeId) => {
-      const resolve = probeIdToResolveBreakpointRemove.get(probeId)
-      if (resolve) {
-        resolve()
-        probeIdToResolveBreakpointRemove.delete(probeId)
+      const probeState = this.#probeStateById.get(probeId)
+      if (probeState?.resolveRemove) {
+        probeState.resolveRemove()
+        probeState.resolveRemove = undefined
       }
     }).unref?.()
   }

@@ -35,7 +35,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
   let value
   const ranges = []
   const sensitiveRanges = []
-  objRanges = objRanges || {}
+  objRanges ||= {}
 
   if (objRanges || loadSensitiveRanges) {
     const cloneObj = Array.isArray(obj) ? [] : {}
@@ -150,7 +150,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
             sensitiveRanges.push({
               start,
-              end: start + Number.parseInt(regexRes[1]),
+              end: start + Number.parseInt(regexRes[1], 10),
             })
             segments.push(value.slice(pos, rangeKeyIndex))
             outputLength += cleanLength

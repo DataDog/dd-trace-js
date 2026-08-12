@@ -15,6 +15,10 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+/**
+ * @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} Descriptor
+ */
+
 // Reused descriptor scratch space for the `name` and `length` slots that
 // `copyProperties` and `wrapCallback` rewrite per wrap. `Object.defineProperty`
 // reads the descriptor's slots synchronously and does not retain the object,
@@ -46,7 +50,7 @@ function copyProperties (original, wrapped) {
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
       if (skipMethods.has(key)) continue
-      const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+      const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
       } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
@@ -65,7 +69,7 @@ function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
   for (const key of ownKeys) {
     if (key === skipKey) continue
-    const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+    const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
     if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
       wrapped[key] = original[key]
     } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {

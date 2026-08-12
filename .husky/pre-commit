@@ -6,5 +6,5 @@ if [ ! -e "node_modules/.bin/yarn-deduplicate" ]; then
   exit 1
 fi
 
-yarn dependencies:dedupe
+npm run dependencies:dedupe
 git add yarn.lock
