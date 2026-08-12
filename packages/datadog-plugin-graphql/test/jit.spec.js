@@ -1742,12 +1742,12 @@ describe('Plugin', () => {
           const defaultResult = await executeWithTrace(() => query({}, {}, {}), /CoercedArguments/)
           assert.deepStrictEqual(defaultResult.data, { items: [{ value: 'ok' }] })
 
-          const variableValues = Object.defineProperty({}, 'identifier', {
+          const variableValues = Object.freeze(Object.defineProperty({}, 'identifier', {
             enumerable: true,
             get () {
               return 123
             },
-          })
+          }))
           const providedResult = await executeWithTrace(
             () => query({}, {}, variableValues),
             /CoercedArguments/
@@ -1758,6 +1758,116 @@ describe('Plugin', () => {
         }
 
         assert.deepStrictEqual(resolverArguments, ['operation-default', '123'])
+      })
+
+      it('shares frozen defaults unless a subscriber may mutate them', async () => {
+        const opaqueObjectDefault = Object.freeze({ kind: 'opaque' })
+        const schemaFilterDefault = Object.freeze({ extra: 'preserved', name: 'schema' })
+        const schemaTagsDefault = Object.freeze(['schema'])
+        const literalSchema = graphql.buildSchema(`
+          scalar FreshLiteralOpaque
+          input FreshLiteralFilter { name: String }
+          type FreshLiteralItem {
+            value(
+              filter: FreshLiteralFilter
+              opaqueObject: FreshLiteralOpaque
+              schemaFilter: FreshLiteralFilter!
+              schemaTags: [String]
+              tags: [String]
+            ): String
+          }
+          type Query { items: [FreshLiteralItem] }
+        `)
+        const valueField = literalSchema.getType('FreshLiteralItem').getFields().value
+        const argumentsByName = new Map(valueField.args.map(argument => [argument.name, argument]))
+        argumentsByName.get('opaqueObject').defaultValue = opaqueObjectDefault
+        argumentsByName.get('schemaFilter').defaultValue = schemaFilterDefault
+        argumentsByName.get('schemaTags').defaultValue = schemaTagsDefault
+        const { query } = compileQuery(
+          literalSchema,
+          graphql.parse(
+            'query FreshLiteralArguments { items { value(filter: { name: "fresh" }, tags: ["fresh"]) } }'
+          )
+        )
+        const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
+        let sharedArguments
+        /** @param {{ resolverInfo: { value?: Record<string, unknown> } }} message */
+        const onResolverStart = ({ resolverInfo }) => {
+          if (resolverInfo.value) sharedArguments = resolverInfo.value
+        }
+
+        resolverStartChannel.subscribe(onResolverStart)
+        try {
+          const result = await executeWithTrace(
+            () => query(Object.freeze({
+              items: Object.freeze([Object.freeze({ value: 'ok' })]),
+            }), Object.freeze({}), Object.freeze({})),
+            /FreshLiteralArguments/
+          )
+          assert.deepStrictEqual(result.data, { items: [{ value: 'ok' }] })
+        } finally {
+          resolverStartChannel.unsubscribe(onResolverStart)
+        }
+
+        assert.ok(sharedArguments)
+        assert.strictEqual(sharedArguments.opaqueObject, opaqueObjectDefault)
+        assert.strictEqual(sharedArguments.schemaFilter, schemaFilterDefault)
+        assert.strictEqual(sharedArguments.schemaTags, schemaTagsDefault)
+
+        const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
+        const resolverArguments = []
+        /**
+         * @param {{
+         *   args: {
+         *     filter: { name: string },
+         *     opaqueObject: { kind: string },
+         *     schemaFilter: { extra: string, name: string },
+         *     schemaTags: string[],
+         *     tags: string[]
+         *   },
+         *   info: { fieldName: string }
+         * }} message
+         */
+        const onResolveStart = ({ args, info }) => {
+          if (info.fieldName !== 'value') return
+
+          resolverArguments.push(args)
+          if (resolverArguments.length === 1) {
+            args.filter.name = 'mutated'
+            args.schemaFilter.name = 'mutated'
+            args.schemaTags[0] = 'mutated'
+            args.tags[0] = 'mutated'
+          }
+        }
+
+        resolveStartChannel.subscribe(onResolveStart)
+        try {
+          for (let execution = 0; execution < 2; execution++) {
+            const result = await executeWithTrace(
+              () => query({ items: [{ value: 'ok' }] }, {}, {}),
+              /FreshLiteralArguments/
+            )
+            assert.deepStrictEqual(result.data, { items: [{ value: 'ok' }] })
+          }
+        } finally {
+          resolveStartChannel.unsubscribe(onResolveStart)
+        }
+
+        assert.deepStrictEqual(resolverArguments[1], {
+          filter: { name: 'fresh' },
+          opaqueObject: opaqueObjectDefault,
+          schemaFilter: { extra: 'preserved', name: 'schema' },
+          schemaTags: ['schema'],
+          tags: ['fresh'],
+        })
+        assert.notStrictEqual(resolverArguments[0].filter, resolverArguments[1].filter)
+        assert.strictEqual(resolverArguments[0].opaqueObject, opaqueObjectDefault)
+        assert.strictEqual(resolverArguments[1].opaqueObject, opaqueObjectDefault)
+        assert.notStrictEqual(resolverArguments[0].schemaFilter, resolverArguments[1].schemaFilter)
+        assert.notStrictEqual(resolverArguments[0].schemaTags, resolverArguments[1].schemaTags)
+        assert.notStrictEqual(resolverArguments[0].tags, resolverArguments[1].tags)
+        assert.deepStrictEqual(schemaFilterDefault, { extra: 'preserved', name: 'schema' })
+        assert.deepStrictEqual(schemaTagsDefault, ['schema'])
       })
 
       it('publishes resolver completion when an inline default getter throws', async () => {
