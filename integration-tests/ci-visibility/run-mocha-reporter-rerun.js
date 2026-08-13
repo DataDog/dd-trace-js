@@ -3,6 +3,7 @@
 const Mocha = require('mocha')
 
 const reporterEvent = process.env.MOCHA_REUSABLE_REPORTER_EVENT
+const runCallbackThrows = process.env.MOCHA_REUSABLE_RUN_CALLBACK_THROWS
 let reporterRun = 0
 let firstRunFinished = false
 let firstRunError
@@ -41,11 +42,24 @@ function runAgainWhenReady () {
 }
 
 process.once('uncaughtException', (error) => {
+  if (runCallbackThrows) {
+    // eslint-disable-next-line no-console
+    console.log(`MOCHA PROPAGATED ERROR: ${error.message}`)
+    process.exitCode = 1
+    return
+  }
+
   firstRunError = error
   runAgainWhenReady()
 })
 
 mocha.run(() => {
+  if (runCallbackThrows) {
+    // eslint-disable-next-line no-console
+    console.log('MOCHA RUN CALLBACK EXECUTED')
+    throw new Error('custom reusable Mocha run callback failed')
+  }
+
   firstRunFinished = true
   runAgainWhenReady()
 })

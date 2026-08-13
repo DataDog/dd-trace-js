@@ -376,8 +376,11 @@ function getOnEndHandler (isParallel, onDone) {
       isParallel,
       isFrameworkError: arguments.length > 0,
     }, () => {
-      onDone()
-      onFrameworkErrorDone?.()
+      try {
+        onDone()
+      } finally {
+        onFrameworkErrorDone?.()
+      }
     })
 
     logTestOptimizationSummary({

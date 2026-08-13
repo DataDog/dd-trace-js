@@ -46,6 +46,7 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponses = []
   #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
@@ -103,6 +104,16 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettings (newSettings) {
     this.#settings = newSettings
+  }
+
+  /**
+   * Sets library configuration responses to return in order.
+   *
+   * @param {object[]} responses
+   * @returns {void}
+   */
+  setSettingsResponses (responses) {
+    this.#settingsResponses = responses.slice()
   }
 
   /**
@@ -305,11 +316,14 @@ class FakeCiVisIntake extends FakeAgent {
       const respond = () => {
         const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
           this.#settingsResponseStatusCode
+        const settings = this.#settingsResponses.length
+          ? this.#settingsResponses.shift()
+          : this.#settings
         res.status(settingsResponseStatusCode)
         if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
           res.send(JSON.stringify({
             data: {
-              attributes: this.#settings,
+              attributes: settings,
             },
           }))
         } else {
@@ -450,6 +464,7 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponses = []
     this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []

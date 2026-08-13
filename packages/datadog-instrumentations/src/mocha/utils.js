@@ -35,6 +35,7 @@ const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 /** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
 const testToContext = new WeakMap()
+const originalEfdFns = new WeakMap()
 const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
 const testToStartLine = new WeakMap()
@@ -171,6 +172,7 @@ function wrapOriginalEfdTest (test, retryPolicy) {
   }
   test._ddEfdDurationWrapped = true
   const originalFn = test.fn
+  originalEfdFns.set(test, originalFn)
   test.fn = shimmer.wrapFunction(originalFn, originalFn => function () {
     const start = performance.now()
     const recordDuration = () => {
@@ -313,6 +315,20 @@ function restoreRunnableFunction (runnable) {
 }
 
 /**
+ * Restores a test function wrapped to measure its EFD duration.
+ *
+ * @param {import('mocha').Test} test
+ * @returns {void}
+ */
+function restoreEfdTestFunction (test) {
+  if (!originalEfdFns.has(test)) return
+
+  test.fn = originalEfdFns.get(test)
+  originalEfdFns.delete(test)
+  delete test._ddEfdDurationWrapped
+}
+
+/**
  * Clears state that belongs to one Mocha runner execution and removes retry clones from prior executions.
  *
  * @param {import('mocha').Suite} rootSuite
@@ -341,6 +357,7 @@ function resetRunState (rootSuite) {
       retainedTests.add(test)
 
       restoreRunnableFunction(test)
+      restoreEfdTestFunction(test)
       if (originalPendingByTest.has(test)) {
         test.pending = originalPendingByTest.get(test)
         originalPendingByTest.delete(test)

@@ -687,6 +687,40 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   }
 
+  onlyLatestIt('propagates a reporter error when the programmatic run callback throws', async function () {
+    this.timeout(20_000)
+    childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        MOCHA_REUSABLE_REPORTER_EVENT: 'test',
+        MOCHA_REUSABLE_RUN_CALLBACK_THROWS: '1',
+      },
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom reusable Mocha reporter failed/)
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.notStrictEqual(exitCode, 0, testOutput)
+    assert.match(testOutput, /MOCHA RUN CALLBACK EXECUTED/)
+    assert.match(testOutput, /MOCHA PROPAGATED ERROR: custom reusable Mocha reporter failed/)
+  })
+
   onlyLatestIt('reports tests again when the same Mocha instance runs twice successfully', async function () {
     this.timeout(20_000)
     childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
@@ -719,19 +753,30 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 2)
   })
 
-  onlyLatestIt('restores EFD test context when the same Mocha instance runs again', async function () {
+  onlyLatestIt('restores EFD test context and retry policy when the same Mocha instance runs again', async function () {
     this.timeout(20_000)
-    const retryCount = 2
+    const firstRetryCount = 1
+    const secondRetryCount = 2
     const testName = 'mocha-reporter-reusable-run runs again after reporter recovery'
     receiver.setKnownTests({ mocha: {} })
-    receiver.setSettings({
-      early_flake_detection: {
-        enabled: true,
-        slow_test_retries: { '5s': retryCount },
-        faulty_session_threshold: 100,
+    receiver.setSettingsResponses([
+      {
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': firstRetryCount },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
       },
-      known_tests_enabled: true,
-    })
+      {
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': secondRetryCount },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      },
+    ])
     childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
       cwd,
       env: {
@@ -750,7 +795,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const testEvents = events.filter(event =>
           event.type === 'test' && event.content.meta[TEST_NAME] === testName
         )
-        assert.strictEqual(testEvents.length, (retryCount + 1) * 2, testOutput)
+        const expectedExecutions = firstRetryCount + secondRetryCount + 2
+        assert.strictEqual(testEvents.length, expectedExecutions, testOutput)
         const activeTestSpanIds = [...testOutput.matchAll(/MOCHA REUSABLE ACTIVE TEST: ([0-9]+)/g)]
           .map(match => match[1])
           .sort()
@@ -766,7 +812,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
     assert.strictEqual(
       (testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length,
-      (retryCount + 1) * 2
+      firstRetryCount + secondRetryCount + 2
     )
   })
 
