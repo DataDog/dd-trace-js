@@ -28,18 +28,34 @@ function registerTelemetryFlusher (flusher) {
  *   _processor?: { _stats?: { forceFlush?: TelemetryFlusher } }
  * }|undefined} tracer
  * @param {() => void} [done]
+ * @param {{ timeout?: number }} [options]
  */
-function flushAll (tracer, done) {
+function flushAll (tracer, done, options) {
   const traceExporter = tracer?._exporter
   const traceFlusher = traceExporter?.flush
   const spanStatsFlusher = tracer?._processor?._stats?.forceFlush
   let pending = telemetryFlushers.size +
     (typeof traceFlusher === 'function' ? 1 : 0) +
     (typeof spanStatsFlusher === 'function' ? 1 : 0)
-  if (pending === 0) return done?.()
+  let completed = false
+  let timeout
 
+  const finish = () => {
+    if (completed) return
+    completed = true
+    clearTimeout(timeout)
+    done?.()
+  }
   const complete = () => {
-    if (--pending === 0) done?.()
+    if (--pending === 0) finish()
+  }
+
+  if (pending === 0) return finish()
+  if (options?.timeout) {
+    timeout = setTimeout(() => {
+      log.warn('Timed out waiting for telemetry flush after %dms', options.timeout)
+      finish()
+    }, options.timeout)
   }
 
   const flush = flusher => {

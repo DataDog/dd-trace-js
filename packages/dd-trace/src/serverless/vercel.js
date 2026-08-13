@@ -12,7 +12,7 @@ const vercelRetentionHandlers = new WeakMap()
 const retainedVercelRequests = new WeakMap()
 
 /**
- * @typedef {{ flushAll?: (done: () => void) => void }} TelemetryFlusher
+ * @typedef {{ flushAll?: (done: () => void, options?: { timeout?: number }) => void }} TelemetryFlusher
  */
 
 /**
@@ -21,20 +21,11 @@ const retainedVercelRequests = new WeakMap()
  * @returns {void}
  */
 function flushVercelTelemetry (tracer, done) {
-  let completed = false
-  const complete = () => {
-    if (completed) return
-    completed = true
-    clearTimeout(timeout)
-    done()
-  }
-  const timeout = setTimeout(complete, VERCEL_FLUSH_TIMEOUT)
-
   setImmediate(() => {
     try {
-      tracer.flushAll(complete)
+      tracer.flushAll(done, { timeout: VERCEL_FLUSH_TIMEOUT })
     } catch {
-      complete()
+      done()
     }
   })
 }

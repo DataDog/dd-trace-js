@@ -69,6 +69,27 @@ describe('Tracer', () => {
       assert.strictEqual(completed, true)
       unregister()
     })
+
+    it('bounds configured telemetry flushing', () => {
+      const { flushAll, registerTelemetryFlusher } = require('../src/flush')
+      const timeout = sinon.stub(global, 'setTimeout')
+      const clearTimeout = sinon.stub(global, 'clearTimeout')
+      const done = sinon.spy()
+      const unregister = registerTelemetryFlusher(() => {})
+
+      try {
+        flushAll({}, done, { timeout: 2_000 })
+
+        sinon.assert.calledWith(timeout, sinon.match.func, 2_000)
+        timeout.firstCall.args[0]()
+        sinon.assert.calledOnce(done)
+        sinon.assert.called(clearTimeout)
+      } finally {
+        unregister()
+        timeout.restore()
+        clearTimeout.restore()
+      }
+    })
   })
 
   describe('trace', () => {

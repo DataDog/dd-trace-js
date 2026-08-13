@@ -276,33 +276,27 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('bounds Vercel retention when an exporter does not complete', async () => {
+  it('passes Vercel retention timeout to the telemetry flush barrier', async () => {
     let retained
-    let timeout
-    const setTimeoutOriginal = global.setTimeout
-    const clearTimeoutOriginal = global.clearTimeout
-    global.setTimeout = (callback, duration) => {
-      timeout = { callback, duration }
-      return timeout
-    }
-    global.clearTimeout = () => {}
+    let options
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
     }
 
     let unregister
     try {
-      unregister = registerVercelTelemetryRetention({ flushAll () {} })
+      unregister = registerVercelTelemetryRetention({
+        flushAll (done, flushOptions) {
+          options = flushOptions
+          done()
+        },
+      })
       channel('apm:next:request:finish').publish({})
-      await new Promise(resolve => setImmediate(resolve))
-
-      assert.strictEqual(timeout.duration, 2_000)
-      timeout.callback()
       await retained
+
+      assert.deepStrictEqual(options, { timeout: 2_000 })
     } finally {
       unregister?.()
-      global.setTimeout = setTimeoutOriginal
-      global.clearTimeout = clearTimeoutOriginal
     }
   })
 })
