@@ -432,10 +432,12 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
   if (inputs.error) return inputs.error
 
   const approved = new Set()
-  for (const filename of configFiles || []) {
-    try {
-      approved.add(fs.realpathSync(filename))
-    } catch {}
+  if (configFiles) {
+    for (const filename of configFiles) {
+      try {
+        approved.add(fs.realpathSync(filename))
+      } catch {}
+    }
   }
   const unbound = inputs.files.find(filename => !approved.has(filename))
   if (unbound) return `references an input that is not approval-bound: ${unbound}`

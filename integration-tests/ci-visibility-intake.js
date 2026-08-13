@@ -50,6 +50,7 @@ class FakeCiVisIntake extends FakeAgent {
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
   #mediaResponseDelayMs = 0
+  #mediaResponsesPending = false
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -137,6 +138,15 @@ class FakeCiVisIntake extends FakeAgent {
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
+  }
+
+  /**
+   * Leaves media requests open until the client cancels them.
+   *
+   * @returns {void}
+   */
+  setMediaResponsesPending () {
+    this.#mediaResponsesPending = true
   }
 
   setWaitingTime (newWaitingTime) {
@@ -280,6 +290,9 @@ class FakeCiVisIntake extends FakeAgent {
         })
       }
 
+      if (this.#mediaResponsesPending) {
+        return
+      }
       if (this.#mediaResponseDelayMs > 0) {
         setTimeout(respond, this.#mediaResponseDelayMs)
       } else {
@@ -446,6 +459,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
     this.#mediaResponseDelayMs = 0
+    this.#mediaResponsesPending = false
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
     this.#skippableSuitesResponseStatusCode = 200
@@ -462,7 +476,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy

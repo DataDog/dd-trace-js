@@ -11,6 +11,7 @@ const {
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
+  getFailedTestReplayPromise,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -30,6 +31,8 @@ const testFnCh = channel('ci:mocha:test:fn')
 const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 
 const testToContext = new WeakMap()
 const originalFns = new WeakMap()
@@ -818,7 +821,7 @@ function finishDeferredHookEnd (test) {
  * @param {object} test - Mocha test currently owning the hook.
  * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
  * @param {unknown} hookThis - Callback receiver.
- * @param {IArguments} args - Arguments passed by Mocha.
+ * @param {ArgumentsLike} args - Arguments passed by Mocha.
  * @returns {unknown}
  */
 function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
@@ -951,14 +954,7 @@ function getOnTestRetryHandler (config) {
         promises,
         ...ctx.currentStore,
       })
-      if (promises.setProbePromise && promises.finishTestPromise) {
-        test._ddFailedTestReplayPromise = Promise.all([
-          promises.setProbePromise,
-          promises.finishTestPromise,
-        ]).then(() => {})
-      } else if (promises.setProbePromise || promises.finishTestPromise) {
-        test._ddFailedTestReplayPromise = promises.setProbePromise || promises.finishTestPromise
-      }
+      test._ddFailedTestReplayPromise = getFailedTestReplayPromise(promises)
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)

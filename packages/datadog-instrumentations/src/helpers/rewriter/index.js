@@ -7,7 +7,7 @@ const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
-const { waitForAsyncEnd } = require('./transforms')
+const { awaitContextCallback, waitForAsyncEnd } = require('./transforms')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
 // (ESM) statements that the transformer splices into the rewritten module.
@@ -35,6 +35,7 @@ const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
 for (const matcher of [matcherCjs, matcherEsm]) {
+  matcher.addTransform('awaitContextCallback', awaitContextCallback)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
 
@@ -87,10 +88,12 @@ function rewrite (content, filename, format, target) {
   return content
 }
 
+/** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
+
 /**
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
- * @param {string | ArrayBuffer | ArrayBufferView} source
+ * @param {string | ArrayBuffer | BufferView} source
  * @returns {string}
  */
 function getSourceText (source) {

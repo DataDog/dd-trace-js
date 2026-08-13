@@ -2823,7 +2823,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
 
     /**
-     * @param {Mocha.Done} done
+     * @param {(error?: Error) => void} done
      * @param {object} options
      * @param {boolean} options.isModified
      * @param {boolean} [options.isEfd]

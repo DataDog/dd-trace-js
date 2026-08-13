@@ -239,7 +239,7 @@ function getWebdriverioHookTest (hook) {
  */
 function adjustWebdriverioHookFailures (runner) {
   let suppressedFailures = 0
-  for (const { test } of runnerToFailedHooks.get(runner) || []) {
+  for (const { test } of runnerToFailedHooks.get(runner)) {
     if (isWebdriverioFailureSuppressed(test)) {
       suppressedFailures++
     }
@@ -281,7 +281,7 @@ function getWebdriverioSuiteResults (runner) {
     }
   })
 
-  for (const { file, test } of runnerToFailedHooks.get(runner) || []) {
+  for (const { file, test } of runnerToFailedHooks.get(runner)) {
     const result = resultsByFile.get(file)
     if (result && !isWebdriverioFailureSuppressed(test)) {
       result.status = 'fail'

@@ -5,10 +5,11 @@ const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require('../../../../ext/tags')
+const { dsmBase64NameLength } = require('../carrier')
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { CONTEXT_PROPAGATION_KEY_BASE64, computePathwayHash } = require('./pathway')
+const { computePathwayHash } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
@@ -21,7 +22,7 @@ const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 // bytes, encoded as 28 base64 chars; together with the header key and
 // JSON framing (matching the prior `JSON.stringify({key: value})` byte
 // count minus 1), this is a fixed value.
-const PATHWAY_HEADER_BYTES = CONTEXT_PROPAGATION_KEY_BASE64.length + 28 + 6
+const PATHWAY_HEADER_BYTES = dsmBase64NameLength + 28 + 6
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -337,7 +338,8 @@ class DataStreamsProcessor {
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
       hash,
-      edgeStartNs,
+      // start the next hop's edge clock here so edge latency stays per-hop
+      edgeStartNs: nowNs,
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,

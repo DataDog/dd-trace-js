@@ -19,7 +19,7 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
 
 /**
  * @typedef {object} EfdRetryPolicy
- * @property {ReadonlyArray<EfdDurationRetryCount>} durationRetryCounts
+ * @property {readonly EfdDurationRetryCount[]} durationRetryCounts
  * @property {number} schedulingRetryCount
  */
 

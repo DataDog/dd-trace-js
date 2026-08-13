@@ -21,6 +21,7 @@ const {
   getTestSuitePath,
   getRelativeCoverageFiles,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
@@ -62,6 +63,7 @@ const modifiedFilesCh = channel('ci:cucumber:modified-files')
 const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:cucumber:worker-report:telemetry')
 
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
@@ -303,6 +305,10 @@ function handleDdWorkerMessage (message) {
       workerReportTraceCh.publish(payload)
       return true
     }
+    if (messageCode === CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
+      return true
+    }
   }
 
   if (message?.[DD_EFD_RETRY_COUNT_MESSAGE]) {
@@ -351,8 +357,10 @@ function maybeStartParallelSuite (pickle) {
   })
 }
 
-function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
-  const { status } = getStatusFromResultLatest(worstTestStepResult)
+function handleParallelTestCaseFinished (pickle, worstTestStepResult, usesNumericStatus = false) {
+  const { status } = usesNumericStatus
+    ? getStatusFromResult(worstTestStepResult)
+    : getStatusFromResultLatest(worstTestStepResult)
   let isNew = false
 
   if (isKnownTestsEnabled) {
@@ -1214,7 +1222,28 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const result = await start.apply(this, arguments)
+    let result
+    try {
+      result = await start.apply(this, arguments)
+    } catch (error) {
+      try {
+        await getChannelPromise(sessionFinishCh, {
+          status: 'fail',
+          error,
+          isSuitesSkipped,
+          numSkippedSuites: skippedSuites.length,
+          hasUnskippableSuites: isUnskippable,
+          hasForcedToRunSuites: isForcedToRun,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+          isParallel,
+        })
+      } catch (finalizationError) {
+        log.error('Cucumber test session finalization error: %s', finalizationError)
+      }
+      throw error
+    }
     const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage
@@ -1488,7 +1517,7 @@ function patchCucumberWorkerRunTestCase (runtimeExecutorPackage, isWorker) {
   )
 }
 
-function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
+function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion, usesNumericStatus = false) {
   return function (worker, message) {
     if (!testSuiteFinishCh.hasSubscribers) {
       return parseWorkerMessageFunction.apply(this, arguments)
@@ -1539,10 +1568,28 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         pickle = testCase.pickle
       }
 
-      handleParallelTestCaseFinished(pickle, worstTestStepResult)
+      handleParallelTestCaseFinished(pickle, worstTestStepResult, usesNumericStatus)
     }
 
     return parseWorkerResponse
+  }
+}
+
+/**
+ * Adapts Cucumber 7's callback-based parallel coordinator to the Promise contract used by getWrappedStart.
+ *
+ * @param {Function} run
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function getWrappedCoordinatorRun (run, frameworkVersion) {
+  const runAsPromise = function (numberOfWorkers) {
+    return new Promise(resolve => run.call(this, numberOfWorkers, resolve))
+  }
+  const wrappedStart = getWrappedStart(runAsPromise, frameworkVersion, true)
+
+  return function (numberOfWorkers, done) {
+    return wrappedStart.call(this, numberOfWorkers).then(done)
   }
 }
 
@@ -1593,19 +1640,33 @@ addHook({
   return runtimePackage
 })
 
-// Only executed in parallel mode.
-// `getWrappedStart` generates session start and finish events
+// Only executed in parallel mode in Cucumber 7 through 10.
+// `getWrappedCoordinatorRun` or `getWrappedStart` generates session start and finish events
 // `getWrappedParseWorkerMessage` generates suite start and finish events
+// Shimmer is required because the coordinator must be changed before it starts workers and exposes no lifecycle hook.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=8.0.0 <11.0.0'],
+  versions: ['>=7.0.0 <11.0.0'],
   file: 'lib/runtime/parallel/coordinator.js',
 }, (coordinatorPackage, frameworkVersion) => {
-  shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
+  const isCucumber7 = satisfies(frameworkVersion, '<8.0.0')
+  if (isCucumber7) {
+    shimmer.wrap(
+      coordinatorPackage.default.prototype,
+      'run',
+      run => getWrappedCoordinatorRun(run, frameworkVersion)
+    )
+  } else {
+    shimmer.wrap(
+      coordinatorPackage.default.prototype,
+      'start',
+      start => getWrappedStart(start, frameworkVersion, true)
+    )
+  }
   shimmer.wrap(
     coordinatorPackage.default.prototype,
     'parseWorkerMessage',
-    parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage)
+    parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, false, isCucumber7)
   )
   return coordinatorPackage
 })

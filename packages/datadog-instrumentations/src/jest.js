@@ -49,7 +49,7 @@ const {
   getRawJestTestName,
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
-} = require('../../datadog-plugin-jest/src/util')
+} = require('../../dd-trace/src/plugins/util/jest')
 const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
@@ -97,7 +97,9 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
-const FLUSH_TIMEOUT = 10_000
+// The exporter has a 10-second bounded final-flush deadline. Leave enough time
+// for its completion callback before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = 12_000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
@@ -585,6 +587,15 @@ function isJestTestSkipped (test, hasFocusedTests, testNamePattern) {
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   const hasConcurrentTestsStartEvent = satisfies(jestVersion, '>=30.0.0')
+  const hasTestsInChildren = satisfies(jestVersion, '>=26.0.0')
+
+  /**
+   * @param {object} describeBlock
+   * @returns {object[]|undefined}
+   */
+  function getTestEntries (describeBlock) {
+    return hasTestsInChildren ? describeBlock?.children : describeBlock?.tests
+  }
 
   return class DatadogEnvironment extends BaseEnvironment {
     #activeDetachedEfdRetries
@@ -632,6 +643,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.concurrentTestContexts = new Map()
       this.concurrentTestStates = new WeakMap()
       this.concurrentTestSourceFns = new WeakMap()
+      this.testParametersByFunction = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
       this.#activeDetachedEfdRetries = 0
@@ -708,6 +720,53 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
         return result
+      }
+    }
+
+    /**
+     * Rebuilds serial `test.each` so every generated row function keeps its parameters.
+     *
+     * @param {Function|undefined} test
+     * @returns {void}
+     */
+    bindTestEach (test) {
+      if (typeof test?.each !== 'function') return
+
+      const bind = this.getJestEachBind()
+      if (typeof bind !== 'function') {
+        const environment = this
+        shimmer.wrap(test, 'each', each => function (...args) {
+          const testParameters = getFormattedJestTestParameters(args)
+          const eachBind = each.apply(this, args)
+          return function (...args) {
+            const [testName] = args
+            environment.setNameToParams(testName, testParameters)
+            return eachBind.apply(this, args)
+          }
+        })
+        return
+      }
+
+      // Jest creates each row function at runtime, so Orchestrion cannot associate parameters statically.
+      const environment = this
+      test.each = function wrappedTestEach (...eachArgs) {
+        const testParameters = getFormattedJestTestParameters(eachArgs)
+        return function (...testArgs) {
+          let parameterIndex = 0
+          const eachTest = function (testName, testFn, ...callArgs) {
+            const parameters = testParameters?.[parameterIndex++]
+            if (parameters !== undefined && typeof testFn === 'function') {
+              environment.appendNameToParams(testName, parameters)
+              environment.testParametersByFunction.set(
+                testFn,
+                getTestParametersString(environment.nameToParams, testName)
+              )
+            }
+            return test.call(this, testName, testFn, ...callArgs)
+          }
+          const eachBind = bind(eachTest).apply(this, eachArgs)
+          return eachBind.apply(this, testArgs)
+        }
       }
     }
 
@@ -1419,7 +1478,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestState = registeredConcurrentTestState || this.concurrentTestStates.get(fn)
       let originalTest
       if (isEfdRetry && !efdRetryGates) {
-        originalTest = state.currentDescribeBlock?.children?.at(-1)
+        originalTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
         if (originalTest?.fn !== fn) {
           log.error('%s could not retain its original Jest test', retryType)
           return 0
@@ -1427,8 +1486,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       let registeredRetryCount = 0
       for (let retryIndex = 1; retryIndex <= retryCount; retryIndex++) {
-        const children = state.currentDescribeBlock?.children
-        const initialChildCount = children?.length
+        const testEntries = getTestEntries(state.currentDescribeBlock)
+        const initialTestCount = testEntries?.length
         let retryFn
         if (concurrentTestState) {
           const test = concurrentTestState.concurrentTest ??
@@ -1467,7 +1526,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (isEfdRetry) {
-          const retryTest = children?.length === initialChildCount + 1 ? children.at(-1) : undefined
+          const retryTest = testEntries?.length === initialTestCount + 1 ? testEntries.at(-1) : undefined
           if (retryTest?.fn !== retryFn) {
             log.error('%s could not retain its pre-registered Jest retry', retryType)
             continue
@@ -1497,8 +1556,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         return false
       }
 
-      const children = retryOptions.state.currentDescribeBlock?.children
-      const initialChildCount = children?.length
+      const testEntries = getTestEntries(retryOptions.state.currentDescribeBlock)
+      const initialTestCount = testEntries?.length
       try {
         const registeredRetryCount = this.retryTest(retryOptions)
         if (registeredRetryCount === retryOptions.retryCount) return true
@@ -1506,8 +1565,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         log.error('%s could not register retries', retryOptions.retryType, error)
       }
 
-      if (children && initialChildCount !== undefined) {
-        const retryTests = children.splice(initialChildCount)
+      if (testEntries && initialTestCount !== undefined) {
+        const retryTests = testEntries.splice(initialTestCount)
         for (const retryTest of retryTests) {
           removedRetryTests.add(retryTest)
           const retryCtx = this.concurrentTestStates.get(retryTest.fn)?.ctx
@@ -1540,7 +1599,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {number} Retries left to run.
      */
     discardEfdRetries (testName, executedTest, retryCount = 0) {
-      const siblings = executedTest.parent?.children
+      const siblings = getTestEntries(executedTest.parent)
       const executedTestIndex = siblings ? siblings.indexOf(executedTest) : -1
       if (executedTestIndex === -1) return 0
 
@@ -1684,7 +1743,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (!this.#discardedEfdRetryTests) return
 
       for (const retryTest of this.#discardedEfdRetryTests) {
-        const siblings = retryTest.parent?.children
+        const siblings = getTestEntries(retryTest.parent)
         const retryTestIndex = siblings?.indexOf(retryTest) ?? -1
         if (retryTestIndex !== -1) {
           siblings.splice(retryTestIndex, 1)
@@ -1719,7 +1778,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
       const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
         concurrentTestContexts?.at(-1)?.concurrentTestState
-      const registeredTest = state.currentDescribeBlock?.children?.at(-1)
+      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
       if (concurrentTestState && registeredTest?.fn === event.fn) {
         testContexts.set(registeredTest, concurrentTestState.ctx)
       }
@@ -1816,18 +1875,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
-      }
-      if (event.name === 'setup' && this.global.test) {
-        const environment = this
-        shimmer.wrap(this.global.test, 'each', each => function (...args) {
-          const testParameters = getFormattedJestTestParameters(args)
-          const eachBind = each.apply(this, args)
-          return function (...args) {
-            const [testName] = args
-            environment.setNameToParams(testName, testParameters)
-            return eachBind.apply(this, args)
-          }
-        })
+        this.bindTestEach(this.global.test)
       }
       if (
         event.name === 'run_describe_start' &&
@@ -1888,6 +1936,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let numOfAttemptsToFixRetries = null
         const testParameters = concurrentCtx?.testParameters ||
           concurrentTestState?.ctx?.testParameters ||
+          this.testParametersByFunction.get(event.test.fn) ||
           getTestParametersString(this.nameToParams, event.test.name)
 
         if (isAttemptToFix) {
@@ -2259,16 +2308,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.#efdRetryGatesByName = undefined
         this.#detachedEfdRetryQueue = undefined
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
-      }
-      if (event.name === 'test_skip' || event.name === 'test_todo') {
+      } else if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
         const retryGates = this.#efdRetryGatesByName?.get(testName)
-        if (retryGates && efdRetryMetadataByTest.has(event.test)) {
-          this.#discardedEfdRetryTests ??= new Set()
-          this.#discardedEfdRetryTests.add(event.test)
-          return
-        }
         if (retryGates) {
+          if (efdRetryMetadataByTest.has(event.test)) {
+            this.#discardedEfdRetryTests ??= new Set()
+            this.#discardedEfdRetryTests.add(event.test)
+            return
+          }
           for (const gate of retryGates) {
             gate.resolve(false)
           }
@@ -3020,7 +3068,19 @@ function getCliWrapper (isNewJestVersion) {
         frameworkVersion: jestVersion,
       })
 
-      const result = await runCLI.apply(this, arguments)
+      let result
+      try {
+        result = await runCLI.apply(this, arguments)
+      } catch (error) {
+        try {
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
+            isTestSessionFinalizationError: true,
+          }))
+        } catch (finalizationError) {
+          log.error('Jest test session finalization error: %s', finalizationError)
+        }
+        throw error
+      }
 
       const {
         results: {

@@ -17,6 +17,7 @@ const {
 const {
   parseAnnotations,
   getTestSuitePath,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
@@ -44,6 +45,7 @@ const testSkipCh = channel('ci:playwright:test:skip')
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
+const reporterErrorCh = channel('ci:playwright:reporter:error')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -55,6 +57,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const workerReportTelemetryCh = channel('ci:playwright:worker-report:telemetry')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
@@ -71,6 +74,7 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
+const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const DD_PROPERTIES_TIMEOUT = 5000
@@ -78,6 +82,8 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 
 let applyRepeatEachIndex = null
+let reporterError
+let hasReporterError = false
 
 let startedSuites = []
 
@@ -131,8 +137,10 @@ const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
+const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
+const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
 const automaticFailureScreenshotPaths = new Set()
 
@@ -1249,6 +1257,17 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    reporterError = undefined
+    hasReporterError = false
+    let restoreReporterConsoleError
+    if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
+      const DatadogPlaywrightReporter = require('./playwright-reporter')
+      restoreReporterConsoleError = DatadogPlaywrightReporter.restoreConsoleError
+      if (!config.config[kDdPlaywrightReporterConfigured]) {
+        Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
+        config.config.reporter.unshift([require.resolve('./playwright-reporter')])
+      }
+    }
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1364,7 +1383,27 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    let runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn
+    try {
+      runAllTestsReturn = await runAllTests.apply(this, arguments)
+    } catch (error) {
+      try {
+        await getChannelPromise(testSessionFinishCh, {
+          status: 'fail',
+          error: hasReporterError ? reporterError : error,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+        })
+      } catch (finalizationError) {
+        log.error('Playwright test session finalization error: %s', finalizationError)
+      }
+      reporterError = undefined
+      hasReporterError = false
+      throw error
+    } finally {
+      restoreReporterConsoleError?.()
+    }
 
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`
@@ -1419,12 +1458,21 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
 
+    const finalizationError = reporterError
+    const finalStatus = hasReporterError
+      ? 'fail'
+      : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     await getChannelPromise(testSessionFinishCh, {
-      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
+      status: finalStatus,
+      error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
     })
+    if (hasReporterError) {
+      if (typeof runAllTestsReturn === 'string') runAllTestsReturn = 'failed'
+      else runAllTestsReturn.status = 'failed'
+    }
 
     startedSuites = []
     remainingTestsByFile = {}
@@ -1441,11 +1489,75 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     ddPropertiesByTestId.clear()
     ddPropertiesRequestsByTestId.clear()
     disabledTestIds.clear()
+    reporterError = undefined
+    hasReporterError = false
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
   }
+}
+
+/**
+ * Records errors thrown or rejected by Playwright reporters before Playwright converts them into run status.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reportersHook (reportersPackage) {
+  return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
+    const reporters = await createReporters.apply(this, arguments)
+    for (const reporter of reporters) {
+      if (instrumentedPlaywrightReporters.has(reporter)) continue
+
+      const onEnd = reporter.onEnd
+      const onExit = reporter.onExit
+      try {
+        if (typeof onEnd === 'function') {
+          reporter.onEnd = async function () {
+            try {
+              return await onEnd.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
+          }
+        }
+        if (typeof onExit === 'function') {
+          reporter.onExit = async function () {
+            try {
+              return await onExit.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
+          }
+        }
+      } catch {
+        continue
+      }
+      if (reporter.onEnd !== onEnd || reporter.onExit !== onExit) instrumentedPlaywrightReporters.add(reporter)
+    }
+    return reporters
+  }, { replaceGetter: true })
+}
+
+/**
+ * Records errors from the reporter multiplexer used by Playwright before 1.38.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reporterMultiplexerHook (reportersPackage) {
+  shimmer.wrap(reportersPackage.Multiplexer.prototype, 'onEnd', onEnd => async function () {
+    try {
+      return await onEnd.apply(this, arguments)
+    } catch (error) {
+      recordReporterError(error)
+      throw error
+    }
+  })
+  return reportersPackage
 }
 
 function runnerHook (runnerExport, playwrightVersion) {
@@ -1547,6 +1659,32 @@ pageGotoCh.subscribe({
   },
 })
 
+reporterErrorCh.subscribe((error) => {
+  recordReporterError(error)
+})
+
+/**
+ * Records a reporter failure even when the reporter throws a falsy value.
+ *
+ * @param {unknown} error
+ * @returns {void}
+ */
+function recordReporterError (error) {
+  if (hasReporterError) return
+
+  let normalizedError
+  try {
+    const errorObject = error && typeof error === 'object' ? error : undefined
+    normalizedError = new Error(errorObject?.message || errorObject?.value || String(error))
+    normalizedError.name = errorObject?.name || normalizedError.name
+    normalizedError.stack = errorObject?.stack || normalizedError.stack
+  } catch {
+    normalizedError = new Error('Playwright reporter failed')
+  }
+  reporterError = normalizedError
+  hasReporterError = true
+}
+
 /**
  * Records a path created by Playwright's automatic screenshot recorder.
  *
@@ -1594,6 +1732,12 @@ if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
     file: 'lib/runner/runner.js',
     versions: ['>=1.31.0 <1.38.0'],
   }, runnerHook)
+
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/reporters/multiplexer.js',
+    versions: ['>=1.18.0 <1.38.0'],
+  }, reporterMultiplexerHook)
 }
 
 addHook({
@@ -1613,6 +1757,12 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, runnerHook)
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/reporters.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, reportersHook)
 
 addHook({
   name: 'playwright',
@@ -1638,6 +1788,30 @@ addHook({
 })
 
 /**
+ * @typedef {Record<string, unknown>} PlaywrightTest
+ */
+
+/**
+ * @typedef {Record<string, unknown>} PlaywrightSuite
+ */
+
+/**
+ * @typedef {{ _fullProject: unknown, _addSuite: (suite: unknown) => void }} PlaywrightProjectSuite
+ */
+
+/**
+ * @typedef {(
+ *   copiedTest: PlaywrightTest, originalTest: PlaywrightTest, repeatEachIndex: number
+ * ) => void} ConfigureCopiedTest
+ */
+
+/**
+ * @typedef {(
+ *   fileSuite: PlaywrightSuite, projectSuite: PlaywrightProjectSuite, repeatEachIndex: number, numRetries: number
+ * ) => number} GetRetryRepeatEachIndex
+ */
+
+/**
  * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
  * as playwright could change it at any time.
  *
@@ -1650,6 +1824,13 @@ addHook({
  * - we clone each of these file suites for each repeat index
  * - we execute `applyRepeatEachIndex` for each of these cloned file suites
  * - we add the cloned file suites to the project suite
+ *
+ * @param {Map<PlaywrightSuite, PlaywrightProjectSuite>} fileSuitesWithTestsToRetry
+ * @param {(test: PlaywrightTest) => unknown} filterTest
+ * @param {Array<string | ((test: PlaywrightTest) => unknown)>} tagsToApply
+ * @param {number} numRetries
+ * @param {ConfigureCopiedTest} [configureCopiedTest]
+ * @param {GetRetryRepeatEachIndex} [getRetryRepeatEachIndex]
  */
 function applyRetriesToTests (
   fileSuitesWithTestsToRetry,
@@ -1879,6 +2060,8 @@ function finishProcessHostStartRunner (processHost) {
         serializedTraces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
       })
+    } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(message[1])
     }
   })
 }
@@ -1927,6 +2110,8 @@ async function handlePageGoto (page) {
     return
   }
 
+  activeRumPages.add(page)
+
   let browserVersion
   try {
     browserVersion = page.context().browser()?.version()
@@ -1961,6 +2146,54 @@ async function handlePageGoto (page) {
   } catch (error) {
     log.error('Playwright RUM correlation cookie error', error)
   }
+}
+
+/**
+ * Stops a RUM session and expires its correlation cookie.
+ *
+ * @param {import('playwright-core').Page} page
+ * @returns {Promise<void>}
+ */
+async function cleanupRumPage (page) {
+  try {
+    const isRumActive = await page.evaluate(stopRumSession)
+
+    if (!isRumActive) {
+      return
+    }
+
+    // Give some time RUM to flush data, similar to what we do in selenium
+    await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+    const url = page.url()
+    if (url) {
+      const domain = new URL(url).hostname
+      await page.context().addCookies([{
+        name: RUM_COOKIE_NAME,
+        value: '',
+        domain,
+        path: '/',
+        expires: 0,
+      }])
+    } else {
+      log.error('RUM is active but page.url() is not available')
+    }
+  } catch (error) {
+    // Cleanup must not change the test result.
+    log.error('afterEach hook error', error)
+  }
+}
+
+/**
+ * Stops RUM sessions and expires correlation cookies for pages visited by the current test.
+ *
+ * @returns {Promise<void[]>|undefined}
+ */
+function cleanupRumPages () {
+  if (activeRumPages.size === 0) return
+
+  const cleanupPromises = Array.from(activeRumPages, cleanupRumPage)
+  activeRumPages.clear()
+  return Promise.all(cleanupPromises)
 }
 
 addHook({
@@ -2012,6 +2245,7 @@ function instrumentWorkerMainMethods (workerMain) {
     }
     test._ddStartTime = performance.now()
     steps = []
+    activeRumPages.clear()
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -2075,34 +2309,7 @@ function instrumentWorkerMainMethods (workerMain) {
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
-          fn: async function ({ page }) {
-            try {
-              if (page) {
-                const isRumActive = await page.evaluate(stopRumSession)
-
-                if (isRumActive) {
-                  // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
-                  const url = page.url()
-                  if (url) {
-                    const domain = new URL(url).hostname
-                    await page.context().addCookies([{
-                      name: RUM_COOKIE_NAME,
-                      value: '',
-                      domain,
-                      path: '/',
-                      expires: 0,
-                    }])
-                  } else {
-                    log.error('RUM is active but page.url() is not available')
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore errors
-              log.error('afterEach hook error', e)
-            }
-          },
+          fn: cleanupRumPages,
           title: 'afterEach hook',
           _ddHook: true,
         })
