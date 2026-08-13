@@ -27,14 +27,15 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
     if (createDatasetError) throw createDatasetError
     return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 1, 1)
   }
-  c.appendDatasetRecords = async (projectId, datasetId, records) => {
-    requests.push({ method: 'appendDatasetRecords', projectId, datasetId, records })
-    return records.map((record, index) => new DatasetRecord(
+  c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+    requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+    const records = attributes.insert_records.map((record, index) => new DatasetRecord(
       record.input,
       record.expected_output,
       record.metadata,
       record.id ?? `rec-${index}`
     ))
+    return { records, version: 3 }
   }
   c.createExperiment = async (attributes) => {
     requests.push({ method: 'createExperiment', attributes })
@@ -77,7 +78,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].kind, 'experiment')
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
-    assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, 'rec-0')
+    assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
   })
@@ -99,8 +100,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
     await dataset.push()
 
-    assert.equal(dataset.version(), 6)
-    assert.equal(dataset.latestVersion(), 6)
+    assert.equal(dataset.version(), 3)
+    assert.equal(dataset.latestVersion(), 3)
   })
 
   it('keeps evaluator results aligned for summary evaluators when rows fail', async () => {

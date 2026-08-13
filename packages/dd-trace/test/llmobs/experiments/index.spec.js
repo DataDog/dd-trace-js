@@ -242,7 +242,7 @@ describe('LLMObs Experiments facade', () => {
   describe('pullDataset', () => {
     it('pulls records from the backend client with pagination and an explicit version', async () => {
       const firstRecord = { id: 'r1', input: { value: 1 }, expectedOutput: 'one', metadata: { page: 1 } }
-      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
+      const secondRecord = { id: 'r2', input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
       const { listDatasetRecords } = stubPullDatasetClient({
         datasets: [datasetResource({ name: 'remote-dataset', id: 'ds', description: 'desc', latestVersion: 4 })],
         pages: [
@@ -263,8 +263,16 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.projectId(), 'proj')
       assert.equal(dataset.version(), 2)
       assert.equal(dataset.latestVersion(), 4)
-      assert.deepEqual(dataset.records(), [firstRecord, secondRecord])
-      assert.deepEqual(dataset.recordIds(), ['r1', ''])
+      assert.deepEqual(dataset.records().map(record => ({
+        id: record.id,
+        input: record.input,
+        expectedOutput: record.expectedOutput,
+        metadata: record.metadata,
+      })), [
+        { id: 'r1', input: firstRecord.input, expectedOutput: firstRecord.expectedOutput, metadata: firstRecord.metadata },
+        { id: 'r2', input: secondRecord.input, expectedOutput: secondRecord.expectedOutput, metadata: secondRecord.metadata },
+      ])
+      assert.deepEqual(dataset.recordIds(), ['r1', 'r2'])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
       assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
       assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
