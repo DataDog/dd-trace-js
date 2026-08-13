@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { afterEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
 
@@ -84,6 +85,160 @@ describe('LLMObs Experiments control-plane client', function () {
     assert.equal(new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 's' }).configured, true)
     assert.equal(new ExperimentsClient({ apiKey: 'k', site: 's' }).configured, false)
     assert.equal(new ExperimentsClient({}).configured, false)
+  })
+
+  it('serializes all dataset batch mutations and parses JSON:API records', async function () {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: true,
+      text: async () => JSON.stringify({
+        data: [
+          {
+            id: 'inserted-record',
+            type: 'datasets',
+            attributes: {
+              input: { value: 1 },
+              expected_output: null,
+              metadata: { source: 'insert' },
+              version: 3,
+            },
+          },
+          {
+            id: 'updated-record',
+            type: 'datasets',
+            attributes: {
+              input: { value: 2 },
+              expected_output: 'updated',
+              metadata: { source: 'update' },
+              version: 4,
+            },
+          },
+        ],
+      }),
+    })
+
+    try {
+      const result = await client.batchUpdateDatasetRecords('project-id', 'dataset-id', {
+        insert_records: [{
+          id: 'inserted-record',
+          input: { value: 1 },
+          expected_output: null,
+          metadata: { source: 'insert' },
+        }],
+        update_records: [{
+          id: 'updated-record',
+          input: { value: 2 },
+          expected_output: null,
+          metadata: { source: 'update' },
+        }],
+        delete_records: ['deleted-record'],
+        deduplicate: false,
+        create_new_version: false,
+      })
+
+      assert.equal(fetchStub.callCount, 1)
+      const [url, options] = fetchStub.firstCall.args
+      assert.equal(
+        url,
+        'https://api.datadoghq.com/api/v2/llm-obs/v1/project-id/datasets/dataset-id/batch_update'
+      )
+      assert.equal(options.method, 'POST')
+      assert.deepEqual(options.headers, {
+        'DD-API-KEY': 'api-key',
+        'DD-APPLICATION-KEY': 'app-key',
+        'Content-Type': 'application/json',
+      })
+      assert.ok(options.signal instanceof AbortSignal)
+      assert.deepEqual(JSON.parse(options.body), {
+        data: {
+          type: 'datasets',
+          id: 'dataset-id',
+          attributes: {
+            insert_records: [{
+              id: 'inserted-record',
+              input: { value: 1 },
+              expected_output: null,
+              metadata: { source: 'insert' },
+            }],
+            update_records: [{
+              id: 'updated-record',
+              input: { value: 2 },
+              expected_output: null,
+              metadata: { source: 'update' },
+            }],
+            delete_records: ['deleted-record'],
+            deduplicate: false,
+            create_new_version: false,
+          },
+        },
+      })
+      assert.deepEqual(result.records.map(record => ({
+        id: record.id,
+        input: record.input,
+        expectedOutput: record.expectedOutput,
+        metadata: record.metadata,
+      })), [
+        { id: 'inserted-record', input: { value: 1 }, expectedOutput: null, metadata: { source: 'insert' } },
+        { id: 'updated-record', input: { value: 2 }, expectedOutput: 'updated', metadata: { source: 'update' } },
+      ])
+      assert.equal(result.version, 4)
+    } finally {
+      fetchStub.restore()
+    }
+  })
+
+  it('defaults omitted dataset batch mutations and accepts top-level record responses', async function () {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: true,
+      text: async () => JSON.stringify({
+        records: [{
+          id: 'record-id',
+          input: { value: 1 },
+          expected_output: null,
+          metadata: null,
+          version: 2,
+        }],
+      }),
+    })
+
+    try {
+      const result = await client.batchUpdateDatasetRecords('project-id', 'dataset-id', {})
+
+      assert.deepEqual(JSON.parse(fetchStub.firstCall.args[1].body).data.attributes, {
+        insert_records: [],
+        update_records: [],
+        delete_records: [],
+        deduplicate: true,
+        create_new_version: true,
+      })
+      assert.deepEqual(result.records.map(record => ({
+        id: record.id,
+        input: record.input,
+        expectedOutput: record.expectedOutput,
+        metadata: record.metadata,
+      })), [{ id: 'record-id', input: { value: 1 }, expectedOutput: null, metadata: {} }])
+      assert.equal(result.version, 2)
+    } finally {
+      fetchStub.restore()
+    }
+  })
+
+  it('rejects batch responses with records missing ids', async function () {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: true,
+      text: async () => JSON.stringify({ data: [{ type: 'datasets', attributes: { input: 'input' } }] }),
+    })
+
+    try {
+      await assert.rejects(
+        () => client.batchUpdateDatasetRecords('project-id', 'dataset-id', {}),
+        /Dataset record response is missing an id/
+      )
+    } finally {
+      fetchStub.restore()
+    }
   })
 
   it('creates, appends, lists, reads, and deletes dataset resources', async function () {
