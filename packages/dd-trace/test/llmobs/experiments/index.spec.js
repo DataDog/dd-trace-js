@@ -344,7 +344,7 @@ describe('LLMObs Experiments facade', () => {
       })
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
-        /Dataset records pulled from the backend must have an id/
+        /backend returned a record without an id/
       )
 
       stubPullDatasetClientForRetry({

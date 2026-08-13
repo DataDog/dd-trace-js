@@ -39,6 +39,9 @@ function serializedRecord (record) {
 function serializedRecordUpdate (update) {
   const output = { id: update.id }
   if (Object.hasOwn(update, 'input') && update.input !== undefined) output.input = update.input
+  if (Object.hasOwn(update, 'expectedOutput') && update.expectedOutput !== undefined) {
+    output.expected_output = update.expectedOutput
+  }
   if (Object.hasOwn(update, 'metadata') && update.metadata !== undefined) output.metadata = update.metadata
   if (Object.hasOwn(update, 'tagOperations')) {
     output.tag_operations = serializedTagOperations(update.tagOperations)
@@ -233,6 +236,7 @@ class Dataset {
     if (this.#newRecordsById.has(record.id)) return this
 
     const update = this.#updatedRecordsById.get(record.id) ?? { id: record.id }
+    for (const field of providedFields) update[field] = record[field]
     if (this.#pendingTagOperations.has(record.id)) {
       update.tagOperations = this.#pendingTagOperations.get(record.id)
     }
