@@ -45,6 +45,7 @@ const testSkipCh = channel('ci:playwright:test:skip')
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
+const reporterErrorCh = channel('ci:playwright:reporter:error')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
@@ -81,6 +82,8 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 
 let applyRepeatEachIndex = null
+let reporterError
+let hasReporterError = false
 
 let startedSuites = []
 
@@ -134,8 +137,10 @@ const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
+const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
+const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
 const automaticFailureScreenshotPaths = new Set()
 
@@ -1252,6 +1257,17 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    reporterError = undefined
+    hasReporterError = false
+    let restoreReporterConsoleError
+    if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
+      const DatadogPlaywrightReporter = require('./playwright-reporter')
+      restoreReporterConsoleError = DatadogPlaywrightReporter.restoreConsoleError
+      if (!config.config[kDdPlaywrightReporterConfigured]) {
+        Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
+        config.config.reporter.unshift([require.resolve('./playwright-reporter')])
+      }
+    }
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1367,7 +1383,27 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    let runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn
+    try {
+      runAllTestsReturn = await runAllTests.apply(this, arguments)
+    } catch (error) {
+      try {
+        await getChannelPromise(testSessionFinishCh, {
+          status: 'fail',
+          error: hasReporterError ? reporterError : error,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+        })
+      } catch (finalizationError) {
+        log.error('Playwright test session finalization error: %s', finalizationError)
+      }
+      reporterError = undefined
+      hasReporterError = false
+      throw error
+    } finally {
+      restoreReporterConsoleError?.()
+    }
 
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`
@@ -1422,12 +1458,21 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
 
+    const finalizationError = reporterError
+    const finalStatus = hasReporterError
+      ? 'fail'
+      : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     await getChannelPromise(testSessionFinishCh, {
-      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
+      status: finalStatus,
+      error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
     })
+    if (hasReporterError) {
+      if (typeof runAllTestsReturn === 'string') runAllTestsReturn = 'failed'
+      else runAllTestsReturn.status = 'failed'
+    }
 
     startedSuites = []
     remainingTestsByFile = {}
@@ -1444,11 +1489,75 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     ddPropertiesByTestId.clear()
     ddPropertiesRequestsByTestId.clear()
     disabledTestIds.clear()
+    reporterError = undefined
+    hasReporterError = false
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
   }
+}
+
+/**
+ * Records errors thrown or rejected by Playwright reporters before Playwright converts them into run status.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reportersHook (reportersPackage) {
+  return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
+    const reporters = await createReporters.apply(this, arguments)
+    for (const reporter of reporters) {
+      if (instrumentedPlaywrightReporters.has(reporter)) continue
+
+      const onEnd = reporter.onEnd
+      const onExit = reporter.onExit
+      try {
+        if (typeof onEnd === 'function') {
+          reporter.onEnd = async function () {
+            try {
+              return await onEnd.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
+          }
+        }
+        if (typeof onExit === 'function') {
+          reporter.onExit = async function () {
+            try {
+              return await onExit.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
+          }
+        }
+      } catch {
+        continue
+      }
+      if (reporter.onEnd !== onEnd || reporter.onExit !== onExit) instrumentedPlaywrightReporters.add(reporter)
+    }
+    return reporters
+  }, { replaceGetter: true })
+}
+
+/**
+ * Records errors from the reporter multiplexer used by Playwright before 1.38.
+ *
+ * @param {object} reportersPackage
+ * @returns {object}
+ */
+function reporterMultiplexerHook (reportersPackage) {
+  shimmer.wrap(reportersPackage.Multiplexer.prototype, 'onEnd', onEnd => async function () {
+    try {
+      return await onEnd.apply(this, arguments)
+    } catch (error) {
+      recordReporterError(error)
+      throw error
+    }
+  })
+  return reportersPackage
 }
 
 function runnerHook (runnerExport, playwrightVersion) {
@@ -1550,6 +1659,32 @@ pageGotoCh.subscribe({
   },
 })
 
+reporterErrorCh.subscribe((error) => {
+  recordReporterError(error)
+})
+
+/**
+ * Records a reporter failure even when the reporter throws a falsy value.
+ *
+ * @param {unknown} error
+ * @returns {void}
+ */
+function recordReporterError (error) {
+  if (hasReporterError) return
+
+  let normalizedError
+  try {
+    const errorObject = error && typeof error === 'object' ? error : undefined
+    normalizedError = new Error(errorObject?.message || errorObject?.value || String(error))
+    normalizedError.name = errorObject?.name || normalizedError.name
+    normalizedError.stack = errorObject?.stack || normalizedError.stack
+  } catch {
+    normalizedError = new Error('Playwright reporter failed')
+  }
+  reporterError = normalizedError
+  hasReporterError = true
+}
+
 /**
  * Records a path created by Playwright's automatic screenshot recorder.
  *
@@ -1597,6 +1732,12 @@ if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
     file: 'lib/runner/runner.js',
     versions: ['>=1.31.0 <1.38.0'],
   }, runnerHook)
+
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/reporters/multiplexer.js',
+    versions: ['>=1.18.0 <1.38.0'],
+  }, reporterMultiplexerHook)
 }
 
 addHook({
@@ -1616,6 +1757,12 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, runnerHook)
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/reporters.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, reportersHook)
 
 addHook({
   name: 'playwright',
