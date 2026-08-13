@@ -134,6 +134,36 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(deleteRequest.attributes.delete_records, ['record-0'])
   })
 
+  it('serializes explicit null expected outputs and rejects empty updates', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', 'expected', { row: 0 }, 'record-0')],
+      ['record-0'],
+      1,
+      1
+    )
+
+    assert.throws(
+      () => dataset.update(0, {}),
+      /record update must include input, expectedOutput, or metadata/
+    )
+    assert.throws(
+      () => dataset.update(0, { expectedOutput: undefined }),
+      /record update must include input, expectedOutput, or metadata/
+    )
+
+    await dataset.update(0, { expectedOutput: null }).push()
+
+    const attributes = requests.find(request => request.method === 'batchUpdateDatasetRecords').attributes
+    assert.deepEqual(attributes.update_records, [{ id: 'record-0', expected_output: null }])
+    assert.equal(dataset.records()[0].expectedOutput, null)
+  })
+
   it('preserves local updates made while a push is in flight', async () => {
     const { client: c, requests } = clientWithMockBackend()
     let resolvePush

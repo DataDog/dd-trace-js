@@ -31,11 +31,11 @@ function serializedRecord (record) {
 
 function serializedRecordUpdate (update) {
   const output = { id: update.id }
-  if (Object.hasOwn(update, 'input')) output.input = update.input
-  if (Object.hasOwn(update, 'expectedOutput')) {
-    output.expected_output = update.expectedOutput ?? ''
+  if (Object.hasOwn(update, 'input') && update.input !== undefined) output.input = update.input
+  if (Object.hasOwn(update, 'expectedOutput') && update.expectedOutput !== undefined) {
+    output.expected_output = update.expectedOutput
   }
-  if (Object.hasOwn(update, 'metadata')) output.metadata = update.metadata ?? {}
+  if (Object.hasOwn(update, 'metadata') && update.metadata !== undefined) output.metadata = update.metadata
   return output
 }
 
@@ -117,7 +117,7 @@ class Dataset {
     }
     const record = this.#recordAt(index)
     const fieldNames = ['input', 'expectedOutput', 'metadata']
-    const providedFields = fieldNames.filter(field => Object.hasOwn(fields, field))
+    const providedFields = fieldNames.filter(field => Object.hasOwn(fields, field) && fields[field] !== undefined)
     if (providedFields.length === 0) {
       throw new Error('record update must include input, expectedOutput, or metadata')
     }
