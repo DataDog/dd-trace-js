@@ -2593,6 +2593,63 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      it('keeps interactive run events enabled when setupNodeEvents returns a partial config', async () => {
+        const projectRoot = createProjectRoot()
+        const datadogAfterSpecHandler = sinon.stub()
+        datadogAfterSpecHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+        const datadogAfterRunHandler = sinon.stub()
+        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const { cypressConfig, manualPluginOwner, warnings } = loadCypressConfig(
+          undefined,
+          undefined,
+          setupNodeEventsChannel
+        )
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+        }
+        const config = {
+          e2e: {
+            setupNodeEvents (on) {
+              on('after:spec', datadogAfterSpecHandler)
+              on('after:run', datadogAfterRunHandler)
+              on('task', taskHandler)
+              return { env: { returned: true } }
+            },
+          },
+        }
+        const handlers = {}
+        const initialConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        const returnedConfig = config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, initialConfig)
+
+        assert.notStrictEqual(returnedConfig, initialConfig)
+        assert.deepStrictEqual(returnedConfig.env, { returned: true })
+        assert.strictEqual(returnedConfig.experimentalInteractiveRunEvents, true)
+        assert.strictEqual(initialConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
+        await handlers['after:run']({})
+      })
+
       it('removes a pre-screenshot manual before:run handler when current instrumentation takes ownership', () => {
         const projectRoot = createProjectRoot()
         const legacyBeforeRunHandler = sinon.stub()

@@ -563,7 +563,12 @@ function registerDdTraceHooks (
       manualPlugin.ownsCurrentPlugin ||
       supportsErrorAwareFinalization(manualPlugin) ||
       !setupNodeEventsCh.hasSubscribers)) {
-    if (manualPlugin.afterRunHandler) enableInteractiveRunEvents(config)
+    if (manualPlugin.afterRunHandler) {
+      enableInteractiveRunEvents(config)
+      if (manualPlugin.initialConfig !== config) {
+        manualPlugin.initialConfig.experimentalInteractiveRunEvents = config.experimentalInteractiveRunEvents
+      }
+    }
     for (const handler of userBeforeRunHandlers) on('before:run', handler)
     registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
@@ -625,6 +630,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     const userAfterScreenshotHandlers = []
     const manualPlugin = {
       detected: false,
+      initialConfig: config,
       beforeRunHandler: undefined,
       afterSpecHandler: undefined,
       afterRunHandler: undefined,
