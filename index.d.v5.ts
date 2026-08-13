@@ -4123,7 +4123,7 @@ declare namespace tracer {
     }
 
     interface ExternalExperiment {
-      experimentId (): string | null
+      experimentId (): string
       name (): string
       url (): string | null
       submitSpan (input?: ExternalExperimentSpanInput): Promise<ExternalExperimentSpan>

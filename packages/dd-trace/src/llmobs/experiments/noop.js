@@ -71,9 +71,11 @@ class NoopDataset {
 
 class NoopExperiment {
   #name
+  #external
 
-  constructor (name = '') {
+  constructor (name = '', external = false) {
     this.#name = name
+    this.#external = external
   }
 
   name () {
@@ -81,7 +83,7 @@ class NoopExperiment {
   }
 
   experimentId () {
-    return null
+    return this.#external ? NOOP_EXPERIMENT_ID : null
   }
 
   url () {
@@ -160,7 +162,7 @@ class NoopExperiments {
     }
 
     this.#warn()
-    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name)))
+    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }
 }
 
