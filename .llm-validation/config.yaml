@@ -11,6 +11,7 @@ instruction_files:
   - .agents/skills/apm-integrations/SKILL.md
   - .agents/skills/apm-integrations/references/new-integration-guide.md
   - .agents/skills/apm-integrations/references/orchestrion.md
+  - .agents/skills/apm-integrations/references/plugin-patterns.md
   - .agents/skills/apm-integrations/references/reference-plugins.md
   - .agents/skills/apm-integrations/references/testing.md
 

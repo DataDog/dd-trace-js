@@ -63,13 +63,14 @@ cases:
       - .agents/skills/apm-integrations/SKILL.md
       - .agents/skills/apm-integrations/references/new-integration-guide.md
       - .agents/skills/apm-integrations/references/orchestrion.md
+      - .agents/skills/apm-integrations/references/plugin-patterns.md
       - .agents/skills/apm-integrations/references/reference-plugins.md
       - .agents/skills/apm-integrations/references/testing.md
     input: |
       We are evaluating automatic tracing for acme-cache >=2. Client.execute(command, ...args) is an async source
       method duplicated in dist/cjs/client.js and dist/esm/client.js, and it calls a cache service. In at most
       6 bullets, explain the recommended instrumentation, plugin lifecycle, and focused tests. Do not cover
-      registration, documentation, or CI setup.
+      plugin/product registration, documentation, or CI setup.
     expected_criteria:
       - Chooses Orchestrion rather than shimmer because execute exists as a source method.
       - >
