@@ -4,8 +4,11 @@ const { channel } = require('dc-polyfill')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const nextRequestFinishChannel = channel('apm:next:request:finish')
+const httpRequestFinishChannel = channel('apm:http:server:request:finish')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
+const VERCEL_FLUSH_TIMEOUT = 2_000
 const vercelRetentionHandlers = new WeakMap()
+const retainedVercelRequests = new WeakSet()
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -77,18 +80,31 @@ function getServerlessPlatform () {
  * @returns {void}
  */
 function flushVercelTelemetry (tracer, done) {
+  let completed = false
+  const complete = () => {
+    if (completed) return
+    completed = true
+    clearTimeout(timeout)
+    done()
+  }
+  const timeout = setTimeout(complete, VERCEL_FLUSH_TIMEOUT)
+
   setImmediate(() => {
     try {
-      tracer.flushAll(done)
+      tracer.flushAll(complete)
     } catch {
-      done()
+      complete()
     }
   })
 }
 
 function registerVercelRequestFlush (tracer) {
-  const waitUntil = getVercelRequestContext()?.waitUntil
+  const requestContext = getVercelRequestContext()
+  if (!requestContext || retainedVercelRequests.has(requestContext)) return
+
+  const { waitUntil } = requestContext
   if (typeof waitUntil !== 'function') return
+  retainedVercelRequests.add(requestContext)
 
   // Retain the invocation synchronously, then flush after Next finishes its root span.
   let done
@@ -116,9 +132,11 @@ function registerVercelTelemetryRetention (tracer) {
   if (typeof tracer?.flushAll !== 'function') return
   const flushRequest = () => registerVercelRequestFlush(tracer)
   nextRequestFinishChannel.subscribe(flushRequest)
+  httpRequestFinishChannel.subscribe(flushRequest)
 
   const unregister = () => {
     nextRequestFinishChannel.unsubscribe(flushRequest)
+    httpRequestFinishChannel.unsubscribe(flushRequest)
     vercelRetentionHandlers.delete(tracer)
   }
   vercelRetentionHandlers.set(tracer, unregister)
@@ -130,7 +148,7 @@ function registerVercelTelemetryRetention (tracer) {
  * @param {TelemetryFlusher} tracer
  */
 function initializeServerlessTelemetry (tracer) {
-  if (getServerlessPlatform().isVercel) registerVercelTelemetryRetention(tracer)
+  if (getServerlessPlatform().isVercel) return registerVercelTelemetryRetention(tracer)
 }
 
 /**

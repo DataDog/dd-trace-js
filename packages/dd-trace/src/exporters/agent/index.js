@@ -6,6 +6,7 @@ const Writer = require('./writer')
 
 class AgentExporter {
   #timer
+  #activeFlushes = new Set()
 
   constructor (config, prioritySampler) {
     this._config = config
@@ -44,10 +45,10 @@ class AgentExporter {
     const { flushInterval } = this._config
 
     if (flushInterval === 0) {
-      this._writer.flush()
+      this.#flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
-        this._writer.flush()
+        this.#flush()
         this.#timer = undefined
       }, flushInterval)
       this.#timer.unref?.()
@@ -57,7 +58,25 @@ class AgentExporter {
   flush (done = () => {}) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    this._writer.flush(done)
+    this.#flush()
+
+    const activeFlushes = [...this.#activeFlushes]
+    if (activeFlushes.length === 0) return done()
+
+    let pending = activeFlushes.length
+    const complete = () => {
+      if (--pending === 0) done()
+    }
+    for (const flush of activeFlushes) flush.callbacks.push(complete)
+  }
+
+  #flush () {
+    const flush = { callbacks: [] }
+    this.#activeFlushes.add(flush)
+    this._writer.flush(() => {
+      this.#activeFlushes.delete(flush)
+      for (const callback of flush.callbacks) callback()
+    })
   }
 }
 

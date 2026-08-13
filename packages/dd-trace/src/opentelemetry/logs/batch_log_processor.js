@@ -60,6 +60,7 @@ class BatchLogRecordProcessor {
     this.#clearTimer()
     const flushNext = () => {
       if (this.#logRecords.length === 0) {
+        // A size-triggered batch can still be in flight after it leaves this queue.
         if (typeof this.exporter.flush === 'function') this.exporter.flush(done)
         else done?.()
         return

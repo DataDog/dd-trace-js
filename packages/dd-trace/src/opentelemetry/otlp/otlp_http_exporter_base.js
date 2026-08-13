@@ -20,8 +20,7 @@ const legacyStorage = storage('legacy')
  */
 class OtlpHttpExporterBase {
   #transport = https
-  #activeRequests = 0
-  #flushCallbacks = []
+  #activeRequests = new Set()
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -90,14 +89,15 @@ class OtlpHttpExporterBase {
       },
     }
 
-    this.#activeRequests++
+    const activeRequest = { callbacks: [] }
+    this.#activeRequests.add(activeRequest)
     let completed = false
     const complete = result => {
       if (completed) return
       completed = true
-      this.#activeRequests--
+      this.#activeRequests.delete(activeRequest)
       resultCallback(result)
-      if (this.#activeRequests === 0) this.#completeFlush()
+      for (const callback of activeRequest.callbacks) callback()
     }
 
     try {
@@ -144,22 +144,21 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Calls back once all started OTLP requests have completed.
+   * Calls back once OTLP requests active at the flush boundary have completed.
    * @param {Function} [done]
    */
   flush (done) {
     if (!done) return
-    if (this.#activeRequests === 0) {
+    const activeRequests = [...this.#activeRequests]
+    if (activeRequests.length === 0) {
       done()
       return
     }
-    this.#flushCallbacks.push(done)
-  }
-
-  #completeFlush () {
-    const callbacks = this.#flushCallbacks
-    this.#flushCallbacks = []
-    for (const callback of callbacks) callback()
+    let pending = activeRequests.length
+    const complete = () => {
+      if (--pending === 0) done()
+    }
+    for (const request of activeRequests) request.callbacks.push(complete)
   }
 
   /**

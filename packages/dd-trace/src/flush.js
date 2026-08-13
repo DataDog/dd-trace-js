@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('./log')
+
 /**
  * @typedef {(done: () => void) => void | Promise<void>} TelemetryFlusher
  */
@@ -40,16 +42,17 @@ function flushAll (tracer, done) {
 
   const flush = flusher => {
     let flushed = false
-    const onFlushed = () => {
+    const onFlushed = error => {
       if (flushed) return
       flushed = true
+      if (error) log.error('Error flushing telemetry pipeline:', error)
       complete()
     }
     try {
       const result = flusher(onFlushed)
-      result?.then(onFlushed, onFlushed)
-    } catch {
-      onFlushed()
+      result?.then(onFlushed, error => onFlushed(error))
+    } catch (error) {
+      onFlushed(error)
     }
   }
 
