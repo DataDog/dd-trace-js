@@ -269,6 +269,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             MOCHA_REPORTER_THROW_EVENT: reporterEvent,
+            ...(['test', 'hook'].includes(reporterEvent) && { MOCHA_REPORT_PENDING_AT_END: '1' }),
           },
         }
       )
@@ -352,6 +353,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       if (reporterEvent === 'start' || reporterEvent === 'suite' || reporterEvent === 'test' ||
         reporterEvent === 'hook') {
         assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
+      }
+      if (reporterEvent === 'test' || reporterEvent === 'hook') {
+        assert.match(testOutput, /REPORTER TEST PENDING AT END: true/)
       }
       if (['pass', 'fail', 'pending', 'retry', 'test end'].includes(reporterEvent)) {
         assert.doesNotMatch(testOutput, /MOCHA AFTER EACH EXECUTED/)
@@ -473,6 +477,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           MOCHA_REPORTER_THROW_EVENT: 'hook end',
+          MOCHA_REPORT_PENDING_AT_END: '1',
         },
       }
     )
@@ -504,6 +509,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     ])
     if (mochaMajor >= 8) assert.match(testOutput, /custom Mocha reporter failed/)
     assert.match(testOutput, /MOCHA BEFORE EACH EXECUTED/)
+    assert.match(testOutput, /REPORTER TEST PENDING AT END: true/)
     assert.doesNotMatch(testOutput, /MOCHA (?:AFTER EACH|TEST BODY) EXECUTED/)
     assert.notStrictEqual(exitCode, 0, testOutput)
   })

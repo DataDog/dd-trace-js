@@ -764,7 +764,6 @@ function wrapRunnerEmit (Runner) {
 
     runnerEndHandlers.delete(this)
     restoreFutureHooks(this)
-    restoreReporterMutations(this)
     parallelRunners.delete(this)
     runnerTestEndHandlers.delete(this)
     runnerStarted.delete(this)
@@ -779,6 +778,8 @@ function wrapRunnerEmit (Runner) {
         frameworkError = error
         runnerFrameworkErrors.set(this, error)
       }
+    } finally {
+      restoreReporterMutations(this)
     }
 
     adjustRunnerFailuresOnce(this)
