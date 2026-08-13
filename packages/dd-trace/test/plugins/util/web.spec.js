@@ -901,6 +901,29 @@ describe('plugins/util/web', () => {
       )
     })
 
+    it('merges tracing headers into mixed-case explicit headers', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'baggage'
+      res.getHeaders.returns({})
+      res.writeHead = sinon.spy()
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200, {
+        [ALLOW_ORIGIN]: '*',
+        'Access-Control-Allow-Headers': 'content-type',
+      })
+
+      assert.ok(res.writeHead.calledOnce)
+      assert.deepStrictEqual(
+        res.writeHead.firstCall.args,
+        [200, {
+          [ALLOW_ORIGIN]: '*',
+          'Access-Control-Allow-Headers': 'content-type,baggage',
+        }]
+      )
+    })
+
     it('honours headers passed as the third writeHead argument with a status message', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
