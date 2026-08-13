@@ -13,6 +13,7 @@ class Row {
     this.expectedOutput = fields.expectedOutput
     this.errorType = fields.errorType
     this.errorMessage = fields.errorMessage
+    this.errorStack = fields.errorStack
     this.evaluations = fields.evaluations
     this.evaluationErrors = fields.evaluationErrors
   }
