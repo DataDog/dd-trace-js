@@ -493,7 +493,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
     assert.equal(record.id, 'rec')
-    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
+    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, tags: [], id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
