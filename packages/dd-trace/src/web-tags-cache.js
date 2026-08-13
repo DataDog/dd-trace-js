@@ -3,8 +3,9 @@
 // Per-span cache of "which tag bag from the started-spans chain identifies
 // this span (or its nearest web-server ancestor) as a web-server span?"
 // Populated lazily on first `getCachedWebTags(span)`, refreshed
-// automatically when a `dd-trace:span:tags:update` event promotes a
-// previously-empty answer for that span into a real value.
+// automatically when a `dd-trace:span:tags:update` event turns a span into a
+// web-server span after the fact — for that span and for every descendant
+// whose answer the promotion changes.
 //
 // Used by the wall profiler (endpoint-collection label on samples) and by
 // the OTEP-4947 thread-context writer (endpoint attribute in the record);
@@ -13,11 +14,12 @@
 //
 // Consumers that want to react to late web-server-span discovery
 // subscribe to `resolvedCh` — a diagnostics channel we publish on once
-// per span at the moment its cached webTags transitions from undefined
-// to a real value. Doing it via a channel (rather than exposing a
-// stateful "did the transition happen?" query) means each consumer sees
-// every transition exactly once, regardless of subscription order or
-// how many other consumers are attached.
+// per span at the moment its cached webTags changes, i.e. when a promotion
+// gives it an answer it didn't have or replaces the one it had with a
+// nearer one. Doing it via a channel (rather than exposing a stateful "did
+// the transition happen?" query) means each consumer sees every transition
+// exactly once, regardless of subscription order or how many other
+// consumers are attached.
 //
 // `endpointResolvedCh` is the same idea one field over: published once per
 // web-server span at the moment its endpoint name settles (see finalEndpoint in
@@ -63,7 +65,9 @@ function getCache (span) {
 // Returns the web-server tag bag for this span or its nearest web-server
 // ancestor in the started-spans chain, or undefined if none is a
 // web-server span. Lazy: walks the parent chain on the first call, caches
-// the result on the span.
+// the result on the span. Answers only ever change through onTagsUpdate, which
+// rewrites the affected entries in place, so a resolved answer is never
+// revisited here.
 function getCachedWebTags (span) {
   const cached = getCache(span)
   if (cached.resolved) return cached.webTags
@@ -97,11 +101,17 @@ function getCachedWebTags (span) {
 function onTagsUpdate (span) {
   const cached = span[CachedSym]
   if (cached === undefined || !cached.resolved) return
-  const tags = span.context().getTags()
-  if (cached.webTags === undefined) {
-    if (!isWebServerSpan(tags)) return
+  const spanContext = span.context()
+  const tags = spanContext.getTags()
+  // Anything but this span's own bag is an answer that predates it being a
+  // web-server span: either empty, or an outer web-server ancestor's bag that
+  // this span now supersedes for itself and for its descendants. A span whose
+  // cached answer already is its own bag is the overwhelmingly common case here
+  // (every further tag update on a request span), and stops at one comparison.
+  if (cached.webTags !== tags && isWebServerSpan(tags)) {
     cached.webTags = tags
     resolvedCh.publish(span)
+    resolveDescendants(spanContext, tags)
   }
   // Endpoint finality is a property of the web-server span itself: for a
   // descendant, cached.webTags is an ancestor's bag rather than these tags, and
@@ -112,6 +122,36 @@ function onTagsUpdate (span) {
   if (finalEndpoint(tags) === undefined) return
   cached.endpointFinal = true
   endpointResolvedCh.publish(span)
+}
+
+// A span has just become a web-server span; answers cached for its descendants
+// before that moment found a farther ancestor or nothing at all, and are now
+// wrong. Rewrite them here rather than letting each descendant discover it on
+// its next lookup: a descendant that is already active keeps handing samplers
+// its stale answer for as long as it runs without re-entering storage, which is
+// precisely the uninterrupted synchronous stretch profiling cares about.
+//
+// One forward pass over the trace's started-spans list, which is in creation
+// order, so a span's parent always precedes it: `answers` holds the new answer
+// for each span in the promoted span's subtree, keyed by span id, and a span
+// inherits its parent's unless it is a web-server span itself, in which case its
+// own bag shadows the promotion for its own subtree. Spans outside the subtree
+// are never in `answers`, so they cost one map lookup and nothing else.
+function resolveDescendants (spanContext, webTags) {
+  const startedSpans = getStartedSpans(spanContext)
+  const answers = new Map([[spanContext._spanId, webTags]])
+  for (const span of startedSpans) {
+    const context = span.context()
+    const inherited = answers.get(context._parentId)
+    if (inherited === undefined) continue
+    const tags = context.getTags()
+    const answer = isWebServerSpan(tags) ? tags : inherited
+    answers.set(context._spanId, answer)
+    const cached = span[CachedSym]
+    if (cached === undefined || !cached.resolved || cached.webTags === answer) continue
+    cached.webTags = answer
+    resolvedCh.publish(span)
+  }
 }
 
 let activeCount = 0
