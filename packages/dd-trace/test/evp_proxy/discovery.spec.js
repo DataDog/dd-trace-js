@@ -10,7 +10,7 @@ describe('EVP proxy discovery', () => {
   const url = new URL('http://localhost:8126')
   const options = {
     supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
-    requiredHeaders: ['X-Datadog-EVP-Subdomain'],
+    requiredHeaders: ['Content-Type'],
   }
 
   let discoverEVPProxy
@@ -35,7 +35,7 @@ describe('EVP proxy discovery', () => {
     it('uses caller preference order and normalizes trailing slashes', () => {
       const path = selectEVPProxyPath({
         endpoints: ['/evp_proxy/v2/', '/evp_proxy/v4/'],
-        evp_proxy_allowed_headers: ['x-datadog-evp-subdomain'],
+        evp_proxy_allowed_headers: ['content-type'],
       }, options)
 
       assert.strictEqual(path, '/evp_proxy/v4')
@@ -64,7 +64,7 @@ describe('EVP proxy discovery', () => {
     it('rejects a malformed allowed-header field', () => {
       const path = selectEVPProxyPath({
         endpoints: ['/evp_proxy/v2'],
-        evp_proxy_allowed_headers: 'X-Datadog-EVP-Subdomain',
+        evp_proxy_allowed_headers: 'Content-Type',
       }, options)
 
       assert.strictEqual(path, undefined)
@@ -73,7 +73,7 @@ describe('EVP proxy discovery', () => {
     it('rejects a missing required header', () => {
       const path = selectEVPProxyPath({
         endpoints: ['/evp_proxy/v2'],
-        evp_proxy_allowed_headers: ['Content-Type'],
+        evp_proxy_allowed_headers: ['Accept-Encoding'],
       }, options)
 
       assert.strictEqual(path, undefined)
@@ -88,7 +88,7 @@ describe('EVP proxy discovery', () => {
     it('fetches information only when discovery is called', (done) => {
       fetchAgentInfo.yields(null, {
         endpoints: ['/evp_proxy/v2'],
-        evp_proxy_allowed_headers: ['X-Datadog-EVP-Subdomain'],
+        evp_proxy_allowed_headers: ['content-type'],
       })
 
       sinon.assert.notCalled(fetchAgentInfo)

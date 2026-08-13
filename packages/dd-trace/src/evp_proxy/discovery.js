@@ -49,8 +49,8 @@ const TRAILING_SLASHES = /\/+$/
  * @param {object} agentInfo - Agent `/info` response
  * @param {object} options - Selection options
  * @param {string[]} options.supportedPaths - Supported paths in preference order
- * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward to intake. Do not include
- * routing headers that the Agent consumes, such as X-Datadog-EVP-Subdomain.
+ * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
+ * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
  * @returns {string|undefined} Selected normalized path
  */
 function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] } = {}) {
@@ -103,8 +103,8 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {URL} url - Configured Agent URL
  * @param {object} options - Selection options
  * @param {string[]} options.supportedPaths - Supported paths in preference order
- * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward to intake. Do not include
- * routing headers that the Agent consumes, such as X-Datadog-EVP-Subdomain.
+ * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
+ * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
  * @returns {void}
  */
