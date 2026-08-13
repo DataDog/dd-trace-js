@@ -147,9 +147,10 @@ class DatadogTracer extends Tracer {
   /**
    * Flushes every configured telemetry pipeline.
    * @param {Function} [done] Called after every configured export completes
+   * @param {{ timeout?: number }} [options] Bounds this flush operation.
    */
-  flushAll (done) {
-    flushAll(this, done)
+  flushAll (done, options) {
+    flushAll(this, done, options)
   }
 
   scope () {
