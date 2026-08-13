@@ -4,7 +4,7 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
-## 6.0 to 7.0
+## 6.0 to 7.0 (unreleased)
 
 ### Electron plugin disabled by default
 
