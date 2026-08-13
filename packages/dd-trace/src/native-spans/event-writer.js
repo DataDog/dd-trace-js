@@ -627,7 +627,10 @@ if (DOUBLE_COUNTS[KIND_SET_TAG_NUMBER] !== 1) {
  * traffic and the interning table on their own.
  *
  * Overriding the write methods rather than branching inside them keeps the flag off
- * the hot path entirely: with it on, `EventWriter` is byte for byte the class it was.
+ * the hot path entirely: with it on, `EventWriter` is byte for byte the class it was. The
+ * cost is that a write method added to `EventWriter` without an override here would
+ * quietly keep writing — which is exactly what happened when the web-server events
+ * landed — so `test/native-spans/event-writer.spec.js` pins the two method sets equal.
  * Nothing is written, so `flush()` has nothing to hand over and the whole Rust
  * pipeline goes quiet too — this is the JS-side counterpart of
  * `DD_NATIVE_SPANS_DECODE=0`, and the outermost rung of that same ladder.
@@ -650,7 +653,13 @@ class NoopEventWriter extends EventWriter {
 
   addEvent () {}
 
+  spanError () {}
+
   finish () {}
+
+  webRequestStart () {}
+
+  webRequestFinish () {}
 
   flush () {}
 }
@@ -694,4 +703,4 @@ function getWriter (config) {
   return writer
 }
 
-module.exports = { EventWriter, getWriter }
+module.exports = { EventWriter, NoopEventWriter, getWriter }
