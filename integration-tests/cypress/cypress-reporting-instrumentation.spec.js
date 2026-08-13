@@ -582,7 +582,7 @@ moduleTypes.forEach(({
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
-            CYPRESS_REJECT_AFTER_SPEC: 'cypress/e2e/basic-pass.js',
+            CYPRESS_REJECT_SECOND_AFTER_SPEC: '1',
             SPEC_PATTERN: 'cypress/e2e/{basic-pass,other.cy}.js',
           },
         }
@@ -596,15 +596,15 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const completedSuite = events.find(event =>
-            event.type === 'test_suite_end' &&
-            event.content.resource === 'test_suite.cypress/e2e/other.cy.js'
-          )
-          const failedSuite = events.find(event =>
-            event.type === 'test_suite_end' &&
-            event.content.resource === 'test_suite.cypress/e2e/basic-pass.js'
-          )
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+          const completedSuite = suiteEvents.find(event => event.content.meta[TEST_STATUS] === 'pass')
+          const failedSuite = suiteEvents.find(event => event.content.meta[TEST_STATUS] === 'fail')
 
+          assert.strictEqual(suiteEvents.length, 2)
+          assert.deepStrictEqual(suiteEvents.map(event => event.content.resource).sort(), [
+            'test_suite.cypress/e2e/basic-pass.js',
+            'test_suite.cypress/e2e/other.cy.js',
+          ])
           assert.ok(completedSuite, `expected the completed suite event\n${testOutput}`)
           assert.strictEqual(completedSuite.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(completedSuite.content.error, 0)
@@ -1074,12 +1074,14 @@ moduleTypes.forEach(({
       enableHelper,
       rejectAfterPlugin,
       errorMessage,
+      simulatePreScreenshotPlugin,
     } of [
         {
           lifecycle: 'after:run',
           enableHelper: 'CYPRESS_ENABLE_AFTER_RUN_CUSTOM',
           rejectAfterPlugin: 'CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN',
           errorMessage: 'manual after:run failed after Datadog',
+          simulatePreScreenshotPlugin: true,
         },
         {
           lifecycle: 'after:spec',
@@ -1088,7 +1090,9 @@ moduleTypes.forEach(({
           errorMessage: 'manual after:spec failed after Datadog',
         },
       ]) {
-      over10It(`defers an older direct ${lifecycle} helper to current finalization`, async () => {
+      const preScreenshotDescription = simulatePreScreenshotPlugin ? ' with a pre-screenshot manual plugin' : ''
+      const testName = `defers an older direct ${lifecycle} helper to current finalization${preScreenshotDescription}`
+      over10It(testName, async () => {
         const manualPackageDir = path.join(cwd, 'node_modules', 'dd-trace')
         const externalPackageDir = path.join(cwd, 'external-tracer', 'node_modules', 'dd-trace')
         fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
@@ -1112,6 +1116,7 @@ moduleTypes.forEach(({
                 NODE_OPTIONS: `-r ${path.join(externalPackageDir, 'ci', 'init')}`,
                 CYPRESS_BASE_URL: webAppBaseUrl,
                 CYPRESS_SIMULATE_OLD_MANUAL_PLUGIN: '1',
+                CYPRESS_SIMULATE_PRE_SCREENSHOT_MANUAL_PLUGIN: simulatePreScreenshotPlugin ? '1' : undefined,
                 [enableHelper]: '1',
                 [rejectAfterPlugin]: '1',
                 SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
@@ -2500,7 +2505,7 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
-      it('removes an older manual before:run handler when current auto instrumentation takes ownership', () => {
+      it('removes a pre-screenshot manual before:run handler when current instrumentation takes ownership', () => {
         const projectRoot = createProjectRoot()
         const legacyBeforeRunHandler = sinon.stub()
         const currentBeforeRunHandler = sinon.stub()
@@ -2528,7 +2533,6 @@ if (requestedVersion === 'latest' &&
              */
             setupNodeEvents (on) {
               on('before:run', legacyBeforeRunHandler)
-              on('after:screenshot', sinon.stub())
               on('after:spec', sinon.stub())
               on('after:run', sinon.stub())
               on('task', taskHandler)

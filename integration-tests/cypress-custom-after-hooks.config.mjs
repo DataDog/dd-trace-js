@@ -4,7 +4,9 @@ export default defineConfig({
   defaultCommandTimeout: 1000,
   e2e: {
     setupNodeEvents (on, config) {
+      let afterSpecCount = 0
       on('after:spec', (spec, results) => {
+        afterSpecCount++
         // eslint-disable-next-line no-console
         console.log('[custom:after:spec]', spec.relative, results.stats.passes)
         if (process.env.CYPRESS_REJECT_AFTER_SPEC_WITHOUT_REASON) {
@@ -14,6 +16,9 @@ export default defineConfig({
         if (process.env.CYPRESS_REJECT_AFTER_SPEC &&
           (process.env.CYPRESS_REJECT_AFTER_SPEC === '1' ||
             process.env.CYPRESS_REJECT_AFTER_SPEC === spec.relative)) {
+          return Promise.reject(new Error('custom after:spec failed'))
+        }
+        if (process.env.CYPRESS_REJECT_SECOND_AFTER_SPEC && afterSpecCount === 2) {
           return Promise.reject(new Error('custom after:spec failed'))
         }
         return new Promise((resolve) => {

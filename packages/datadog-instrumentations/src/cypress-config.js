@@ -621,15 +621,18 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
           manualPlugin.ownsCurrentPlugin = isCurrentDatadogTaskRegistration(handler)
-          const [beforeRun, afterScreenshot, afterSpec, afterRun] = recentRegistrations
+          const afterRun = recentRegistrations.at(-1)
+          const afterSpec = recentRegistrations.at(-2)
+          const possibleAfterScreenshot = recentRegistrations.at(-3)
+          const hasAfterScreenshot = possibleAfterScreenshot?.event === 'after:screenshot'
+          const beforeRun = hasAfterScreenshot ? recentRegistrations.at(-4) : possibleAfterScreenshot
           if (beforeRun?.event === 'before:run' &&
-            afterScreenshot?.event === 'after:screenshot' &&
             afterSpec?.event === 'after:spec' &&
             afterRun?.event === 'after:run') {
             manualPlugin.beforeRunHandler ||= beforeRun.handler
             manualPlugin.afterSpecHandler ||= afterSpec.handler
             manualPlugin.afterRunHandler ||= afterRun.handler
-            manualPlugin.afterScreenshotHandler ||= afterScreenshot.handler
+            if (hasAfterScreenshot) manualPlugin.afterScreenshotHandler ||= possibleAfterScreenshot.handler
           }
           manualPlugin.taskHandler = handler
         } else {
