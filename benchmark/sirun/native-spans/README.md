@@ -2,7 +2,7 @@
 
 End-to-end benchmark, parity harness and shared test app for the native-spans PoC —
 a `Span` implementation whose every mutating method is a fixed-width write into a
-shared buffer, with decode, chunk assembly, v0.5 encoding and HTTP export handled by
+shared buffer, with decode, chunk assembly, msgpack encoding and HTTP export handled by
 a Rust native extension.
 
 Selected with `DD_TRACE_EXPERIMENTAL_NATIVE_SPANS=1`. Not shipped, not backported.
@@ -22,48 +22,38 @@ that asserts on exported spans.
 | File | Purpose |
 |---|---|
 | `app.js` | The shared test app: `/hello` (auto-instrumentation only), `/simple` (one child span, one tag), `/busy` (five child spans, four tags each — the clustered shape identity elision targets), `/error` (throws). Imported by all three consumers, never duplicated. |
-| `capture-server.js` | Trace sink accepting `PUT` on `/v0.4/traces` and `/v0.5/traces`, decoding both into one comparable shape. The repo's mock agent 404s on v0.5. `decode: false` turns it into a discard-the-body sink. |
+| `capture-server.js` | Trace sink accepting `PUT /v0.4/traces` and decoding each span into one comparable shape. `decode: false` turns it into a discard-the-body sink. |
 | `parity.js` | Runs the app twice — baseline, then native — and compares what each exported. |
 | `parity-worker.js` | One side of that comparison, as a child process. |
 | `server.js` / `client.js` / `common.js` / `meta.json` | The sirun end-to-end benchmark: an untraced client driving the traced server over one keep-alive connection. |
 
-## Wire protocols
+## Wire format
 
-The native encoder implements both agent trace formats and follows
-`DD_TRACE_AGENT_PROTOCOL_VERSION`, so it speaks whichever one the rest of the tracer was
-configured for. v0.4 is the tracer's default. Both are pinned byte for byte against the
-JS encoders by `v04_matches_the_js_encoder_byte_for_byte` and its v0.5 counterpart in
-`native/src/tests.rs`.
+The extension always `PUT`s `/v0.4/traces`, whatever `DD_TRACE_AGENT_PROTOCOL_VERSION`
+says, and its bytes are pinned against `0.4.js` by
+`v04_matches_the_js_encoder_byte_for_byte` in `native/src/tests.rs`.
 
-Measured, 150k spans, medians of five (`cargo test --release stage_timings`):
+Two things the JS encoders do that this one deliberately does not, both measured rather
+than assumed — worth knowing before adding either back:
 
-| | encode | payload |
-|---|---|---|
-| v0.4 | 17.0 ms | 42.8 MiB |
-| v0.5 | 35.2 ms | 20.5 MiB |
-
-**v0.4 encodes twice as fast in Rust, and that is the reverse of JS**, where v0.5 is
-~22% faster (2030 ms vs 2600 ms over 2M spans). The two languages are paying for
-different things: JS spends its time converting UTF-16 strings to UTF-8, which v0.5's
-string table amortises across every repeat, while a Rust `Rc<str>` is already UTF-8 so
-emitting a string is a length prefix plus a `memcpy` — and v0.5's per-string hash lookup
-costs more than the bytes it saves.
-
-For the same reason there is **no string cache in the Rust v0.4 encoder**, unlike
-`0.4.js`. Caching pre-encoded bytes trades that `memcpy` for a hash lookup and nothing
-else; `v04_string_cache_comparison` prices it at **49% slower** (29.0 ms against 19.5 ms
-for the same 13.5 MB of output). The JS cache is not a mistake — it avoids a conversion
-that simply does not exist on the Rust side.
+- **No indexed string table.** The agent's other trace format hoists every string into a
+  leading table and refers to it by index. Implemented here, it encoded at half the speed
+  (35 ms against 17 ms per 150k spans): a table trades a `memcpy` for a hash lookup per
+  string, and a Rust `Rc<str>` is already UTF-8, so there is no conversion left for the
+  table to amortise. The same trade favours the table in JS, where it avoids repeated
+  UTF-16 to UTF-8 conversions — which is why the JS encoder has one and this does not.
+- **No string cache**, unlike `0.4.js`, for the same reason: caching pre-encoded bytes
+  buys nothing when the bytes are already sitting there. Measured at 49% slower — 29.0 ms
+  against 19.5 ms for the same 13.5 MB of output.
 
 ## Parity
 
 ```bash
-node benchmark/sirun/native-spans/parity.js          # both protocols
-PARITY_PROTOCOL=0.4 node benchmark/sirun/native-spans/parity.js
+node benchmark/sirun/native-spans/parity.js
 ```
 
-Each pass compares native against a baseline speaking the *same* protocol, so a format
-difference can never be mistaken for a real one.
+Both sides are pinned to the same wire format, so a format difference can never read as a
+real one.
 
 The two implementations run as separate process invocations, so ids and timestamps
 never match; the comparison is structural — same chunk count, same span count and
@@ -105,8 +95,12 @@ The headline comparison always runs with all five on.
 | `DD_NATIVE_SPANS_WRITE=0` | the span layer only — ids, timestamp splitting, tag dispatch, link and event serialization; no buffer writes, no interning, nothing for Rust to read |
 | `DD_NATIVE_SPANS_DECODE=0` | + buffer writes and interning |
 | `DD_NATIVE_SPANS_PROCESS=0` | + decode |
-| `DD_NATIVE_SPANS_ENCODE=0` | + chunk assembly |
-| `DD_NATIVE_SPANS_FLUSH=0` | + v0.5 encoding, no HTTP PUT |
+| `DD_NATIVE_SPANS_ENCODE=0` | + chunk assembly, without writing any bytes |
+| `DD_NATIVE_SPANS_FLUSH=0` | + encoding, no HTTP PUT |
+
+Assembly and encoding are one pass — a finished span is written to bytes while the
+assembler still holds it — so `ENCODE=0` skips the byte writing inside that pass rather
+than skipping a separate stage.
 
 `WRITE=0` is the JS-side rung and is read straight from the environment, like the four
 Rust ones; none of them is registered in `supported-configurations.json`, because they
@@ -120,6 +114,22 @@ Two caveats when using them with `benchmark/sirun/spans`:
   `span_format` and msgpack. For a full-pipeline comparison, replace that override with
   `tracer._tracer._processor._exporter._writer._sendPayload = function () {}` — which
   keeps formatting and encoding and drops only the socket write.
+
+## Rust stage timings
+
+```bash
+cd packages/dd-trace/src/native-spans/native
+cargo test --release -- --nocapture --ignored --test-threads=1
+BENCH_SPANS_PER_SEGMENT=8 cargo test --release stage_timings -- --nocapture --ignored --test-threads=1
+```
+
+`--test-threads=1` matters: the harnesses contaminate each other's timings otherwise.
+
+`BENCH_SPANS_PER_SEGMENT` defaults to 1, which is the worst case for per-segment overhead
+and unlike anything real — an Express request produces three to eight spans in one
+segment. It is worth setting before optimising anything: going from 1 to 8 halves assembly
+(41 ms to 21 ms per 150k spans), because half of what the default measures is per-segment
+bookkeeping that real traces amortise away.
 
 ## Debugging
 

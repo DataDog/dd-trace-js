@@ -377,7 +377,7 @@ class EventWriter {
   }
 
   /**
-   * Hand the three buffers to Rust — decode, chunk assembly and v0.5 encoding all
+   * Hand the three buffers to Rust — decode, chunk assembly and msgpack encoding all
    * run inline, on this thread, before the call returns; only the HTTP PUT is
    * deferred. Cursors and the interning table reset afterwards, so the next
    * window starts overwriting from the front of each buffer with ids restarting

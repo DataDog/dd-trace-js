@@ -25,11 +25,10 @@ const WORKER_PATH = join(__dirname, 'parity-worker.js')
 // two runs would never be comparable on those fields at all.
 const APP_PORT = Number(process.env.PARITY_APP_PORT) || 31_337
 
-// Both wire formats, each compared against a baseline speaking the same one. The native
-// encoder implements both, so there is no reason to compare across protocols — and doing
-// so would confuse a real difference with a format difference. Narrow it with
-// `PARITY_PROTOCOL=0.4`.
-const PROTOCOLS = process.env.PARITY_PROTOCOL ? [process.env.PARITY_PROTOCOL] : ['0.4', '0.5']
+// The wire format both sides speak. Pinned rather than left to the environment, so a
+// stray `DD_TRACE_AGENT_PROTOCOL_VERSION` cannot point the baseline at a format the
+// capture server does not accept.
+const PROTOCOL = '0.4'
 
 /**
  * Tag keys whose values cannot match across two processes, or that this PoC
@@ -88,29 +87,8 @@ const EXPECTED_DIFFERENCES = [
 ]
 
 async function main () {
-  let failed = 0
-
-  for (const protocol of PROTOCOLS) {
-    process.stdout.write(`\n=== protocol v${protocol} ===\n`)
-    failed += await comparePass(protocol)
-  }
-
-  if (failed === 0) {
-    process.stdout.write('\nPARITY OK — no unexplained differences\n')
-    return
-  }
-
-  process.stdout.write(`\nPARITY FAILED (${failed} unexplained difference(s))\n`)
-  process.exitCode = 1
-}
-
-/**
- * @param {string} protocol
- * @returns {Promise<number>} Count of unexplained differences.
- */
-async function comparePass (protocol) {
-  const baseline = await collect(false, protocol)
-  const native = await collect(true, protocol)
+  const baseline = await collect(false)
+  const native = await collect(true)
 
   const differences = []
   const expected = new Map()
@@ -139,11 +117,16 @@ async function comparePass (protocol) {
     }
   }
 
-  for (const difference of differences) {
-    process.stdout.write(`  UNEXPLAINED: ${difference}\n`)
+  if (differences.length === 0) {
+    process.stdout.write('\nPARITY OK — no unexplained differences\n')
+    return
   }
 
-  return differences.length
+  process.stdout.write(`\nPARITY FAILED (${differences.length} unexplained difference(s))\n`)
+  for (const difference of differences) {
+    process.stdout.write(`  ${difference}\n`)
+  }
+  process.exitCode = 1
 }
 
 /**
@@ -151,10 +134,9 @@ async function comparePass (protocol) {
  * into a comparable order.
  *
  * @param {boolean} native
- * @param {string} protocol
  * @returns {Promise<import('./capture-server').CapturedSpan[][]>}
  */
-async function collect (native, protocol) {
+async function collect (native) {
   const capture = await startCaptureServer()
 
   await new Promise((resolve, reject) => {
@@ -162,7 +144,7 @@ async function collect (native, protocol) {
       env: {
         ...process.env,
         DD_TRACE_AGENT_URL: `http://127.0.0.1:${capture.port}`,
-        DD_TRACE_AGENT_PROTOCOL_VERSION: protocol,
+        DD_TRACE_AGENT_PROTOCOL_VERSION: PROTOCOL,
         DD_TRACE_EXPERIMENTAL_NATIVE_SPANS: native ? '1' : '0',
         PARITY_APP_PORT: String(APP_PORT),
         DD_SERVICE: 'native-spans-parity',

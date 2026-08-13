@@ -30,6 +30,10 @@ use crate::wire::{
 /// A decoded record. Strings are resolved to owned `Rc<str>` here, before the
 /// batch's id table is discarded, so nothing downstream holds a reference to an id
 /// whose meaning resets at the next flush.
+// Variant names mirror the wire kind names (`ADD_EVENT`, `ADD_LINK`, ...) so the decoder
+// reads against the format table; that some of them end in `Event` is a coincidence of the
+// enum's own name.
+#[allow(clippy::enum_variant_names)]
 pub enum Event {
     ProcessInfo {
         service: Rc<str>,

@@ -1,12 +1,11 @@
 'use strict'
 
-// A minimal trace sink. The existing mock agent (`test/plugins/agent.js`) 404s on
-// `/v0.5/traces`, which is the only endpoint the native path speaks, so the harness
-// stands up its own.
+// A minimal trace sink: accepts `PUT /v0.4/traces` and normalizes each span into one
+// comparable shape, so a baseline run and a native run line up field by field. The repo's
+// own mock agent (`test/plugins/agent.js`) is built around the plugin-test harness rather
+// than a standalone driver, so this stands in for it.
 //
-// Accepts `PUT` on both `/v0.4/traces` and `/v0.5/traces` and normalizes each into
-// one shape, so a baseline run and a native run are comparable field by field. With
-// `decode: false` the body is discarded unread — that is the mode the end-to-end
+// With `decode: false` the body is discarded unread — that is the mode the end-to-end
 // benchmark wants, where decoding would put the harness's own cost into the numbers.
 
 const http = require('node:http')
@@ -48,7 +47,7 @@ function startCaptureServer ({ decode: shouldDecode = true, port = 0, onChunk } 
   let requestCount = 0
 
   const server = http.createServer((request, response) => {
-    if (request.method !== 'PUT' || !/^\/v0\.[45]\/traces$/.test(request.url)) {
+    if (request.method !== 'PUT' || request.url !== '/v0.4/traces') {
       response.writeHead(404).end()
       return
     }
@@ -69,10 +68,7 @@ function startCaptureServer ({ decode: shouldDecode = true, port = 0, onChunk } 
         // `useBigInt64` keeps 64-bit ids exact; without it the decoder rounds them
         // through a double and parent/child linkage stops matching.
         const payload = decode(Buffer.concat(parts), { useBigInt64: true })
-        const decoded = request.url === '/v0.5/traces'
-          ? normalizeV05(payload)
-          : normalizeV04(payload)
-        for (const chunk of decoded) {
+        for (const chunk of normalize(payload)) {
           chunks.push(chunk)
           onChunk?.(chunk)
         }
@@ -97,12 +93,12 @@ function startCaptureServer ({ decode: shouldDecode = true, port = 0, onChunk } 
 }
 
 /**
- * v0.4 is an array of chunks, each an array of maps keyed by field name.
+ * The wire is an array of traces, each an array of maps keyed by field name.
  *
  * @param {Array<Array<Record<string, unknown>>>} payload
  * @returns {CapturedSpan[][]}
  */
-function normalizeV04 (payload) {
+function normalize (payload) {
   return payload.map(chunk => chunk.map(span => ({
     service: text(span.service),
     name: text(span.name),
@@ -116,45 +112,6 @@ function normalizeV04 (payload) {
     error: Number(span.error ?? 0),
     meta: stringMap(span.meta),
     metrics: numberMap(span.metrics),
-  })))
-}
-
-// v0.5 is `[stringTable, traces]`, and each span is a 12-slot array whose string
-// fields are indices into the table.
-const V05_SERVICE = 0
-const V05_NAME = 1
-const V05_RESOURCE = 2
-const V05_TRACE_ID = 3
-const V05_SPAN_ID = 4
-const V05_PARENT_ID = 5
-const V05_START = 6
-const V05_DURATION = 7
-const V05_ERROR = 8
-const V05_META = 9
-const V05_METRICS = 10
-const V05_TYPE = 11
-
-/**
- * @param {[string[], Array<Array<Array<unknown>>>]} payload
- * @returns {CapturedSpan[][]}
- */
-function normalizeV05 (payload) {
-  const [table, traces] = payload
-  const lookup = index => table[Number(index)] ?? ''
-
-  return traces.map(chunk => chunk.map(span => ({
-    service: lookup(span[V05_SERVICE]),
-    name: lookup(span[V05_NAME]),
-    resource: lookup(span[V05_RESOURCE]),
-    type: lookup(span[V05_TYPE]),
-    trace_id: identifier(span[V05_TRACE_ID]),
-    span_id: identifier(span[V05_SPAN_ID]),
-    parent_id: identifier(span[V05_PARENT_ID]),
-    start: Number(span[V05_START] ?? 0),
-    duration: Number(span[V05_DURATION] ?? 0),
-    error: Number(span[V05_ERROR] ?? 0),
-    meta: indexedStringMap(span[V05_META], lookup),
-    metrics: indexedNumberMap(span[V05_METRICS], lookup),
   })))
 }
 
@@ -193,22 +150,6 @@ function numberMap (value) {
   const out = {}
   if (value) {
     for (const [key, entry] of Object.entries(value)) out[key] = Number(entry)
-  }
-  return out
-}
-
-function indexedStringMap (value, lookup) {
-  const out = {}
-  if (value) {
-    for (const [key, entry] of Object.entries(value)) out[lookup(key)] = lookup(entry)
-  }
-  return out
-}
-
-function indexedNumberMap (value, lookup) {
-  const out = {}
-  if (value) {
-    for (const [key, entry] of Object.entries(value)) out[lookup(key)] = Number(entry)
   }
   return out
 }

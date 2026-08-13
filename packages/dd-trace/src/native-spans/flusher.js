@@ -39,9 +39,6 @@ function createFlusher (events, doubles, strings, config) {
       url: String(config?.url ?? 'http://127.0.0.1:8126'),
       tracerVersion,
       nodeVersion: process.version,
-      // Whichever wire format the rest of the tracer was configured for; the native
-      // encoder implements both.
-      protocolVersion: String(config?.protocolVersion ?? '0.5'),
       flushMinSpans: config?.flushMinSpans ?? 1000,
     }
   )

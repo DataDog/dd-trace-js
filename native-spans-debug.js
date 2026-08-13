@@ -43,8 +43,6 @@ async function main () {
 
   process.env.DD_TRACE_AGENT_URL = `http://127.0.0.1:${sink.port}`
   process.env.DD_TRACE_ENABLED = 'true'
-  process.env.DD_TRACE_AGENT_PROTOCOL_VERSION =
-    process.env.DD_TRACE_EXPERIMENTAL_NATIVE_SPANS === '1' ? '0.5' : '0.4'
 
   const tracer = require('./').init()
   const { ROUTES, startApp } = require('./benchmark/sirun/native-spans/app')

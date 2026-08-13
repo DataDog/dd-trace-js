@@ -1,6 +1,5 @@
-//! `PUT /v0.4/traces` or `/v0.5/traces` — whichever the configured protocol selects —
-//! run from `FlushToAgent::compute` on N-API's worker pool after `flush()` has already
-//! returned to JS.
+//! `PUT /v0.4/traces`, run from `FlushToAgent::compute` on N-API's worker pool after
+//! `flush()` has already returned to JS.
 //!
 //! `ureq` rather than `reqwest`: `reqwest`'s blocking mode starts its own tokio
 //! runtime purely to `block_on`, which is exactly the overhead being avoided here,
@@ -22,12 +21,7 @@ pub struct AgentClient {
 }
 
 impl AgentClient {
-    pub fn new(
-        base_url: &str,
-        tracer_version: String,
-        node_version: String,
-        path: &str,
-    ) -> Self {
+    pub fn new(base_url: &str, tracer_version: String, node_version: String) -> Self {
         let config = ureq::Agent::config_builder()
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_recv_response(Some(READ_TIMEOUT))
@@ -35,7 +29,7 @@ impl AgentClient {
 
         Self {
             agent: config.new_agent(),
-            endpoint: format!("{}{}", base_url.trim_end_matches('/'), path),
+            endpoint: format!("{}{}", base_url.trim_end_matches('/'), crate::encode::AGENT_PATH),
             tracer_version,
             node_version,
         }

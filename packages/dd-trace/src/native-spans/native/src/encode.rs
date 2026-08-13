@@ -1,12 +1,11 @@
-//! Hand-rolled msgpack for both agent trace protocols, not `rmp-serde` / `rmpv`.
+//! Hand-rolled msgpack v0.4, not `rmp-serde` / `rmpv`.
 //!
-//! `0.5.js` deliberately mixes fixed and runtime-chosen widths per field: string
-//! table indices and the three ids are always forced to `uint32` / `uint64`
-//! regardless of value, the outer string-table and trace arrays are always
-//! `array32` regardless of length, the meta / metrics maps are always `map32`, and
-//! `start`, `duration`, `error` and metric *values* each get the
-//! shortest-int-or-float encoding at runtime. A generic `Serialize` derive cannot
-//! reproduce that mix, which is the whole justification for writing the bytes here.
+//! `0.4.js` deliberately mixes fixed and runtime-chosen widths per field: the three
+//! ids are always `uint64` whatever their value, the outer trace arrays are always
+//! `array32` regardless of length, the meta and metrics maps are always `map32`, and
+//! `error`, `start`, `duration` and metric *values* each get the shortest
+//! int-or-float encoding at runtime. A generic `Serialize` derive cannot reproduce
+//! that mix, which is the whole justification for writing the bytes here.
 //!
 //! `write_int_or_float` replicates `MsgpackChunk#writeIntOrFloat` exactly, including
 //! its positive-fixint fast path and its treatment of `NaN`, `±Infinity` and `-0.0`
@@ -15,45 +14,23 @@
 //! (see the `id.js` rewrite section of the design doc) — but the dispatch is
 //! replicated anyway, since byte-for-byte fidelity is the point.
 
-use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::process::{Chunk, FormattedSpan};
+/// The only endpoint this extension speaks.
+///
+/// The agent's indexed-string format was implemented here and then dropped: it encoded at
+/// half the speed (35 ms against 17 ms per 150k spans), because a string table trades a
+/// `memcpy` for a hash lookup per string and a Rust `Rc<str>` is already UTF-8, so there
+/// was no conversion for the table to amortise. Worth knowing before reaching for it
+/// again — the same trade favours the table in JS, which is why the JS encoder has one.
+pub const AGENT_PATH: &str = "/v0.4/traces";
 
-/// Which wire format the agent endpoint expects. v0.4 spells every field name out on
-/// each span; v0.5 hoists all strings into a leading table and refers to them by
-/// index. They are different enough that they get separate encoders sharing only the
-/// number and string primitives.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Protocol {
-    V04,
-    V05,
-}
-
-impl Protocol {
-    pub fn parse(value: &str) -> Self {
-        if value == "0.4" {
-            Self::V04
-        } else {
-            Self::V05
-        }
-    }
-
-    pub fn path(self) -> &'static str {
-        match self {
-            Self::V04 => "/v0.4/traces",
-            Self::V05 => "/v0.5/traces",
-        }
-    }
-}
-
-/// Encode chunks for the requested protocol.
-pub fn encode(chunks: &[Chunk], protocol: Protocol) -> Vec<u8> {
-    match protocol {
-        Protocol::V04 => encode_v04(chunks),
-        Protocol::V05 => encode_v05(chunks),
-    }
-}
+const ARRAY_32: u8 = 0xDD;
+const UINT_32: u8 = 0xCE;
+const UINT_64: u8 = 0xCF;
+const INT_64: u8 = 0xD3;
+const FLOAT_64: u8 = 0xCB;
+const STR_32: u8 = 0xDB;
 
 // ---------------------------------------------------------------------------
 // v0.4: `[trace, ...]`, each span a fixmap of spelled-out keys.
@@ -89,271 +66,242 @@ const KEY_METRICS_MAP32: &[u8] = b"\xa7metrics\xdf";
 /// Eleven fields on every span, twelve when it has a type.
 const V04_FIELD_COUNT: u8 = 11;
 
-fn encode_v04(chunks: &[Chunk]) -> Vec<u8> {
-    let span_count: usize = chunks.iter().map(Vec::len).sum();
-    // v0.4 repeats every key and value inline, so it runs wider than v0.5's indexed
-    // form — ~260 bytes for a typical HTTP span against ~140.
-    let mut out: Vec<u8> = Vec::with_capacity(span_count * 260 + 1024);
+/// Bytes a typical HTTP server span occupies on the v0.4 wire, used to size the payload
+/// buffer up front. v0.4 spells out every key and value, so it runs wide.
+pub const ESTIMATED_SPAN_BYTES: usize = 260;
 
-    write_array_32_prefix(&mut out, chunks.len() as u32);
-    for chunk in chunks {
-        write_array_32_prefix(&mut out, chunk.len() as u32);
-        for span in chunk {
-            encode_span_v04(&mut out, span);
-        }
-    }
-
-    out
+/// A span as the wire wants it, borrowed rather than owned.
+///
+/// This replaced an owned `FormattedSpan` that chunk assembly built and the encoder
+/// then walked. Borrowing removes, per span: a ~100-byte struct write, two `Vec` moves,
+/// three to five `Rc` clones for the name / resource / service / type, and an
+/// allocation whenever one of those needed truncating — a truncation is now just a
+/// shorter `&str`.
+pub struct SpanWire<'a> {
+    pub trace_id: u64,
+    pub span_id: u64,
+    pub parent_id: u64,
+    pub service: &'a str,
+    pub name: &'a str,
+    pub resource: &'a str,
+    pub span_type: &'a str,
+    pub error: i64,
+    pub start: u64,
+    pub duration: u64,
+    pub meta: &'a [(Rc<str>, Rc<str>)],
+    pub metrics: &'a [(Rc<str>, f64)],
 }
 
-fn encode_span_v04(out: &mut Vec<u8>, span: &FormattedSpan) {
+/// Reserve the outer `array32` header. The trace count is not known until every
+/// completed segment has been written, and `array32` is fixed width, so the slot is
+/// patched by `finish_payload`.
+pub fn begin_payload(out: &mut Vec<u8>) {
+    out.push(ARRAY_32);
+    out.extend_from_slice(&[0, 0, 0, 0]);
+}
+
+/// One trace: an `array32` of spans.
+pub fn write_trace_header(out: &mut Vec<u8>, span_count: u32) {
+    write_array_32_prefix(out, span_count);
+}
+
+pub fn finish_payload(out: &mut [u8], trace_count: u32) {
+    out[1..5].copy_from_slice(&trace_count.to_be_bytes());
+}
+
+/// Widest the fixed part of a span can be: the map header, the optional `type` key with
+/// a `str32` header, the three fused id fields, the three name keys with `str32` headers,
+/// the `error` / `start` / `duration` trio at `uint64`, and both map headers. Rounded up.
+const FIXED_SPAN_BYTES: usize = 224;
+
+/// A cursor over a `Vec<u8>`'s reserved-but-unwritten tail.
+///
+/// Every field of a span used to go through `extend_from_slice`, which re-checks capacity
+/// on each of the fourteen-plus calls a span makes. Reserving the span's upper bound once
+/// and writing through a cursor removes those checks from a path that runs per span.
+struct Cursor {
+    ptr: *mut u8,
+    at: usize,
+}
+
+impl Cursor {
+    /// # Safety
+    /// `src.len()` must fit in the remaining reservation.
+    #[inline]
+    unsafe fn bytes(&mut self, src: &[u8]) {
+        std::ptr::copy_nonoverlapping(src.as_ptr(), self.ptr.add(self.at), src.len());
+        self.at += src.len();
+    }
+
+    /// # Safety
+    /// At least one byte must remain in the reservation.
+    #[inline]
+    unsafe fn byte(&mut self, value: u8) {
+        *self.ptr.add(self.at) = value;
+        self.at += 1;
+    }
+
+}
+
+/// Upper bound on the bytes `write_span` will write. Deduplication only ever drops map
+/// entries and every width here is the widest that field can take, so this is never an
+/// underestimate — which is what makes the cursor writes sound.
+fn span_bound(span: &SpanWire) -> usize {
+    let mut bound = FIXED_SPAN_BYTES
+        + span.name.len()
+        + span.resource.len()
+        + span.service.len()
+        + span.span_type.len();
+    for (key, value) in span.meta {
+        // Two `str32` headers at most, plus both payloads.
+        bound += 10 + key.len() + value.len();
+    }
+    for (key, _) in span.metrics {
+        // A `str32` header, plus the widest number encoding.
+        bound += 14 + key.len();
+    }
+    bound
+}
+
+pub fn write_span(out: &mut Vec<u8>, span: &SpanWire) {
+    let bound = span_bound(span);
+    out.reserve(bound);
+
+    // SAFETY: `reserve` guarantees `bound` writable bytes past `len`, and `span_bound`
+    // over-estimates every write below. The cursor never advances past `bound`, which the
+    // `debug_assert` at the end pins in test builds.
+    let written = unsafe {
+        let mut cursor = Cursor {
+            ptr: out.as_mut_ptr().add(out.len()),
+            at: 0,
+        };
+        write_span_into(&mut cursor, span);
+        debug_assert!(cursor.at <= bound, "span exceeded its bound");
+        cursor.at
+    };
+    // SAFETY: `written` bytes were just initialised by the cursor.
+    unsafe { out.set_len(out.len() + written) };
+}
+
+/// # Safety
+/// The cursor must have `span_bound(span)` bytes available.
+unsafe fn write_span_into(out: &mut Cursor, span: &SpanWire) {
     let has_type = !span.span_type.is_empty();
 
-    // One growth check for the whole fixed part: the map header, three fused id
-    // fields, the three names with their headers, and the error / start / duration
-    // trio at their widest.
-    out.reserve(
-        64 + span.name.len() + span.resource.len() + span.service.len() + span.span_type.len(),
-    );
-
-    out.push(0x80 + V04_FIELD_COUNT + u8::from(has_type));
+    out.put(0x80 + V04_FIELD_COUNT + u8::from(has_type));
 
     // `type` leads, and is omitted entirely when absent — `0.4.js` gates on
     // `if (span.type)`, so an empty type is a missing key, not an empty string.
     if has_type {
-        out.extend_from_slice(KEY_TYPE);
-        write_str(out, &span.span_type);
+        out.put_slice(KEY_TYPE);
+        write_str(out, span.span_type);
     }
 
-    out.extend_from_slice(KEY_TRACE_ID_U64);
-    out.extend_from_slice(&span.trace_id.to_be_bytes());
-    out.extend_from_slice(KEY_SPAN_ID_U64);
-    out.extend_from_slice(&span.span_id.to_be_bytes());
-    out.extend_from_slice(KEY_PARENT_ID_U64);
-    out.extend_from_slice(&span.parent_id.to_be_bytes());
+    out.put_slice(KEY_TRACE_ID_U64);
+    out.put_slice(&span.trace_id.to_be_bytes());
+    out.put_slice(KEY_SPAN_ID_U64);
+    out.put_slice(&span.span_id.to_be_bytes());
+    out.put_slice(KEY_PARENT_ID_U64);
+    out.put_slice(&span.parent_id.to_be_bytes());
 
-    out.extend_from_slice(KEY_NAME);
-    write_str(out, &span.name);
-    out.extend_from_slice(KEY_RESOURCE);
-    write_str(out, &span.resource);
-    out.extend_from_slice(KEY_SERVICE);
-    write_str(out, &span.service);
+    out.put_slice(KEY_NAME);
+    write_str(out, span.name);
+    out.put_slice(KEY_RESOURCE);
+    write_str(out, span.resource);
+    out.put_slice(KEY_SERVICE);
+    write_str(out, span.service);
 
     match span.error {
-        0 => out.extend_from_slice(KEY_ERROR_0),
-        1 => out.extend_from_slice(KEY_ERROR_1),
+        0 => out.put_slice(KEY_ERROR_0),
+        1 => out.put_slice(KEY_ERROR_1),
         other => {
-            out.extend_from_slice(KEY_ERROR);
+            out.put_slice(KEY_ERROR);
             write_int_or_float(out, other as f64);
         }
     }
 
-    out.extend_from_slice(KEY_START);
+    out.put_slice(KEY_START);
     write_int_or_float(out, span.start as f64);
-    out.extend_from_slice(KEY_DURATION);
+    out.put_slice(KEY_DURATION);
     write_int_or_float(out, span.duration as f64);
 
-    write_meta_v04(out, &span.meta);
-    write_metrics_v04(out, &span.metrics);
+    write_meta(out, span.meta);
+    write_metrics(out, span.metrics);
 }
 
-fn write_meta_v04(out: &mut Vec<u8>, meta: &[(Rc<str>, Rc<str>)]) {
-    out.extend_from_slice(KEY_META_MAP32);
-    let count_offset = out.len();
-    out.extend_from_slice(&[0, 0, 0, 0]);
+/// # Safety
+/// The cursor must have room for every entry, per `span_bound`.
+unsafe fn write_meta(out: &mut Cursor, meta: &[(Rc<str>, Rc<str>)]) {
+    out.put_slice(KEY_META_MAP32);
+    let count_offset = out.at;
+    out.put_slice(&[0, 0, 0, 0]);
 
     let mut count: u32 = 0;
     for (index, (key, value)) in meta.iter().enumerate() {
         if meta[index + 1..].iter().any(|(later, _)| later == key) {
             continue;
         }
-        out.reserve(10 + key.len() + value.len());
         write_str(out, key);
         write_str(out, value);
         count += 1;
     }
 
-    out[count_offset..count_offset + 4].copy_from_slice(&count.to_be_bytes());
+    std::ptr::copy_nonoverlapping(count.to_be_bytes().as_ptr(), out.ptr.add(count_offset), 4);
 }
 
-fn write_metrics_v04(out: &mut Vec<u8>, metrics: &[(Rc<str>, f64)]) {
-    out.extend_from_slice(KEY_METRICS_MAP32);
-    let count_offset = out.len();
-    out.extend_from_slice(&[0, 0, 0, 0]);
+/// # Safety
+/// The cursor must have room for every entry, per `span_bound`.
+unsafe fn write_metrics(out: &mut Cursor, metrics: &[(Rc<str>, f64)]) {
+    out.put_slice(KEY_METRICS_MAP32);
+    let count_offset = out.at;
+    out.put_slice(&[0, 0, 0, 0]);
 
     let mut count: u32 = 0;
     for (index, (key, value)) in metrics.iter().enumerate() {
         if metrics[index + 1..].iter().any(|(later, _)| later == key) {
             continue;
         }
-        out.reserve(14 + key.len());
         write_str(out, key);
         write_int_or_float(out, *value);
         count += 1;
     }
 
-    out[count_offset..count_offset + 4].copy_from_slice(&count.to_be_bytes());
+    std::ptr::copy_nonoverlapping(count.to_be_bytes().as_ptr(), out.ptr.add(count_offset), 4);
 }
 
-// ---------------------------------------------------------------------------
-// v0.5: `[stringTable, traces]`, every string a `uint32` index into the table.
-// ---------------------------------------------------------------------------
-
-const ARRAY_OF_TWO: u8 = 0x92;
-const ARRAY_OF_TWELVE: u8 = 0x9C;
-const ARRAY_32: u8 = 0xDD;
-const MAP_32: u8 = 0xDF;
-const UINT_32: u8 = 0xCE;
-const UINT_64: u8 = 0xCF;
-const INT_64: u8 = 0xD3;
-const FLOAT_64: u8 = 0xCB;
-const STR_32: u8 = 0xDB;
-
-/// Per-batch string table. Like the JS encoder's `_stringMap` / `_stringBytes` pair:
-/// the payload is `[stringTable, traces]`, and every string in the traces half is a
-/// `uint32` index into the first.
-///
-/// Keyed by content, like the JS encoder. A second map keyed by `Rc` pointer was tried
-/// as a fast path — decode resolves each distinct string in a batch to one shared
-/// `Rc<str>`, so the same string usually arrives as the same pointer — and it did win
-/// 28 % in an isolated micro-benchmark. It made no measurable difference in the real
-/// pipeline (~600 ms either way over 2M spans, three runs each), because real spans
-/// carry enough unique strings that the extra pointer-map miss cancels the hit. Not
-/// kept: this stage is dominated by writing the bytes, not by hashing them.
-struct StringTable {
-    by_content: HashMap<Rc<str>, u32>,
-    bytes: Vec<u8>,
-    count: u32,
+/// Somewhere bytes go. Two implementations: a plain `Vec<u8>` for the payload framing,
+/// and `Cursor` for the per-span hot path. One trait keeps the msgpack width selection —
+/// which has to stay byte-identical to `MsgpackChunk` — in a single place.
+trait Sink {
+    fn put(&mut self, value: u8);
+    fn put_slice(&mut self, src: &[u8]);
 }
 
-impl StringTable {
-    fn new() -> Self {
-        let mut table = Self {
-            by_content: HashMap::new(),
-            bytes: Vec::new(),
-            count: 0,
-        };
-        // `0.5.js`'s `_reset()` caches the empty string first, so index 0 is always
-        // `""`. Seeding it here keeps every later index identical to the JS encoder's;
-        // without it the whole table shifts by one and the payloads differ byte for
-        // byte while still decoding to the same spans.
-        table.intern(&Rc::from(""));
-        table
+impl Sink for Vec<u8> {
+    #[inline]
+    fn put(&mut self, value: u8) {
+        self.push(value);
     }
 
-    fn intern(&mut self, value: &Rc<str>) -> u32 {
-        if let Some(index) = self.by_content.get(value) {
-            return *index;
-        }
-        let index = self.count;
-        self.count += 1;
-        self.by_content.insert(Rc::clone(value), index);
-        write_str(&mut self.bytes, value);
-        index
+    #[inline]
+    fn put_slice(&mut self, src: &[u8]) {
+        self.extend_from_slice(src);
     }
 }
 
-fn encode_v05(chunks: &[Chunk]) -> Vec<u8> {
-    let mut strings = StringTable::new();
-    // ~140 bytes per span on the v0.5 wire for a typical HTTP span: the 12-slot head is
-    // 61 bytes and each meta pair is 10. Growing from a 4 KiB start instead meant a
-    // dozen reallocations and memcpys of a payload that reaches tens of megabytes.
-    let span_count: usize = chunks.iter().map(Vec::len).sum();
-    let mut traces: Vec<u8> = Vec::with_capacity(span_count * 140 + 1024);
-
-    write_array_32_prefix(&mut traces, chunks.len() as u32);
-    for chunk in chunks {
-        write_array_32_prefix(&mut traces, chunk.len() as u32);
-        for span in chunk {
-            encode_span(&mut traces, &mut strings, span);
-        }
+impl Sink for Cursor {
+    #[inline]
+    fn put(&mut self, value: u8) {
+        // SAFETY: upheld by the caller of `write_span_into`, whose reservation covers
+        // every write reachable from it. See `span_bound`.
+        unsafe { self.byte(value) }
     }
 
-    let mut payload = Vec::with_capacity(1 + 5 + strings.bytes.len() + traces.len());
-    payload.push(ARRAY_OF_TWO);
-    write_array_32_prefix(&mut payload, strings.count);
-    payload.extend_from_slice(&strings.bytes);
-    payload.extend_from_slice(&traces);
-    payload
-}
-
-fn encode_span(out: &mut Vec<u8>, strings: &mut StringTable, span: &FormattedSpan) {
-    let service_index = strings.intern(&span.service);
-    let name_index = strings.intern(&span.name);
-    let resource_index = strings.intern(&span.resource);
-
-    out.push(ARRAY_OF_TWELVE);
-    write_index(out, service_index);
-    write_index(out, name_index);
-    write_index(out, resource_index);
-    write_id(out, span.trace_id);
-    write_id(out, span.span_id);
-    write_id(out, span.parent_id);
-    write_int_or_float(out, span.start as f64);
-    write_int_or_float(out, span.duration as f64);
-    write_int_or_float(out, span.error as f64);
-    write_meta(out, strings, &span.meta);
-    write_metrics(out, strings, &span.metrics);
-    let type_index = strings.intern(&span.span_type);
-    write_index(out, type_index);
-}
-
-/// Both halves of a meta entry are `uint32` indices on the v0.5 wire. Later
-/// duplicates of a key are dropped so the map cannot carry a key twice — the JS
-/// side reaches the same state because it accumulates into an object, where a
-/// second `setTag` on the same key overwrites the first. Last write wins there, so
-/// the scan runs from the back.
-fn write_meta(out: &mut Vec<u8>, strings: &mut StringTable, meta: &[(Rc<str>, Rc<str>)]) {
-    let header = out.len();
-    out.push(MAP_32);
-    out.extend_from_slice(&[0, 0, 0, 0]);
-
-    let mut count: u32 = 0;
-    for (index, (key, value)) in meta.iter().enumerate() {
-        if meta[index + 1..].iter().any(|(later, _)| later == key) {
-            continue;
-        }
-        let key_index = strings.intern(key);
-        let value_index = strings.intern(value);
-        write_index(out, key_index);
-        write_index(out, value_index);
-        count += 1;
+    #[inline]
+    fn put_slice(&mut self, src: &[u8]) {
+        // SAFETY: as above.
+        unsafe { self.bytes(src) }
     }
-
-    out[header + 1..header + 5].copy_from_slice(&count.to_be_bytes());
-}
-
-fn write_metrics(out: &mut Vec<u8>, strings: &mut StringTable, metrics: &[(Rc<str>, f64)]) {
-    let header = out.len();
-    out.push(MAP_32);
-    out.extend_from_slice(&[0, 0, 0, 0]);
-
-    let mut count: u32 = 0;
-    for (index, (key, value)) in metrics.iter().enumerate() {
-        if metrics[index + 1..].iter().any(|(later, _)| later == key) {
-            continue;
-        }
-        let key_index = strings.intern(key);
-        write_index(out, key_index);
-        write_int_or_float(out, *value);
-        count += 1;
-    }
-
-    out[header + 1..header + 5].copy_from_slice(&count.to_be_bytes());
-}
-
-/// `[0xCE, uint32]` — always the fixed width, whatever the value, matching
-/// `#writeIndexAt`.
-fn write_index(out: &mut Vec<u8>, index: u32) {
-    out.push(UINT_32);
-    out.extend_from_slice(&index.to_be_bytes());
-}
-
-/// `[0xCF, uint64]` — the low 64 bits of an id, big-endian, matching `#writeIdAt`
-/// over `Identifier#toBuffer()`.
-fn write_id(out: &mut Vec<u8>, id: u64) {
-    out.push(UINT_64);
-    out.extend_from_slice(&id.to_be_bytes());
 }
 
 fn write_array_32_prefix(out: &mut Vec<u8>, length: u32) {
@@ -361,15 +309,16 @@ fn write_array_32_prefix(out: &mut Vec<u8>, length: u32) {
     out.extend_from_slice(&length.to_be_bytes());
 }
 
-fn write_str(out: &mut Vec<u8>, value: &str) {
+/// A msgpack string: `fixstr` under 32 bytes, `str32` above.
+fn write_str<S: Sink>(out: &mut S, value: &str) {
     let bytes = value.as_bytes();
     if bytes.len() < 0x20 {
-        out.push(0xA0 | bytes.len() as u8);
+        out.put(0xA0 | bytes.len() as u8);
     } else {
-        out.push(STR_32);
-        out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        out.put(STR_32);
+        out.put_slice(&(bytes.len() as u32).to_be_bytes());
     }
-    out.extend_from_slice(bytes);
+    out.put_slice(bytes);
 }
 
 /// The shortest valid msgpack number encoding, replicating
@@ -377,11 +326,14 @@ fn write_str(out: &mut Vec<u8>, value: &str) {
 /// signed / unsigned ints for exact integers, float64 for everything else. `NaN`,
 /// `±Infinity` and `-0.0` all take the float64 branch and keep their bits, which is
 /// why this cannot be `writeNumber`'s logic.
-fn write_int_or_float(out: &mut Vec<u8>, value: f64) {
+// The explicit bounds mirror the JS `value === (value & 0x7F)` they replicate; a range
+// `contains` reads further from the line it has to stay faithful to.
+#[allow(clippy::manual_range_contains)]
+fn write_int_or_float<S: Sink>(out: &mut S, value: f64) {
     // JS: `value === (value & 0x7F)` — an exact integer in 0..=127. `-0.0` passes
     // there too, since `-0 === 0`, and emits fixint 0; `value as u8` does the same.
     if value >= 0.0 && value <= 127.0 && value.fract() == 0.0 {
-        out.push(value as u8);
+        out.put(value as u8);
         return;
     }
 
@@ -397,49 +349,49 @@ fn write_int_or_float(out: &mut Vec<u8>, value: f64) {
         }
     }
 
-    out.push(FLOAT_64);
-    out.extend_from_slice(&value.to_bits().to_be_bytes());
+    out.put(FLOAT_64);
+    out.put_slice(&value.to_bits().to_be_bytes());
 }
 
 /// Test-only reach-in: `write_int_or_float` is the one piece whose byte fidelity with
-/// `0.5.js` has to be pinned directly, and it is private to this module.
+/// `0.4.js` has to be pinned directly, and it is private to this module.
 #[cfg(test)]
 pub fn write_int_or_float_for_test(out: &mut Vec<u8>, value: f64) {
     write_int_or_float(out, value);
 }
 
-fn write_unsigned(out: &mut Vec<u8>, value: u64) {
+fn write_unsigned<S: Sink>(out: &mut S, value: u64) {
     if value <= 0x7F {
-        out.push(value as u8);
+        out.put(value as u8);
     } else if value <= 0xFF {
-        out.push(0xCC);
-        out.push(value as u8);
+        out.put(0xCC);
+        out.put(value as u8);
     } else if value <= 0xFFFF {
-        out.push(0xCD);
-        out.extend_from_slice(&(value as u16).to_be_bytes());
+        out.put(0xCD);
+        out.put_slice(&(value as u16).to_be_bytes());
     } else if value <= 0xFFFF_FFFF {
-        out.push(UINT_32);
-        out.extend_from_slice(&(value as u32).to_be_bytes());
+        out.put(UINT_32);
+        out.put_slice(&(value as u32).to_be_bytes());
     } else {
-        out.push(UINT_64);
-        out.extend_from_slice(&value.to_be_bytes());
+        out.put(UINT_64);
+        out.put_slice(&value.to_be_bytes());
     }
 }
 
-fn write_signed(out: &mut Vec<u8>, value: i64) {
+fn write_signed<S: Sink>(out: &mut S, value: i64) {
     if value >= -0x20 {
-        out.push(value as i8 as u8);
+        out.put(value as i8 as u8);
     } else if value >= -0x80 {
-        out.push(0xD0);
-        out.push(value as i8 as u8);
+        out.put(0xD0);
+        out.put(value as i8 as u8);
     } else if value >= -0x8000 {
-        out.push(0xD1);
-        out.extend_from_slice(&(value as i16).to_be_bytes());
+        out.put(0xD1);
+        out.put_slice(&(value as i16).to_be_bytes());
     } else if value >= -0x8000_0000 {
-        out.push(0xD2);
-        out.extend_from_slice(&(value as i32).to_be_bytes());
+        out.put(0xD2);
+        out.put_slice(&(value as i32).to_be_bytes());
     } else {
-        out.push(INT_64);
-        out.extend_from_slice(&value.to_be_bytes());
+        out.put(INT_64);
+        out.put_slice(&value.to_be_bytes());
     }
 }

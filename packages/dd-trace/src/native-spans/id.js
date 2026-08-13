@@ -72,7 +72,7 @@ class NativeId {
 
   /**
    * Big-endian bytes of the low 64 bits, matching `id.js`'s `toBuffer()` so the
-   * v0.5 id layout and the binary propagator see the same shape.
+   * encoder's id layout and the binary propagator see the same shape.
    *
    * @returns {Uint8Array}
    */

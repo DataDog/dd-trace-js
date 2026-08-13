@@ -8,13 +8,13 @@
 use std::rc::Rc;
 
 use crate::decode::{decode, Event};
-use crate::encode::{encode, Protocol};
-use crate::process::{Assembler, FormattedSpan};
+use crate::encode::{self, SpanWire};
+use crate::process::Assembler;
 use crate::wire::*;
 
 /// Expected bytes are the output of `MsgpackChunk#writeIntOrFloat` for the same value,
 /// captured from the JS encoder rather than derived from the msgpack spec — fidelity
-/// with `0.5.js` is the requirement, not fidelity with the spec.
+/// with `0.4.js` is the requirement, not fidelity with the spec.
 #[test]
 fn write_int_or_float_matches_the_js_encoder() {
     let cases: &[(f64, &[u8])] = &[
@@ -48,6 +48,161 @@ fn write_int_or_float_matches_the_js_encoder() {
         crate::encode::write_int_or_float_for_test(&mut out, *value);
         assert_eq!(&out[..], *expected, "value {value} encoded wrongly");
     }
+}
+
+/// Just enough msgpack to read back what the encoder writes. Lets the chunk-assembly
+/// tests assert on the bytes the agent would receive, instead of on an intermediate
+/// representation the encoder no longer builds.
+struct Reader<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+/// A span read back off the wire.
+#[derive(Debug, Default, PartialEq)]
+struct WireSpan {
+    trace_id: u64,
+    span_id: u64,
+    parent_id: u64,
+    service: String,
+    name: String,
+    resource: String,
+    span_type: Option<String>,
+    error: i64,
+    start: u64,
+    duration: u64,
+    meta: Vec<(String, String)>,
+    metrics: Vec<(String, f64)>,
+}
+
+impl WireSpan {
+    fn meta_value(&self, key: &str) -> Option<&str> {
+        self.meta
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn metric_value(&self, key: &str) -> Option<f64> {
+        self.metrics
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| *value)
+    }
+}
+
+impl<'a> Reader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, at: 0 }
+    }
+
+    fn byte(&mut self) -> u8 {
+        let value = self.bytes[self.at];
+        self.at += 1;
+        value
+    }
+
+    fn take(&mut self, count: usize) -> &'a [u8] {
+        let slice = &self.bytes[self.at..self.at + count];
+        self.at += count;
+        slice
+    }
+
+    fn array32(&mut self) -> usize {
+        assert_eq!(self.byte(), 0xDD, "expected array32");
+        u32::from_be_bytes(self.take(4).try_into().unwrap()) as usize
+    }
+
+    fn map32_len(&mut self) -> usize {
+        assert_eq!(self.byte(), 0xDF, "expected map32");
+        u32::from_be_bytes(self.take(4).try_into().unwrap()) as usize
+    }
+
+    fn string(&mut self) -> String {
+        let marker = self.byte();
+        let length = match marker {
+            0xA0..=0xBF => (marker & 0x1F) as usize,
+            0xDB => u32::from_be_bytes(self.take(4).try_into().unwrap()) as usize,
+            other => panic!("expected a string, got {other:#x}"),
+        };
+        String::from_utf8(self.take(length).to_vec()).unwrap()
+    }
+
+    fn number(&mut self) -> f64 {
+        let marker = self.byte();
+        match marker {
+            0x00..=0x7F => marker as f64,
+            0xE0..=0xFF => (marker as i8) as f64,
+            0xCC => self.byte() as f64,
+            0xCD => u16::from_be_bytes(self.take(2).try_into().unwrap()) as f64,
+            0xCE => u32::from_be_bytes(self.take(4).try_into().unwrap()) as f64,
+            0xCF => u64::from_be_bytes(self.take(8).try_into().unwrap()) as f64,
+            0xD0 => (self.byte() as i8) as f64,
+            0xD1 => i16::from_be_bytes(self.take(2).try_into().unwrap()) as f64,
+            0xD2 => i32::from_be_bytes(self.take(4).try_into().unwrap()) as f64,
+            0xD3 => i64::from_be_bytes(self.take(8).try_into().unwrap()) as f64,
+            0xCB => f64::from_bits(u64::from_be_bytes(self.take(8).try_into().unwrap())),
+            other => panic!("expected a number, got {other:#x}"),
+        }
+    }
+
+    fn span(&mut self) -> WireSpan {
+        let marker = self.byte();
+        assert!((0x80..=0x8F).contains(&marker), "expected a fixmap, got {marker:#x}");
+        let fields = (marker & 0x0F) as usize;
+
+        let mut span = WireSpan::default();
+        for _ in 0..fields {
+            let key = self.string();
+            match key.as_str() {
+                "type" => span.span_type = Some(self.string()),
+                "trace_id" => span.trace_id = self.number() as u64,
+                "span_id" => span.span_id = self.number() as u64,
+                "parent_id" => span.parent_id = self.number() as u64,
+                "name" => span.name = self.string(),
+                "resource" => span.resource = self.string(),
+                "service" => span.service = self.string(),
+                "error" => span.error = self.number() as i64,
+                "start" => span.start = self.number() as u64,
+                "duration" => span.duration = self.number() as u64,
+                "meta" => {
+                    for _ in 0..self.map32_len() {
+                        let name = self.string();
+                        span.meta.push((name, self.string()));
+                    }
+                }
+                "metrics" => {
+                    for _ in 0..self.map32_len() {
+                        let name = self.string();
+                        span.metrics.push((name, self.number()));
+                    }
+                }
+                other => panic!("unexpected span field {other}"),
+            }
+        }
+        span
+    }
+}
+
+/// Decode a whole payload into traces of spans.
+fn read_payload(bytes: &[u8]) -> Vec<Vec<WireSpan>> {
+    let mut reader = Reader::new(bytes);
+    let traces = reader.array32();
+    let mut out = Vec::with_capacity(traces);
+    for _ in 0..traces {
+        let spans = reader.array32();
+        out.push((0..spans).map(|_| reader.span()).collect());
+    }
+    assert_eq!(reader.at, bytes.len(), "payload had trailing bytes");
+    out
+}
+
+/// Run a batch through assembly and read back what it encoded.
+fn assemble(assembler: &mut Assembler, events: Vec<Event>) -> Vec<Vec<WireSpan>> {
+    let payload = assembler.process(events, true);
+    let traces = read_payload(&payload.bytes);
+    assert_eq!(traces.len(), payload.trace_count, "trace count disagrees with the bytes");
+    traces
 }
 
 /// Build an event log the way `EventWriter` would, so decode is exercised against the
@@ -339,18 +494,21 @@ fn process_emits_a_chunk_once_every_started_span_finished() {
     log.finish(Some(20), 50);
 
     let mut assembler = Assembler::new(1000);
-    assert!(assembler.process(log.decode()).is_empty(), "an open segment must not emit");
+    assert!(
+        assemble(&mut assembler, log.decode()).is_empty(),
+        "an open segment must not emit"
+    );
 
     let mut rest = LogBuilder::new();
     rest.finish(Some(10), 200);
-    let chunks = assembler.process(rest.decode());
+    let traces = assemble(&mut assembler, rest.decode());
 
-    assert_eq!(chunks.len(), 1);
-    assert_eq!(chunks[0].len(), 2);
-    assert_eq!(&*chunks[0][0].name, "root");
-    assert_eq!(&*chunks[0][1].name, "child");
-    assert_eq!(chunks[0][0].trace_id, 777);
-    assert_eq!(chunks[0][1].parent_id, 10);
+    assert_eq!(traces.len(), 1);
+    assert_eq!(traces[0].len(), 2);
+    assert_eq!(traces[0][0].name, "root");
+    assert_eq!(traces[0][1].name, "child");
+    assert_eq!(traces[0][0].trace_id, 777);
+    assert_eq!(traces[0][1].parent_id, 10);
 }
 
 #[test]
@@ -363,11 +521,11 @@ fn process_emits_early_at_the_flush_min_spans_threshold() {
 
     // Threshold of one: the first finish alone is enough, even with the root open.
     let mut assembler = Assembler::new(1);
-    let chunks = assembler.process(log.decode());
+    let traces = assemble(&mut assembler, log.decode());
 
-    assert_eq!(chunks.len(), 1);
-    assert_eq!(chunks[0].len(), 1);
-    assert_eq!(chunks[0][0].span_id, 20);
+    assert_eq!(traces.len(), 1);
+    assert_eq!(traces[0].len(), 1);
+    assert_eq!(traces[0][0].span_id, 20);
 }
 
 #[test]
@@ -386,17 +544,17 @@ fn process_applies_process_defaults_and_derived_tags() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
-    let span = &chunks[0][0];
+    let traces = assemble(&mut assembler, log.decode());
+    let span = &traces[0][0];
 
     // Service falls back to the process default; resource falls back to the name.
-    assert_eq!(&*span.service, "shop");
-    assert_eq!(&*span.resource, "web.request");
-    assert!(span.meta.iter().any(|(key, value)| &**key == "language" && &**value == "javascript"));
-    assert!(span.metrics.iter().any(|(key, value)| &**key == "process_id" && *value == 4242.0));
-    assert!(span.metrics.iter().any(|(key, value)| &**key == "_dd.top_level" && *value == 1.0));
+    assert_eq!(span.service, "shop");
+    assert_eq!(span.resource, "web.request");
+    assert_eq!(span.meta_value("language"), Some("javascript"));
+    assert_eq!(span.metric_value("process_id"), Some(4242.0));
+    assert_eq!(span.metric_value("_dd.top_level"), Some(1.0));
     // `span.kind` is not "internal", so the span is measured.
-    assert!(span.metrics.iter().any(|(key, value)| &**key == "_dd.measured" && *value == 1.0));
+    assert_eq!(span.metric_value("_dd.measured"), Some(1.0));
 }
 
 #[test]
@@ -407,9 +565,9 @@ fn process_skips_top_level_for_a_segment_rooted_on_a_remote_parent() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
+    let traces = assemble(&mut assembler, log.decode());
 
-    assert!(!chunks[0][0].metrics.iter().any(|(key, _)| &**key == "_dd.top_level"));
+    assert_eq!(traces[0][0].metric_value("_dd.top_level"), None);
 }
 
 #[test]
@@ -426,24 +584,21 @@ fn process_routes_reserved_keys_to_top_level_fields() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
-    let span = &chunks[0][0];
+    let traces = assemble(&mut assembler, log.decode());
+    let span = &traces[0][0];
 
-    assert_eq!(&*span.name, "web.request");
-    assert_eq!(&*span.service, "override");
-    assert_eq!(&*span.resource, "GET /x");
-    assert_eq!(&*span.span_type, "web");
+    assert_eq!(span.name, "web.request");
+    assert_eq!(span.service, "override");
+    assert_eq!(span.resource, "GET /x");
+    assert_eq!(span.span_type.as_deref(), Some("web"));
     assert_eq!(span.error, 1);
     // None of those reserved keys may leak into the generic maps.
     for key in ["operation.name", "service.name", "resource.name", "span.type", "error"] {
-        assert!(!span.meta.iter().any(|(name, _)| &**name == key), "{key} leaked into meta");
-        assert!(!span.metrics.iter().any(|(name, _)| &**name == key), "{key} leaked into metrics");
+        assert_eq!(span.meta_value(key), None, "{key} leaked into meta");
+        assert_eq!(span.metric_value(key), None, "{key} leaked into metrics");
     }
     // The status code is the documented exception: a number that travels as a string.
-    assert!(span
-        .meta
-        .iter()
-        .any(|(key, value)| &**key == "http.status_code" && &**value == "404"));
+    assert_eq!(span.meta_value("http.status_code"), Some("404"));
 }
 
 #[test]
@@ -455,14 +610,14 @@ fn process_sets_error_from_the_error_meta_keys() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
+    let traces = assemble(&mut assembler, log.decode());
 
-    assert_eq!(chunks[0][0].error, 1);
-    assert!(chunks[0][0].meta.iter().any(|(key, value)| &**key == "error.message" && &**value == "boom"));
+    assert_eq!(traces[0][0].error, 1);
+    assert_eq!(traces[0][0].meta_value("error.message"), Some("boom"));
 }
 
 #[test]
-fn encode_writes_the_two_element_payload_and_a_twelve_slot_span() {
+fn encode_writes_the_trace_arrays_and_a_span_fixmap() {
     let mut log = LogBuilder::new();
     log.segment_start(10, 777);
     log.span_start(10, 10, 0, 100);
@@ -470,18 +625,21 @@ fn encode_writes_the_two_element_payload_and_a_twelve_slot_span() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
-    let payload = encode(&chunks, Protocol::V05);
+    let payload = assembler.process(log.decode(), true).bytes;
 
-    // `[stringTable, traces]`, always a two-element array.
-    assert_eq!(payload[0], 0x92);
-    // The string table is always `array32`, whatever its length.
-    assert_eq!(payload[1], 0xdd);
-
-    // The trace array, the chunk array and then the span's 12-slot fixarray.
-    let string_count = u32::from_be_bytes([payload[2], payload[3], payload[4], payload[5]]);
-    assert!(string_count > 0);
-    assert!(payload.contains(&0x9c), "no 12-slot span array in the payload");
+    // `array32` of traces, then `array32` of spans, both fixed width whatever the
+    // count — `writeArrayPrefix` never shortens to fixarray.
+    assert_eq!(payload[0], 0xdd);
+    assert_eq!(u32::from_be_bytes([payload[1], payload[2], payload[3], payload[4]]), 1);
+    assert_eq!(payload[5], 0xdd);
+    assert_eq!(u32::from_be_bytes([payload[6], payload[7], payload[8], payload[9]]), 1);
+    // An 11-field fixmap: this span has no type, so the optional key is absent.
+    assert_eq!(payload[10], 0x8b);
+    // And the name reached the wire as a spelled-out key, not a table index.
+    assert!(
+        payload.windows(4).any(|window| window == b"name"),
+        "no `name` key in the payload"
+    );
 }
 
 #[test]
@@ -494,27 +652,22 @@ fn encode_drops_a_duplicate_meta_key_keeping_the_last_write() {
     log.finish(Some(10), 200);
 
     let mut assembler = Assembler::new(1000);
-    let chunks = assembler.process(log.decode());
-    let payload = encode(&chunks, Protocol::V05);
-    let table = String::from_utf8_lossy(&payload).to_string();
+    let traces = assemble(&mut assembler, log.decode());
+    let span = &traces[0][0];
 
-    // Both values reach the string table, but only the later pairing is in the map,
-    // which is where a JS object's last-write-wins lands too.
-    assert!(table.contains("second"));
+    // One entry on the wire, carrying the later write — where a JS object's
+    // last-write-wins also lands.
     assert_eq!(
-        chunks[0][0]
-            .meta
-            .iter()
-            .filter(|(key, _)| &**key == "custom")
-            .count(),
-        2,
-        "process keeps both; deduplication is the encoder's job"
+        span.meta.iter().filter(|(key, _)| key == "custom").count(),
+        1,
+        "the duplicate key reached the wire twice"
     );
+    assert_eq!(span.meta_value("custom"), Some("second"));
 }
 
 // ---------------------------------------------------------------------------
 // Wire fidelity. The expected bytes are the output of the JS encoders for the same
-// span, captured from `packages/dd-trace/src/encode/0.4.js` and `0.5.js` rather than
+// span, captured from `packages/dd-trace/src/encode/0.4.js` rather than
 // derived from the msgpack spec — matching what ships is the requirement.
 // ---------------------------------------------------------------------------
 
@@ -522,17 +675,60 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// Owns what a `SpanWire` borrows, so a test case can be built by a helper and still
+/// outlive it.
+struct OwnedSpan {
+    trace_id: u64,
+    span_id: u64,
+    parent_id: u64,
+    service: String,
+    name: String,
+    resource: String,
+    span_type: String,
+    error: i64,
+    start: u64,
+    duration: u64,
+    meta: Vec<(Rc<str>, Rc<str>)>,
+    metrics: Vec<(Rc<str>, f64)>,
+}
+
+/// Encode one span as a whole payload, the way a single-span batch would arrive.
+fn encode_one(span: &OwnedSpan) -> Vec<u8> {
+    let mut out = Vec::new();
+    encode::begin_payload(&mut out);
+    encode::write_trace_header(&mut out, 1);
+    encode::write_span(
+        &mut out,
+        &SpanWire {
+            trace_id: span.trace_id,
+            span_id: span.span_id,
+            parent_id: span.parent_id,
+            service: &span.service,
+            name: &span.name,
+            resource: &span.resource,
+            span_type: &span.span_type,
+            error: span.error,
+            start: span.start,
+            duration: span.duration,
+            meta: &span.meta,
+            metrics: &span.metrics,
+        },
+    );
+    encode::finish_payload(&mut out, 1);
+    out
+}
+
 /// A span with a type, `error: 0`, a nanosecond `start` past 2^32, and one entry in
 /// each map.
-fn span_with_type() -> FormattedSpan {
-    FormattedSpan {
+fn span_with_type() -> OwnedSpan {
+    OwnedSpan {
         trace_id: 0x4d2,
         span_id: 0x162e,
         parent_id: 0,
-        service: Rc::from("shop"),
-        name: Rc::from("web.request"),
-        resource: Rc::from("GET /x"),
-        span_type: Rc::from("web"),
+        service: "shop".into(),
+        name: "web.request".into(),
+        resource: "GET /x".into(),
+        span_type: "web".into(),
         error: 0,
         start: 1_786_060_800_000_000_000,
         duration: 500_000,
@@ -543,15 +739,15 @@ fn span_with_type() -> FormattedSpan {
 
 /// No type, `error: 1`, a fixint `start`, a zero duration and both maps empty — the
 /// other side of every width decision in the encoders.
-fn span_without_type() -> FormattedSpan {
-    FormattedSpan {
+fn span_without_type() -> OwnedSpan {
+    OwnedSpan {
         trace_id: 0x4d2,
         span_id: 0x162e,
         parent_id: 0x162d,
-        service: Rc::from("s"),
-        name: Rc::from("x"),
-        resource: Rc::from("x"),
-        span_type: Rc::from(""),
+        service: "s".into(),
+        name: "x".into(),
+        resource: "x".into(),
+        span_type: String::new(),
         error: 1,
         start: 7,
         duration: 0,
@@ -563,7 +759,7 @@ fn span_without_type() -> FormattedSpan {
 #[test]
 fn v04_matches_the_js_encoder_byte_for_byte() {
     assert_eq!(
-        hex(&encode(&[vec![span_with_type()]], Protocol::V04)),
+        hex(&encode_one(&span_with_type())),
         "dd00000001dd000000018ca474797065a3776562a874726163655f6964cf00000000000004d2\
          a77370616e5f6964cf000000000000162ea9706172656e745f6964cf0000000000000000a46e\
          616d65ab7765622e72657175657374a87265736f75726365a6474554202f78a773657276696365\
@@ -577,7 +773,7 @@ fn v04_matches_the_js_encoder_byte_for_byte() {
 #[test]
 fn v04_omits_an_absent_type_and_shrinks_the_map() {
     assert_eq!(
-        hex(&encode(&[vec![span_without_type()]], Protocol::V04)),
+        hex(&encode_one(&span_without_type())),
         "dd00000001dd000000018ba874726163655f6964cf00000000000004d2a77370616e5f6964cf00\
          0000000000162ea9706172656e745f6964cf000000000000162da46e616d65a178a87265736f75\
          726365a178a773657276696365a173a56572726f7201a5737461727407a86475726174696f6e00\
@@ -586,36 +782,70 @@ fn v04_omits_an_absent_type_and_shrinks_the_map() {
     );
 }
 
+
+/// The `str32` path and the reservation bound together. Every string in the other
+/// fidelity cases is a `fixstr`, so without this the wide header — and the part of
+/// `span_bound` that covers it — is never exercised. Run under `cargo test` (debug) this
+/// also trips the bound's `debug_assert` if the estimate is ever short.
 #[test]
-fn v05_matches_the_js_encoder_byte_for_byte() {
-    assert_eq!(
-        hex(&encode(&[vec![span_with_type()]], Protocol::V05)),
-        "92dd00000008a0a473686f70ab7765622e72657175657374a6474554202f78a86c616e67756167\
-         65aa6a617661736372697074aa70726f636573735f6964a3776562dd00000001dd000000019cce\
-         00000001ce00000002ce00000003cf00000000000004d2cf000000000000162ecf000000000000\
-         0000cf18c95cd5ab400000ce0007a12000df00000001ce00000004ce00000005df00000001ce00\
-         000006cd1092ce00000007"
-            .replace(['\n', ' '], "")
-    );
+fn encodes_strings_past_the_fixstr_limit() {
+    let long_name = "n".repeat(64);
+    let long_value = "v".repeat(70_000);
+    let span = OwnedSpan {
+        trace_id: 1,
+        span_id: 2,
+        parent_id: 0,
+        service: "s".repeat(40),
+        name: long_name.clone(),
+        resource: "r".repeat(33),
+        span_type: "t".repeat(32),
+        error: 0,
+        start: 1,
+        duration: 1,
+        meta: vec![(Rc::from("k".repeat(50).as_str()), Rc::from(long_value.as_str()))],
+        metrics: vec![(Rc::from("m".repeat(31).as_str()), 1.5)],
+    };
+
+    let payload = encode_one(&span);
+    let traces = read_payload(&payload);
+    let decoded = &traces[0][0];
+
+    assert_eq!(decoded.name, long_name);
+    assert_eq!(decoded.service.len(), 40);
+    assert_eq!(decoded.resource.len(), 33);
+    // 32 is the first length that needs `str32` rather than `fixstr`.
+    assert_eq!(decoded.span_type.as_deref().map(str::len), Some(32));
+    assert_eq!(decoded.meta_value(&"k".repeat(50)).map(str::len), Some(70_000));
+    assert_eq!(decoded.metric_value(&"m".repeat(31)), Some(1.5));
 }
 
+/// A `fixstr` holds up to 31 bytes; 31 and 32 are the last accepted and first rejected
+/// lengths for the short header, and the encoder has to switch exactly there.
 #[test]
-fn v05_reuses_the_empty_string_at_index_zero_for_an_absent_type() {
-    assert_eq!(
-        hex(&encode(&[vec![span_without_type()]], Protocol::V05)),
-        "92dd00000003a0a173a178dd00000001dd000000019cce00000001ce00000002ce00000002cf00\
-         000000000004d2cf000000000000162ecf000000000000162d070001df00000000df00000000ce\
-         00000000"
-            .replace(['\n', ' '], "")
-    );
-}
-
-#[test]
-fn protocol_parsing_picks_the_endpoint() {
-    assert_eq!(Protocol::parse("0.4"), Protocol::V04);
-    assert_eq!(Protocol::parse("0.5"), Protocol::V05);
-    // Anything unrecognised falls back to v0.5 rather than failing the flush.
-    assert_eq!(Protocol::parse(""), Protocol::V05);
-    assert_eq!(Protocol::parse("0.4").path(), "/v0.4/traces");
-    assert_eq!(Protocol::parse("0.5").path(), "/v0.5/traces");
+fn switches_to_str32_at_exactly_thirty_two_bytes() {
+    for (length, expected_marker) in [(31_usize, 0xBF_u8), (32, 0xDB)] {
+        let span = OwnedSpan {
+            trace_id: 1,
+            span_id: 2,
+            parent_id: 0,
+            service: "s".to_string(),
+            name: "n".repeat(length),
+            resource: "r".to_string(),
+            span_type: String::new(),
+            error: 0,
+            start: 1,
+            duration: 1,
+            meta: Vec::new(),
+            metrics: Vec::new(),
+        };
+        let payload = encode_one(&span);
+        // The byte right after the `name` key is the string header.
+        let at = payload.windows(5).position(|window| window == b"\xa4name").unwrap() + 5;
+        assert_eq!(
+            payload[at] & 0xE0,
+            expected_marker & 0xE0,
+            "length {length} took the wrong string header"
+        );
+        assert_eq!(read_payload(&payload)[0][0].name.len(), length);
+    }
 }

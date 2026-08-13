@@ -1,4 +1,4 @@
-//! Native span pipeline: decode → chunk assembly → v0.5 encode, all inline on the
+//! Native span pipeline: decode → chunk assembly → msgpack encode, all inline on the
 //! calling thread, then an off-thread HTTP PUT.
 //!
 //! Everything up to and including encode runs synchronously inside `flush()`, so
@@ -38,10 +38,6 @@ pub struct FlusherOptions {
     pub url: String,
     pub tracer_version: String,
     pub node_version: String,
-    /// `"0.4"` or `"0.5"`; anything else is treated as v0.5. Mirrors
-    /// `DD_TRACE_AGENT_PROTOCOL_VERSION`, so the native path speaks whichever wire
-    /// format the rest of the tracer was configured for.
-    pub protocol_version: String,
     pub flush_min_spans: u32,
 }
 
@@ -84,7 +80,6 @@ pub struct EventFlusher {
     strings_view: Uint8Array,
     assembler: process::Assembler,
     client: Arc<agent::AgentClient>,
-    protocol: encode::Protocol,
     layers: Layers,
 }
 
@@ -97,7 +92,6 @@ impl EventFlusher {
         strings_view: Uint8Array,
         options: FlusherOptions,
     ) -> Self {
-        let protocol = encode::Protocol::parse(&options.protocol_version);
         Self {
             events_view,
             doubles_view,
@@ -107,9 +101,7 @@ impl EventFlusher {
                 &options.url,
                 options.tracer_version,
                 options.node_version,
-                protocol.path(),
             )),
-            protocol,
             layers: Layers::from_env(),
         }
     }
@@ -137,22 +129,17 @@ impl EventFlusher {
         if !self.layers.process {
             return Ok(());
         }
-        let chunks = self.assembler.process(decoded);
-        if chunks.is_empty() {
+        // Chunk assembly and encoding are one pass: a finished span is written to bytes
+        // and recycled while the assembler still holds it, so nothing is copied into an
+        // intermediate representation first. `layers.encode` gates only the byte writing.
+        let payload = self.assembler.process(decoded, self.layers.encode);
+        if payload.trace_count == 0 || !self.layers.encode || !self.layers.flush {
             return Ok(());
         }
 
-        if !self.layers.encode {
-            return Ok(());
-        }
-        let payload = encode::encode(&chunks, self.protocol);
-
-        if !self.layers.flush {
-            return Ok(());
-        }
         env.spawn(FlushToAgent {
-            payload,
-            trace_count: chunks.len(),
+            payload: payload.bytes,
+            trace_count: payload.trace_count,
             client: Arc::clone(&self.client),
         })?;
 
