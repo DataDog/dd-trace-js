@@ -204,6 +204,15 @@ function isDatadogAfterSpecHandler (handler) {
 }
 
 /**
+ * @param {object} manualPlugin manual plugin registration state
+ * @returns {boolean} whether the manual plugin supports error-aware finalization
+ */
+function supportsErrorAwareFinalization (manualPlugin) {
+  return isDatadogAfterSpecHandler(manualPlugin.afterSpecHandler) &&
+    isDatadogAfterRunHandler(manualPlugin.afterRunHandler)
+}
+
+/**
  * @param {unknown} value
  * @returns {boolean}
  */
@@ -532,11 +541,21 @@ function registerDdTraceHooks (
     on('task', noopTask)
   }
 
-  if (manualPlugin.detected) {
+  if (manualPlugin.detected &&
+    (supportsErrorAwareFinalization(manualPlugin) || !setupNodeEventsCh.hasSubscribers)) {
     registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
+    on('task', manualPlugin.taskHandler)
     return config
+  }
+
+  if (manualPlugin.detected) {
+    userAfterSpecHandlers = userAfterSpecHandlers.filter(handler => handler !== manualPlugin.afterSpecHandler)
+    userAfterRunHandlers = userAfterRunHandlers.filter(handler => handler !== manualPlugin.afterRunHandler)
+    userAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
+      handler => handler !== manualPlugin.afterScreenshotHandler
+    )
   }
 
   if (!setupNodeEventsCh.hasSubscribers) {
@@ -582,6 +601,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       afterSpecHandler: undefined,
       afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
+      taskHandler: undefined,
     }
 
     const wrappedOn = (event, handler) => {
@@ -599,8 +619,10 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
           manualPlugin.afterSpecHandler ||= userAfterSpecHandlers.at(-1)
           manualPlugin.afterRunHandler ||= userAfterRunHandlers.at(-1)
           manualPlugin.afterScreenshotHandler ||= userAfterScreenshotHandlers.at(-1)
+          manualPlugin.taskHandler = handler
+        } else {
+          on(event, handler)
         }
-        on(event, handler)
       }
     }
 

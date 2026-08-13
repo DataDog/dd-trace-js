@@ -932,6 +932,74 @@ moduleTypes.forEach(({
       }
     )
 
+    over10It('uses current finalization when a different manual plugin copy has the old handler contract',
+      async () => {
+        const externalPackageDir = path.join(cwd, 'external-tracer', 'node_modules', 'dd-trace')
+        fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        fs.mkdirSync(path.dirname(externalPackageDir), { recursive: true })
+        fs.cpSync(path.join(cwd, 'node_modules', 'dd-trace'), externalPackageDir, { recursive: true })
+
+        const legacyConfigFile = type === 'esm'
+          ? 'cypress-legacy-plugin.config.mjs'
+          : 'cypress-legacy-plugin.config.js'
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        let testOutput = ''
+
+        try {
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                NODE_OPTIONS: `-r ${path.join(externalPackageDir, 'ci', 'init')}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                CYPRESS_REJECT_AFTER_SPEC_AFTER_PLUGIN: '1',
+                CYPRESS_SIMULATE_OLD_MANUAL_PLUGIN: '1',
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (data) => { testOutput += data })
+          childProcess.stderr?.on('data', (data) => { testOutput += data })
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+                const testSessionTraceEvents = events.filter(event => event.type === eventType)
+                assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
+                assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
+                assert.match(
+                  testSessionTraceEvents[0].content.meta[ERROR_MESSAGE],
+                  /manual after:spec failed after Datadog/
+                )
+              }
+
+              const testEvent = events.find(event =>
+                event.type === 'test' &&
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+              assert.ok(testEvent, 'expected completed test event')
+              assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            },
+            { hardTimeout: 60000 }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.notStrictEqual(exitCode, 0, `cypress process should fail\n${testOutput}`)
+          assert.doesNotMatch(testOutput, /Multiple attempts to register the following task/)
+        } finally {
+          fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        }
+      })
+
     over10It('reports real test statuses when supportFile is false', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const getSupportWrappers = () => fs.readdirSync(cwd)

@@ -12,6 +12,25 @@ function renameScreenshot (details) {
   return { path: renamedPath }
 }
 
+/**
+ * @param {Function} on Cypress event registration function
+ * @param {object} config Cypress configuration
+ * @returns {object|Promise<object>} resolved Cypress configuration
+ */
+function registerPlugin (on, config) {
+  if (!process.env.CYPRESS_SIMULATE_OLD_MANUAL_PLUGIN) return ddTracePlugin(on, config)
+
+  return ddTracePlugin((event, handler) => {
+    if (event === 'after:spec') {
+      on(event, (spec, results) => handler(spec, results))
+    } else if (event === 'after:run') {
+      on(event, results => handler(results))
+    } else {
+      on(event, handler)
+    }
+  }, config)
+}
+
 export default defineConfig({
   defaultCommandTimeout: 1000,
   e2e: {
@@ -27,7 +46,7 @@ export default defineConfig({
       if (process.env.CYPRESS_REJECT_AFTER_SPEC_BEFORE_PLUGIN) {
         on('after:spec', () => Promise.reject(new Error('manual after:spec failed before Datadog')))
       }
-      const resolvedConfig = ddTracePlugin(on, config)
+      const resolvedConfig = registerPlugin(on, config)
       if (process.env.CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN) {
         on('after:run', () => Promise.reject(new Error('manual after:run failed after Datadog')))
       }
