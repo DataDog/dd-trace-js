@@ -1638,10 +1638,12 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
+        const canRunAfterRun = !this.cypressConfig.isInteractive ||
+          this.cypressConfig.experimentalInteractiveRunEvents
         const exporter = this.tracer._tracer._exporter
-        if (exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
+        if (canRunAfterRun && exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
         this.testSuiteSpan.finish()
-        this.finishedTestSuiteSpans.push(this.testSuiteSpan)
+        if (canRunAfterRun) this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }

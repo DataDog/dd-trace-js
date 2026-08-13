@@ -2091,6 +2091,10 @@ if (requestedVersion === 'latest' &&
       hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
       originalCypressRetries: cypressPlugin.originalCypressRetries,
       tracer: cypressPlugin.tracer,
+      finishedTestsByFile: cypressPlugin.finishedTestsByFile,
+      testsToSkip: cypressPlugin.testsToSkip,
+      testSuiteSpan: cypressPlugin.testSuiteSpan,
+      finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
     }
 
     afterEach(() => {
@@ -2100,6 +2104,10 @@ if (requestedVersion === 'latest' &&
       cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
       cypressPlugin.tracer = originalState.tracer
+      cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
+      cypressPlugin.testsToSkip = originalState.testsToSkip
+      cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
+      cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
       sinon.restore()
     })
 
@@ -2133,6 +2141,42 @@ if (requestedVersion === 'latest' &&
 
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
+
+    for (const [description, cypressConfig, shouldDefer] of [
+      ['does not retain completed suites without an after:run boundary', {
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }, false],
+      ['retains completed suites in terminal runs', {
+        isInteractive: false,
+        experimentalInteractiveRunEvents: false,
+      }, true],
+      ['retains completed suites when interactive run events are enabled', {
+        isInteractive: true,
+        experimentalInteractiveRunEvents: true,
+      }, true],
+    ]) {
+      it(description, () => {
+        const deferTestSuiteSpan = sinon.stub()
+        const testSuiteSpan = {
+          finish: sinon.stub(),
+          setTag: sinon.stub(),
+        }
+        cypressPlugin.cypressConfig = cypressConfig
+        cypressPlugin.finishedTestsByFile = {}
+        cypressPlugin.testsToSkip = []
+        cypressPlugin.testSuiteSpan = testSuiteSpan
+        cypressPlugin.finishedTestSuiteSpans = []
+        cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
+        sinon.stub(cypressPlugin, 'ciVisEvent')
+
+        cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
+
+        sinon.assert.calledOnce(testSuiteSpan.finish)
+        assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
+        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
+      })
+    }
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
