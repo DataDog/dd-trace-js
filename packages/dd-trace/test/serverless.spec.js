@@ -14,9 +14,9 @@ const {
   getServerlessPlatformTags,
   getServerlessPlatform,
   enableGCPPubSubPushSubscription,
-  registerVercelTelemetryRetention,
   initializeServerlessTelemetry,
 } = require('../src/serverless')
+const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
 const Tracer = require('../src/tracer')
 const { initializeOpenTelemetryLogs } = require('../src/opentelemetry/logs')
 const { initializeOpenTelemetryMetrics } = require('../src/opentelemetry/metrics')
@@ -255,9 +255,9 @@ describe('Vercel telemetry retention', () => {
   })
 
   it('retains telemetry for an ordinary HTTP Vercel request only once', async () => {
-    let retained
+    const retained = []
     let flushes = 0
-    const context = { waitUntil: promise => { retained = promise } }
+    const context = { waitUntil: promise => { retained.push(promise) } }
     globalThis[requestContext] = { get: () => context }
 
     const unregister = registerVercelTelemetryRetention({
@@ -269,7 +269,7 @@ describe('Vercel telemetry retention', () => {
     try {
       channel('apm:http:server:request:finish').publish({})
       channel('apm:next:request:finish').publish({})
-      await retained
+      await Promise.all(retained)
       assert.strictEqual(flushes, 1)
     } finally {
       unregister()
