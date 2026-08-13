@@ -542,12 +542,12 @@ moduleTypes.forEach(({
 
     for (const { testName, rejectionVariable, expectedError } of [
       {
-        testName: 'reports a failed hierarchy when after:spec prevents Cypress after:run',
+        testName: 'reports a failed test session trace when after:spec prevents Cypress after:run',
         rejectionVariable: 'CYPRESS_REJECT_AFTER_SPEC',
         expectedError: /custom after:spec failed/,
       },
       {
-        testName: 'reports a failed hierarchy when after:spec rejects without a reason',
+        testName: 'reports a failed test session trace when after:spec rejects without a reason',
         rejectionVariable: 'CYPRESS_REJECT_AFTER_SPEC_WITHOUT_REASON',
         expectedError: /Cypress user handler rejected without an error/,
       },
@@ -580,11 +580,11 @@ moduleTypes.forEach(({
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-              const hierarchyEvents = events.filter(event => event.type === eventType)
-              assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
-              assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(hierarchyEvents[0].content.error, 1)
-              assert.match(hierarchyEvents[0].content.meta[ERROR_MESSAGE], expectedError)
+              const testSessionTraceEvents = events.filter(event => event.type === eventType)
+              assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
+              assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
+              assert.match(testSessionTraceEvents[0].content.meta[ERROR_MESSAGE], expectedError)
             }
 
             const testEvent = events.find(event =>
@@ -708,7 +708,7 @@ moduleTypes.forEach(({
     // (wrapSetupNodeEvents), the manual plugin sets _isInit=true, and the channel subscriber
     // chains the after:spec/after:run handlers intercepted by wrappedOn.
     // Differs from the backwards-compat test (APM protocol, single pass) by validating
-    // the full citestcycle span hierarchy through the channel's _isInit=true branch.
+    // the full citestcycle test session trace through the channel's _isInit=true branch.
     over10It('correctly chains hooks when auto-instrumentation and manual plugin are both active', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       let testOutput = ''
@@ -767,7 +767,7 @@ moduleTypes.forEach(({
       assert.match(testOutput, /\[custom:after:spec:manual\]/)
     })
 
-    over10It('reports a failed hierarchy when a handler after the manual plugin rejects', async () => {
+    over10It('reports a failed test session trace when a handler after the manual plugin rejects', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const legacyConfigFile = type === 'esm'
         ? 'cypress-legacy-plugin.config.mjs'
@@ -840,12 +840,12 @@ moduleTypes.forEach(({
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-                const hierarchyEvents = events.filter(event => event.type === eventType)
-                assert.strictEqual(hierarchyEvents.length, 1, `expected one ${eventType} event`)
-                assert.strictEqual(hierarchyEvents[0].content.meta[TEST_STATUS], 'fail')
-                assert.strictEqual(hierarchyEvents[0].content.error, 1)
+                const testSessionTraceEvents = events.filter(event => event.type === eventType)
+                assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
+                assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
                 assert.match(
-                  hierarchyEvents[0].content.meta[ERROR_MESSAGE],
+                  testSessionTraceEvents[0].content.meta[ERROR_MESSAGE],
                   new RegExp(`manual after:spec failed ${position} Datadog`)
                 )
               }
