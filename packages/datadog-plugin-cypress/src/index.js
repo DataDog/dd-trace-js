@@ -2,6 +2,7 @@
 
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { finalizeAfterUserHandlers, runUserHandler } = require('./finalization')
 
 /**
  * Cypress plugin handles setup-node-events from the instrumentation layer
@@ -30,11 +31,12 @@ class CypressPlugin extends Plugin {
       const registerAfterRunWithCleanup = (afterRunHandler) => {
         on('after:run', (results) => {
           const chain = userAfterRunHandlers.reduce(
-            (p, h) => p.then(() => h(results)),
+            (p, h) => p.then(() => runUserHandler(() => h(results))),
             Promise.resolve()
           )
           if (afterRunHandler) {
-            return chain.then(() => afterRunHandler(results)).finally(cleanupWrapper)
+            return finalizeAfterUserHandlers(chain, userError => afterRunHandler(results, userError))
+              .finally(cleanupWrapper)
           }
           return chain.finally(cleanupWrapper)
         })
@@ -82,7 +84,7 @@ class CypressPlugin extends Plugin {
         // (the chained registration replaces the one plugin.js set, so it must include it).
         if (userAfterSpecHandlers.length > 0) {
           on('after:spec', (spec, results) => userAfterSpecHandlers.reduce(
-            (chain, handler) => chain.then(() => handler(spec, results)),
+            (chain, handler) => chain.then(() => runUserHandler(() => handler(spec, results))),
             Promise.resolve()
           ))
         }
@@ -97,13 +99,17 @@ class CypressPlugin extends Plugin {
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(
-          (p, h) => p.then(() => h(spec, results)),
+          (p, h) => p.then(() => runUserHandler(() => h(spec, results))),
           Promise.resolve()
         )
-        return chain.then(() => cypressPlugin.afterSpec(spec, results))
+        return finalizeAfterUserHandlers(chain, userError => cypressPlugin.afterSpec(spec, results, userError))
+          .catch((error) => {
+            cleanupWrapper()
+            throw error
+          })
       })
 
-      registerAfterRunWithCleanup((results) => cypressPlugin.afterRun(results))
+      registerAfterRunWithCleanup((results, userError) => cypressPlugin.afterRun(results, userError))
 
       on('task', cypressPlugin.getTasks())
 

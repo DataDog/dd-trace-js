@@ -39,4 +39,8 @@ if (process.env.CONFIG_RESOLVER) {
   config.resolver = process.env.CONFIG_RESOLVER
 }
 
+if (process.env.JEST_THROWING_REPORTER) {
+  config.reporters = ['<rootDir>/ci-visibility/jest-reporter-throws.js']
+}
+
 module.exports = config
