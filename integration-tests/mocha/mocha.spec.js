@@ -303,9 +303,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             let expectedTestName = 'mocha-test-pass-two can pass'
             if (reporterEvent === 'hook end') expectedTestName = 'mocha-reporter-hook-end can pass'
             else if (reporterEvent === 'pending') expectedTestName = 'mocha-test-skip can skip'
-            const testEvent = events.find(event =>
+            const testEvents = events.filter(event =>
               event.type === 'test' && event.content.meta[TEST_NAME] === expectedTestName
             )
+            assert.strictEqual(testEvents.length, 1, 'expected one completed test event')
+            const [testEvent] = testEvents
             assert.ok(testEvent, 'expected completed test event')
             assert.strictEqual(testEvent.content.meta[TEST_STATUS], reporterEvent === 'pending' ? 'skip' : 'pass')
             assert.strictEqual(testEvent.content.error, 0)
@@ -457,10 +459,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ({ url }) => url.endsWith('/api/v2/citestcycle'),
       (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
-        const testEvent = events.find(event =>
+        const testEvents = events.filter(event =>
           event.type === 'test' && event.content.meta[TEST_NAME] ===
           'mocha-reporter-hook-end-outer mocha-reporter-hook-end-inner can pass after an inner hook reporter error'
         )
+        assert.strictEqual(testEvents.length, 1, 'expected one completed test event')
+        const [testEvent] = testEvents
         assert.ok(testEvent, 'expected completed test event')
         assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
         assert.strictEqual(testEvent.content.error, 0)

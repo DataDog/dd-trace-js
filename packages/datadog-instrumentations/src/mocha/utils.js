@@ -372,6 +372,19 @@ function getTestContext (test) {
 }
 
 /**
+ * Claims publication of a test finish event across Mocha's terminal event paths.
+ *
+ * @param {object} test
+ * @returns {boolean}
+ */
+function startTestFinish (test) {
+  if (test._ddTestFinishStarted || test._ddTestFinishPublished) return false
+
+  test._ddTestFinishStarted = true
+  return true
+}
+
+/**
  * Copies Test Management metadata from Mocha's original runnable to its native retry clone.
  * @param {{
  *   _retriedTest?: {
@@ -702,8 +715,6 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       return
     }
     const shouldWaitForHitProbe = test._retriedTest?._ddShouldWaitForHitProbe
-    if (test._ddTestFinishPublished || (shouldWaitForHitProbe && test._ddTestFinishStarted)) return
-    if (shouldWaitForHitProbe) test._ddTestFinishStarted = true
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
     const shouldFinishTest = ctx && (
@@ -712,6 +723,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       !getAfterEachHooks(test).length ||
       (test._ddIsDisabled && !test._ddIsAttemptToFix)
     )
+    if (shouldFinishTest && !startTestFinish(test)) return
     let testFinishInfo
     let isFinalAttempt = false
 
@@ -769,10 +781,11 @@ function getOnHookEndHandler (config, finalAttemptHandlers) {
         const ctx = getTestContext(test)
         // Disabled tests are already finished in getOnTestEndHandler,
         // skip to avoid double-publishing
-        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix) && startTestFinish(test)) {
           const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
           const isFinalAttempt = testFinishInfo.finalStatus !== undefined
           const publishTestFinish = () => {
+            test._ddTestFinishPublished = true
             testFinishCh.publish({
               status,
               hasBeenRetried: isMochaRetry(test),
@@ -896,7 +909,7 @@ function getOnFailHandler (isMain, config) {
       testContext = getTestContext(test)
     }
     if (testContext) {
-      if (isHook) {
+      if (isHook && startTestFinish(test)) {
         const hookError = new Error(`${testOrHook.fullTitle()}: ${err.message}`, { cause: err })
         hookError.name = err.name
         hookError.stack = err.stack
@@ -917,6 +930,7 @@ function getOnFailHandler (isMain, config) {
         // test.state is never set to 'failed' for hook failures (Mocha marks the hook,
         // not the test). Flag it so finishRootSuiteForFile can compute the correct status.
         test._ddHookFailed = true
+        test._ddTestFinishPublished = true
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),
