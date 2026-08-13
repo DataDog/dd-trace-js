@@ -482,6 +482,71 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.notStrictEqual(exitCode, 0)
   })
 
+  for (const { file, name, status } of [
+    {
+      file: 'reporter-terminal-event.js',
+      name: 'mocha-test-pass-two can pass',
+      status: 'pass',
+    },
+    {
+      file: 'failing.js',
+      name: 'mocha-test-fail can fail',
+      status: 'fail',
+    },
+  ]) {
+    it(`preserves a completed ${status} test when a reporter throws on its afterEach hook`, async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        `node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/${file} ` +
+        '--reporter ./ci-visibility/mocha-reporter-throws.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            MOCHA_REPORTER_THROW_EVENT: 'hook',
+            MOCHA_REPORTER_THROW_AFTER_EACH: '1',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event =>
+            event.type === 'test' && event.content.meta[TEST_NAME] === name
+          )
+          assert.strictEqual(testEvents.length, 1, 'expected one completed test event')
+          const [testEvent] = testEvents
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], status)
+          if (status === 'fail') {
+            assert.strictEqual(testEvent.content.error, 1)
+            assert.match(testEvent.content.meta[ERROR_MESSAGE], /Expected values to be strictly equal/)
+            assert.doesNotMatch(testEvent.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+          } else {
+            assert.strictEqual(testEvent.content.error, 0)
+          }
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+          }
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      if (mochaMajor >= 8) assert.match(testOutput, /custom Mocha reporter failed/)
+      assert.doesNotMatch(testOutput, /MOCHA AFTER EACH EXECUTED/)
+      assert.notStrictEqual(exitCode, 0, testOutput)
+    })
+  }
+
   onlyLatestIt('marks parallel worker suites as failed when the coordinator reporter throws', async function () {
     this.timeout(20_000)
     childProcess = exec(
@@ -621,6 +686,88 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 1)
     })
   }
+
+  onlyLatestIt('reports tests again when the same Mocha instance runs twice successfully', async function () {
+    this.timeout(20_000)
+    childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+      cwd,
+      env: getCiVisAgentlessConfig(receiver.port),
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event =>
+          event.type === 'test' &&
+          event.content.meta[TEST_NAME] === 'mocha-reporter-reusable-run runs again after reporter recovery'
+        )
+        assert.strictEqual(testEvents.length, 2)
+        assert.deepStrictEqual(testEvents.map(event => event.content.meta[TEST_STATUS]), ['pass', 'pass'])
+        const sessionEvents = events.filter(event => event.type === 'test_session_end')
+        assert.strictEqual(sessionEvents.length, 2)
+        assert.deepStrictEqual(sessionEvents.map(event => event.content.meta[TEST_STATUS]), ['pass', 'pass'])
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 2)
+  })
+
+  onlyLatestIt('restores attempt-to-fix retries when the same Mocha instance runs again', async function () {
+    this.timeout(20_000)
+    const retryCount = 2
+    const testName = 'mocha-reporter-reusable-run runs again after reporter recovery'
+    receiver.setSettings({
+      early_flake_detection: { enabled: false },
+      test_management: { enabled: true, attempt_to_fix_retries: retryCount },
+    })
+    receiver.setTestManagementTests({
+      mocha: {
+        suites: {
+          'ci-visibility/mocha-plugin-tests/reporter-reusable-run.js': {
+            tests: {
+              [testName]: { properties: { attempt_to_fix: true } },
+            },
+          },
+        },
+      },
+    })
+    childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        MOCHA_REUSABLE_REPORTER_EVENT: 'test',
+      },
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event =>
+          event.type === 'test' && event.content.meta[TEST_NAME] === testName
+        )
+        assert.strictEqual(testEvents.filter(event => event.content.meta[TEST_STATUS] === 'skip').length, 1)
+        const passedEvents = testEvents.filter(event => event.content.meta[TEST_STATUS] === 'pass')
+        assert.strictEqual(passedEvents.length, retryCount + 1)
+        assert.strictEqual(passedEvents.at(-1).content.meta[TEST_FINAL_STATUS], 'pass')
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, retryCount + 1)
+  })
 
   it('reports a completed suite when the process exits before session finalization', async function () {
     this.timeout(20_000)

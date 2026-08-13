@@ -11,7 +11,7 @@ let hasStartedSecondRun = false
 class ThrowOnceReporter {
   constructor (runner) {
     reporterRun++
-    if (reporterRun !== 1) return
+    if (!reporterEvent || reporterRun !== 1) return
 
     runner.on(reporterEvent, (runnable) => {
       if (reporterEvent === 'hook end' && !runnable.title.startsWith('"before each" hook')) return
@@ -26,11 +26,13 @@ mocha.cleanReferencesAfterRun?.(false)
 mocha.addFile(require.resolve('./mocha-plugin-tests/reporter-reusable-run.js'))
 
 function runAgainWhenReady () {
-  if (hasStartedSecondRun || !firstRunFinished || !firstRunError) return
+  if (hasStartedSecondRun || !firstRunFinished || (reporterEvent && !firstRunError)) return
 
   hasStartedSecondRun = true
-  // eslint-disable-next-line no-console
-  console.log(`MOCHA FIRST RUN ERROR: ${firstRunError.message}`)
+  if (firstRunError) {
+    // eslint-disable-next-line no-console
+    console.log(`MOCHA FIRST RUN ERROR: ${firstRunError.message}`)
+  }
   mocha.run((failures) => {
     // eslint-disable-next-line no-console
     console.log(`MOCHA SECOND RUN FAILURES: ${failures}`)

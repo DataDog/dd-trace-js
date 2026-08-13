@@ -53,6 +53,7 @@ const {
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
+  resetRunState,
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
@@ -533,7 +534,14 @@ function stopCurrentHook (runner, hook) {
   hook.run = function (onDone) {
     hook.run = run
     const test = hook.ctx?.currentTest
-    if (test) markTestPending(runner, test)
+    if (test) {
+      if (hook.parent?._afterEach?.includes(hook)) {
+        markTestTerminal(runner, test)
+        if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(runner)?.(test)
+      } else {
+        markTestPending(runner, test)
+      }
+    }
     onDone()
   }
 }
@@ -1111,6 +1119,7 @@ addHook({
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
+    resetRunState(this.suite)
     runnerFailuresAdjusted.delete(this)
     runnerFrameworkErrors.delete(this)
     runnerStarted.delete(this)

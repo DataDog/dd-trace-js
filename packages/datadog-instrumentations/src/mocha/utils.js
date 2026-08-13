@@ -272,6 +272,7 @@ function retryTest (test, numRetries, tags, retryPolicy) {
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     disableMochaRetries(clonedTest)
+    clonedTest._ddIsDatadogRetry = true
     suite.addTest(clonedTest)
     if (isEfdRetry) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
@@ -292,6 +293,50 @@ function retryTest (test, numRetries, tags, retryPolicy) {
         clonedTest[tag] = true
       }
     }
+  }
+}
+
+/**
+ * Clears state that belongs to one Mocha runner execution and removes retry clones from prior executions.
+ *
+ * @param {import('mocha').Suite} rootSuite
+ * @returns {void}
+ */
+function resetRunState (rootSuite) {
+  for (const key of Object.keys(newTests)) delete newTests[key]
+  for (const key of Object.keys(efdTests)) delete efdTests[key]
+  newTestsWithDynamicNames.clear()
+  testsAttemptToFix.clear()
+  testsQuarantined.clear()
+  testsStatuses.clear()
+  efdRetryCountByTestFullName.clear()
+  efdSlowAbortedTests.clear()
+  attemptToFixExecutions.clear()
+  loggedAttemptToFixTests.clear()
+
+  const suites = [rootSuite]
+  while (suites.length) {
+    const suite = suites.pop()
+    const originalTests = []
+    for (const test of suite.tests) {
+      if (test._ddIsDatadogRetry) continue
+
+      delete test._ddIsAttemptToFix
+      delete test._ddIsDisabled
+      delete test._ddIsQuarantined
+      delete test._ddIsModified
+      delete test._ddIsNew
+      delete test._ddShouldSkipEfdRetry
+      delete test._ddTestFinishStarted
+      delete test._ddTestFinishPublished
+      delete test._ddIsFinalAttempt
+      delete test._ddHookFailed
+      delete test._ddReporterStartFailed
+      delete test._ddReporterTerminalFailed
+      originalTests.push(test)
+    }
+    suite.tests = originalTests
+    suites.push(...suite.suites)
   }
 }
 
@@ -1113,6 +1158,7 @@ module.exports = {
   getOnPendingHandler,
   testFileToSuiteCtx,
   getRunTestsWrapper,
+  resetRunState,
   newTests,
   efdTests,
   newTestsWithDynamicNames,
