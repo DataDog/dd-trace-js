@@ -29,6 +29,7 @@ const META_BASE_SERVICE: &str = "_dd.base_service";
 const METRIC_PROCESS_ID: &str = "process_id";
 const METRIC_TOP_LEVEL: &str = "_dd.top_level";
 const METRIC_MEASURED: &str = "_dd.measured";
+const META_VERSION: &str = "version";
 
 // Everything a web-server span carries that follows from being a web-server span. None
 // of this travels on the wire: the specialized events send the method, the URL, the
@@ -684,6 +685,30 @@ impl Assembler {
             self.expand_web_request(span, trace_id_upper);
         }
 
+        // `config.tags` — `runtime-id`, the remote-config client id, `service`, `env`,
+        // `version` and any global tag the user set. These used to be re-tagged onto every
+        // span from JS; they now arrive once, on `PROCESS_INFO`, and are applied here.
+        //
+        // Spliced in *front* of the span's own entries because deduplication keeps the
+        // last write: a per-span tag has to beat the global of the same name, which is the
+        // order `addTags(config.tags)` then `addTags(options.tags)` produced.
+        if !self.process.tags.is_empty() {
+            // Unified service tagging: a span that overrode the service does not inherit
+            // the global version.
+            let inherits_version = span
+                .service
+                .as_deref()
+                .is_none_or(|service| service.eq_ignore_ascii_case(&self.process.service_lower));
+            span.meta.splice(
+                0..0,
+                self.process
+                    .tags
+                    .iter()
+                    .filter(|(key, _)| inherits_version || &**key != META_VERSION)
+                    .map(|(key, value)| (Rc::clone(key), Rc::clone(value))),
+            );
+        }
+
         // The derived entries go into the span's own maps so the encoder's
         // last-write-wins deduplication still lets them override a user tag of the same
         // name, which is the order `extractTags` produces.
@@ -834,12 +859,6 @@ impl Assembler {
             ));
         }
 
-        // `config.tags` — `runtime-id`, the remote-config client id, `service`, `env`,
-        // `version` and any global tags the user set. The generic path applies these per
-        // span through `addTags`; here they arrive once, on `PROCESS_INFO`.
-        for (key, value) in &self.process.tags {
-            span.meta.push((Rc::clone(key), Rc::clone(value)));
-        }
     }
 }
 

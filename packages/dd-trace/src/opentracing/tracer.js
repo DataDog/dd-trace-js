@@ -70,9 +70,13 @@ class DatadogTracer {
     // which one it got. Creating the writer here rather than lazily keeps the
     // buffer allocation and `PROCESS_INFO` write out of the first span's cost.
     this._Span = Span
+    // `config.tags` reach a native span from `PROCESS_INFO` instead of being re-tagged
+    // onto every span, so the per-span `addTags` below is skipped on that path.
+    this._appliesConfigTags = true
     if (config.DD_TRACE_EXPERIMENTAL_NATIVE_SPANS) {
       require('../native-spans/event-writer').getWriter(config)
       this._Span = require('../native-spans/span')
+      this._appliesConfigTags = false
     }
   }
 
@@ -105,7 +109,9 @@ class DatadogTracer {
       ctx.setTag('service.name', this._service)
     }
 
-    span.addTags(this._config.tags)
+    if (this._appliesConfigTags) {
+      span.addTags(this._config.tags)
+    }
     span.addTags(options.tags)
 
     return span
