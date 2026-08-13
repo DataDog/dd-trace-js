@@ -42,6 +42,7 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
+const { sdkConfigAllowlist } = require('./sdk-config-allowlist')
 
 const RUNTIME_ID = uuid()
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
@@ -331,6 +332,10 @@ class Config extends ConfigBase {
     if (options !== null) {
       const filtered = {}
       for (const [key, value] of Object.entries(options)) {
+        if (!sdkConfigAllowlist.has(key)) {
+          log.warn('Ignoring remote config for unsupported configuration %s', key)
+          continue
+        }
         // TODO(config-at-runtime): also drop restart-required configs
         if (sensitiveConfigurations.has(key)) {
           log.warn('Ignoring remote config for sensitive configuration %s', key)
