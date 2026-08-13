@@ -82,8 +82,9 @@ function initializeOpenTelemetryLogs (config) {
 
   // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
-  // Remove a previous provider callback before replacing it during tracer reinitialization.
+  // Remove the old provider callback so lifecycle retention flushes only this global provider.
   unregisterTelemetryFlusher?.()
+  // Include final log batches in lifecycle retention with trace delivery.
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }
 
