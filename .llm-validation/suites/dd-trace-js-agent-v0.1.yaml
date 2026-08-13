@@ -114,6 +114,9 @@ cases:
         Rejects Object.keys(tags).length as an emptiness probe because it allocates and suggests tracking presence,
         probing a known key, or returning undefined when empty.
       - >
+        Requires checking tag presence before allocating formatted or calling format, so the empty-tags fast path
+        returns without constructing or populating the output array.
+      - >
         Rejects async/await and promises in production package code except allowed worker-thread locations, while
         allowing them in tests.
       - >
@@ -125,6 +128,7 @@ cases:
     bad_signals:
       - Accepts the loop as faster without benchmark evidence.
       - Recommends Object.keys(tags).length in the tracer hot path.
+      - Leaves the allocation or format loop before the empty-tags check.
       - Treats async/await as acceptable in ordinary production package code.
 
   - id: dd-trace-js-real-path-tests-007
@@ -148,13 +152,19 @@ cases:
       We want to move a diagnostic channel's only publish behind a seen-path gate to reduce duplicate tracing work.
       Is that safe? Explain what must be checked and how the notifications should be structured. Answer in at most 3 bullets.
     expected_criteria:
-      - Says the only per-call publish cannot move behind the gate because repeated calls would disappear from IAST.
+      - >
+        Makes the answer conditional on the subscriber search: if IAST, AppSec, or another per-call subscriber is
+        present, moving the only publish behind the gate drops repeated calls; if every subscriber needs only
+        first-occurrence cardinality, the move can be safe.
       - Requires finding every subscriber and deciding the cardinality each one needs before moving the publish.
-      - Keeps per-call notification before the gate and separates first-occurrence-only work after the gate.
+      - >
+        When cardinalities differ, keeps the per-call notification before the gate and separates first-occurrence-only
+        work after the gate.
     bad_signals:
+      - Makes a categorical IAST claim without identifying the channel or finding its subscribers.
       - Considers only the tracing subscriber.
       - Assumes preserving one publish for the first occurrence preserves behavior.
-      - Drops repeated calls required by IAST or AppSec.
+      - Drops repeated calls without checking whether IAST, AppSec, or another per-call subscriber requires them.
 
   - id: dd-trace-js-hung-ci-009
     files: [AGENTS.md, CLAUDE.md]
