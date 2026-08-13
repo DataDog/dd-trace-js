@@ -1,9 +1,39 @@
+import assert from 'node:assert/strict'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { RuleTester } from 'eslint'
+import { Linter, RuleTester } from 'eslint'
 
 import noProcessEnvDisable from './eslint-no-process-env-disable.mjs'
 import processEnv from './eslint-process-env.mjs'
+
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
+
+const nestedCwdMessages = new Linter({ cwd: path.join(repositoryRoot, 'packages/dd-trace') }).verify(
+  '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
+  {
+    languageOptions: { ecmaVersion: 2022 },
+    linterOptions: { reportUnusedDisableDirectives: false },
+    plugins: {
+      'eslint-rules': {
+        rules: {
+          'eslint-no-process-env-disable': noProcessEnvDisable,
+          'eslint-process-env': processEnv,
+        },
+      },
+    },
+    rules: {
+      'eslint-rules/eslint-no-process-env-disable': [
+        'error',
+        { allowFiles: ['packages/dd-trace/src/config/index.js'] },
+      ],
+      'eslint-rules/eslint-process-env': 'error',
+    },
+  },
+  { filename: path.join(repositoryRoot, 'packages/dd-trace/src/config/index.js') }
+)
+
+assert.deepStrictEqual(nestedCwdMessages, [])
 
 const ruleTester = new RuleTester({
   languageOptions: { ecmaVersion: 2022 },
@@ -26,17 +56,17 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
     '// eslint-enable eslint-rules/eslint-process-env',
     {
       code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
-      filename: path.join(process.cwd(), 'ci/init.js'),
+      filename: path.join(repositoryRoot, 'ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
     },
     {
       code: '/* eslint-disable no-console, eslint-rules/eslint-process-env */\nprocess.env.CI',
-      filename: path.join(process.cwd(), 'ci/diagnose.js'),
+      filename: path.join(repositoryRoot, 'ci/diagnose.js'),
       options: [{ allowFiles: ['ci/diagnose.js'] }],
     },
     {
       code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
-      filename: path.join(process.cwd(), 'packages/example/src/ci/init.js'),
+      filename: path.join(repositoryRoot, 'packages/example/src/ci/init.js'),
       options: [{ allowFiles: ['packages/example/src/ci/init.js'] }],
     },
   ],
@@ -62,25 +92,33 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
       errors: [{ messageId: 'noProcessEnvDisable' }],
     },
     {
+      code: '// eslint-disable-next-line "eslint-rules/eslint-process-env"\nprocess.env.CI',
+      errors: [{ messageId: 'noProcessEnvDisable' }],
+    },
+    {
+      code: '// eslint-disable-next-line eslint-rules/eslint-process-env --- requires raw input\nprocess.env.CI',
+      errors: [{ messageId: 'noProcessEnvDisable' }],
+    },
+    {
       code: [
         '// eslint-disable-next-line eslint-rules/eslint-process-env',
         'process.env.CI',
         '// eslint-disable-next-line eslint-rules/eslint-process-env',
         'process.env.NODE_ENV',
       ].join('\n'),
-      filename: path.join(process.cwd(), 'ci/init.js'),
+      filename: path.join(repositoryRoot, 'ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
       errors: [{ messageId: 'noProcessEnvDisable' }],
     },
     {
       code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
-      filename: path.join(process.cwd(), 'packages/example/src/ci/init.js'),
+      filename: path.join(repositoryRoot, 'packages/example/src/ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
       errors: [{ messageId: 'noProcessEnvDisable' }],
     },
     {
       code: 'getEnvironmentVariable("CI")',
-      filename: path.join(process.cwd(), 'ci/init.js'),
+      filename: path.join(repositoryRoot, 'ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
       errors: [{ message: 'Remove the stale process.env suppression allowlist entry for this file.' }],
     },

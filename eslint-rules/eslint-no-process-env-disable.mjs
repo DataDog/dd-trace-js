@@ -1,13 +1,14 @@
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { ConfigCommentParser } from '@eslint/plugin-kit'
 
 const PROCESS_ENV_RULE = 'eslint-rules/eslint-process-env'
+const REPOSITORY_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const commentParser = new ConfigCommentParser()
 
-function isProcessEnvDisable (comment) {
-  const match = comment.value.trim().match(/^eslint-disable(?:-next-line|-line)?(?:\s+([\s\S]*))?$/u)
-  if (!match?.[1]) return false
-
-  const [ruleList] = match[1].split(/\s+--(?:\s|$)/u, 1)
-  return ruleList.split(',').some(rule => rule.trim() === PROCESS_ENV_RULE)
+function isProcessEnvDisable (directive) {
+  return directive.type !== 'enable' && Object.hasOwn(commentParser.parseListConfig(directive.value), PROCESS_ENV_RULE)
 }
 
 export default {
@@ -37,27 +38,30 @@ export default {
   },
 
   create (context) {
-    const filename = path.relative(context.cwd, context.filename || context.getFilename?.() || '').replaceAll('\\', '/')
+    const filename = path.relative(
+      REPOSITORY_ROOT,
+      context.filename || context.getFilename?.() || ''
+    ).replaceAll('\\', '/')
     const allowFiles = context.options[0]?.allowFiles ?? []
-    let remainingAllowedDirectives = allowFiles.includes(filename) ? 1 : 0
+    let allowanceAvailable = allowFiles.includes(filename)
 
     return {
       Program (node) {
-        for (const comment of context.sourceCode.getAllComments()) {
-          if (!isProcessEnvDisable(comment)) continue
+        for (const directive of context.sourceCode.getDisableDirectives().directives) {
+          if (!isProcessEnvDisable(directive)) continue
 
-          if (remainingAllowedDirectives > 0) {
-            remainingAllowedDirectives--
+          if (allowanceAvailable) {
+            allowanceAvailable = false
             continue
           }
 
           context.report({
-            node: comment,
+            node: directive.node,
             messageId: 'noProcessEnvDisable',
           })
         }
 
-        if (remainingAllowedDirectives > 0) {
+        if (allowanceAvailable) {
           context.report({
             node,
             messageId: 'staleAllowFile',
