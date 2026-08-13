@@ -109,11 +109,12 @@ async function getRuns () {
 const dispatchedRunIds = new Set()
 const processingPromises = []
 
-// Set when any run's artifact download exhausts its retries. A partial download still lets
-// `processRun` merge and upload whatever files did land, so this has to gate the Codecov
-// notification the same way `hasUploadFailed()` does — otherwise a transient GitHub artifact
-// outage on an otherwise-green run still reports a complete coverage status.
-let hasIncompleteDownload = false
+// Set when any run's artifact download exhausts its retries, or `processRun` throws outright (e.g.
+// the artifact listing or the lcov merge itself fails). Either way that run's report never fully
+// reached Codecov/Datadog, so this has to gate the Codecov notification the same way
+// `hasUploadFailed()` does — otherwise a transient GitHub outage or a processing error on an
+// otherwise-green run still reports a complete coverage status.
+let hasProcessingFailure = false
 
 /**
  * Download a single finished workflow run's junit and coverage artifacts, merge them, and upload
@@ -125,7 +126,7 @@ let hasIncompleteDownload = false
 async function processRun (run) {
   const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
   if (failed > 0) {
-    hasIncompleteDownload = true
+    hasProcessingFailure = true
     process.exitCode = 1
   }
 
@@ -161,6 +162,7 @@ function scheduleProcessing (runs) {
     processingPromises.push(
       processRun(run).catch(err => {
         console.error(`Failed to process workflow run ${run.id} (${run.name}): ${err.message}`)
+        hasProcessingFailure = true
         process.exitCode = 1
       })
     )
@@ -296,12 +298,12 @@ async function checkAllGreen () {
   // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
   // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
   // artifacts are skipped) — notifying then would target a report that was never created. And skip
-  // when any report-upload call failed, or any run's artifact download did (both tracked separately
-  // from `failedRuns`, which only reflects GitHub's own workflow-run conclusions) — notifying then
-  // would post a status computed from a report Codecov never fully received.
+  // when any report-upload call failed, or any run's processing did (both tracked separately from
+  // `failedRuns`, which only reflects GitHub's own workflow-run conclusions) — notifying then would
+  // post a status computed from a report Codecov never fully received.
   if (
     process.env.GITHUB_ACTIONS && failedRuns.length === 0 &&
-    !hasUploadFailed() && !hasIncompleteDownload && hasCodecovCommit()
+    !hasUploadFailed() && !hasProcessingFailure && hasCodecovCommit()
   ) {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
