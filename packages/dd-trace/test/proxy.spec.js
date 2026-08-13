@@ -274,25 +274,6 @@ describe('TracerProxy', () => {
       },
     })
 
-    const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
-    const noopOpenfeature = {}
-
-    featureRegistry.registerFeature({
-      name: 'openfeature',
-      noop: noopOpenfeature,
-      factory: () => openfeature,
-      provider: () => OpenFeatureProvider,
-      /** @param {object} config */
-      isEnabled (config) {
-        return config.featureFlags.DD_FEATURE_FLAGS_ENABLED
-      },
-      remoteConfig (rc, config, proxy) {
-        const subscribe = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
-          config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
-        openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
-      },
-    })
-
     proxy = new ProxyClass()
   })
 

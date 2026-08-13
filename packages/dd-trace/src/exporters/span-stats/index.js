@@ -15,17 +15,14 @@ class SpanStatsExporter {
     this.#flush(done)
   }
 
-  flush (done = () => {}) {
-    this.#flush()
-
+  flush (done) {
     const activeFlushes = [...this.#activeFlushes]
-    if (activeFlushes.length === 0) return done()
-
-    let pending = activeFlushes.length
+    let pending = activeFlushes.length + 1
     const complete = () => {
-      if (--pending === 0) done()
+      if (--pending === 0) done?.()
     }
     for (const flush of activeFlushes) flush.callbacks.push(complete)
+    this.#flush(complete)
   }
 
   #flush (done) {
