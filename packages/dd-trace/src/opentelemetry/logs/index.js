@@ -80,9 +80,9 @@ function initializeOpenTelemetryLogs (config) {
   // Create logger provider with processor for Datadog Agent export
   const loggerProvider = new LoggerProvider({ processor })
 
-  // Register the logger provider globally with OpenTelemetry API
+  // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
-  // Retain only the current global provider when the tracer reinitializes.
+  // Remove a previous provider callback before replacing it during tracer reinitialization.
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 }
