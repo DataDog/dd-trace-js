@@ -69,7 +69,6 @@ function datasetFromResource (client, projectId, resource) {
     resource?.id ?? attrs.id ?? null,
     projectId,
     [],
-    [],
     version,
     version
   )

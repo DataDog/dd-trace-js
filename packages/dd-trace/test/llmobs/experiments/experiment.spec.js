@@ -25,7 +25,7 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
   c.createDataset = async (projectId, attributes) => {
     requests.push({ method: 'createDataset', projectId, attributes })
     if (createDatasetError) throw createDatasetError
-    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], [], 1, 1)
+    return Dataset.fromExisting(c, attributes.name, attributes.description, 'ds', projectId, [], 1, 1)
   }
   c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
     requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
@@ -96,7 +96,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('advances appended dataset versions from the current latest version', async () => {
     const { client: c } = clientWithMockBackend()
-    const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [], [], 2, 5).addRecord('a')
+    const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [], 2, 5).addRecord('a')
 
     await dataset.push()
 
@@ -113,7 +113,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'ds',
       'proj',
       [new DatasetRecord('before', 'expected', { row: 0 }, 'record-0')],
-      ['record-0'],
       1,
       1
     )
@@ -143,7 +142,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'ds',
       'proj',
       [new DatasetRecord('input', 'expected', { row: 0 }, 'record-0')],
-      ['record-0'],
       1,
       1
     )
@@ -183,7 +181,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'ds',
       'proj',
       [new DatasetRecord('before', null, {}, 'record-0')],
-      ['record-0'],
       1,
       1
     )

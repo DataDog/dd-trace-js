@@ -86,7 +86,7 @@ class Dataset {
   }
 
   // Build a Dataset that already exists remotely (used by pullDataset).
-  static fromExisting (client, name, description, id, projectId, records, _recordIds, version, latestVersion) {
+  static fromExisting (client, name, description, id, projectId, records, version, latestVersion) {
     const dataset = new Dataset(client, name, description)
     dataset.#id = id
     dataset.#projectId = projectId
