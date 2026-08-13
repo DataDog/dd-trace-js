@@ -816,6 +816,17 @@ class CypressPlugin {
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
+      cypressConfig.retries = this.originalCypressRetries !== null &&
+        typeof this.originalCypressRetries === 'object'
+        ? { ...this.originalCypressRetries }
+        : this.originalCypressRetries
+    } else {
+      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
+        ? { ...cypressConfig.retries }
+        : cypressConfig.retries
+      this.hasOriginalCypressRetries = true
+    }
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -1322,7 +1333,7 @@ class CypressPlugin {
         newTestsWithDynamicNames: this.newTestsWithDynamicNames,
       })
 
-      this.tracer._tracer._exporter.exportDeferredTestSuiteSpans?.()
+      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -1628,7 +1639,7 @@ class CypressPlugin {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
         const exporter = this.tracer._tracer._exporter
-        if (exporter.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
+        if (exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)
         this.testSuiteSpan.finish()
         this.finishedTestSuiteSpans.push(this.testSuiteSpan)
         this.testSuiteSpan = null

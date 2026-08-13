@@ -127,6 +127,10 @@ class CypressPlugin extends Plugin {
           Promise.resolve()
         )
         return finalizeAfterUserHandlers(chain, userError => cypressPlugin.afterSpec(spec, results, userError))
+          .catch((error) => {
+            cleanupWrapper()
+            throw error
+          })
       })
 
       registerAfterRunWithCleanup((results, userError) => cypressPlugin.afterRun(results, userError))

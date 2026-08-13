@@ -56,6 +56,12 @@ const cypressVersionsSupportingNode18 = DD_MAJOR === 5
   ? ['10.2.0', '12.0.0', '14.5.4']
   : ['12.0.0', '14.5.4']
 
+function getGeneratedSupportFiles (directory) {
+  return fs.readdirSync(directory)
+    .filter(filename => filename.startsWith('dd-cypress-support-'))
+    .sort()
+}
+
 function cleanupPrecompiledSourceLineDist (cwd) {
   fs.rmSync(path.join(cwd, CYPRESS_PRECOMPILED_SPEC_DIST_DIR), { recursive: true, force: true })
 }
@@ -539,6 +545,8 @@ moduleTypes.forEach(({
           ? 'cypress-custom-after-hooks.config.mjs'
           : 'cypress-custom-after-hooks.config.js'
         const startedAt = Date.now()
+        const supportDirectory = path.join(cwd, 'cypress', 'support')
+        const supportWrappersBefore = getGeneratedSupportFiles(supportDirectory)
 
         childProcess = exec(
           `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
@@ -583,6 +591,7 @@ moduleTypes.forEach(({
 
         assert.notStrictEqual(exitCode, 0)
         assert.ok(Date.now() - startedAt < 20_000, 'final writer flush should remain bounded')
+        assert.deepStrictEqual(getGeneratedSupportFiles(supportDirectory), supportWrappersBefore)
       })
     }
 
