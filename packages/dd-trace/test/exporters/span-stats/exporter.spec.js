@@ -41,6 +41,22 @@ describe('span-stats exporter', () => {
     sinon.assert.called(writer.flush)
   })
 
+  it('waits for an in-flight export during flush', () => {
+    exporter = new Exporter({ url })
+    let inFlightDone
+    writer.flush = sinon.stub()
+    writer.flush.onFirstCall().callsFake(done => { inFlightDone = done })
+    writer.flush.onSecondCall().callsFake(done => done())
+    const done = sinon.spy()
+
+    exporter.export('in flight')
+    exporter.flush(done)
+
+    sinon.assert.notCalled(done)
+    inFlightDone()
+    sinon.assert.calledOnce(done)
+  })
+
   it('should set url from config', () => {
     const url = new URL('http://0.0.0.0:1234')
 
