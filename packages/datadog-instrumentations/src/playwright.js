@@ -83,6 +83,7 @@ const isFailureScreenshotUploadEnabled =
 
 let applyRepeatEachIndex = null
 let reporterError
+let hasReporterError = false
 
 let startedSuites = []
 
@@ -137,9 +138,9 @@ const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
 const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
-const kDdPlaywrightReporterInstrumented = Symbol('ddPlaywrightReporterInstrumented')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
+const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
 const automaticFailureScreenshotPaths = new Set()
 
@@ -1257,6 +1258,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
     reporterError = undefined
+    hasReporterError = false
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config && !config.config[kDdPlaywrightReporterConfigured]) {
       Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
       config.config.reporter.unshift([require.resolve('./playwright-reporter')])
@@ -1392,6 +1394,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         log.error('Playwright test session finalization error: %s', finalizationError)
       }
       reporterError = undefined
+      hasReporterError = false
       throw error
     }
 
@@ -1449,7 +1452,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     loggedAttemptToFixTests.clear()
 
     const finalizationError = reporterError
-    const finalStatus = finalizationError
+    const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     await getChannelPromise(testSessionFinishCh, {
@@ -1459,7 +1462,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
     })
-    if (finalizationError) {
+    if (hasReporterError) {
       if (typeof runAllTestsReturn === 'string') runAllTestsReturn = 'failed'
       else runAllTestsReturn.status = 'failed'
     }
@@ -1480,6 +1483,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     ddPropertiesRequestsByTestId.clear()
     disabledTestIds.clear()
     reporterError = undefined
+    hasReporterError = false
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1497,18 +1501,22 @@ function reportersHook (reportersPackage) {
   return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
     const reporters = await createReporters.apply(this, arguments)
     for (const reporter of reporters) {
-      if (reporter[kDdPlaywrightReporterInstrumented] || typeof reporter.onEnd !== 'function') continue
+      if (instrumentedPlaywrightReporters.has(reporter) || typeof reporter.onEnd !== 'function') continue
 
-      Object.defineProperty(reporter, kDdPlaywrightReporterInstrumented, { value: true })
       const onEnd = reporter.onEnd
-      reporter.onEnd = async function () {
-        try {
-          return await onEnd.apply(this, arguments)
-        } catch (error) {
-          reporterError ||= error
-          throw error
+      try {
+        reporter.onEnd = async function () {
+          try {
+            return await onEnd.apply(this, arguments)
+          } catch (error) {
+            recordReporterError(error)
+            throw error
+          }
         }
+      } catch {
+        continue
       }
+      if (reporter.onEnd !== onEnd) instrumentedPlaywrightReporters.add(reporter)
     }
     return reporters
   }, { replaceGetter: true })
@@ -1525,7 +1533,7 @@ function reporterMultiplexerHook (reportersPackage) {
     try {
       return await onEnd.apply(this, arguments)
     } catch (error) {
-      reporterError ||= error
+      recordReporterError(error)
       throw error
     }
   })
@@ -1632,13 +1640,24 @@ pageGotoCh.subscribe({
 })
 
 reporterErrorCh.subscribe((error) => {
-  if (reporterError) return
+  recordReporterError(error)
+})
 
+/**
+ * Records a reporter failure even when the reporter throws a falsy value.
+ *
+ * @param {unknown} error
+ * @returns {void}
+ */
+function recordReporterError (error) {
+  if (hasReporterError) return
+
+  hasReporterError = true
   const errorObject = error && typeof error === 'object' ? error : undefined
   reporterError = new Error(errorObject?.message || errorObject?.value || String(error))
   reporterError.name = errorObject?.name || reporterError.name
   reporterError.stack = errorObject?.stack || reporterError.stack
-})
+}
 
 /**
  * Records a path created by Playwright's automatic screenshot recorder.

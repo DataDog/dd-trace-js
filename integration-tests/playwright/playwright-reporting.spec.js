@@ -166,6 +166,67 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
+    it('reports the session when a custom reporter throws undefined', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            PLAYWRIGHT_REPORTER_THROWS_UNDEFINED: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /undefined/)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
+    contextNewVersions('immutable reporters', () => {
+      it('does not abort when a reporter instance is frozen', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              PLAYWRIGHT_FROZEN_REPORTER: '1',
+              TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+            },
+          }
+        )
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.ok(events.find(event => event.type === 'test'))
+            const testSession = events.find(event => event.type === 'test_session_end')
+            assert.strictEqual(testSession.content.meta[TEST_STATUS], 'pass')
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
+    })
+
     it('does not treat matching user console output as a reporter failure', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js',
