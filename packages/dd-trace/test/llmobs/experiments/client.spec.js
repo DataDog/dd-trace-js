@@ -41,6 +41,8 @@ describe('LLMObs Experiments control-plane client', function () {
     `dd-trace-js-experiments-${backendTestId}`
   const backendClientDatasetName = `${backendProjectName}-client-dataset`
   const backendClientCustomRecordsDatasetName = `${backendProjectName}-client-custom-records-dataset`
+  const backendBatchProjectName = 'dd-trace-js-experiments-batch-vcr'
+  const backendClientBatchDatasetName = `${backendBatchProjectName}-client-batch-update-dataset`
   const backendClientExperimentDatasetName = `${backendProjectName}-client-experiment-dataset`
   const backendClientExperimentName = `${backendProjectName}-client-experiment`
   const backendClientTaskName = `${backendProjectName}-client-task`
@@ -64,6 +66,17 @@ describe('LLMObs Experiments control-plane client', function () {
 
   function trackBackendDataset (client, projectId, datasetId) {
     backendDatasets.push({ client, projectId, datasetId })
+  }
+
+  function batchBackendClient () {
+    const client = new ExperimentsClient({
+      apiKey: process.env.DD_API_KEY ?? 'test-api-key',
+      appKey: process.env.DD_APP_KEY ?? 'test-app-key',
+      site: process.env.DD_SITE ?? 'datadoghq.com',
+      projectName: backendBatchProjectName,
+    })
+    client.apiBase = EXPERIMENTS_VCR_API_BASE
+    return client
   }
 
   it('resolves the control-plane host from the site', () => {
@@ -318,6 +331,61 @@ describe('LLMObs Experiments control-plane client', function () {
       { input: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'client-custom-records-test' } },
       { input: { value: 2 }, expectedOutput: { value: 3 }, metadata: { source: 'client-custom-records-test' } },
     ])
+  })
+
+  it('inserts, updates, and deletes records through the batch endpoint', async function () {
+    const client = batchBackendClient()
+    const projectId = await client.ensureProjectId()
+    const dataset = await client.createDataset(projectId, {
+      name: backendClientBatchDatasetName,
+      description: 'created by a dd-trace-js experiments batch update VCR test',
+    })
+    trackBackendDataset(client, projectId, dataset.id())
+
+    const inserted = await client.batchUpdateDatasetRecords(projectId, dataset.id(), {
+      insert_records: [
+        {
+          id: 'batch-a',
+          input: { value: 1 },
+          expected_output: { value: 2 },
+          metadata: { source: 'batch-insert' },
+        },
+        {
+          id: 'batch-b',
+          input: { value: 2 },
+          expected_output: null,
+          metadata: { source: 'batch-insert' },
+        },
+      ],
+      update_records: [],
+      delete_records: [],
+    })
+    assert.equal(inserted.records.length, 2)
+    assert.deepEqual(inserted.records.map(record => record.id).sort(), ['batch-a', 'batch-b'])
+    assert.equal(inserted.records.find(record => record.id === 'batch-b').expectedOutput, null)
+    assert.match(String(inserted.version), /\d+/)
+
+    const changed = await client.batchUpdateDatasetRecords(projectId, dataset.id(), {
+      insert_records: [],
+      update_records: [{
+        id: 'batch-a',
+        input: { value: 10 },
+        expected_output: 'updated-output',
+        metadata: { source: 'batch-update' },
+      }],
+      delete_records: ['batch-b'],
+    })
+    assert.deepEqual(changed.records.map(record => ({
+      id: record.id,
+      input: record.input,
+      expectedOutput: record.expectedOutput,
+      metadata: record.metadata,
+    })).sort((left, right) => left.id.localeCompare(right.id)), [
+      { id: 'batch-a', input: { value: 10 }, expectedOutput: 'updated-output', metadata: { source: 'batch-update' } },
+      { id: 'batch-b', input: { value: 2 }, expectedOutput: null, metadata: { source: 'batch-insert' } },
+    ])
+    assert.match(String(changed.version), /\d+/)
+
   })
 
   it('creates an experiment, posts events, and marks it completed', async function () {
