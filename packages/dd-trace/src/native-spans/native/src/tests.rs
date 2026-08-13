@@ -535,8 +535,18 @@ fn process_applies_process_defaults_and_derived_tags() {
     let environment = log.intern("prod");
     let version = log.intern("1.0.0");
     let language = log.intern("javascript");
-    log.events
-        .extend_from_slice(&[KIND_PROCESS_INFO, service, environment, version, language, 4242]);
+    // The process-tags blob is the sixth field; empty here, so nothing extra lands on the
+    // spans this test builds.
+    let process_tags = log.intern("");
+    log.events.extend_from_slice(&[
+        KIND_PROCESS_INFO,
+        service,
+        environment,
+        version,
+        language,
+        4242,
+        process_tags,
+    ]);
     log.segment_start(10, 777);
     log.span_start(10, 10, 0, 100);
     log.set_tag_string(Some(10), "operation.name", "web.request");

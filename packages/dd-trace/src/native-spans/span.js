@@ -6,7 +6,7 @@ const { storage } = require('../../../datadog-core')
 const DatadogSpan = require('../opentracing/span')
 const { LANES, nowMillis, splitMillisToNanoLanes } = require('./clock')
 const { getWriter } = require('./event-writer')
-const { NativeId, ZERO_ID, randomId, traceIdFrom } = require('./id')
+const { ZERO_ID, identifierToNativeId, randomId, traceIdFrom, traceIdFromRemote } = require('./id')
 const NativeSpanContext = require('./span_context')
 
 // Reserved keys, resolved to fixed string ids on both sides of the FFI boundary.
@@ -314,40 +314,6 @@ function traceIdHighHex (startMillis) {
     cachedTraceIdHighHex = second.toString(16).padStart(8, '0').padEnd(16, '0')
   }
   return cachedTraceIdHighHex
-}
-
-/**
- * Convert a baseline `Identifier` — a byte buffer — into lanes, taking the low 8
- * bytes the way `Identifier#toArray()` does.
- *
- * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
- * @returns {import('./id').NativeId}
- */
-function identifierToNativeId (identifier) {
-  const bytes = identifier.toBuffer()
-  const start = bytes.length - 8
-  const hi = ((bytes[start] << 24) | (bytes[start + 1] << 16) | (bytes[start + 2] << 8) | bytes[start + 3]) >>> 0
-  const lo = ((bytes[start + 4] << 24) | (bytes[start + 5] << 16) |
-    (bytes[start + 6] << 8) | bytes[start + 7]) >>> 0
-  return new NativeId(hi, lo)
-}
-
-/**
- * The 128-bit trace id of a remote parent: the low 64 bits from its trace
- * `Identifier`, the upper 64 from the `_dd.p.tid` chunk tag propagation carried, if
- * the caller sent one.
- *
- * @param {{ _traceId: object, _trace?: { tags?: Record<string, string> } }} parent
- * @returns {import('./id').NativeId}
- */
-function traceIdFromRemote (parent) {
-  const traceId = identifierToNativeId(parent._traceId)
-  const high = parent._trace?.tags?.[TRACE_ID_128]
-  if (typeof high === 'string' && high.length === 16) {
-    traceId.upperHi = Number.parseInt(high.slice(0, 8), 16)
-    traceId.upperLo = Number.parseInt(high.slice(8), 16)
-  }
-  return traceId
 }
 
 /**

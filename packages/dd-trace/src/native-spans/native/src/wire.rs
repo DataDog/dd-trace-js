@@ -19,8 +19,11 @@ pub const KIND_PROCESS_INFO: u32 = 13;
 pub const KIND_SEGMENT_START: u32 = 14;
 pub const KIND_ENTER_CONTEXT_KEEP_LAST: u32 = 15;
 pub const KIND_ENTER_CONTEXT_NEW: u32 = 16;
+pub const KIND_WEB_REQUEST_START: u32 = 17;
+pub const KIND_WEB_REQUEST_FINISH: u32 = 18;
+pub const KIND_SPAN_ERROR: u32 = 19;
 
-pub const KIND_COUNT: usize = 17;
+pub const KIND_COUNT: usize = 20;
 
 /// Record width in words, kind tag included, indexed by kind. A zero entry marks
 /// an unassigned tag, which decode treats as a corrupt stream and bails on.
@@ -38,10 +41,13 @@ pub const WIDTHS: [u8; KIND_COUNT] = {
     widths[KIND_FINISH as usize] = 3;
     widths[KIND_FINISH_ID as usize] = 5;
     widths[KIND_REGISTER_STRING as usize] = 3;
-    widths[KIND_PROCESS_INFO as usize] = 6;
+    widths[KIND_PROCESS_INFO as usize] = 7;
     widths[KIND_SEGMENT_START as usize] = 7;
     widths[KIND_ENTER_CONTEXT_KEEP_LAST as usize] = 1;
     widths[KIND_ENTER_CONTEXT_NEW as usize] = 3;
+    widths[KIND_WEB_REQUEST_START as usize] = 11;
+    widths[KIND_WEB_REQUEST_FINISH as usize] = 8;
+    widths[KIND_SPAN_ERROR as usize] = 6;
     widths
 };
 
@@ -58,7 +64,7 @@ pub const DOUBLE_COUNTS: [u8; KIND_COUNT] = {
 
 /// Strings with fixed ids on both sides. Outside the resettable id range, so they
 /// never appear in a `REGISTER_STRING` record. Append only, never reorder.
-pub const RESERVED_STRINGS: [&str; 45] = [
+pub const RESERVED_STRINGS: [&str; 47] = [
     "",
     "operation.name",
     "service.name",
@@ -104,7 +110,20 @@ pub const RESERVED_STRINGS: [&str; 45] = [
     "_sampling_priority_v1",
     "opentracing",
     "events",
+    // Names the web-server events resolve to rather than send. `http.route`,
+    // `http.method` and the rest of that family are already reserved above.
+    "web.request",
+    "express.request",
 ];
+
+/// Framework ids carried by `WEB_REQUEST_FINISH`. The operation name, the `component`
+/// tag and the `_dd.integration` tag all follow from this one word, so none of them
+/// travels on the wire.
+/// Sent by the JS side as the default; nothing here has to compare against it, since
+/// "not express" is the only other case today.
+#[allow(dead_code)]
+pub const FRAMEWORK_HTTP: u32 = 0;
+pub const FRAMEWORK_EXPRESS: u32 = 1;
 
 pub const FIRST_DYNAMIC_STRING_ID: u32 = 64;
 

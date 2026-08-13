@@ -37,8 +37,11 @@ const KIND_PROCESS_INFO = 13
 const KIND_SEGMENT_START = 14
 const KIND_ENTER_CONTEXT_KEEP_LAST = 15
 const KIND_ENTER_CONTEXT_NEW = 16
+const KIND_WEB_REQUEST_START = 17
+const KIND_WEB_REQUEST_FINISH = 18
+const KIND_SPAN_ERROR = 19
 
-const KIND_COUNT = 17
+const KIND_COUNT = 20
 
 /** Record width in words, kind tag included, indexed by kind. */
 const WIDTHS = new Uint8Array(KIND_COUNT)
@@ -72,13 +75,34 @@ WIDTHS[KIND_FINISH] = 3
 WIDTHS[KIND_FINISH_ID] = 5
 // [stringId, byteLength] — process-global, never has an id form
 WIDTHS[KIND_REGISTER_STRING] = 3
-// [serviceId, envId, versionId, languageId, pid]
-WIDTHS[KIND_PROCESS_INFO] = 6
+// [serviceId, envId, versionId, languageId, pid, processTagsId]
+WIDTHS[KIND_PROCESS_INFO] = 7
 // [segmentIdHi, segmentIdLo, traceIdHiHi, traceIdHiLo, traceIdLoHi, traceIdLoLo]
 WIDTHS[KIND_SEGMENT_START] = 7
 WIDTHS[KIND_ENTER_CONTEXT_KEEP_LAST] = 1
 // [idHi, idLo]
 WIDTHS[KIND_ENTER_CONTEXT_NEW] = 3
+
+// The specialized web-server records. A web request attaches to a segment the same way
+// `SPAN_START` does rather than implying one: it is the segment root today, but an
+// inferred proxy span — the shape Serverless produces — would sit above it in the same
+// segment, and a kind that assumed otherwise would have to be redesigned to allow it.
+// [segmentIdHi, segmentIdLo, spanIdHi, spanIdLo, parentIdHi, parentIdLo, startHi, startLo,
+//  methodId, urlId]
+WIDTHS[KIND_WEB_REQUEST_START] = 11
+// [idHi, idLo, durationHi, durationLo, statusCode, routeId, framework]
+//
+// No error field: a 5xx is derivable from the status, and a thrown error is rare enough
+// that its three strings get their own record rather than three empty words on every
+// successful request.
+WIDTHS[KIND_WEB_REQUEST_FINISH] = 8
+// [idHi, idLo, messageId, typeId, stackId]
+//
+// Not web-specific: an error is an error. Every span reaches this instead of the four
+// records `setTag('error', err)` used to write — three `SET_TAG_STRING`s for the message,
+// type and stack, plus a `SET_TAG_NUMBER` for the flag, which the assembler now infers
+// from the record's mere presence.
+WIDTHS[KIND_SPAN_ERROR] = 6
 
 /** Widest record on the wire, used to size the pre-flush headroom. */
 let MAX_RECORD_WORDS = 0
@@ -140,7 +164,19 @@ const RESERVED_STRINGS = [
   '_sampling_priority_v1',
   'opentracing',
   'events',
+  // Names the web-server events resolve to rather than send. `http.route`,
+  // `http.method` and the rest of that family are already reserved above.
+  'web.request',
+  'express.request',
 ]
+
+/**
+ * Framework ids carried by `WEB_REQUEST_FINISH`. The operation name, the
+ * `component` tag and the `_dd.integration` tag all follow from this one word, so
+ * none of them travels on the wire.
+ */
+const FRAMEWORK_HTTP = 0
+const FRAMEWORK_EXPRESS = 1
 
 /**
  * First id handed out by the per-flush interning table. Reserved ids occupy
@@ -157,6 +193,8 @@ if (RESERVED_STRINGS.length > FIRST_DYNAMIC_STRING_ID) {
 module.exports = {
   DOUBLE_COUNTS,
   FIRST_DYNAMIC_STRING_ID,
+  FRAMEWORK_EXPRESS,
+  FRAMEWORK_HTTP,
   KIND_ADD_EVENT,
   KIND_ADD_EVENT_ID,
   KIND_ADD_LINK,
@@ -173,7 +211,10 @@ module.exports = {
   KIND_SET_TAG_NUMBER_ID,
   KIND_SET_TAG_STRING,
   KIND_SET_TAG_STRING_ID,
+  KIND_SPAN_ERROR,
   KIND_SPAN_START,
+  KIND_WEB_REQUEST_FINISH,
+  KIND_WEB_REQUEST_START,
   MAX_RECORD_WORDS,
   RESERVED_STRINGS,
   WIDTHS,

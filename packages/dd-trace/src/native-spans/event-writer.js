@@ -23,6 +23,9 @@ const {
   KIND_SET_TAG_STRING,
   KIND_SET_TAG_STRING_ID,
   KIND_SPAN_START,
+  KIND_SPAN_ERROR,
+  KIND_WEB_REQUEST_FINISH,
+  KIND_WEB_REQUEST_START,
   MAX_RECORD_WORDS,
   RESERVED_STRINGS,
 } = require('./wire')
@@ -120,9 +123,15 @@ class EventWriter {
   }
 
   /**
-   * `[serviceId, envId, versionId, languageId, pid]`, once per process. Rust
-   * resolves these to owned strings during this batch's decode, so they outlive
-   * the interning window they were registered in.
+   * `[serviceId, envId, versionId, languageId, pid, processTagsId]`, once per
+   * process. Rust resolves these to owned strings during this batch's decode, so
+   * they outlive the interning window they were registered in.
+   *
+   * The process tags are `config.tags` — `runtime-id`, the remote-config client id,
+   * `version`, and any global tags the user set — serialized once here instead of
+   * re-sent per span. The generic path still writes them per span through
+   * `addTags(config.tags)`; a specialized event sends no tags at all, so the assembler
+   * applies these to those spans.
    *
    * @param {Config} [config]
    */
@@ -131,6 +140,7 @@ class EventWriter {
     const environmentId = this.#intern(config?.env ?? '')
     const versionId = this.#intern(config?.version ?? '')
     const languageId = this.#intern('javascript')
+    const processTagsId = this.#intern(serializeProcessTags(config?.tags))
 
     const events = this.#events
     const cursor = this.#eventCursor
@@ -140,7 +150,8 @@ class EventWriter {
     events[cursor + 3] = versionId
     events[cursor + 4] = languageId
     events[cursor + 5] = process.pid
-    this.#eventCursor = cursor + 6
+    events[cursor + 6] = processTagsId
+    this.#eventCursor = cursor + 7
   }
 
   /**
@@ -377,6 +388,132 @@ class EventWriter {
   }
 
   /**
+   * The whole start of a web-server request in one record.
+   *
+   * A generic span of the same shape costs a `SPAN_START`, a context entry and eight or
+   * nine `SET_TAG_STRING`s — roughly 42 words plus the interning for every key. This is
+   * 11, because a web request's shape is known: its span kind is always `server`, its
+   * type is always `web`, and its name, `component` and `_dd.integration` all follow
+   * from the framework id sent at finish. Only the method and the URL are genuinely
+   * per-request, and no tag *keys* travel at all — position carries the meaning.
+   *
+   * The segment is opened separately, by `segmentStart`, rather than implied here: a web
+   * request roots its own segment today, but an inferred proxy span would sit above it in
+   * the same segment and this record must not have to change for that.
+   *
+   * @param {import('./span_context')} context
+   * @param {number} startHi Start time in integer-nanosecond lanes.
+   * @param {number} startLo
+   * @param {string} method
+   * @param {string} url
+   */
+  webRequestStart (context, startHi, startLo, method, url) {
+    if (this.#eventCursor >= EVENT_LIMIT || this.#stringCursor >= STRING_LIMIT) this.flush()
+
+    const methodId = this.#intern(method)
+    const urlId = this.#intern(url)
+
+    const segmentId = context._segmentId
+    const spanId = context._spanId
+    const parentId = context._parentId
+    const events = this.#events
+    const cursor = this.#eventCursor
+
+    events[cursor] = KIND_WEB_REQUEST_START
+    events[cursor + 1] = segmentId.hi
+    events[cursor + 2] = segmentId.lo
+    events[cursor + 3] = spanId.hi
+    events[cursor + 4] = spanId.lo
+    events[cursor + 5] = parentId.hi
+    events[cursor + 6] = parentId.lo
+    events[cursor + 7] = startHi
+    events[cursor + 8] = startLo
+    events[cursor + 9] = methodId
+    events[cursor + 10] = urlId
+    this.#eventCursor = cursor + 11
+
+    this.#lastExplicitContext = context
+    this.#pendingContext = context
+  }
+
+  /**
+   * The rest of a web-server request: duration, the response status, the matched
+   * route and which framework handled it. Always carries its own id — a request
+   * finishes long after its middleware have come and gone, so the entered context
+   * is rarely still this span and the elided form would seldom apply.
+   *
+   * @param {import('./span_context')} context
+   * @param {number} startHi
+   * @param {number} startLo
+   * @param {number} finishMillis
+   * @param {number} statusCode
+   * @param {string} route Empty when nothing matched.
+   * @param {number} framework One of `FRAMEWORK_*` in `./wire`.
+   */
+  webRequestFinish (context, startHi, startLo, finishMillis, statusCode, route, framework) {
+    if (this.#eventCursor >= EVENT_LIMIT || this.#stringCursor >= STRING_LIMIT) this.flush()
+
+    const routeId = this.#intern(route)
+
+    splitMillisToNanoLanes(finishMillis)
+    subtractNanoLanes(startHi, startLo, LANES[0], LANES[1])
+
+    const spanId = context._spanId
+    const events = this.#events
+    const cursor = this.#eventCursor
+
+    events[cursor] = KIND_WEB_REQUEST_FINISH
+    events[cursor + 1] = spanId.hi
+    events[cursor + 2] = spanId.lo
+    events[cursor + 3] = LANES[0]
+    events[cursor + 4] = LANES[1]
+    events[cursor + 5] = statusCode
+    events[cursor + 6] = routeId
+    events[cursor + 7] = framework
+    this.#eventCursor = cursor + 8
+
+    this.#lastExplicitContext = context
+    this.#pendingContext = context
+  }
+
+  /**
+   * `[idHi, idLo, messageId, typeId, stackId]` — one record for a failed span, of any
+   * kind.
+   *
+   * This replaces the four records `setTag('error', err)` used to write: three
+   * `SET_TAG_STRING`s and a `SET_TAG_NUMBER` for the flag, which the assembler now infers
+   * from this record existing. Errors are rare, so nothing about them is folded into the
+   * finish records that every span writes.
+   *
+   * @param {import('./span_context')} context
+   * @param {string} message
+   * @param {string} type
+   * @param {string} stack
+   */
+  spanError (context, message, type, stack) {
+    if (this.#eventCursor >= EVENT_LIMIT || this.#stringCursor >= STRING_LIMIT) this.flush()
+
+    const messageId = this.#intern(message)
+    const typeId = this.#intern(type)
+    const stackId = this.#intern(stack)
+
+    const spanId = context._spanId
+    const events = this.#events
+    const cursor = this.#eventCursor
+
+    events[cursor] = KIND_SPAN_ERROR
+    events[cursor + 1] = spanId.hi
+    events[cursor + 2] = spanId.lo
+    events[cursor + 3] = messageId
+    events[cursor + 4] = typeId
+    events[cursor + 5] = stackId
+    this.#eventCursor = cursor + 6
+
+    this.#lastExplicitContext = context
+    this.#pendingContext = context
+  }
+
+  /**
    * Hand the three buffers to Rust — decode, chunk assembly and msgpack encoding all
    * run inline, on this thread, before the call returns; only the HTTP PUT is
    * deferred. Cursors and the interning table reset afterwards, so the next
@@ -521,6 +658,26 @@ class NoopEventWriter extends EventWriter {
 // Development stage flag, not configuration — see the note on `NoopEventWriter`.
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const WRITES_DISABLED = isFalse(process.env.DD_NATIVE_SPANS_WRITE ?? 'true')
+
+/**
+ * `config.tags` as one string: `key\tvalue\nkey\tvalue`. Tab and newline are the
+ * separators because no real tag key or value contains either, and it keeps the parse on
+ * the Rust side to two `split` calls with no escaping.
+ *
+ * @param {Record<string, unknown> | undefined} tags
+ * @returns {string}
+ */
+function serializeProcessTags (tags) {
+  if (tags === undefined || tags === null) return ''
+  let out = ''
+  for (const key of Object.keys(tags)) {
+    const value = tags[key]
+    if (typeof value !== 'string' && typeof value !== 'number') continue
+    if (out !== '') out += '\n'
+    out += `${key}\t${value}`
+  }
+  return out
+}
 
 /** @type {EventWriter | undefined} */
 let writer

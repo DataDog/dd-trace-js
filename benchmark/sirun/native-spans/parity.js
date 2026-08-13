@@ -31,6 +31,22 @@ const APP_PORT = Number(process.env.PARITY_APP_PORT) || 31_337
 const PROTOCOL = '0.4'
 
 /**
+ * The implementations under comparison. `native-plugins` adds the specialized web-server
+ * events on top of native spans: the server span is written straight to the event buffer
+ * with no `Span` object and no tag keys at all, and Rust reconstitutes the rest.
+ */
+const MODES = [
+  { name: 'native spans', env: { DD_TRACE_EXPERIMENTAL_NATIVE_SPANS: '1' } },
+  {
+    name: 'native spans + native plugins',
+    env: {
+      DD_TRACE_EXPERIMENTAL_NATIVE_SPANS: '1',
+      DD_TRACE_EXPERIMENTAL_NATIVE_PLUGINS: '1',
+    },
+  },
+]
+
+/**
  * Tag keys whose values cannot match across two processes, or that this PoC
  * deliberately does not produce.
  *
@@ -87,9 +103,29 @@ const EXPECTED_DIFFERENCES = [
 ]
 
 async function main () {
-  const baseline = await collect(false)
-  const native = await collect(true)
+  const baseline = await collect({})
+  let failed = 0
 
+  for (const mode of MODES) {
+    process.stdout.write(`\n=== ${mode.name} ===\n`)
+    failed += await comparePass(baseline, await collect(mode.env))
+  }
+
+  if (failed === 0) {
+    process.stdout.write('\nPARITY OK — no unexplained differences\n')
+    return
+  }
+
+  process.stdout.write(`\nPARITY FAILED (${failed} unexplained difference(s))\n`)
+  process.exitCode = 1
+}
+
+/**
+ * @param {import('./capture-server').CapturedSpan[][]} baseline
+ * @param {import('./capture-server').CapturedSpan[][]} native
+ * @returns {number} Count of unexplained differences.
+ */
+function comparePass (baseline, native) {
   const differences = []
   const expected = new Map()
 
@@ -116,27 +152,21 @@ async function main () {
       process.stdout.write(`  ${count}x ${reason}\n`)
     }
   }
-
-  if (differences.length === 0) {
-    process.stdout.write('\nPARITY OK — no unexplained differences\n')
-    return
-  }
-
-  process.stdout.write(`\nPARITY FAILED (${differences.length} unexplained difference(s))\n`)
   for (const difference of differences) {
-    process.stdout.write(`  ${difference}\n`)
+    process.stdout.write(`  UNEXPLAINED: ${difference}\n`)
   }
-  process.exitCode = 1
+
+  return differences.length
 }
 
 /**
  * Drive every route in a child process and return the chunks it exported, sorted
  * into a comparable order.
  *
- * @param {boolean} native
+ * @param {Record<string, string>} modeEnv Flags selecting the implementation.
  * @returns {Promise<import('./capture-server').CapturedSpan[][]>}
  */
-async function collect (native) {
+async function collect (modeEnv) {
   const capture = await startCaptureServer()
 
   await new Promise((resolve, reject) => {
@@ -145,7 +175,13 @@ async function collect (native) {
         ...process.env,
         DD_TRACE_AGENT_URL: `http://127.0.0.1:${capture.port}`,
         DD_TRACE_AGENT_PROTOCOL_VERSION: PROTOCOL,
-        DD_TRACE_EXPERIMENTAL_NATIVE_SPANS: native ? '1' : '0',
+        DD_TRACE_EXPERIMENTAL_NATIVE_SPANS: '0',
+        DD_TRACE_EXPERIMENTAL_NATIVE_PLUGINS: '0',
+        // Code origin hangs `_dd.code_origin.*` tags on a `Span` object. A specialized
+        // web event never creates one, so the feature is off on both sides rather than
+        // compared and excluded.
+        DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'false',
+        ...modeEnv,
         PARITY_APP_PORT: String(APP_PORT),
         DD_SERVICE: 'native-spans-parity',
         DD_ENV: 'parity',

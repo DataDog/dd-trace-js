@@ -17,8 +17,9 @@ use std::rc::Rc;
 use crate::decode::Event;
 use crate::encode;
 use crate::wire::{
-    KEY_ERROR, KEY_ERROR_MESSAGE, KEY_ERROR_STACK, KEY_ERROR_TYPE, KEY_HTTP_STATUS_CODE,
-    KEY_OPERATION_NAME, KEY_RESOURCE_NAME, KEY_SERVICE_NAME, KEY_SPAN_KIND, KEY_SPAN_TYPE,
+    FRAMEWORK_EXPRESS, KEY_ERROR, KEY_ERROR_MESSAGE, KEY_ERROR_STACK, KEY_ERROR_TYPE,
+    KEY_HTTP_STATUS_CODE, KEY_OPERATION_NAME, KEY_RESOURCE_NAME, KEY_SERVICE_NAME, KEY_SPAN_KIND,
+    KEY_SPAN_TYPE,
 };
 
 const META_LANGUAGE: &str = "language";
@@ -28,6 +29,24 @@ const META_BASE_SERVICE: &str = "_dd.base_service";
 const METRIC_PROCESS_ID: &str = "process_id";
 const METRIC_TOP_LEVEL: &str = "_dd.top_level";
 const METRIC_MEASURED: &str = "_dd.measured";
+
+// Everything a web-server span carries that follows from being a web-server span. None
+// of this travels on the wire: the specialized events send the method, the URL, the
+// status, the route and one framework word, and the rest is filled in here.
+const META_COMPONENT: &str = "component";
+const META_SPAN_KIND: &str = "span.kind";
+const META_HTTP_METHOD: &str = "http.method";
+const META_HTTP_URL: &str = "http.url";
+const META_HTTP_STATUS_CODE: &str = "http.status_code";
+const META_HTTP_ROUTE: &str = "http.route";
+const META_INTEGRATION: &str = "_dd.integration";
+const META_TRACE_ID_HIGH: &str = "_dd.p.tid";
+const VALUE_SERVER: &str = "server";
+const VALUE_WEB: &str = "web";
+const NAME_WEB_REQUEST: &str = "web.request";
+const NAME_EXPRESS_REQUEST: &str = "express.request";
+const COMPONENT_HTTP: &str = "http";
+const COMPONENT_EXPRESS: &str = "express";
 
 // `normalizeSpan` in `encode/tags-processors.js`, which both JS encoders run before
 // writing a span. Applied here so a formatted span is already normalised whichever
@@ -76,6 +95,23 @@ type IdMap<V> = HashMap<u64, V, BuildHasherDefault<IdHasher>>;
 /// allocations plus a memcpy per span, purely to spell out a `&'static str`.
 struct ConstantKeys {
     language: Rc<str>,
+    component: Rc<str>,
+    span_kind: Rc<str>,
+    http_method: Rc<str>,
+    http_url: Rc<str>,
+    http_status_code: Rc<str>,
+    http_route: Rc<str>,
+    integration: Rc<str>,
+    trace_id_high: Rc<str>,
+    error_message: Rc<str>,
+    error_type: Rc<str>,
+    error_stack: Rc<str>,
+    value_server: Rc<str>,
+    value_web: Rc<str>,
+    name_web_request: Rc<str>,
+    name_express_request: Rc<str>,
+    component_http: Rc<str>,
+    component_express: Rc<str>,
     span_links: Rc<str>,
     events: Rc<str>,
     base_service: Rc<str>,
@@ -88,6 +124,23 @@ impl ConstantKeys {
     fn new() -> Self {
         Self {
             language: Rc::from(META_LANGUAGE),
+            component: Rc::from(META_COMPONENT),
+            span_kind: Rc::from(META_SPAN_KIND),
+            http_method: Rc::from(META_HTTP_METHOD),
+            http_url: Rc::from(META_HTTP_URL),
+            http_status_code: Rc::from(META_HTTP_STATUS_CODE),
+            http_route: Rc::from(META_HTTP_ROUTE),
+            integration: Rc::from(META_INTEGRATION),
+            trace_id_high: Rc::from(META_TRACE_ID_HIGH),
+            error_message: Rc::from(KEY_ERROR_MESSAGE),
+            error_type: Rc::from(KEY_ERROR_TYPE),
+            error_stack: Rc::from(KEY_ERROR_STACK),
+            value_server: Rc::from(VALUE_SERVER),
+            value_web: Rc::from(VALUE_WEB),
+            name_web_request: Rc::from(NAME_WEB_REQUEST),
+            name_express_request: Rc::from(NAME_EXPRESS_REQUEST),
+            component_http: Rc::from(COMPONENT_HTTP),
+            component_express: Rc::from(COMPONENT_EXPRESS),
             span_links: Rc::from(META_SPAN_LINKS),
             events: Rc::from(META_EVENTS),
             base_service: Rc::from(META_BASE_SERVICE),
@@ -106,6 +159,9 @@ pub struct Payload {
 
 #[derive(Default)]
 struct ProcessInfo {
+    /// `config.tags`, parsed from `PROCESS_INFO` once. Applied to spans built from
+    /// specialized events, which send no tags of their own.
+    tags: Vec<(Rc<str>, Rc<str>)>,
     service: Rc<str>,
     service_lower: String,
     service_lower_shared: Rc<str>,
@@ -113,6 +169,17 @@ struct ProcessInfo {
     version: Rc<str>,
     language: Rc<str>,
     pid: u32,
+}
+
+/// What a web-server span carries beyond the generic fields. Present only on spans
+/// created by `WEB_REQUEST_START`.
+#[derive(Default)]
+struct WebRequest {
+    method: Rc<str>,
+    url: Rc<str>,
+    route: Rc<str>,
+    status_code: u32,
+    framework: u32,
 }
 
 struct SpanBuilder {
@@ -130,6 +197,8 @@ struct SpanBuilder {
     metrics: Vec<(Rc<str>, f64)>,
     links: Vec<Rc<str>>,
     events: Vec<(Rc<str>, u64, Rc<str>)>,
+    /// `Some` for a span that came from the specialized web-server events.
+    web: Option<Box<WebRequest>>,
 }
 
 impl SpanBuilder {
@@ -150,6 +219,7 @@ impl SpanBuilder {
         self.metrics.clear();
         self.links.clear();
         self.events.clear();
+        self.web = None;
     }
 
     /// Release anything the builder still points at before it goes back to the pool, so
@@ -164,6 +234,7 @@ impl SpanBuilder {
         self.metrics.clear();
         self.links.clear();
         self.events.clear();
+        self.web = None;
     }
 
     fn new(span_id: u64, parent_id: u64, start: u64) -> Self {
@@ -182,6 +253,7 @@ impl SpanBuilder {
             metrics: Vec::with_capacity(4),
             links: Vec::new(),
             events: Vec::new(),
+            web: None,
         }
     }
 
@@ -218,11 +290,9 @@ impl SpanBuilder {
 
 struct Segment {
     trace_id: u64,
-    /// The wire carries only the low 64 bits of a trace id; the upper half
-    /// travels as the `_dd.p.tid` meta tag the JS side writes on the local root, the
-    /// same way the baseline emits it as a chunk tag. Kept decoded so the segment
-    /// record stays the single place the mapping lives.
-    #[allow(dead_code)]
+    /// The wire carries only the low 64 bits of a trace id. The upper half travels as the
+    /// `_dd.p.tid` meta tag — written by the JS side on a generic local root, and derived
+    /// from this field for a web request, which sends no tags at all.
     trace_id_upper: u64,
     spans: Vec<SpanBuilder>,
     finished: usize,
@@ -290,7 +360,18 @@ impl Assembler {
                     version,
                     language,
                     pid,
+                    process_tags,
                 } => {
+                    // Parsed once per process. A specialized event sends no tags at all,
+                    // so these are what stands in for the generic path's
+                    // `addTags(config.tags)` on every span.
+                    self.process.tags.clear();
+                    for entry in process_tags.split('\n') {
+                        let Some((key, value)) = entry.split_once('\t') else {
+                            continue;
+                        };
+                        self.process.tags.push((Rc::from(key), Rc::from(value)));
+                    }
                     self.process.service_lower = service.to_lowercase();
                     self.process.service_lower_shared = Rc::from(self.process.service_lower.as_str());
                     self.process.service = service;
@@ -359,6 +440,94 @@ impl Assembler {
                 } => {
                     if let Some(span) = self.span_mut(span_id) {
                         span.events.push((name, time, attributes));
+                    }
+                }
+                Event::WebRequestStart {
+                    segment_id,
+                    span_id,
+                    parent_id,
+                    start,
+                    method,
+                    url,
+                } => {
+                    // Attaches to whichever segment opened it, the same as `SpanStart`.
+                    // Nothing here assumes the request is that segment's root.
+                    let mut builder = self
+                        .pool
+                        .pop()
+                        .unwrap_or_else(|| SpanBuilder::new(span_id, parent_id, start));
+                    builder.reuse(span_id, parent_id, start);
+                    builder.web = Some(Box::new(WebRequest {
+                        method,
+                        url,
+                        ..WebRequest::default()
+                    }));
+                    if let Some(segment) = self.segments.get_mut(&segment_id) {
+                        segment.spans.push(builder);
+                        self.last_span = Some((span_id, segment_id, segment.spans.len() - 1));
+                        self.span_segments.insert(span_id, segment_id);
+                    } else {
+                        self.pool.push(builder);
+                    }
+                }
+                Event::WebRequestFinish {
+                    span_id,
+                    duration,
+                    status_code,
+                    route,
+                    framework,
+                } => {
+                    let Some(&segment_id) = self.span_segments.get(&span_id) else {
+                        continue;
+                    };
+                    let Some(segment) = self.segments.get_mut(&segment_id) else {
+                        continue;
+                    };
+                    if let Some(span) = segment.spans.iter_mut().find(|span| span.span_id == span_id)
+                    {
+                        if span.duration.is_none() {
+                            span.duration = Some(duration);
+                            segment.finished += 1;
+                        }
+                        // `web.js` treats any 5xx as an error; a thrown error arrives
+                        // separately, as `WebRequestError`.
+                        if status_code >= 500 {
+                            span.error = 1;
+                        }
+                        if let Some(web) = &mut span.web {
+                            web.route = route;
+                            web.status_code = status_code;
+                            web.framework = framework;
+                        }
+                    }
+                    if segment.finished == segment.spans.len()
+                        || segment.finished >= self.flush_min_spans
+                    {
+                        completed.push((segment_id, 0));
+                    }
+                }
+                Event::SpanError {
+                    span_id,
+                    message,
+                    error_type,
+                    stack,
+                } => {
+                    // Cloned up front: `span_mut` borrows `self` mutably for the rest
+                    // of the block.
+                    let message_key = Rc::clone(&self.keys.error_message);
+                    let type_key = Rc::clone(&self.keys.error_type);
+                    let stack_key = Rc::clone(&self.keys.error_stack);
+                    if let Some(span) = self.span_mut(span_id) {
+                        span.error = 1;
+                        if !message.is_empty() {
+                            span.meta.push((message_key, message));
+                        }
+                        if !error_type.is_empty() {
+                            span.meta.push((type_key, error_type));
+                        }
+                        if !stack.is_empty() {
+                            span.meta.push((stack_key, stack));
+                        }
                     }
                 }
                 Event::Finish { span_id, duration } => {
@@ -449,10 +618,14 @@ impl Assembler {
         // An empty vector with capacity, to receive whichever spans are still open.
         let mut open = std::mem::take(&mut self.scratch);
 
-        let (mut spans, trace_id) = match self.segments.get_mut(&segment_id) {
+        let (mut spans, trace_id, trace_id_upper) = match self.segments.get_mut(&segment_id) {
             Some(segment) => {
                 segment.finished = 0;
-                (std::mem::take(&mut segment.spans), segment.trace_id)
+                (
+                    std::mem::take(&mut segment.spans),
+                    segment.trace_id,
+                    segment.trace_id_upper,
+                )
             }
             None => {
                 self.scratch = open;
@@ -472,7 +645,7 @@ impl Assembler {
             }
             self.span_segments.remove(&span.span_id);
             if encode {
-                self.write_span(out, &mut span, segment_id, trace_id);
+                self.write_span(out, &mut span, segment_id, trace_id, trace_id_upper);
             }
             if self.pool.len() < POOL_CAPACITY {
                 span.reset();
@@ -497,7 +670,20 @@ impl Assembler {
     /// special-casing: a per-span `service.name` override arrived as an ordinary
     /// `SET_TAG_STRING`, and anything absent falls back to the process-level value from
     /// `PROCESS_INFO`.
-    fn write_span(&self, out: &mut Vec<u8>, span: &mut SpanBuilder, segment_id: u64, trace_id: u64) {
+    fn write_span(
+        &self,
+        out: &mut Vec<u8>,
+        span: &mut SpanBuilder,
+        segment_id: u64,
+        trace_id: u64,
+        trace_id_upper: u64,
+    ) {
+        // A web-server span arrives with no tags at all: its whole tag set follows from
+        // being a web-server span, so it is reconstituted here rather than sent.
+        if span.web.is_some() {
+            self.expand_web_request(span, trace_id_upper);
+        }
+
         // The derived entries go into the span's own maps so the encoder's
         // last-write-wins deduplication still lets them override a user tag of the same
         // name, which is the order `extractTags` produces.
@@ -584,6 +770,76 @@ impl Assembler {
                 metrics: &span.metrics,
             },
         );
+    }
+}
+
+/// Everything a web-server span carries that the wire did not have to send. The four
+/// values it did send — method, URL, status, route — plus one framework word are enough,
+/// because the rest is the same on every web request: kind, type, component, integration,
+/// and the process-level service / env / version that a generic span picks up from
+/// `config.tags` one `setTag` at a time.
+impl Assembler {
+    fn expand_web_request(&self, span: &mut SpanBuilder, trace_id_upper: u64) {
+        let web = span.web.as_ref().expect("caller checked");
+        let express = web.framework == FRAMEWORK_EXPRESS;
+
+        span.name = Some(Rc::clone(if express {
+            &self.keys.name_express_request
+        } else {
+            &self.keys.name_web_request
+        }));
+        span.span_type = Some(Rc::clone(&self.keys.value_web));
+        // `addResourceTag`: the method, joined with the route when one matched.
+        span.resource = Some(if web.route.is_empty() {
+            Rc::clone(&web.method)
+        } else {
+            Rc::from(format!("{} {}", web.method, web.route).as_str())
+        });
+        // `span.kind` is always `server`, which is also what makes the span measured.
+        span.span_kind = Some(Rc::clone(&self.keys.value_server));
+
+        let component = if express {
+            &self.keys.component_express
+        } else {
+            &self.keys.component_http
+        };
+        span.meta
+            .push((Rc::clone(&self.keys.component), Rc::clone(component)));
+        span.meta
+            .push((Rc::clone(&self.keys.integration), Rc::clone(component)));
+        span.meta.push((
+            Rc::clone(&self.keys.span_kind),
+            Rc::clone(&self.keys.value_server),
+        ));
+        span.meta
+            .push((Rc::clone(&self.keys.http_method), Rc::clone(&web.method)));
+        span.meta
+            .push((Rc::clone(&self.keys.http_url), Rc::clone(&web.url)));
+        span.meta.push((
+            Rc::clone(&self.keys.http_status_code),
+            Rc::from(web.status_code.to_string().as_str()),
+        ));
+        if !web.route.is_empty() {
+            span.meta
+                .push((Rc::clone(&self.keys.http_route), Rc::clone(&web.route)));
+        }
+
+        // The upper half of the 128-bit trace id. A generic span has the JS side write
+        // this as a tag on every local root; here it is derived from the id the segment
+        // already carries.
+        if trace_id_upper != 0 {
+            span.meta.push((
+                Rc::clone(&self.keys.trace_id_high),
+                Rc::from(format!("{:016x}", trace_id_upper).as_str()),
+            ));
+        }
+
+        // `config.tags` — `runtime-id`, the remote-config client id, `service`, `env`,
+        // `version` and any global tags the user set. The generic path applies these per
+        // span through `addTags`; here they arrive once, on `PROCESS_INFO`.
+        for (key, value) in &self.process.tags {
+            span.meta.push((Rc::clone(key), Rc::clone(value)));
+        }
     }
 }
 

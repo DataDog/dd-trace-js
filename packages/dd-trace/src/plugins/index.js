@@ -1,5 +1,13 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../config/helper')
+const { isTrue } = require('../util')
+
+// Read once: the registry is consulted per instrumented module load, and this decides
+// which class a module name resolves to.
+const nativePlugins = isTrue(getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_NATIVE_PLUGINS')) &&
+  isTrue(getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_NATIVE_SPANS'))
+
 const plugins = {
   get '@anthropic-ai/claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
@@ -67,7 +75,14 @@ const plugins = {
   get grpc () { return require('../../../datadog-plugin-grpc/src') },
   get hapi () { return require('../../../datadog-plugin-hapi/src') },
   get hono () { return require('../../../datadog-plugin-hono/src') },
-  get http () { return require('../../../datadog-plugin-http/src') },
+  get http () {
+    // PoC: a specialized server plugin that writes events straight to the native
+    // `EventWriter` without ever allocating a `Span`. Requires native spans, since the
+    // events it writes only exist on that path.
+    return nativePlugins
+      ? require('../native-spans/plugins/http')
+      : require('../../../datadog-plugin-http/src')
+  },
   get http2 () { return require('../../../datadog-plugin-http2/src') },
   get https () { return require('../../../datadog-plugin-http/src') },
   get ioredis () { return require('../../../datadog-plugin-ioredis/src') },

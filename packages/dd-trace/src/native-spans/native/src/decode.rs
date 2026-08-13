@@ -24,7 +24,8 @@ use crate::wire::{
     KIND_ADD_LINK, KIND_ADD_LINK_ID, KIND_COUNT, KIND_ENTER_CONTEXT_KEEP_LAST,
     KIND_ENTER_CONTEXT_NEW, KIND_FINISH, KIND_FINISH_ID, KIND_PROCESS_INFO, KIND_REGISTER_STRING,
     KIND_SEGMENT_START, KIND_SET_TAG_NUMBER, KIND_SET_TAG_NUMBER_ID, KIND_SET_TAG_STRING,
-    KIND_SET_TAG_STRING_ID, KIND_SPAN_START, RESERVED_STRINGS, WIDTHS,
+    KIND_SET_TAG_STRING_ID, KIND_SPAN_START, KIND_SPAN_ERROR, KIND_WEB_REQUEST_FINISH,
+    KIND_WEB_REQUEST_START, RESERVED_STRINGS, WIDTHS,
 };
 
 /// A decoded record. Strings are resolved to owned `Rc<str>` here, before the
@@ -41,6 +42,9 @@ pub enum Event {
         version: Rc<str>,
         language: Rc<str>,
         pid: u32,
+        /// `config.tags`, serialized as `key\tvalue\nkey\tvalue`. Sent once per process
+        /// rather than per span.
+        process_tags: Rc<str>,
     },
     SegmentStart {
         segment_id: u64,
@@ -82,6 +86,32 @@ pub enum Event {
     Finish {
         span_id: u64,
         duration: u64,
+    },
+    /// A web-server request start. Stands in for `SegmentStart` plus `SpanStart` plus
+    /// the eight or nine tags a generic server span would send: everything else about
+    /// the shape is fixed and is filled in during assembly.
+    WebRequestStart {
+        segment_id: u64,
+        span_id: u64,
+        parent_id: u64,
+        start: u64,
+        method: Rc<str>,
+        url: Rc<str>,
+    },
+    WebRequestFinish {
+        span_id: u64,
+        duration: u64,
+        status_code: u32,
+        route: Rc<str>,
+        framework: u32,
+    },
+    /// A failed span, of any kind. Written only on failure, so nothing about errors is
+    /// folded into the records every span writes.
+    SpanError {
+        span_id: u64,
+        message: Rc<str>,
+        error_type: Rc<str>,
+        stack: Rc<str>,
     },
 }
 
@@ -175,6 +205,7 @@ pub fn decode(events: &[u32], doubles: &[f64], strings: &[u8]) -> Vec<Event> {
                     version: table.get(fields[2]),
                     language: table.get(fields[3]),
                     pid: fields[4],
+                    process_tags: table.get(fields[5]),
                 });
             }
             KIND_SEGMENT_START => {
@@ -235,6 +266,39 @@ pub fn decode(events: &[u32], doubles: &[f64], strings: &[u8]) -> Vec<Event> {
                     name: table.get(rest[0]),
                     time: lanes_to_u64(rest[1], rest[2]),
                     attributes: table.get(rest[3]),
+                });
+            }
+            KIND_WEB_REQUEST_START => {
+                let span_id = lanes_to_u64(fields[2], fields[3]);
+                last_explicit = span_id;
+                decoded.push(Event::WebRequestStart {
+                    segment_id: lanes_to_u64(fields[0], fields[1]),
+                    span_id,
+                    parent_id: lanes_to_u64(fields[4], fields[5]),
+                    start: lanes_to_u64(fields[6], fields[7]),
+                    method: table.get(fields[8]),
+                    url: table.get(fields[9]),
+                });
+            }
+            KIND_WEB_REQUEST_FINISH => {
+                let span_id = lanes_to_u64(fields[0], fields[1]);
+                last_explicit = span_id;
+                decoded.push(Event::WebRequestFinish {
+                    span_id,
+                    duration: lanes_to_u64(fields[2], fields[3]),
+                    status_code: fields[4],
+                    route: table.get(fields[5]),
+                    framework: fields[6],
+                });
+            }
+            KIND_SPAN_ERROR => {
+                let span_id = lanes_to_u64(fields[0], fields[1]);
+                last_explicit = span_id;
+                decoded.push(Event::SpanError {
+                    span_id,
+                    message: table.get(fields[2]),
+                    error_type: table.get(fields[3]),
+                    stack: table.get(fields[4]),
                 });
             }
             KIND_FINISH | KIND_FINISH_ID => {

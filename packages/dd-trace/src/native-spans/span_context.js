@@ -15,9 +15,6 @@ const { getWriter } = require('./event-writer')
  */
 
 const ERROR = 'error'
-const ERROR_MESSAGE = 'error.message'
-const ERROR_STACK = 'error.stack'
-const ERROR_TYPE = 'error.type'
 
 /**
  * Reads of the tag map, sampling state and trace state land here instead of
@@ -130,15 +127,21 @@ class NativeSpanContext {
    * `span_format`'s `extractError`, which has no equivalent here — there is no
    * JS-side span object left for a format pass to read.
    *
+   * One `SPAN_ERROR` record rather than the three `SET_TAG_STRING`s and one
+   * `SET_TAG_NUMBER` this used to write: the keys never vary, and the flag follows from
+   * the record existing.
+   *
    * @param {import('./event-writer').EventWriter} writer
    * @param {ErrorLike} error
    */
   #setErrorTags (writer, error) {
     const message = error.message || error.code
-    if (message != null) writer.setTagString(this, ERROR_MESSAGE, truncate(String(message)))
-    if (error.name != null) writer.setTagString(this, ERROR_TYPE, truncate(String(error.name)))
-    if (error.stack != null) writer.setTagString(this, ERROR_STACK, truncate(String(error.stack)))
-    writer.setTagNumber(this, ERROR, 1)
+    writer.spanError(
+      this,
+      message == null ? '' : truncate(String(message)),
+      error.name == null ? '' : truncate(String(error.name)),
+      error.stack == null ? '' : truncate(String(error.stack))
+    )
   }
 
   /** @returns {undefined} No tag map is kept, so there is never anything to read. */
