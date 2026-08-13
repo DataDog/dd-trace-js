@@ -19,6 +19,7 @@ export default {
     messages: {
       noProcessEnvDisable:
         'Do not disable the process.env guardrail. Use getEnvironmentVariable() or add a reviewed lint exception.',
+      staleAllowFile: 'Remove the stale process.env suppression allowlist entry for this file.',
     },
     schema: [
       {
@@ -41,7 +42,7 @@ export default {
     let remainingAllowedDirectives = allowFiles.includes(filename) ? 1 : 0
 
     return {
-      Program () {
+      Program (node) {
         for (const comment of context.sourceCode.getAllComments()) {
           if (!isProcessEnvDisable(comment)) continue
 
@@ -53,6 +54,13 @@ export default {
           context.report({
             node: comment,
             messageId: 'noProcessEnvDisable',
+          })
+        }
+
+        if (remainingAllowedDirectives > 0) {
+          context.report({
+            node,
+            messageId: 'staleAllowFile',
           })
         }
       },

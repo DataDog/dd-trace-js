@@ -78,5 +78,11 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
       options: [{ allowFiles: ['ci/init.js'] }],
       errors: [{ messageId: 'noProcessEnvDisable' }],
     },
+    {
+      code: 'getEnvironmentVariable("CI")',
+      filename: path.join(process.cwd(), 'ci/init.js'),
+      options: [{ allowFiles: ['ci/init.js'] }],
+      errors: [{ message: 'Remove the stale process.env suppression allowlist entry for this file.' }],
+    },
   ],
 })
