@@ -213,11 +213,8 @@ describe('Vercel telemetry retention', () => {
       metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
 
       unregister = registerVercelTelemetryRetention(tracer)
-      channel('apm:next:request:finish').publish({})
-      await Promise.race([
-        intakeRequests,
-        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Missing intake signals')), 1000)),
-      ])
+      channel('apm:http:server:request:finish').publish({})
+      await intakeRequests
       await retained
       assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
       assert.strictEqual(metricPayloads, 2)
@@ -229,13 +226,14 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('defers flushing until after Next request finish subscribers return', async () => {
+  it('waits for HTTP response completion after Next request finish', async () => {
     process.env.VERCEL = '1'
     let retained
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
     }
-    const finishChannel = channel('apm:next:request:finish')
+    const nextFinishChannel = channel('apm:next:request:finish')
+    const httpFinishChannel = channel('apm:http:server:request:finish')
     let finished = false
     const tracer = {
       flushAll (done) {
@@ -246,8 +244,10 @@ describe('Vercel telemetry retention', () => {
 
     const unregister = initializeServerlessTelemetry(tracer)
     try {
-      finishChannel.publish({})
+      nextFinishChannel.publish({})
+      assert.strictEqual(retained, undefined)
       finished = true
+      httpFinishChannel.publish({})
       await retained
     } finally {
       unregister()
@@ -268,7 +268,6 @@ describe('Vercel telemetry retention', () => {
     })
     try {
       channel('apm:http:server:request:finish').publish({})
-      channel('apm:next:request:finish').publish({})
       await Promise.all(retained)
       assert.strictEqual(flushes, 1)
     } finally {
@@ -291,12 +290,34 @@ describe('Vercel telemetry retention', () => {
           done()
         },
       })
-      channel('apm:next:request:finish').publish({})
+      channel('apm:http:server:request:finish').publish({})
       await retained
 
       assert.deepStrictEqual(options, { timeout: 2_000 })
     } finally {
       unregister?.()
+    }
+  })
+
+  it('retains telemetry at HTTP/2 response completion', async () => {
+    let retained
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    let flushes = 0
+    const unregister = registerVercelTelemetryRetention({
+      flushAll (done) {
+        flushes++
+        done()
+      },
+    })
+    try {
+      channel('apm:http2:server:response:emit').publish({ eventName: 'close' })
+      await retained
+      assert.strictEqual(flushes, 1)
+    } finally {
+      unregister()
     }
   })
 })
