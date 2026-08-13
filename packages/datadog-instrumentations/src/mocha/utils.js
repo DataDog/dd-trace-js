@@ -311,7 +311,6 @@ function restoreRunnableFunction (runnable) {
   if (!wrappedFunctions.has(wrappedFunction)) return
 
   runnable.fn = originalFns.get(wrappedFunction)
-  wrappedFunctions.delete(wrappedFunction)
 }
 
 /**

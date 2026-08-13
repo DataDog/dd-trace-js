@@ -16,6 +16,9 @@ module.exports = function ThrowingReporter (runner) {
       // eslint-disable-next-line no-throw-literal
       throw undefined
     }
+    if (process.env.MOCHA_REPORTER_THROWS_UNCOERCIBLE) {
+      throw Object.create(null)
+    }
     throw new Error('custom Mocha reporter failed')
   })
 }

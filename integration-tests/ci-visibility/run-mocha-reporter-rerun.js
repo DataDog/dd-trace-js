@@ -24,6 +24,7 @@ class ThrowOnceReporter {
 
 const mocha = new Mocha({ reporter: ThrowOnceReporter })
 mocha.cleanReferencesAfterRun?.(false)
+if (process.env.MOCHA_REUSABLE_NATIVE_RETRY) mocha.retries(1)
 mocha.addFile(require.resolve('./mocha-plugin-tests/reporter-reusable-run.js'))
 
 function runAgainWhenReady () {

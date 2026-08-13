@@ -82,6 +82,7 @@ const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
 const runnerStarted = new WeakSet()
 const runnerRecoveryStates = new WeakMap()
+const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
@@ -675,6 +676,35 @@ function stopParallelWorkers (runner) {
 }
 
 /**
+ * Resets suite coverage after every reporter has observed the completed suite.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function resetPendingSuiteCoverage (runner) {
+  if (!runnersWithPendingCoverageReset.delete(runner) || !global.__coverage__) return
+
+  resetCoverage(global.__coverage__)
+}
+
+/**
+ * Creates an Error for Test Optimization tags without coercing a user-thrown value.
+ *
+ * @param {unknown} frameworkError
+ * @returns {Error}
+ */
+function getFrameworkFinalizationError (frameworkError) {
+  if (typeof frameworkError === 'string') return new Error(frameworkError)
+  try {
+    if (frameworkError instanceof Error) return frameworkError
+  } catch {
+    // User-thrown proxies can fail the instanceof prototype lookup.
+  }
+
+  return new Error('Mocha reporter failed')
+}
+
+/**
  * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
  * runs Datadog's end handler and propagates the original error after finalization.
  *
@@ -726,6 +756,8 @@ function wrapRunnerEmit (Runner) {
           }
         }
         return
+      } finally {
+        if (event === 'suite end') resetPendingSuiteCoverage(this)
       }
     }
 
@@ -751,9 +783,7 @@ function wrapRunnerEmit (Runner) {
     adjustRunnerFailuresOnce(this)
 
     if (hasFrameworkError) {
-      const finalizationError = frameworkError instanceof Error
-        ? frameworkError
-        : new Error(String(frameworkError))
+      const finalizationError = getFrameworkFinalizationError(frameworkError)
       let hasPropagatedFrameworkError = false
       const propagateFrameworkError = () => {
         if (hasPropagatedFrameworkError) return
@@ -1440,7 +1470,7 @@ addHook({
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
         mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
+        runnersWithPendingCoverageReset.add(this)
       }
 
       const ctx = testFileToSuiteCtx.get(suite.file)
