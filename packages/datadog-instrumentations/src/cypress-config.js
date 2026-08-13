@@ -485,6 +485,22 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
 }
 
 /**
+ * Enables the Cypress lifecycle events needed to finish Test Optimization
+ * sessions in interactive mode.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {void}
+ */
+function enableInteractiveRunEvents (config) {
+  if (config.isInteractive && config.experimentalInteractiveRunEvents !== true) {
+    config.experimentalInteractiveRunEvents = true
+    log.warn(
+      'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.'
+    )
+  }
+}
+
+/**
  * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
  * and injects the support file. Communicates with the plugin layer via
  * the `ci:cypress:setup-node-events` diagnostic channel, avoiding direct
@@ -547,6 +563,7 @@ function registerDdTraceHooks (
       manualPlugin.ownsCurrentPlugin ||
       supportsErrorAwareFinalization(manualPlugin) ||
       !setupNodeEventsCh.hasSubscribers)) {
+    if (manualPlugin.afterRunHandler) enableInteractiveRunEvents(config)
     for (const handler of userBeforeRunHandlers) on('before:run', handler)
     registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
@@ -592,6 +609,7 @@ function registerDdTraceHooks (
     return config
   }
 
+  enableInteractiveRunEvents(config)
   return payload.configPromise || config
 }
 
