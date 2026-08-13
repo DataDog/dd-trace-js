@@ -127,6 +127,19 @@ describe('Exporter', () => {
       callbacks[0]()
       sinon.assert.calledOnce(flushed)
     })
+
+    it('does not retain a failed writer flush', () => {
+      writer.flush = sinon.stub()
+      writer.flush.onFirstCall().throws(new Error('encode failed'))
+      writer.flush.onSecondCall().callsFake(done => done())
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      assert.throws(() => exporter.export([span]), /encode failed/)
+      exporter.flush(flushed)
+
+      sinon.assert.calledOnce(flushed)
+    })
   })
 
   describe('setUrl', () => {

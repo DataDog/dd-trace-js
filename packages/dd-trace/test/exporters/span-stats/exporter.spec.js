@@ -57,6 +57,19 @@ describe('span-stats exporter', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('does not retain a failed writer flush', () => {
+    writer.flush = sinon.stub()
+    writer.flush.onFirstCall().throws(new Error('encode failed'))
+    writer.flush.onSecondCall().callsFake(done => done())
+    exporter = new Exporter({ url })
+    const done = sinon.spy()
+
+    assert.throws(() => exporter.export('failed export'), /encode failed/)
+    exporter.flush(done)
+
+    sinon.assert.calledOnce(done)
+  })
+
   it('should set url from config', () => {
     const url = new URL('http://0.0.0.0:1234')
 

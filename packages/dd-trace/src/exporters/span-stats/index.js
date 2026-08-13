@@ -28,10 +28,16 @@ class SpanStatsExporter {
   #flush (done) {
     const flush = { callbacks: done ? [done] : [] }
     this.#activeFlushes.add(flush)
-    this._writer.flush(() => {
+    const complete = () => {
       this.#activeFlushes.delete(flush)
       for (const callback of flush.callbacks) callback()
-    })
+    }
+    try {
+      this._writer.flush(complete)
+    } catch (error) {
+      complete()
+      throw error
+    }
   }
 }
 
