@@ -252,6 +252,48 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@supabase/auth-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/functions-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/postgrest-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/realtime-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/storage-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/supabase-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.2",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "aerospike",
     "integration": "aerospike",
     "minimum_tracer_supported": "4.0.0",
