@@ -331,16 +331,13 @@ class Config extends ConfigBase {
     // This happens when all remote configs are removed
     if (options !== null) {
       const filtered = {}
-      for (const [key, value] of Object.entries(options)) {
-        if (!sdkConfigAllowlist.has(key)) {
-          log.debug('Ignoring remote config for unsupported configuration %s', key)
-          continue
-        }
+      for (const key of sdkConfigAllowlist) {
+        if (!Object.hasOwn(options, key)) continue
         if (sensitiveConfigurations.has(key)) {
           log.debug('Ignoring remote config for sensitive configuration %s', key)
           continue
         }
-        filtered[key] = value
+        filtered[key] = options[key]
       }
 
       // Resolve aliases and drop configs this tracer version doesn't recognize
