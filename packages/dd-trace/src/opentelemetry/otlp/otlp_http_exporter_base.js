@@ -139,6 +139,7 @@ class OtlpHttpExporterBase {
         req.end()
       })
     } catch (error) {
+      log.error('Error sending OTLP %s:', this.signalType, error)
       complete({ code: 1, error })
     }
   }

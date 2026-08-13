@@ -664,23 +664,29 @@ describe('OpenTelemetry Meter Provider', () => {
 
   describe('Lifecycle', () => {
     it('waits for an in-flight export during forceFlush', () => {
-      let exportDone
-      let flushDone
+      const exports = []
+      const flushes = []
       const reader = new PeriodicMetricReader({
-        export: (metrics, done) => { exportDone = done },
-        flush: (done) => { flushDone = done },
+        export: (metrics, done) => { exports.push(done) },
+        flush: (done) => { flushes.push(done) },
       }, 60_000, 'DELTA', 1024)
       const meter = new MeterProvider({ reader }).getMeter('test')
+      const firstDone = sinon.spy()
       const done = sinon.spy()
 
       meter.createCounter('in-flight').add(1)
+      reader.forceFlush(firstDone)
+      flushes.shift()()
+      meter.createCounter('boundary').add(1)
       reader.forceFlush(done)
 
       sinon.assert.notCalled(done)
-      exportDone({ code: 0 })
+      assert.strictEqual(exports.length, 2)
+      exports[1]({ code: 0 })
       sinon.assert.notCalled(done)
-      flushDone()
+      flushes[0]()
       sinon.assert.calledOnce(done)
+      exports[0]({ code: 0 })
       reader.shutdown()
     })
 

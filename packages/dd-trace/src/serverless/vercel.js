@@ -7,7 +7,7 @@ const { getEnvironmentVariable } = require('../config/helper')
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
 const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
-const VERCEL_FLUSH_TIMEOUT = 2_000
+const VERCEL_FLUSH_TIMEOUT = 2000
 const vercelRetentionHandlers = new WeakMap()
 const retainedVercelRequests = new WeakMap()
 
@@ -72,7 +72,7 @@ function registerVercelTelemetryRetention (tracer) {
   if (typeof tracer?.flushAll !== 'function') return
   const flushRequest = () => registerVercelRequestFlush(tracer)
   const flushHttp2Response = ({ eventName }) => {
-    if (eventName === 'finish' || eventName === 'close') flushRequest()
+    if (eventName === 'close') flushRequest()
   }
   httpRequestFinishChannel.subscribe(flushRequest)
   http2ResponseEmitChannel.subscribe(flushHttp2Response)

@@ -205,10 +205,15 @@ class PeriodicMetricReader {
       done?.()
       return
     }
-    this.#collectAndExport(() => {
-      if (typeof this.exporter.flush === 'function') this.exporter.flush(done)
-      else done?.()
-    })
+    let pending = 2
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
+
+    // Snapshot requests already active before starting this flush's export.
+    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
+    else complete()
+    this.#collectAndExport(complete)
   }
 
   /**

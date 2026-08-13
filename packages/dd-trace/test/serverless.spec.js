@@ -313,6 +313,8 @@ describe('Vercel telemetry retention', () => {
       },
     })
     try {
+      channel('apm:http2:server:response:emit').publish({ eventName: 'finish' })
+      assert.strictEqual(retained, undefined)
       channel('apm:http2:server:response:emit').publish({ eventName: 'close' })
       await retained
       assert.strictEqual(flushes, 1)
