@@ -27,4 +27,8 @@ if (process.env.CONFIG_TRANSFORM) {
   config.transform = JSON.parse(process.env.CONFIG_TRANSFORM)
 }
 
+if (process.env.JEST_THROWING_REPORTER) {
+  config.reporters = ['<rootDir>/ci-visibility/jest-reporter-throws.js']
+}
+
 module.exports = config

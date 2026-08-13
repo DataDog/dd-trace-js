@@ -450,3 +450,4 @@ function isUrl (obj) {
 }
 
 module.exports = format
+module.exports.addError = extractError
