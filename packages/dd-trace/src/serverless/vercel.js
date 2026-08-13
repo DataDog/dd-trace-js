@@ -4,8 +4,8 @@ const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable } = require('../config/helper')
 
-const nextRequestFinishChannel = channel('apm:next:request:finish')
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
+const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 const VERCEL_FLUSH_TIMEOUT = 2_000
 const vercelRetentionHandlers = new WeakMap()
@@ -44,7 +44,7 @@ function registerVercelRequestFlush (tracer) {
   if (retainedTracers.has(tracer)) return
   retainedTracers.add(tracer)
 
-  // Retain the invocation synchronously, then flush after Next finishes its root span.
+  // Retain the invocation synchronously, then flush after the response completes.
   let done
   const pending = new Promise(resolve => { done = resolve })
   try {
@@ -71,12 +71,15 @@ function registerVercelTelemetryRetention (tracer) {
 
   if (typeof tracer?.flushAll !== 'function') return
   const flushRequest = () => registerVercelRequestFlush(tracer)
-  nextRequestFinishChannel.subscribe(flushRequest)
+  const flushHttp2Response = ({ eventName }) => {
+    if (eventName === 'finish' || eventName === 'close') flushRequest()
+  }
   httpRequestFinishChannel.subscribe(flushRequest)
+  http2ResponseEmitChannel.subscribe(flushHttp2Response)
 
   const unregister = () => {
-    nextRequestFinishChannel.unsubscribe(flushRequest)
     httpRequestFinishChannel.unsubscribe(flushRequest)
+    http2ResponseEmitChannel.unsubscribe(flushHttp2Response)
     vercelRetentionHandlers.delete(tracer)
   }
   vercelRetentionHandlers.set(tracer, unregister)
