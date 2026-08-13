@@ -270,11 +270,15 @@ describe('LLMObs Experiments facade', () => {
         metadata: record.metadata,
       })), [
         {
-          id: 'r1', input: firstRecord.input, expectedOutput: firstRecord.expectedOutput,
+          id: 'r1',
+          input: firstRecord.input,
+          expectedOutput: firstRecord.expectedOutput,
           metadata: firstRecord.metadata,
         },
         {
-          id: 'r2', input: secondRecord.input, expectedOutput: secondRecord.expectedOutput,
+          id: 'r2',
+          input: secondRecord.input,
+          expectedOutput: secondRecord.expectedOutput,
           metadata: secondRecord.metadata,
         },
       ])

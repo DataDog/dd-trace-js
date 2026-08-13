@@ -385,7 +385,6 @@ describe('LLMObs Experiments control-plane client', function () {
       { id: 'batch-b', input: { value: 2 }, expectedOutput: null, metadata: { source: 'batch-insert' } },
     ])
     assert.match(String(changed.version), /\d+/)
-
   })
 
   it('creates an experiment, posts events, and marks it completed', async function () {
