@@ -4763,16 +4763,6 @@ rules:
       assert.strictEqual(config.DD_API_KEY, undefined)
     })
 
-    it('should ignore a recognized configuration that is not on the SDK_CONFIGURATION allowlist', () => {
-      const config = getConfig({ service: 'original-service' })
-      config.setRemoteConfig({
-        DD_TRACE_SAMPLE_RATE: '0.5',
-        DD_SERVICE: 'should-not-be-applied',
-      })
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.service, 'original-service')
-    })
-
     it('should clamp a sample rate outside the 0-1 range', () => {
       const config = getConfig()
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '1.5' })

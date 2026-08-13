@@ -42,7 +42,6 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
-const { sdkConfigAllowlist } = require('./sdk-config-allowlist')
 
 const RUNTIME_ID = uuid()
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
@@ -318,6 +317,8 @@ class Config extends ConfigBase {
   /**
    * Set the configuration with SDK_CONFIGURATION remote config settings.
    * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
+   * The caller (`RCClientManager`) is expected to have already filtered `options` to the
+   * SDK_CONFIGURATION allowlist.
    *
    * @param {Record<string, string>|null} options - Env-var-keyed configs received via the
    *   SDK_CONFIGURATION remote config product, or null to reset all remote configuration
@@ -331,13 +332,12 @@ class Config extends ConfigBase {
     // This happens when all remote configs are removed
     if (options !== null) {
       const filtered = {}
-      for (const key of sdkConfigAllowlist) {
-        if (!Object.hasOwn(options, key)) continue
+      for (const [key, value] of Object.entries(options)) {
         if (sensitiveConfigurations.has(key)) {
           log.debug('Ignoring remote config for sensitive configuration %s', key)
           continue
         }
-        filtered[key] = options[key]
+        filtered[key] = value
       }
 
       // Resolve aliases and drop configs this tracer version doesn't recognize

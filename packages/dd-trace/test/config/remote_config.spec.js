@@ -124,6 +124,22 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
         sinon.assert.calledOnce(onConfigUpdated)
       })
+
+      it('should filter out unsupported keys without affecting allowlisted ones', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+        const sdkConfig = buildPayloadWithKeyCount(1000)
+
+        const transaction = createTransaction([
+          { id: 'config-1', file: { sdk_config: sdkConfig } },
+        ])
+
+        handler(transaction)
+
+        // A large number of unsupported keys must not crowd out an allowlisted one
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
+      })
     })
   })
 
@@ -268,6 +284,14 @@ describe('Tracing Remote Config', () => {
     })
   })
 })
+
+function buildPayloadWithKeyCount (keyCount) {
+  const payload = { DD_TRACE_ENABLED: 'true' }
+  for (let i = 1; i < keyCount; i++) {
+    payload[`KEY_${i}`] = 'value'
+  }
+  return payload
+}
 
 function createTransaction (toApply = [], toModify = [], toUnapply = []) {
   const addDefaults = (item) => ({

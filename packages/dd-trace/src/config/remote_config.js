@@ -2,6 +2,7 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
+const { sdkConfigAllowlist } = require('./sdk-config-allowlist')
 
 module.exports = {
   enable,
@@ -20,7 +21,7 @@ class RCClientManager {
    * @param {string} currentEnv - Current environment name
    */
   constructor (currentService, currentEnv) {
-    this.configs = new Map() // config_id -> { conf, priority }
+    this.configs = new Map() // config_id -> { priority, sdkConfig }
     this.currentService = currentService
     this.currentEnv = currentEnv
   }
@@ -95,8 +96,19 @@ class RCClientManager {
       return
     }
 
+    // Filter to the allowlist here, at ingestion, so only a bounded (allowlist-sized) subset of
+    // an otherwise untrusted, potentially very large sdk_config payload is ever retained in memory.
+    const confPayload = conf.sdk_config
+    let sdkConfig
+    if (confPayload != null) {
+      sdkConfig = {}
+      for (const key of sdkConfigAllowlist) {
+        if (Object.hasOwn(confPayload, key)) sdkConfig[key] = confPayload[key]
+      }
+    }
+
     const priority = this.calculatePriority(conf)
-    this.configs.set(configId, { conf, priority })
+    this.configs.set(configId, { priority, sdkConfig })
 
     log.debug('[config/remote_config] Added config %s with priority %d', configId, priority)
   }
@@ -125,10 +137,10 @@ class RCClientManager {
 
     const merged = [...this.configs.values()]
       .sort((a, b) => a.priority - b.priority)
-      .reduce((merged, { conf }) => {
-        const payload = conf.sdk_config
-        if (payload != null) hasConfig = true
-        return Object.assign(merged, payload)
+      .reduce((merged, { sdkConfig }) => {
+        if (sdkConfig == null) return merged
+        hasConfig = true
+        return Object.assign(merged, sdkConfig)
       }, {})
 
     return hasConfig ? merged : null
