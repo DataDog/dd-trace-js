@@ -1,7 +1,5 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('node:async_hooks')
-
 const shimmer = require('../../datadog-shimmer')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
@@ -14,6 +12,7 @@ const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
 const queryParsedChannel = channel('apm:next:query-parsed')
+const backgroundRevalidationChannel = channel('apm:next:request:background-revalidation')
 
 /**
  * @typedef {import('node:http').IncomingMessage & {
@@ -51,8 +50,6 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
-const backgroundRevalidations = new AsyncLocalStorage()
-
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 
@@ -345,10 +342,7 @@ const activeRouteRequests = new WeakMap()
 const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
-    const nodeRequest = req.originalRequest || req
-    if (error && backgroundRevalidations.getStore() !== nodeRequest) {
-      publishError(req, undefined, error)
-    }
+    if (error) publishError(req, undefined, error)
     return onRequestError.apply(this, arguments)
   }
 }
@@ -408,7 +402,7 @@ function wrapResponseGenerator (responseGenerator, routeModule, req) {
   return function (context) {
     if (context?.hasResolved) {
       const nodeRequest = req.originalRequest || req
-      return backgroundRevalidations.run(nodeRequest, () => responseGenerator.apply(this, arguments))
+      return backgroundRevalidationChannel.runStores(nodeRequest, () => responseGenerator.apply(this, arguments))
     }
     if (!routeModule) {
       return responseGenerator.apply(this, arguments)

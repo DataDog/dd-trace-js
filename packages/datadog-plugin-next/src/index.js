@@ -14,7 +14,8 @@ const nextParentRoutes = new WeakMap()
 /**
  * @typedef {Record<string, unknown> & {
  *   span: import('../../dd-trace/src/opentracing/span'),
- *   req: import('node:http').IncomingMessage
+ *   req: import('node:http').IncomingMessage,
+ *   backgroundRevalidationRequest?: import('node:http').IncomingMessage
  * }} NextRequestStore
  *
  * @typedef {object} NextRequest
@@ -30,6 +31,7 @@ const nextParentRoutes = new WeakMap()
  * @typedef {object} NextErrorContext
  * @property {import('../../dd-trace/src/opentracing/span')} [span]
  * @property {NextRequestStore} [currentStore]
+ * @property {import('node:http').IncomingMessage} [req]
  * @property {unknown} error
  */
 
@@ -38,6 +40,10 @@ class NextPlugin extends ServerPlugin {
 
   constructor (...args) {
     super(...args)
+    this.addBind('apm:next:request:background-revalidation', req => ({
+      ...storage('legacy').getStore(),
+      backgroundRevalidationRequest: req,
+    }))
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
@@ -85,16 +91,12 @@ class NextPlugin extends ServerPlugin {
   }
 
   /** @param {NextErrorContext} ctx */
-  error ({ currentStore, span, error }) {
-    span ||= currentStore?.span
-    if (!span) {
-      const store = storage('legacy').getStore()
-      if (!store) return
+  error ({ currentStore, span, req, error }) {
+    const store = currentStore ?? storage('legacy').getStore()
+    if (req && store?.backgroundRevalidationRequest === req) return
 
-      span = store.span
-    }
-
-    this.addError(error, span)
+    span ||= store?.span
+    if (span) this.addError(error, span)
   }
 
   /** @param {NextRequestContext} ctx */
