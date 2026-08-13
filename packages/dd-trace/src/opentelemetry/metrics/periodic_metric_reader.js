@@ -255,6 +255,7 @@ class PeriodicMetricReader {
    * @param {Function} [callback] - Called after export completes
    */
   #collectAndExport (callback) {
+    // Observable instruments must be collected even without synchronous measurements.
     // Atomically drain measurements for export. New measurements can be recorded
     // during export without interfering with this batch.
     const allMeasurements = this.#measurements

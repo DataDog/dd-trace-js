@@ -112,6 +112,23 @@ describe('Exporter', () => {
     })
   })
 
+  describe('flush', () => {
+    it('waits for trace exports already in flight', () => {
+      const callbacks = []
+      writer.flush = sinon.spy(done => callbacks.push(done))
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      exporter.flush(flushed)
+
+      callbacks[1]()
+      sinon.assert.notCalled(flushed)
+      callbacks[0]()
+      sinon.assert.calledOnce(flushed)
+    })
+  })
+
   describe('setUrl', () => {
     beforeEach(() => {
       exporter = new Exporter({ url })

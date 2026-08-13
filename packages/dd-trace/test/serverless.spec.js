@@ -244,9 +244,65 @@ describe('Vercel telemetry retention', () => {
       },
     }
 
-    initializeServerlessTelemetry(tracer)
-    finishChannel.publish({})
-    finished = true
-    await retained
+    const unregister = initializeServerlessTelemetry(tracer)
+    try {
+      finishChannel.publish({})
+      finished = true
+      await retained
+    } finally {
+      unregister()
+    }
+  })
+
+  it('retains telemetry for an ordinary HTTP Vercel request only once', async () => {
+    let retained
+    let flushes = 0
+    const context = { waitUntil: promise => { retained = promise } }
+    globalThis[requestContext] = { get: () => context }
+
+    const unregister = registerVercelTelemetryRetention({
+      flushAll (done) {
+        flushes++
+        done()
+      },
+    })
+    try {
+      channel('apm:http:server:request:finish').publish({})
+      channel('apm:next:request:finish').publish({})
+      await retained
+      assert.strictEqual(flushes, 1)
+    } finally {
+      unregister()
+    }
+  })
+
+  it('bounds Vercel retention when an exporter does not complete', async () => {
+    let retained
+    let timeout
+    const setTimeoutOriginal = global.setTimeout
+    const clearTimeoutOriginal = global.clearTimeout
+    global.setTimeout = (callback, duration) => {
+      timeout = { callback, duration }
+      return timeout
+    }
+    global.clearTimeout = () => {}
+    globalThis[requestContext] = {
+      get: () => ({ waitUntil: promise => { retained = promise } }),
+    }
+
+    let unregister
+    try {
+      unregister = registerVercelTelemetryRetention({ flushAll () {} })
+      channel('apm:next:request:finish').publish({})
+      await new Promise(resolve => setImmediate(resolve))
+
+      assert.strictEqual(timeout.duration, 2_000)
+      timeout.callback()
+      await retained
+    } finally {
+      unregister?.()
+      global.setTimeout = setTimeoutOriginal
+      global.clearTimeout = clearTimeoutOriginal
+    }
   })
 })

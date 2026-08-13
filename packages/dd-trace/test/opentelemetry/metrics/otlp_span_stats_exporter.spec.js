@@ -203,4 +203,30 @@ describe('OtlpStatsExporter', () => {
     onEnd()
     sinon.assert.calledOnce(flushed)
   })
+
+  it('does not wait for exports started after the flush boundary', () => {
+    const onEnd = []
+    httpStub.callsFake((options, callback) => {
+      const mockRes = {
+        statusCode: 200,
+        on: sinon.stub(),
+        once: (event, handler) => {
+          if (event === 'end') onEnd.push(handler)
+          return mockRes
+        },
+      }
+      callback(mockRes)
+      return mockReq
+    })
+    const flushed = sinon.spy()
+
+    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+    exporter.flush(flushed)
+    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
+
+    onEnd[0]()
+    sinon.assert.calledOnce(flushed)
+    onEnd[1]()
+    sinon.assert.calledOnce(flushed)
+  })
 })
