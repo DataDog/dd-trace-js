@@ -38,7 +38,6 @@ const {
   parseErrors,
   generateTelemetry,
   warnInvalidValue,
-  sensitiveConfigurations,
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
@@ -331,17 +330,8 @@ class Config extends ConfigBase {
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      const filtered = {}
-      for (const [key, value] of Object.entries(options)) {
-        if (sensitiveConfigurations.has(key)) {
-          log.debug('Ignoring remote config for sensitive configuration %s', key)
-          continue
-        }
-        filtered[key] = value
-      }
-
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(filtered, true), 'remote_config')
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
     this.#applyCalculated()

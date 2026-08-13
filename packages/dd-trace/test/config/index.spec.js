@@ -4752,17 +4752,6 @@ rules:
       assert.strictEqual(config.sampleRate, 0.5)
     })
 
-    it('should ignore a sensitive configuration', () => {
-      const config = getConfig()
-      assert.strictEqual(config.sampleRate, undefined)
-      config.setRemoteConfig({
-        DD_TRACE_SAMPLE_RATE: '0.5',
-        DD_API_KEY: 'should-not-be-applied',
-      })
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.DD_API_KEY, undefined)
-    })
-
     it('should clamp a sample rate outside the 0-1 range', () => {
       const config = getConfig()
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '1.5' })
