@@ -11,5 +11,10 @@ describe('mocha-test-pass-two', () => {
     console.log('MOCHA AFTER SECOND EACH EXECUTED')
   })
 
+  after(() => {
+    // eslint-disable-next-line no-console
+    console.log('MOCHA AFTER ALL EXECUTED')
+  })
+
   it('can pass', () => {})
 })

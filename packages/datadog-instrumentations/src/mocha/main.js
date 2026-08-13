@@ -540,7 +540,7 @@ function stopCurrentHook (runner, hook) {
     hook.run = run
     const test = hook.ctx?.currentTest
     if (test) {
-      if (hook.parent?._afterEach?.includes(hook)) {
+      if (hook.parent?._afterEach?.includes(hook) || hook.parent?._afterAll?.includes(hook)) {
         markTestTerminal(runner, test)
         if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(runner)?.(test)
       } else {
@@ -689,6 +689,22 @@ function resetPendingSuiteCoverage (runner) {
 }
 
 /**
+ * Reads a string Error property without invoking user code outside this boundary.
+ *
+ * @param {Error} error
+ * @param {'message' | 'name' | 'stack'} property
+ * @returns {string | undefined}
+ */
+function readErrorString (error, property) {
+  try {
+    const value = error[property]
+    if (typeof value === 'string') return value
+  } catch {
+    // Ignore user-defined accessors.
+  }
+}
+
+/**
  * Creates an Error for Test Optimization tags without coercing a user-thrown value.
  *
  * @param {unknown} frameworkError
@@ -696,13 +712,21 @@ function resetPendingSuiteCoverage (runner) {
  */
 function getFrameworkFinalizationError (frameworkError) {
   if (typeof frameworkError === 'string') return new Error(frameworkError)
+  let isError = false
   try {
-    if (frameworkError instanceof Error) return frameworkError
+    isError = frameworkError instanceof Error
   } catch {
     // User-thrown proxies can fail the instanceof prototype lookup.
   }
+  if (!isError) return new Error('Mocha reporter failed')
 
-  return new Error('Mocha reporter failed')
+  const message = readErrorString(frameworkError, 'message') || 'Mocha reporter failed'
+  const error = new Error(message)
+  const name = readErrorString(frameworkError, 'name')
+  const stack = readErrorString(frameworkError, 'stack')
+  if (name) error.name = name
+  if (stack) error.stack = stack
+  return error
 }
 
 /**

@@ -38,6 +38,7 @@ const testToContext = new WeakMap()
 const originalEfdFns = new WeakMap()
 const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
+const originalRetriesByTest = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const datadogRetryOriginals = new WeakMap()
@@ -269,6 +270,7 @@ function isEarlyFlakeDetectionTest (test, config) {
 function retryTest (test, numRetries, tags, retryPolicy) {
   const suite = test.parent
   const isEfdRetry = tags.includes('_ddIsEfdRetry')
+  if (!originalRetriesByTest.has(test)) originalRetriesByTest.set(test, test.retries())
   disableMochaRetries(test)
   if (isEfdRetry) {
     wrapOriginalEfdTest(test, retryPolicy)
@@ -360,6 +362,10 @@ function resetRunState (rootSuite) {
       if (originalPendingByTest.has(test)) {
         test.pending = originalPendingByTest.get(test)
         originalPendingByTest.delete(test)
+      }
+      if (originalRetriesByTest.has(test)) {
+        test.retries(originalRetriesByTest.get(test))
+        originalRetriesByTest.delete(test)
       }
 
       delete test._ddIsAttemptToFix
