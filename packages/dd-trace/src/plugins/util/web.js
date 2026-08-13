@@ -334,10 +334,15 @@ const web = {
         headers = typeof statusMessage === 'string' ? headers : statusMessage
         const headersObj = Array.isArray(headers) ? flatHeadersToObject(headers) : headers
         const mergedHeaders = { ...res.getHeaders(), ...headersObj }
+
         if (isOriginAllowed(req, mergedHeaders)) {
           const allowedHeaders = computeAllowedHeaders(req, mergedHeaders)
           if (allowedHeaders) {
-            headers = { ...headersObj, 'access-control-allow-headers': allowedHeaders }
+            // if the original headers is an array preserve it as an array to prevent
+            // overwriting duplicated key.
+            headers = Array.isArray(headers)
+              ? setFlatHeader(headers, 'access-control-allow-headers', allowedHeaders)
+              : { ...headersObj, 'access-control-allow-headers': allowedHeaders }
             headersModified = true
           }
         }
@@ -417,8 +422,26 @@ function splitHeader (str) {
 function flatHeadersToObject (headers) {
   const result = {}
   for (let i = 0; i < headers.length; i += 2) {
-    result[headers[i]] = headers[i + 1]
+    result[headers[i].toLowerCase()] = headers[i + 1]
   }
+  return result
+}
+
+function setFlatHeader (headers, name, value) {
+  const result = headers.slice()
+  let headerFound = false
+
+  for (let i = 0; i < result.length; i += 2) {
+    if (result[i].toLowerCase() === name) {
+      result[i + 1] = value
+      headerFound = true
+    }
+  }
+
+  if (!headerFound) {
+    result.push(name, value)
+  }
+
   return result
 }
 
