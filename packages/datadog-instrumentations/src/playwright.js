@@ -1260,11 +1260,13 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     reporterError = undefined
     hasReporterError = false
     let restoreReporterConsoleError
-    if (satisfies(playwrightVersion, '>=1.60.0') && config?.config && !config.config[kDdPlaywrightReporterConfigured]) {
+    if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
-      Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
-      config.config.reporter.unshift([require.resolve('./playwright-reporter')])
       restoreReporterConsoleError = DatadogPlaywrightReporter.restoreConsoleError
+      if (!config.config[kDdPlaywrightReporterConfigured]) {
+        Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
+        config.config.reporter.unshift([require.resolve('./playwright-reporter')])
+      }
     }
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
@@ -1506,22 +1508,35 @@ function reportersHook (reportersPackage) {
   return shimmer.wrap(reportersPackage, 'createReporters', createReporters => async function () {
     const reporters = await createReporters.apply(this, arguments)
     for (const reporter of reporters) {
-      if (instrumentedPlaywrightReporters.has(reporter) || typeof reporter.onEnd !== 'function') continue
+      if (instrumentedPlaywrightReporters.has(reporter)) continue
 
       const onEnd = reporter.onEnd
+      const onExit = reporter.onExit
       try {
-        reporter.onEnd = async function () {
-          try {
-            return await onEnd.apply(this, arguments)
-          } catch (error) {
-            recordReporterError(error)
-            throw error
+        if (typeof onEnd === 'function') {
+          reporter.onEnd = async function () {
+            try {
+              return await onEnd.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
+          }
+        }
+        if (typeof onExit === 'function') {
+          reporter.onExit = async function () {
+            try {
+              return await onExit.apply(this, arguments)
+            } catch (error) {
+              recordReporterError(error)
+              throw error
+            }
           }
         }
       } catch {
         continue
       }
-      if (reporter.onEnd !== onEnd) instrumentedPlaywrightReporters.add(reporter)
+      if (reporter.onEnd !== onEnd || reporter.onExit !== onExit) instrumentedPlaywrightReporters.add(reporter)
     }
     return reporters
   }, { replaceGetter: true })
@@ -1657,11 +1672,17 @@ reporterErrorCh.subscribe((error) => {
 function recordReporterError (error) {
   if (hasReporterError) return
 
+  let normalizedError
+  try {
+    const errorObject = error && typeof error === 'object' ? error : undefined
+    normalizedError = new Error(errorObject?.message || errorObject?.value || String(error))
+    normalizedError.name = errorObject?.name || normalizedError.name
+    normalizedError.stack = errorObject?.stack || normalizedError.stack
+  } catch {
+    normalizedError = new Error('Playwright reporter failed')
+  }
+  reporterError = normalizedError
   hasReporterError = true
-  const errorObject = error && typeof error === 'object' ? error : undefined
-  reporterError = new Error(errorObject?.message || errorObject?.value || String(error))
-  reporterError.name = errorObject?.name || reporterError.name
-  reporterError.stack = errorObject?.stack || reporterError.stack
 }
 
 /**

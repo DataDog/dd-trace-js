@@ -227,6 +227,35 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
+    it('does not replace a hostile reporter error with a property access error', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            PLAYWRIGHT_REPORTER_THROWS_HOSTILE_OBJECT: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const session = events.find(event => event.type === 'test_session_end')
+          assert.ok(session, 'expected test_session_end event')
+          assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+          assert.doesNotMatch(session.content.meta[ERROR_MESSAGE], /reporter property access failed/)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     it('reports the session when a custom reporter throws during onExit', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js',
@@ -315,6 +344,30 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 0)
       })
     })
+
+    if (satisfies(version, '>=1.60.0') || version === 'latest') {
+      context('programmatic reruns', () => {
+        it('restores console.error after every run with the same config', async (receiver, run) => {
+          let testOutput = ''
+          const proc = run(
+            'node ./ci-visibility/playwright-rerun-console.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '',
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+              },
+            }
+          )
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit')])
+          assert.strictEqual(exitCode, 0, testOutput)
+        })
+      })
+    }
 
     it('does not treat matching user console output as a reporter failure', async (receiver, run) => {
       const proc = run(

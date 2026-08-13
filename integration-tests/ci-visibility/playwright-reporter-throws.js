@@ -12,6 +12,13 @@ class ThrowingReporter {
       // eslint-disable-next-line no-throw-literal
       throw null
     }
+    if (process.env.PLAYWRIGHT_REPORTER_THROWS_HOSTILE_OBJECT) {
+      throw new Proxy({}, {
+        get () {
+          throw new Error('reporter property access failed')
+        },
+      })
+    }
     if (process.env.PLAYWRIGHT_REPORTER_THROWS_UNDEFINED) {
       // eslint-disable-next-line no-throw-literal
       throw undefined
