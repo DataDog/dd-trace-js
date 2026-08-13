@@ -81,7 +81,6 @@ class Experiments {
 
     let pulledDataset = null
     let records = []
-    let recordIds = []
     let datasetVersion = version ?? null
     let latestVersion = null
     let lastError = ''
@@ -102,7 +101,6 @@ class Experiments {
         }
 
         const recs = []
-        const ids = []
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
@@ -111,15 +109,11 @@ class Experiments {
             cursor,
             version: datasetVersion,
           })
-          for (const record of page.records) {
-            recs.push(record)
-            ids.push(String(record.id ?? ''))
-          }
+          for (const record of page.records) recs.push(record)
           cursor = page.after
           if (!cursor) break
         }
         records = recs
-        recordIds = ids
         lastError = ''
 
         return expectedRecordCount == null || recs.length >= expectedRecordCount
@@ -152,7 +146,6 @@ class Experiments {
       pulledDataset.id(),
       projectId,
       records,
-      recordIds,
       datasetVersion,
       latestVersion
     )
