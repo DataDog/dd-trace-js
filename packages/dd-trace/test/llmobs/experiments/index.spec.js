@@ -46,7 +46,7 @@ describe('LLMObs Experiments facade', () => {
     sinon.restore()
   })
 
-  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
+  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr-facade'
   const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
     `dd-trace-js-experiments-${backendTestId}`
   const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
@@ -102,6 +102,11 @@ describe('LLMObs Experiments facade', () => {
     const listDatasetRecords = sinon.stub(ExperimentsClient.prototype, 'listDatasetRecords')
     for (let i = 0; i < pages.length; i++) listDatasetRecords.onCall(i).resolves(pages[i])
     return { listDatasetRecords }
+  }
+
+  function stubPullDatasetClientForRetry (options) {
+    sinon.restore()
+    return stubPullDatasetClient(options)
   }
 
   describe('createExperiments gating', () => {
@@ -210,6 +215,10 @@ describe('LLMObs Experiments facade', () => {
         }],
       })
       dataset.addRecord('input only')
+      dataset.update(0, { input: 'updated', expectedOutput: null, metadata: null })
+      dataset.update(10, { input: 'ignored' })
+      dataset.delete(1)
+      dataset.delete(10)
 
       assert.equal(dataset.name(), 'd')
       assert.equal(dataset.description(), 'desc')
@@ -219,15 +228,14 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.latestVersion(), null)
       assert.deepEqual(dataset.recordIds(), [])
       assert.equal(dataset.url(), null)
-      assert.deepEqual(dataset.records(), [
-        {
-          id: 'r1',
-          input: { question: 'q' },
-          expectedOutput: { answer: 'a' },
-          metadata: { source: 'test' },
-        },
-        { id: null, input: 'input only', expectedOutput: null, metadata: {} },
-      ])
+      assert.deepEqual(dataset.records(), [{
+        id: 'r1',
+        input: 'updated',
+        expectedOutput: null,
+        metadata: {},
+      }])
+      dataset.addRecord('after push')
+      assert.equal(dataset.records().length, 2)
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
 
       const pulled = await exp.pullDataset('pulled')
@@ -246,7 +254,7 @@ describe('LLMObs Experiments facade', () => {
   describe('pullDataset', () => {
     it('pulls records from the backend client with pagination and an explicit version', async () => {
       const firstRecord = { id: 'r1', input: { value: 1 }, expectedOutput: 'one', metadata: { page: 1 } }
-      const secondRecord = { input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
+      const secondRecord = { id: 'r2', input: { value: 2 }, expectedOutput: 'two', metadata: { page: 2 } }
       const { listDatasetRecords } = stubPullDatasetClient({
         datasets: [datasetResource({ name: 'remote-dataset', id: 'ds', description: 'desc', latestVersion: 4 })],
         pages: [
@@ -267,8 +275,26 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.projectId(), 'proj')
       assert.equal(dataset.version(), 2)
       assert.equal(dataset.latestVersion(), 4)
-      assert.deepEqual(dataset.records(), [firstRecord, secondRecord])
-      assert.deepEqual(dataset.recordIds(), ['r1', ''])
+      assert.deepEqual(dataset.records().map(record => ({
+        id: record.id,
+        input: record.input,
+        expectedOutput: record.expectedOutput,
+        metadata: record.metadata,
+      })), [
+        {
+          id: 'r1',
+          input: firstRecord.input,
+          expectedOutput: firstRecord.expectedOutput,
+          metadata: firstRecord.metadata,
+        },
+        {
+          id: 'r2',
+          input: secondRecord.input,
+          expectedOutput: secondRecord.expectedOutput,
+          metadata: secondRecord.metadata,
+        },
+      ])
+      assert.deepEqual(dataset.recordIds(), ['r1', 'r2'])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
       assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
       assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
@@ -315,6 +341,26 @@ describe('LLMObs Experiments facade', () => {
       )
     })
 
+    it('surfaces malformed pulled records and pagination failures', async () => {
+      stubPullDatasetClient({
+        datasets: [datasetResource()],
+        pages: [{ records: [{ input: 'missing-id' }], after: '' }],
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Dataset records pulled from the backend must have an id/
+      )
+
+      stubPullDatasetClientForRetry({
+        datasets: [datasetResource()],
+        pages: [{ records: [], after: 'next' }],
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Failed to fetch records for dataset/
+      )
+    })
+
     it('surfaces an expected record count miss after the wait budget is exhausted', async () => {
       stubPullDatasetClient({
         datasets: [datasetResource()],
@@ -337,8 +383,18 @@ describe('LLMObs Experiments facade', () => {
       const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
         records: [
-          { inputData: { q: 'apple' }, expectedOutput: 'APPLE', metadata: { row: 0 } },
-          { inputData: { q: 'car' }, expectedOutput: 'CAR', metadata: { row: 1 } },
+          {
+            id: '72c42c47-1949-4b6c-8d5f-dc89d1116b53',
+            inputData: { q: 'apple' },
+            expectedOutput: 'APPLE',
+            metadata: { row: 0 },
+          },
+          {
+            id: '8139a365-5aa4-41c0-aa39-7b13a49f5301',
+            inputData: { q: 'car' },
+            expectedOutput: 'CAR',
+            metadata: { row: 1 },
+          },
         ],
       }))
 
@@ -388,7 +444,12 @@ describe('LLMObs Experiments facade', () => {
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
-        records: [{ inputData: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'backend-test' } }],
+        records: [{
+          id: 'f1a85430-c609-49e8-bb84-3f6bcc6e32cf',
+          inputData: { value: 1 },
+          expectedOutput: { value: 2 },
+          metadata: { source: 'backend-test' },
+        }],
       }))
 
       const result = await exp.experiment({
