@@ -36,7 +36,7 @@ function recordDataByInputValue (records) {
 describe('LLMObs Experiments control-plane client', function () {
   this.timeout(EXPERIMENTS_VCR_TIMEOUT_MS)
   const backendDatasets = []
-  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
+  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr-client'
   const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
     `dd-trace-js-experiments-${backendTestId}`
   const backendClientDatasetName = `${backendProjectName}-client-dataset`
