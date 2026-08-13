@@ -32,8 +32,10 @@ function serializedRecord (record) {
 function serializedRecordUpdate (update) {
   const output = { id: update.id }
   if (Object.hasOwn(update, 'input')) output.input = update.input
-  if (Object.hasOwn(update, 'expectedOutput')) output.expected_output = update.expectedOutput
-  if (Object.hasOwn(update, 'metadata')) output.metadata = update.metadata
+  if (Object.hasOwn(update, 'expectedOutput')) {
+    output.expected_output = update.expectedOutput ?? ''
+  }
+  if (Object.hasOwn(update, 'metadata')) output.metadata = update.metadata ?? {}
   return output
 }
 
