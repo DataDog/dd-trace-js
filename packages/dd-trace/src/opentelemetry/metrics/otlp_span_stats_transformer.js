@@ -153,21 +153,21 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   #addDistribution (distributions, sketch, startNano, endNano, baseAttributes, baseKey, topLevel, statusCode) {
     if (!sketch || sketch.count === 0) return
 
-    const attributes = {
-      ...baseAttributes,
-      'datadog.span.top_level': topLevel,
-      'status.code': statusCode,
-    }
     const key = `${baseKey},${topLevel},${statusCode}`
     const existing = distributions.get(key)
     if (existing) {
       existing.sketch.merge(sketch)
     } else {
+      const attributes = this.transformAttributes(baseAttributes)
+      attributes.push(
+        { key: 'datadog.span.top_level', value: { boolValue: topLevel } },
+        { key: 'status.code', value: { stringValue: statusCode } }
+      )
       distributions.set(key, {
         sketch,
         startNano,
         endNano,
-        attributes: this.transformAttributes(attributes),
+        attributes,
       })
     }
   }
