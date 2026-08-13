@@ -719,6 +719,105 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 2)
   })
 
+  onlyLatestIt('restores EFD test context when the same Mocha instance runs again', async function () {
+    this.timeout(20_000)
+    const retryCount = 2
+    const testName = 'mocha-reporter-reusable-run runs again after reporter recovery'
+    receiver.setKnownTests({ mocha: {} })
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: { '5s': retryCount },
+        faulty_session_threshold: 100,
+      },
+      known_tests_enabled: true,
+    })
+    childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        MOCHA_REUSABLE_LOG_ACTIVE_TEST: '1',
+      },
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event =>
+          event.type === 'test' && event.content.meta[TEST_NAME] === testName
+        )
+        assert.strictEqual(testEvents.length, (retryCount + 1) * 2, testOutput)
+        const activeTestSpanIds = [...testOutput.matchAll(/MOCHA REUSABLE ACTIVE TEST: ([0-9]+)/g)]
+          .map(match => match[1])
+          .sort()
+        assert.deepStrictEqual(
+          activeTestSpanIds,
+          testEvents.map(event => event.content.span_id.toString()).sort()
+        )
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.strictEqual(
+      (testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length,
+      (retryCount + 1) * 2
+    )
+  })
+
+  onlyLatestIt('restores a Test Management disabled test before the next run', async function () {
+    this.timeout(20_000)
+    const testName = 'mocha-reporter-reusable-run runs again after reporter recovery'
+    receiver.setSettings({
+      early_flake_detection: { enabled: false },
+      test_management: { enabled: true },
+    })
+    receiver.setTestManagementTestResponses([
+      {
+        mocha: {
+          suites: {
+            'ci-visibility/mocha-plugin-tests/reporter-reusable-run.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+      {},
+    ])
+    childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+      cwd,
+      env: getCiVisAgentlessConfig(receiver.port),
+    })
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event =>
+          event.type === 'test' && event.content.meta[TEST_NAME] === testName
+        )
+        assert.deepStrictEqual(testEvents.map(event => event.content.meta[TEST_STATUS]), ['skip', 'pass'])
+        assert.strictEqual(testEvents[0].content.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+        assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in testEvents[1].content.meta))
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 1)
+  })
+
   onlyLatestIt('restores attempt-to-fix retries when the same Mocha instance runs again', async function () {
     this.timeout(20_000)
     const retryCount = 2

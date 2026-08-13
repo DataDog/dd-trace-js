@@ -36,8 +36,10 @@ const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
 const testToContext = new WeakMap()
 const originalFns = new WeakMap()
+const originalPendingByTest = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
+const datadogRetryOriginals = new WeakMap()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
 const efdTests = {}
@@ -272,7 +274,7 @@ function retryTest (test, numRetries, tags, retryPolicy) {
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     disableMochaRetries(clonedTest)
-    clonedTest._ddIsDatadogRetry = true
+    datadogRetryOriginals.set(clonedTest, test)
     suite.addTest(clonedTest)
     if (isEfdRetry) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
@@ -297,6 +299,20 @@ function retryTest (test, numRetries, tags, retryPolicy) {
 }
 
 /**
+ * Restores a runnable function wrapped with its Test Optimization context.
+ *
+ * @param {import('mocha').Runnable} runnable
+ * @returns {void}
+ */
+function restoreRunnableFunction (runnable) {
+  const wrappedFunction = runnable.fn
+  if (!wrappedFunctions.has(wrappedFunction)) return
+
+  runnable.fn = originalFns.get(wrappedFunction)
+  wrappedFunctions.delete(wrappedFunction)
+}
+
+/**
  * Clears state that belongs to one Mocha runner execution and removes retry clones from prior executions.
  *
  * @param {import('mocha').Suite} rootSuite
@@ -318,8 +334,17 @@ function resetRunState (rootSuite) {
   while (suites.length) {
     const suite = suites.pop()
     const originalTests = []
-    for (const test of suite.tests) {
-      if (test._ddIsDatadogRetry) continue
+    const retainedTests = new Set()
+    for (const runnable of suite.tests) {
+      const test = datadogRetryOriginals.get(runnable) || runnable
+      if (retainedTests.has(test)) continue
+      retainedTests.add(test)
+
+      restoreRunnableFunction(test)
+      if (originalPendingByTest.has(test)) {
+        test.pending = originalPendingByTest.get(test)
+        originalPendingByTest.delete(test)
+      }
 
       delete test._ddIsAttemptToFix
       delete test._ddIsDisabled
@@ -471,11 +496,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     const test = isTestHook ? this.ctx.currentTest : this
 
     // we restore the original user defined function
-    if (wrappedFunctions.has(this.fn)) {
-      const originalFn = originalFns.get(this.fn)
-      this.fn = originalFn
-      wrappedFunctions.delete(this.fn)
-    }
+    restoreRunnableFunction(this)
 
     if (isDatadogManagedRetryTest(test, libraryConfig)) {
       disableMochaRetries(this)
@@ -518,11 +539,7 @@ function getOnTestHandler (isMain) {
 
     // This may be a retry. If this is the case, `test.fn` is already wrapped,
     // so we need to restore it.
-    if (wrappedFunctions.has(test.fn)) {
-      const originalFn = originalFns.get(test.fn)
-      test.fn = originalFn
-      wrappedFunctions.delete(test.fn)
-    }
+    restoreRunnableFunction(test)
 
     inheritDatadogPropertiesFromRetriedTest(test)
 
@@ -585,6 +602,9 @@ function getOnTestHandler (isMain) {
     }
 
     if (!isAttemptToFix && isDisabled) {
+      if (!originalPendingByTest.has(test)) {
+        originalPendingByTest.set(test, test.pending)
+      }
       test.pending = true
     }
 

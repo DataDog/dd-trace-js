@@ -61,6 +61,7 @@ class FakeCiVisIntake extends FakeAgent {
   #waitingTime = 0
   #knownTestsPageIndex = 0
   #testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+  #testManagementResponses = []
   #testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
   #skippableSuitesResponseStatusCode = 200
 
@@ -145,6 +146,16 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTests (newTestManagementTests) {
     this.#testManagementResponse = newTestManagementTests
+  }
+
+  /**
+   * Sets Test Management responses to return in order.
+   *
+   * @param {object[]} responses
+   * @returns {void}
+   */
+  setTestManagementTestResponses (responses) {
+    this.#testManagementResponses = responses.slice()
   }
 
   setTestManagementTestsResponseCode (newStatusCode) {
@@ -392,10 +403,13 @@ class FakeCiVisIntake extends FakeAgent {
       '/evp_proxy/:version/api/v2/test/libraries/test-management/tests',
     ], (req, res) => {
       res.setHeader('content-type', 'application/json')
+      const testManagementResponse = this.#testManagementResponses.length
+        ? this.#testManagementResponses.shift()
+        : this.#testManagementResponse
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: this.#testManagementResponse,
+            modules: testManagementResponse,
           },
         },
       })
@@ -448,6 +462,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#mediaResponseDelayMs = 0
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    this.#testManagementResponses = []
     this.#skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
