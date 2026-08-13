@@ -141,7 +141,7 @@ class PlaywrightPlugin extends CiPlugin {
           testSuiteSpan.setTag('error', error)
         }
         for (const [finishTest, abortController] of this.#pendingTestFinishCallbacks) {
-          finishTest()
+          finishTest(SCREENSHOT_UPLOAD_RESULT_ERROR)
           abortController.abort()
         }
       }

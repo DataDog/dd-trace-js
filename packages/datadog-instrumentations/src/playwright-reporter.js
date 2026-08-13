@@ -12,18 +12,37 @@ const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
  * interpreting identical user console output as a framework error.
  *
  * @param {unknown} message - First console.error argument
- * @param {unknown} error - Second console.error argument
  * @returns {boolean}
  */
-function isPlaywrightReporterError (message, error) {
-  if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE || error == null) return false
+function isPlaywrightReporterError (message) {
+  if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE) return false
 
-  const stack = new Error('Playwright reporter error provenance').stack
-  const caller = stack?.split('\n', 4)[3]
-  return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(caller || '')
+  const originalPrepareStackTrace = Error.prepareStackTrace
+  try {
+    Error.prepareStackTrace = (_, callSites) => callSites
+    const stack = new Error('Playwright reporter error provenance').stack
+    return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(stack?.[2]?.toString() || '')
+  } finally {
+    Error.prepareStackTrace = originalPrepareStackTrace
+  }
 }
 
-module.exports = class DatadogPlaywrightReporter {
+class DatadogPlaywrightReporter {
+  /**
+   * Restores console error after Playwright completes the reporter lifecycle.
+   *
+   * @returns {void}
+   */
+  static restoreConsoleError () {
+    // eslint-disable-next-line no-console
+    if (console.error === DatadogPlaywrightReporter.consoleError) {
+      // eslint-disable-next-line no-console
+      console.error = DatadogPlaywrightReporter.originalConsoleError
+    }
+    DatadogPlaywrightReporter.consoleError = undefined
+    DatadogPlaywrightReporter.originalConsoleError = undefined
+  }
+
   /**
    * Marks the beginning of reporter finalization so later reporter errors can be identified.
    *
@@ -34,11 +53,11 @@ module.exports = class DatadogPlaywrightReporter {
     // Playwright 1.60 and 1.61 only expose reporter errors through this exact console call.
     // eslint-disable-next-line no-console
     const originalConsoleError = console.error
-    this.originalConsoleError = originalConsoleError
+    DatadogPlaywrightReporter.originalConsoleError = originalConsoleError
     const reporter = this
     // eslint-disable-next-line no-console
-    this.consoleError = console.error = function (message, error) {
-      if (isPlaywrightReporterError(message, error)) {
+    DatadogPlaywrightReporter.consoleError = console.error = function (message, error) {
+      if (isPlaywrightReporterError(message)) {
         reporter.onError(error)
       }
       return originalConsoleError.apply(this, arguments)
@@ -56,19 +75,6 @@ module.exports = class DatadogPlaywrightReporter {
   }
 
   /**
-   * Restores console error after all reporters have finalized.
-   *
-   * @returns {void}
-   */
-  onExit () {
-    // eslint-disable-next-line no-console
-    if (console.error === this.consoleError) {
-      // eslint-disable-next-line no-console
-      console.error = this.originalConsoleError
-    }
-  }
-
-  /**
    * Keeps the internal reporter from affecting Playwright's output reporter selection.
    *
    * @returns {boolean}
@@ -77,3 +83,5 @@ module.exports = class DatadogPlaywrightReporter {
     return false
   }
 }
+
+module.exports = DatadogPlaywrightReporter

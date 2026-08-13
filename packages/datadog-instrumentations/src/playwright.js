@@ -1259,9 +1259,12 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config) {
     reporterError = undefined
     hasReporterError = false
+    let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config && !config.config[kDdPlaywrightReporterConfigured]) {
+      const DatadogPlaywrightReporter = require('./playwright-reporter')
       Object.defineProperty(config.config, kDdPlaywrightReporterConfigured, { value: true })
       config.config.reporter.unshift([require.resolve('./playwright-reporter')])
+      restoreReporterConsoleError = DatadogPlaywrightReporter.restoreConsoleError
     }
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
@@ -1396,6 +1399,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       reporterError = undefined
       hasReporterError = false
       throw error
+    } finally {
+      restoreReporterConsoleError?.()
     }
 
     // Tests that have only skipped tests may reach this point

@@ -198,6 +198,95 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
+    it('reports the session when a custom reporter throws null', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            PLAYWRIGHT_REPORTER_THROWS_NULL: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const session = events.find(event => event.type === 'test_session_end')
+          assert.ok(session, 'expected test_session_end event')
+          assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+          assert.match(session.content.meta[ERROR_MESSAGE], /null/)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
+    it('reports the session when a custom reporter throws during onExit', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            PLAYWRIGHT_REPORTER_THROWS_ON_EXIT: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter onExit failed/)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
+    it('does not replace reporter errors with a custom stack formatter', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            PLAYWRIGHT_REPORTER_CUSTOM_STACK: '1',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const session = events.find(event => event.type === 'test_session_end')
+          assert.ok(session, 'expected test_session_end event')
+          assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+          assert.match(session.content.meta[ERROR_MESSAGE], /custom Playwright reporter failed/)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
+
     contextNewVersions('immutable reporters', () => {
       it('does not abort when a reporter instance is frozen', async (receiver, run) => {
         const proc = run(
@@ -289,6 +378,8 @@ versions.forEach((version) => {
               const event = events.find(event => event.type === eventType)
               assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter failed/)
             }
+            const test = events.find(event => event.type === 'test')
+            assert.strictEqual(test.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
           },
           { hardTimeout: 15_000 }
         ).catch((error) => {
