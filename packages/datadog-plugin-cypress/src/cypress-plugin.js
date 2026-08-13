@@ -1333,7 +1333,6 @@ class CypressPlugin {
         newTestsWithDynamicNames: this.newTestsWithDynamicNames,
       })
 
-      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -1344,6 +1343,7 @@ class CypressPlugin {
       })
 
       finishAllTraceSpans(this.testSessionSpan)
+      this.tracer._tracer._exporter?.exportDeferredTestSuiteSpans?.()
     }
 
     return new Promise(resolve => {
