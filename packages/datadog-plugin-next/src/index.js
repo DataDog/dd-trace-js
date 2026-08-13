@@ -27,6 +27,7 @@ const nextParentRoutes = new WeakMap()
  * @property {NextRequest} [nextRequest]
  * @property {boolean} [finishOnResponse]
  * @property {NextRequestStore} [currentStore]
+ * @property {unknown} [error]
  *
  * @typedef {object} NextErrorContext
  * @property {import('../../dd-trace/src/opentracing/span')} [span]
@@ -108,7 +109,7 @@ class NextPlugin extends ServerPlugin {
     if (reusedNextRequestStores.has(store)) return
 
     const span = store.span
-    const error = span.context().getTag('error')
+    const error = ctx.error ?? span.context().getTag('error')
     const requestError = req.error || nextRequest.error
 
     if (requestError) {

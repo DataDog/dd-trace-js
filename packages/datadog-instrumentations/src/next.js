@@ -1,5 +1,7 @@
 'use strict'
 
+const { isNativeError } = require('node:util').types
+
 const shimmer = require('../../datadog-shimmer')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
@@ -50,6 +52,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const requestErrors = new WeakMap()
+const noFallbackErrorPrototypes = new WeakSet()
 // Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 
@@ -280,11 +283,16 @@ function publishFinish (ctx, error) {
 function finish (ctx, result, error) {
   if (ctx.finishOnResponse) {
     ctx.handlerFinished = true
-    if (error) ctx.error = error
+    if (error && !isNoFallbackError(error)) ctx.error = error
     if (!ctx.responseFinished) return
   }
 
   publishFinish(ctx, error)
+}
+
+/** @param {unknown} error */
+function isNoFallbackError (error) {
+  return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
 }
 
 /**
@@ -293,7 +301,9 @@ function finish (ctx, result, error) {
  * @param {unknown} error
  */
 function publishError (req, ctx, error) {
-  if (!error) return
+  if (!error || isNoFallbackError(error)) return
+
+  if (ctx) ctx.error = error
 
   req = req.originalRequest || req
   let errors = requestErrors.get(req)
@@ -306,7 +316,6 @@ function publishError (req, ctx, error) {
   errors.add(error)
 
   if (ctx) {
-    ctx.error = error
     errorChannel.publish(ctx)
   } else {
     errorChannel.publish({ req, error })
@@ -340,6 +349,20 @@ const patchedRouteModules = new WeakSet()
 const routeResponses = new WeakMap()
 const activeRouteRequests = new WeakMap()
 const COMPILED_RUNTIME_PATH = 'dist/compiled/next-server/'
+
+/** @param {{ NoFallbackError: typeof Error }} noFallbackError */
+function captureNoFallbackError (noFallbackError) {
+  noFallbackErrorPrototypes.add(noFallbackError.NoFallbackError.prototype)
+  return noFallbackError
+}
+
+// The sentinel identity only exists at runtime, so there is no source function for Orchestrion to rewrite.
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  file: 'dist/shared/lib/no-fallback-error.external.js',
+}, captureNoFallbackError)
+
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
     if (error) publishError(req, undefined, error)
@@ -430,12 +453,14 @@ function wrapHandleResponse (handleResponse, associateNextRequest) {
     const res = routeResponses.get(req)
     routeResponses.delete(req)
 
-    if (!res || (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers)) {
+    if (!startChannel.hasSubscribers && !queryParsedChannel.hasSubscribers) {
       return handleResponse.apply(this, arguments)
     }
 
-    const routeModule = associateNextRequest ? this : undefined
+    const routeModule = res && associateNextRequest ? this : undefined
     options.responseGenerator = wrapResponseGenerator(options.responseGenerator, routeModule, req)
+
+    if (!res) return handleResponse.apply(this, arguments)
 
     return instrument(req, res, ctx => {
       publishRoutePage(ctx, this, undefined, true)

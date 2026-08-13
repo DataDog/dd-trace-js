@@ -1462,6 +1462,145 @@ describe('compiled Next runtimes', () => {
       await trace
     })
 
+    it('does not attach nested fallback revalidation errors to the foreground App Page span', async () => {
+      let backgroundRevalidation
+      let continueRevalidation
+      const backgroundError = new Error('nested fallback revalidation error')
+      const revalidationContinuation = new Promise(resolve => { continueRevalidation = resolve })
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/nested-fallback' }
+
+        /**
+         * @param {object} options
+         * @param {boolean} [options.isFallback]
+         * @param {(context?: {hasResolved?: boolean}) => Promise<unknown>} options.responseGenerator
+         */
+        handleResponse (options) {
+          if (options.isFallback) {
+            backgroundRevalidation = options.responseGenerator({ hasResolved: true })
+            return Promise.resolve({ isMiss: false, isStale: true })
+          }
+
+          return options.responseGenerator()
+        }
+
+        onRequestError () {
+          return Promise.resolve()
+        }
+      }
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/nested-fallback' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assert.strictEqual(span.error, 0)
+        assert.strictEqual(span.meta['error.message'], undefined)
+      }, { spanResourceMatch: /nested-fallback/ })
+
+      await routeModule.prepare(request, response, {})
+      await routeModule.handleResponse({
+        req: request,
+        responseGenerator: async () => {
+          await routeModule.handleResponse({
+            isFallback: true,
+            req: request,
+            responseGenerator: async () => {
+              await revalidationContinuation
+              await routeModule.onRequestError(request, backgroundError)
+              throw backgroundError
+            },
+          })
+          return { value: { status: 200 } }
+        },
+      })
+
+      const revalidation = assert.rejects(backgroundRevalidation, backgroundError)
+      continueRevalidation()
+      await revalidation
+      response.emit('finish')
+      await trace
+    })
+
+    it('retains deferred App Page handler error details after onRequestError reports the same error', async () => {
+      const handlerError = new Error('deferred App Page handler error')
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/deferred-handler-error' }
+
+        handleResponse () {
+          return Promise.reject(handlerError)
+        }
+
+        onRequestError () {
+          return Promise.resolve()
+        }
+      }
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/deferred-handler-error' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 1,
+          meta: {
+            'error.message': handlerError.message,
+            'error.type': 'Error',
+          },
+        })
+      }, { spanResourceMatch: /deferred-handler-error/ })
+
+      await routeModule.prepare(request, response, {})
+      await assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => assert.fail('a handler error should not invoke the response generator'),
+      }), handlerError)
+      await routeModule.onRequestError(request, handlerError)
+      response.emit('finish')
+      await trace
+    })
+
+    it('does not record NoFallbackError when the Next 16 App Page router handles it as a 404', async () => {
+      // Next exposes this CommonJS export through Object.defineProperty.
+      // eslint-disable-next-line eslint-rules/eslint-require-export-exists
+      const { NoFallbackError } = require(
+        '../../../versions/next@16/node_modules/next/dist/shared/lib/no-fallback-error.external'
+      )
+      const noFallbackError = new NoFallbackError()
+
+      class AppPageRouteModule extends RouteModule {
+        definition = { pathname: '/without-fallback' }
+      }
+      getCompiledRuntimeHook('app-page')({ AppPageRouteModule })
+
+      const request = { headers: {}, method: 'GET', url: '/without-fallback' }
+      const response = new http.ServerResponse(request)
+      const routeModule = new AppPageRouteModule()
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          error: 0,
+          meta: {
+            'http.status_code': '404',
+          },
+        })
+        assert.strictEqual(span.meta['error.message'], undefined)
+      }, { spanResourceMatch: /without-fallback/ })
+
+      await routeModule.prepare(request, response, {})
+      await assert.rejects(routeModule.handleResponse({
+        req: request,
+        responseGenerator: () => Promise.reject(noFallbackError),
+      }), noFallbackError)
+      response.statusCode = 404
+      response.emit('finish')
+      await trace
+    })
+
     for (const { cacheStatus, label, responseStatus } of [
       { cacheStatus: 307, label: 'RSC redirect', responseStatus: 200 },
       { cacheStatus: 200, label: 'segment-prefetch miss', responseStatus: 204 },
