@@ -417,10 +417,9 @@ function stopCurrentTest (runner, test) {
  *
  * @param {object} runner
  * @param {object} hook
- * @param {Error} error
  * @returns {void}
  */
-function stopCurrentHook (runner, hook, error) {
+function stopCurrentHook (runner, hook) {
   const hookMethod = runner.hook
   const hookDown = runner.hookDown
   const hookUp = runner.hookUp
@@ -440,7 +439,12 @@ function stopCurrentHook (runner, hook, error) {
   }
   hook.run = function (onDone) {
     hook.run = run
-    onDone(error)
+    const test = hook.ctx?.currentTest
+    if (test) {
+      test.pending = true
+      test._ddReporterStartFailed = true
+    }
+    onDone()
   }
 }
 
@@ -576,9 +580,16 @@ function wrapRunnerEmit (Runner) {
           stopFutureHooks(this)
           if (event === 'start') stopRootSuite(this)
           else if (event === 'test') stopCurrentTest(this, arguments[1])
-          else if (event === 'hook') stopCurrentHook(this, arguments[1], error)
-          else if (event === 'hook end') stopAfterHookEnd(this, arguments[1])
-          else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
+          else if (event === 'hook') stopCurrentHook(this, arguments[1])
+          else if (event === 'hook end') {
+            const hook = arguments[1]
+            stopAfterHookEnd(this, hook)
+            const test = hook.ctx?.currentTest
+            if (test && hook.parent?._afterEach?.includes(hook)) {
+              test._ddReporterTerminalFailed = true
+              if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(this)?.(test)
+            }
+          } else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
             if (event === 'test end' && !test._ddTestFinishStarted) {
@@ -1025,7 +1036,8 @@ addHook({
       if (hasFinishedRun) return
       if (hasEnded && pendingRootFinalizations === 0) {
         hasFinishedRun = true
-        onEnd.call(endRunner, endError, onFrameworkErrorDone)
+        if (onFrameworkErrorDone) onEnd.call(endRunner, endError, onFrameworkErrorDone)
+        else onEnd.call(endRunner)
       }
     }
 

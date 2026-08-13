@@ -9,3 +9,15 @@ describe('mocha-reporter-hook-end', () => {
     assert.strictEqual(true, true)
   })
 })
+
+describe('mocha-reporter-hook-end-outer', () => {
+  afterEach(() => {})
+
+  describe('mocha-reporter-hook-end-inner', () => {
+    afterEach(() => {})
+
+    it('can pass after an inner hook reporter error', () => {
+      assert.strictEqual(true, true)
+    })
+  })
+})

@@ -331,6 +331,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.ok(testEvent, 'expected aborted test event')
             assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
           }
+          if (reporterEvent === 'hook') {
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'expected aborted test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(testEvent.content.error, 0)
+          }
         },
         { hardTimeout: 20_000 }
       )
@@ -429,6 +435,47 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.match(testOutput, /MOCHA BEFORE EACH EXECUTED/)
     assert.doesNotMatch(testOutput, /MOCHA (?:AFTER EACH|TEST BODY) EXECUTED/)
     assert.notStrictEqual(exitCode, 0, testOutput)
+  })
+
+  it('reports a completed test when a reporter throws on an inner afterEach hook', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/passing-with-after-each.js ' +
+      '--reporter ./ci-visibility/mocha-reporter-throws.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_REPORTER_THROW_EVENT: 'hook end',
+          MOCHA_REPORTER_THROW_INNER_HOOK: '1',
+        },
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvent = events.find(event =>
+          event.type === 'test' && event.content.meta[TEST_NAME] ===
+          'mocha-reporter-hook-end-outer mocha-reporter-hook-end-inner can pass after an inner hook reporter error'
+        )
+        assert.ok(testEvent, 'expected completed test event')
+        assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testEvent.content.error, 0)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.notStrictEqual(exitCode, 0)
   })
 
   onlyLatestIt('marks parallel worker suites as failed when the coordinator reporter throws', async function () {
