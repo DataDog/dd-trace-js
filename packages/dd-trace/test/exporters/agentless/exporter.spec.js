@@ -7,10 +7,13 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 require('../../setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('AgentlessExporter', () => {
   let Exporter
@@ -26,6 +29,7 @@ describe('AgentlessExporter', () => {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
+      resetPendingBatch: sinon.stub(),
     }
 
     const Writer = function () {
@@ -256,6 +260,27 @@ describe('AgentlessExporter', () => {
 
     it('should call callback when done', (done) => {
       exporter.flush(done)
+    })
+  })
+
+  describe('identity refresh', () => {
+    it('drops the pending trace batch when the identity-refresh channel fires', () => {
+      exporter = new Exporter({})
+
+      identityRefreshChannel.publish({ tags: {} })
+
+      sinon.assert.calledOnce(writer.resetPendingBatch)
+    })
+
+    it('stops reacting once a newer exporter takes over', () => {
+      exporter = new Exporter({})
+      new Exporter({}) // eslint-disable-line no-new
+      writer.resetPendingBatch.resetHistory()
+
+      identityRefreshChannel.publish({ tags: {} })
+
+      // Only one reset, not two - the first exporter's subscription was replaced, not stacked on.
+      sinon.assert.calledOnce(writer.resetPendingBatch)
     })
   })
 

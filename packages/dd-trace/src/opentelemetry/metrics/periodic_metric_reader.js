@@ -227,6 +227,26 @@ class PeriodicMetricReader {
   }
 
   /**
+   * Discards queued measurements and sync-instrument cumulative state. Used on a MicroVM clone
+   * resume so measurements recorded before the snapshot don't get exported under the clone's
+   * identity.
+   *
+   * Only clears `#lastExportedState` entries that have a matching `#cumulativeState` entry (sync
+   * Counter/Histogram delta baselines) - an ObservableCounter's baseline lives only in
+   * `#lastExportedState`, and clearing it too would turn its next export into an absolute
+   * reading instead of a delta.
+   * @returns {void}
+   */
+  resetPendingState () {
+    this.#measurements = []
+
+    for (const key of this.#cumulativeState.keys()) {
+      this.#lastExportedState.delete(key)
+    }
+    this.#cumulativeState.clear()
+  }
+
+  /**
    * Shuts down the reader and stops periodic collection.
    * @returns {void}
    */

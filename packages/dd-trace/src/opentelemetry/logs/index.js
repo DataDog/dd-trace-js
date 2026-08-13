@@ -1,10 +1,18 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { buildResourceAttributes, registerResourceAttributeRefresh } = require('../resource-attributes')
 
 /**
  * @typedef {import('../../config')} Config
  */
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// initializeOpenTelemetryLogs() can be called again (e.g. re-init); drop the old subscription
+// first so it doesn't stack.
+let unsubscribeLogsPendingStateReset = null
 
 /**
  * OpenTelemetry Logs Implementation for `dd-trace-js`
@@ -63,6 +71,12 @@ function initializeOpenTelemetryLogs (config) {
   registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 
   registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
+
+  // A clone resume shouldn't export log records queued before the snapshot under its own identity.
+  unsubscribeLogsPendingStateReset?.()
+  const onIdentityRefresh = () => processor.resetPendingState()
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeLogsPendingStateReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
 
 module.exports = {

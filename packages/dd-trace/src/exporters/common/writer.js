@@ -98,6 +98,15 @@ class Writer {
   setUrl (url) {
     this._url = url
   }
+
+  /**
+   * Discards whatever's queued in the encoder. Used on a MicroVM clone resume, where anything
+   * buffered before the snapshot would otherwise flush under every clone's identity.
+   * @returns {void}
+   */
+  resetPendingBatch () {
+    this._encoder.reset()
+  }
 }
 
 module.exports = Writer

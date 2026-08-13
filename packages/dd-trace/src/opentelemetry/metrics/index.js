@@ -3,6 +3,7 @@
 const os = require('os')
 
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
@@ -19,6 +20,12 @@ const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id',
 /**
  * @typedef {import('../../config')} Config
  */
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// initializeOpenTelemetryMetrics() can be called again (e.g. re-init); drop the old subscription
+// first so it doesn't stack.
+let unsubscribeMetricsPendingStateReset = null
 
 /**
  * @file OpenTelemetry Metrics Implementation for dd-trace-js
@@ -69,6 +76,12 @@ function initializeOpenTelemetryMetrics (config) {
   registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 
   registerResourceAttributeRefresh(exporter, () => buildGeneralResourceAttributes(config))
+
+  // A clone resume shouldn't export measurements queued before the snapshot under its own identity.
+  unsubscribeMetricsPendingStateReset?.()
+  const onIdentityRefresh = () => reader.resetPendingState()
+  identityRefreshChannel.subscribe(onIdentityRefresh)
+  unsubscribeMetricsPendingStateReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 }
 
 /**

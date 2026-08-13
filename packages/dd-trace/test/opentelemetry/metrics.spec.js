@@ -1324,5 +1324,28 @@ describe('OpenTelemetry Meter Provider', () => {
         { runtimeId: 'refreshed-id', value: 5 },
       ])
     })
+
+    it('drops sync Counter measurements recorded before an identity refresh', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(metric.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics()
+      const meter = metrics.getMeter('app')
+      const counter = meter.createCounter('requests')
+
+      // Recorded before the refresh: dropped, so it never reaches an export under the refreshed
+      // identity, and it does not contribute to the cumulative total reported afterwards.
+      counter.add(5)
+      identityRefreshChannel.publish(config)
+
+      counter.add(7)
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [7])
+    })
   })
 })
