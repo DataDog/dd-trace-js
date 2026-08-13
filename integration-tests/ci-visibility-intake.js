@@ -50,6 +50,7 @@ class FakeCiVisIntake extends FakeAgent {
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
   #mediaResponseDelayMs = 0
+  #mediaResponsesPending = false
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -137,6 +138,15 @@ class FakeCiVisIntake extends FakeAgent {
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
+  }
+
+  /**
+   * Leaves media requests open until the client cancels them.
+   *
+   * @returns {void}
+   */
+  setMediaResponsesPending () {
+    this.#mediaResponsesPending = true
   }
 
   setWaitingTime (newWaitingTime) {
@@ -280,6 +290,9 @@ class FakeCiVisIntake extends FakeAgent {
         })
       }
 
+      if (this.#mediaResponsesPending) {
+        return
+      }
       if (this.#mediaResponseDelayMs > 0) {
         setTimeout(respond, this.#mediaResponseDelayMs)
       } else {
@@ -446,6 +459,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
     this.#mediaResponseDelayMs = 0
+    this.#mediaResponsesPending = false
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
     this.#skippableSuitesResponseStatusCode = 200
