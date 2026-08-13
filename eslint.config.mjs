@@ -817,6 +817,23 @@ export default [
     },
   },
   {
+    // A repo-root debug driver for the native-spans PoC, so `SRC_FILES` picks it up as
+    // library source. It is the same kind of program as the benchmark drivers above:
+    // it reads its own environment directly (including the flags it forwards to the
+    // tracer, which must be set before the tracer loads) and exits on `--help`.
+    name: 'dd-trace/scripts/native-spans-debug',
+    files: ['native-spans-debug.js'],
+    plugins: {
+      n: eslintPluginN,
+      unicorn: eslintPluginUnicorn,
+    },
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+      'n/no-process-exit': 'off',
+      'unicorn/no-process-exit': 'off',
+    },
+  },
+  {
     name: 'dd-trace/defaults/v0.8-oldest',
     plugins: {
       n: eslintPluginN,

@@ -5,12 +5,19 @@ const guard = require('../startup-guard')
 
 const tracer = require('../../..').init()
 
+// Not reached on the native path: `NativeSpan.finish` writes a `FINISH` record and
+// the processor never runs, so there is no JS-side trace to erase.
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
   this._erase(trace)
 }
 
 const { FINISH, SHAPE = 'plain' } = process.env
+
+// The native-span PoC keeps no readable JS-side state, so the pre-flight assertions
+// below have nothing to read. The variants that set the flag skip them; everything
+// else about the loop is identical, which is the point of comparing the two here.
+const NATIVE_SPANS = process.env.DD_TRACE_EXPERIMENTAL_NATIVE_SPANS === '1'
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
@@ -75,9 +82,11 @@ const FIELDS_WITH_MANY_TAGS = { tags: MANY_TAGS }
 // breakage where the construction shape stopped propagating.
 const sanitySpan = tracer.startSpan('sanity.span', FIELDS_WITH_TAGS_AND_LINKS)
 sanitySpan.addEvent('sanity-event', EVENT_ATTRIBUTES)
-assert.equal(sanitySpan.context().getTag('service'), 'svc')
-assert.equal(sanitySpan._links.length, 1)
-assert.equal(sanitySpan._events.length, 1)
+if (!NATIVE_SPANS) {
+  assert.equal(sanitySpan.context().getTag('service'), 'svc')
+  assert.equal(sanitySpan._links.length, 1)
+  assert.equal(sanitySpan._events.length, 1)
+}
 sanitySpan.finish()
 
 // One span creation for the active shape. addEvent only applies to the otel shape.

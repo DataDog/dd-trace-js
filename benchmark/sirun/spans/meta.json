@@ -44,6 +44,32 @@
         "SHAPE": "tags-and-otel",
         "OPERATIONS": "2000000"
       }
+    },
+    "finish-immediately-native": {
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS": "1",
+        "FINISH": "now",
+        "OPERATIONS": "2000000"
+      }
+    },
+    "finish-immediately-with-tags-native": {
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS": "1",
+        "FINISH": "now",
+        "SHAPE": "tags",
+        "OPERATIONS": "2000000"
+      }
+    },
+    "finish-immediately-with-many-tags-native": {
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "DD_TRACE_EXPERIMENTAL_NATIVE_SPANS": "1",
+        "FINISH": "now",
+        "SHAPE": "many-tags",
+        "OPERATIONS": "2000000"
+      }
     }
   }
 }

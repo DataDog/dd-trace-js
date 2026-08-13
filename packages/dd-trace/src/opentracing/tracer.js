@@ -64,6 +64,16 @@ class DatadogTracer {
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+
+    // PoC: swap the span implementation at the construction call site. `NativeSpan`
+    // implements the same public method surface, so nothing above this point knows
+    // which one it got. Creating the writer here rather than lazily keeps the
+    // buffer allocation and `PROCESS_INFO` write out of the first span's cost.
+    this._Span = Span
+    if (config.DD_TRACE_EXPERIMENTAL_NATIVE_SPANS) {
+      require('../native-spans/event-writer').getWriter(config)
+      this._Span = require('../native-spans/span')
+    }
   }
 
   startSpan (name, options = {}) {
@@ -71,7 +81,7 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
-    const span = new Span(this, this._processor, this._prioritySampler, {
+    const span = new this._Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
       parent,
       startTime: options.startTime,

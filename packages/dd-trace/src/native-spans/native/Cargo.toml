@@ -1,0 +1,24 @@
+[package]
+name = "native_spans"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# `rlib` alongside `cdylib` so `cargo test` can link the crate's own unit tests.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `napi4` brings in the async-work API `Env::spawn` needs for the deferred HTTP PUT.
+napi = { version = "2", default-features = false, features = ["napi4"] }
+napi-derive = "2"
+# Blocking HTTP without a hidden runtime: `reqwest`'s blocking mode spins up its own
+# tokio just to `block_on`, and `hyper` has had no sync client since 1.x.
+ureq = "3"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1

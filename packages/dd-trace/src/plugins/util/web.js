@@ -93,7 +93,7 @@ const web = {
 
     if (!span) return
 
-    span.context()._name = `${name}.request`
+    span.setOperationName(`${name}.request`)
     span.context().setTag('component', name)
     span._integrationName = name
 
@@ -124,7 +124,7 @@ const web = {
     let span
 
     if (context.span) {
-      context.span.context()._name = name
+      context.span.setOperationName(name)
       span = context.span
     } else {
       span = web.startServerlessSpanWithInferredProxy(tracer, config, name, req, traceCtx)
