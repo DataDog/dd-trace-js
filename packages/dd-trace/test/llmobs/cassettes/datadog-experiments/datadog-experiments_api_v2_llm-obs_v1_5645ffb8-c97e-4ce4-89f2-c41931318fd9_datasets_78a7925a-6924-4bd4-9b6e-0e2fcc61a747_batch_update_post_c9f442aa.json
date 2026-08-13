@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "url": "https://api.datadoghq.comdatadog-experiments/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/78a7925a-6924-4bd4-9b6e-0e2fcc61a747/batch_update",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets/78a7925a-6924-4bd4-9b6e-0e2fcc61a747/batch_update",
     "headers": {
       "Connection": "keep-alive",
       "Content-Type": "application/json",
