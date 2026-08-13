@@ -1,30 +1,15 @@
 'use strict'
 
-const http = require('http')
-const { port, reqs } = require('./common')
-
-let connectionsMade = 0
-function request (opts) {
-  http.get(opts, (res) => {
-    res.on('data', () => {})
-    res.on('end', () => {
-      if (++connectionsMade !== reqs) {
-        request(opts)
-      }
-    })
-  }).on('error', (e) => {
-    setTimeout(() => {
-      request(opts)
-    }, 10)
-  })
-}
+const runRequests = require('../http-client')
+const { port, reqs, warmup } = require('./common')
 
 const path = '/?param=value'
 const opts = {
   headers: {
     accept: 'text/html',
   },
+  host: '127.0.0.1',
   port,
   path,
 }
-request(opts)
+runRequests(opts, warmup, reqs, 1)
