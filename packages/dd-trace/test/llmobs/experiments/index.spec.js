@@ -46,7 +46,7 @@ describe('LLMObs Experiments facade', () => {
     sinon.restore()
   })
 
-  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr'
+  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr-facade'
   const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
     `dd-trace-js-experiments-${backendTestId}`
   const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
