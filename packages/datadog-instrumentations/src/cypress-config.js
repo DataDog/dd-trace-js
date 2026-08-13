@@ -436,15 +436,25 @@ function finalizeAfterUserHandlers (userHandlers, finalizer) {
  * @param {Function} on Cypress event registration function
  * @param {Function[]} handlers collected after:spec handlers
  * @param {Function} [datadogHandler] manual Datadog after:spec handler
+ * @param {Function} [cleanup] removes generated support files after an error
  * @returns {void}
  */
-function registerAfterSpecHandlers (on, handlers, datadogHandler) {
+function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
   const userHandlers = datadogHandler
     ? handlers.filter(handler => handler !== datadogHandler)
     : handlers
 
   if (userHandlers.length === 0) {
-    if (datadogHandler) on('after:spec', datadogHandler)
+    if (datadogHandler) {
+      if (cleanup) {
+        on('after:spec', (...args) => Promise.resolve().then(() => datadogHandler(...args)).catch((error) => {
+          cleanup()
+          throw error
+        }))
+      } else {
+        on('after:spec', datadogHandler)
+      }
+    }
     return
   }
 
@@ -457,7 +467,12 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler) {
       Promise.resolve()
     )
     if (!datadogHandler) return chain
-    return finalizeAfterUserHandlers(chain, (...args) => datadogHandler(spec, results, ...args))
+    const finalization = finalizeAfterUserHandlers(chain, (...args) => datadogHandler(spec, results, ...args))
+    if (!cleanup) return finalization
+    return finalization.catch((error) => {
+      cleanup()
+      throw error
+    })
   })
 }
 
@@ -518,7 +533,7 @@ function registerDdTraceHooks (
   }
 
   if (manualPlugin.detected) {
-    registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler)
+    registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
     return config
@@ -581,7 +596,9 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterScreenshotHandler = userAfterScreenshotHandlers.at(-1)
+          manualPlugin.afterSpecHandler ||= userAfterSpecHandlers.at(-1)
+          manualPlugin.afterRunHandler ||= userAfterRunHandlers.at(-1)
+          manualPlugin.afterScreenshotHandler ||= userAfterScreenshotHandlers.at(-1)
         }
         on(event, handler)
       }

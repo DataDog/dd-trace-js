@@ -2192,6 +2192,95 @@ if (requestedVersion === 'latest' &&
 
     describe('manual plugin', () => {
       for (const event of ['after:run', 'after:spec']) {
+        for (const position of ['before', 'after']) {
+          it(`supports an older manual ${event} handler registered ${position} the user handler`, async () => {
+            const projectRoot = createProjectRoot()
+            const userError = new Error(`user ${event} failed`)
+            const userHandler = sinon.stub().rejects(userError)
+            const datadogAfterSpecHandler = sinon.stub()
+            const datadogAfterRunHandler = sinon.stub()
+            const taskHandler = {
+              'dd:testSuiteStart': sinon.stub(),
+              'dd:beforeEach': sinon.stub(),
+              'dd:afterEach': sinon.stub(),
+              'dd:addTags': sinon.stub(),
+            }
+            const config = {
+              e2e: {
+                /**
+                 * @param {Function} on Cypress event registration function
+                 * @returns {void}
+                 */
+                setupNodeEvents (on) {
+                  if (position === 'before') on(event, userHandler)
+                  on('after:spec', datadogAfterSpecHandler)
+                  on('after:run', datadogAfterRunHandler)
+                  on('task', taskHandler)
+                  if (position === 'after') on(event, userHandler)
+                },
+              },
+            }
+            const handlers = {}
+            const { cypressConfig } = loadCypressConfig()
+            const eventArguments = event === 'after:run'
+              ? [{ totalPassed: 1 }]
+              : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
+
+            cypressConfig.wrapConfig(config)
+            config.e2e.setupNodeEvents((registeredEvent, handler) => {
+              handlers[registeredEvent] = handler
+            }, { projectRoot, supportFile: false, isInteractive: false })
+
+            assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+            await assert.rejects(handlers[event](...eventArguments), error => error === userError)
+            sinon.assert.callOrder(userHandler, event === 'after:run'
+              ? datadogAfterRunHandler
+              : datadogAfterSpecHandler)
+            const finalizer = event === 'after:run' ? datadogAfterRunHandler : datadogAfterSpecHandler
+            const finalizerError = finalizer.lastCall.args.at(-1)
+            assert.ok(finalizerError instanceof Error)
+            assert.strictEqual(finalizerError.message, userError.message)
+            assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+          })
+        }
+      }
+
+      it('cleans generated support files when an older manual after:spec finalizer rejects', async () => {
+        const projectRoot = createProjectRoot()
+        const finalizationError = new Error('older manual after:spec failed')
+        const datadogAfterSpecHandler = sinon.stub().rejects(finalizationError)
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('after:spec', datadogAfterSpecHandler)
+              on('task', taskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig } = loadCypressConfig()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+        await assert.rejects(handlers['after:spec']({}, {}), finalizationError)
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      for (const event of ['after:run', 'after:spec']) {
         it(`defers a wrapped legacy ${event} helper to the manual plugin finalizer`, async () => {
           const projectRoot = createProjectRoot()
           const legacyFinalizer = sinon.stub()
