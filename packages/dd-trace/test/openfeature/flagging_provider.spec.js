@@ -245,27 +245,23 @@ describe('FlaggingProvider', () => {
 
     assert.strictEqual(fixture.schema, 'datadog.ffe.targeting-regex-conformance/v1')
     assert.strictEqual(fixture.schemaVersion, 1)
-    assert.strictEqual(fixture.contractVersion, 'targeting-regex-v1')
+    assert.strictEqual(fixture.contractVersion, 'targeting-regex-v2')
     assert.strictEqual(regexCases.length, 75)
     assert.strictEqual(new Set(regexCases.map(regexCase => regexCase.id)).size, 75)
-    assert.strictEqual(
-      regexCases.filter(regexCase => typeof regexCase.expectedCompile === 'boolean').length,
-      66
-    )
+    assert.strictEqual(regexCases.filter(regexCase => regexCase.contract === 'accepted').length, 30)
+    assert.strictEqual(regexCases.filter(regexCase => regexCase.contract === 'rejected').length, 45)
 
     for (const regexCase of regexCases) {
-      // The production evaluator uses native ECMAScript RegExp, not RE2JS.
-      // The fixture has no ECMAScript engine key, so keep divergent cases visible
-      // as skips instead of silently dropping them from the reported test count.
-      const run = typeof regexCase.expectedCompile === 'boolean' ? it : it.skip
-      run(`should evaluate ${regexCase.id}`, async () => {
+      it(`should evaluate ${regexCase.id}`, async () => {
         const expectedCompile = regexCase.expectedCompile
         const expectedMatch = regexCase.expectedMatch
         const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-        assert.strictEqual(typeof expectedCompile, 'boolean')
-        if (expectedCompile && expectedMatch !== null) {
+        if (regexCase.contract === 'accepted') {
+          assert.strictEqual(expectedCompile, true)
           assert.strictEqual(typeof expectedMatch, 'boolean')
+        } else {
+          assert.strictEqual(regexCase.contract, 'rejected')
         }
 
         provider.setConfiguration(createRegexConfiguration(regexCase.normalizedPattern))
@@ -277,9 +273,9 @@ describe('FlaggingProvider', () => {
           { error () {}, warn () {}, info () {}, debug () {} }
         )
 
-        assert.strictEqual(details.reason, expectedCompile ? 'TARGETING_MATCH' : 'DEFAULT')
-        if (!expectedCompile || expectedMatch !== null) {
-          assert.strictEqual(details.value, expectedCompile ? expectedMatch : false)
+        if (regexCase.contract === 'accepted') {
+          assert.strictEqual(details.reason, 'TARGETING_MATCH')
+          assert.strictEqual(details.value, expectedMatch)
         }
       })
     }
