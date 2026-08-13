@@ -6,8 +6,11 @@ const { hostname } = require('os')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const { version } = require('../src/pkg')
@@ -586,5 +589,36 @@ describe('SpanStatsProcessor', () => {
 
     p.onSpanFinished(topLevelSpan)
     assert.strictEqual(p.buckets.size, 1)
+  })
+
+  it('should clear pending buckets when the identity-refresh channel fires', () => {
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+
+    p.onSpanFinished(topLevelSpan)
+    assert.strictEqual(p.buckets.size, 1)
+
+    const previousBuckets = p.buckets
+    identityRefreshChannel.publish(config)
+
+    assert.notStrictEqual(p.buckets, previousBuckets)
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  it('should stop reacting to identity refresh once a newer instance takes over', () => {
+    const first = new SpanStatsProcessor(config)
+    clearTimeout(first.timer)
+    const firstBuckets = first.buckets
+
+    const second = new SpanStatsProcessor(config)
+    clearTimeout(second.timer)
+    const secondBuckets = second.buckets
+
+    identityRefreshChannel.publish(config)
+
+    // Only the second (newest) instance should react - the first's subscription was replaced,
+    // not stacked on top of.
+    assert.strictEqual(first.buckets, firstBuckets)
+    assert.notStrictEqual(second.buckets, secondBuckets)
   })
 })

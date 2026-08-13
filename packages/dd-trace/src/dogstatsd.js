@@ -61,18 +61,21 @@ class DogStatsDClient {
    * before the swap.
    *
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   * @returns {boolean} True if the tag prefix actually changed (and buffered lines were dropped)
    */
   updateTags (tags) {
     const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
 
     this._tags = tags
 
-    if (tagsPrefix === this.#tagsPrefix) return
+    if (tagsPrefix === this.#tagsPrefix) return false
 
     this.#tagsPrefix = tagsPrefix
     this._queue = []
     this._buffer = ''
     this._offset = 0
+
+    return true
   }
 
   increment (stat, value, tags) {
@@ -241,11 +244,16 @@ class MetricsAggregationClient {
   }
 
   /**
-   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
+   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume). Pending
+   * counters/gauges/histograms were aggregated under the old identity, so they're reset along
+   * with the client's buffered lines — but only if the tags actually changed, so a no-op resume
+   * doesn't discard in-flight aggregation for nothing.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
-    this._client.updateTags(tags)
+    if (this._client.updateTags(tags)) {
+      this.reset()
+    }
   }
 
   flush () {

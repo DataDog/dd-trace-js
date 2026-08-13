@@ -601,10 +601,10 @@ function getTagsString (config, repositoryUrl, commitSHA) {
  */
 function refreshIdentity (config) {
   clientId = uuid()
-  if (config.tags['_dd.rc.client_id']) {
-    config.tags['_dd.rc.client_id'] = clientId
-  }
   if (client !== undefined) {
+    // Unconditional, because an RC lib-config update rebuilds config.tags from scratch (see
+    // tracing_tags() in config/remote_config.js) and drops this directly-set key.
+    config.tags['_dd.rc.client_id'] = clientId
     client.id = clientId
     client.client_tracer.runtime_id = config.tags['runtime-id']
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
