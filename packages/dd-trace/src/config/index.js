@@ -322,9 +322,9 @@ class Config extends ConfigBase {
    * @param {Record<string, string>|null} options - Env-var-keyed configs received via the
    *   SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
-  setRemoteConfigFromSdkConfig (options) {
+  setRemoteConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCConfigMerger` class
+    // State is instead managed by the `RCClientManager` class
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
@@ -333,18 +333,17 @@ class Config extends ConfigBase {
       const filtered = {}
       for (const [key, value] of Object.entries(options)) {
         if (!sdkConfigAllowlist.has(key)) {
-          log.warn('Ignoring remote config for unsupported configuration %s', key)
+          log.debug('Ignoring remote config for unsupported configuration %s', key)
           continue
         }
-        // TODO(config-at-runtime): also drop restart-required configs
         if (sensitiveConfigurations.has(key)) {
-          log.warn('Ignoring remote config for sensitive configuration %s', key)
+          log.debug('Ignoring remote config for sensitive configuration %s', key)
           continue
         }
         filtered[key] = value
       }
 
-      // Use getEnvironmentVariables to filter out configs this tracer version doesn't recognize
+      // Resolve aliases and drop configs this tracer version doesn't recognize
       this.#applyEnvs(getEnvironmentVariables(filtered, true), 'remote_config')
     }
 

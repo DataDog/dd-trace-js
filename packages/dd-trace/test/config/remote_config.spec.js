@@ -28,7 +28,7 @@ describe('Tracing Remote Config', () => {
     config = {
       service: 'test-service',
       env: 'test-env',
-      setRemoteConfigFromSdkConfig: sinon.spy(),
+      setRemoteConfig: sinon.spy(),
     }
 
     onConfigUpdated = sinon.spy()
@@ -62,7 +62,7 @@ describe('Tracing Remote Config', () => {
 
         handler(transaction)
 
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, sdkConfig)
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
@@ -77,7 +77,7 @@ describe('Tracing Remote Config', () => {
         ])
         handler(transaction)
 
-        config.setRemoteConfigFromSdkConfig.resetHistory()
+        config.setRemoteConfig.resetHistory()
         onConfigUpdated.resetHistory()
 
         // Then unapply it
@@ -87,11 +87,11 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         // When all configs are removed, null is passed to reset
-        sinon.assert.calledWithExactly(config.setRemoteConfigFromSdkConfig, null)
+        sinon.assert.calledWithExactly(config.setRemoteConfig, null)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
-      it('should call setRemoteConfigFromSdkConfig only once per batch', () => {
+      it('should call setRemoteConfig only once per batch', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
@@ -106,7 +106,7 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         // Should be called exactly once, not three times
-        sinon.assert.calledOnce(config.setRemoteConfigFromSdkConfig)
+        sinon.assert.calledOnce(config.setRemoteConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
@@ -121,7 +121,7 @@ describe('Tracing Remote Config', () => {
 
         handler(transaction)
 
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, null)
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
         sinon.assert.calledOnce(onConfigUpdated)
       })
     })
@@ -153,7 +153,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Service config should win
-      sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, { DD_TRACE_SAMPLE_RATE: '0.8' })
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.8' })
     })
 
     it('should handle config removal', () => {
@@ -176,7 +176,7 @@ describe('Tracing Remote Config', () => {
       }])
       handler(transaction)
 
-      config.setRemoteConfigFromSdkConfig.resetHistory()
+      config.setRemoteConfig.resetHistory()
 
       // Remove higher priority config
       transaction = createTransaction([], [], [
@@ -191,7 +191,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Lower priority should now apply
-      sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
     })
 
     it('should filter configs by service/env', () => {
@@ -210,7 +210,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Should be ignored, so null is passed to reset all RC fields
-      sinon.assert.calledWithExactly(config.setRemoteConfigFromSdkConfig, null)
+      sinon.assert.calledWithExactly(config.setRemoteConfig, null)
     })
 
     it('should return null when configs have no sdk_config field', () => {
@@ -230,7 +230,7 @@ describe('Tracing Remote Config', () => {
 
       handler(transaction)
 
-      sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, null)
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
       sinon.assert.calledOnce(onConfigUpdated)
     })
 
@@ -261,7 +261,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Service config sample rate should win, but logs injection should come from org
-      sinon.assert.calledOnceWithExactly(config.setRemoteConfigFromSdkConfig, {
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
         DD_TRACE_SAMPLE_RATE: '0.8',
         DD_LOGS_INJECTION: 'true',
       })

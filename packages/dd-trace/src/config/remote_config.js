@@ -14,7 +14,7 @@ module.exports = {
 /**
  * Manages multiple remote configurations with priority-based merging
  */
-class RCConfigMerger {
+class RCClientManager {
   /**
    * @param {string} currentService - Current service name
    * @param {string} currentEnv - Current environment name
@@ -143,17 +143,16 @@ class RCConfigMerger {
  * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
 function enable (rc, config, onConfigUpdated) {
-  // This tracer supports receiving multiple simultaneous targeted configs under the APM_TRACING
-  // product (e.g. an org-level and a service-level config) and merging them by priority.
+  // This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
+  // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
 
   // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
   rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
 
-  const sdkConfigManager = new RCConfigMerger(config.service, config.env)
+  const sdkConfigManager = new RCClientManager(config.service, config.env)
 
-  // SDK_CONFIGURATION has no RC product of its own — the backend delivers it as a config object
-  // (a flat `sdk_config` map) under the APM_TRACING product.
+  // SDK_CONFIGURATION is delivered as a flat sdk_config map under the APM_TRACING product.
   rc.subscribeProducts('APM_TRACING')
 
   rc.setBatchHandler(['APM_TRACING'], (transaction) => {
@@ -169,7 +168,7 @@ function enable (rc, config, onConfigUpdated) {
       transaction.ack(item.path)
     }
 
-    config.setRemoteConfigFromSdkConfig(sdkConfigManager.getMergedConfig())
+    config.setRemoteConfig(sdkConfigManager.getMergedConfig())
 
     onConfigUpdated()
   })

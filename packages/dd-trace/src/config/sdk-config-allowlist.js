@@ -1,9 +1,8 @@
 'use strict'
 
 // SDK_CONFIGURATION currently only accepts configs that already had per-setting RC support under
-// the (now removed) APM_TRACING capabilities. As RC support grows to cover most configurations,
-// this is expected to flip from an allowlist to a blocklist of configs that must never be settable
-// remotely (e.g. restart-required options). No cutover point is set yet.
+// the (now removed) APM_TRACING capabilities. This is a temporary local list until
+// supported-configurations.json gets a "remote" field to drive this from a single source of truth.
 const sdkConfigAllowlist = new Set([
   'DD_TRACE_ENABLED',
   'DD_TRACE_SAMPLE_RATE',
