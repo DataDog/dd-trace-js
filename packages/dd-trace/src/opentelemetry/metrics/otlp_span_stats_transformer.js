@@ -97,22 +97,23 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
       for (const aggStats of bucket.values()) {
         const baseAttributes = this.#buildAttributes(aggStats.aggKey)
+        const baseKey = stableStringify(baseAttributes)
 
         this.#addDistribution(
           distributions, aggStats.topLevelOkDistribution, startNano, endNano,
-          baseAttributes, true, STATUS_CODE_OK
+          baseAttributes, baseKey, true, STATUS_CODE_OK
         )
         this.#addDistribution(
           distributions, aggStats.topLevelErrorDistribution, startNano, endNano,
-          baseAttributes, true, STATUS_CODE_ERROR
+          baseAttributes, baseKey, true, STATUS_CODE_ERROR
         )
         this.#addDistribution(
           distributions, aggStats.nonTopLevelOkDistribution, startNano, endNano,
-          baseAttributes, false, STATUS_CODE_OK
+          baseAttributes, baseKey, false, STATUS_CODE_OK
         )
         this.#addDistribution(
           distributions, aggStats.nonTopLevelErrorDistribution, startNano, endNano,
-          baseAttributes, false, STATUS_CODE_ERROR
+          baseAttributes, baseKey, false, STATUS_CODE_ERROR
         )
       }
 
@@ -144,11 +145,12 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @param {string | number} startNano
    * @param {string | number} endNano
    * @param {import('@opentelemetry/api').Attributes} baseAttributes
+   * @param {string} baseKey
    * @param {boolean} topLevel
    * @param {string} statusCode
    * @returns {void}
    */
-  #addDistribution (distributions, sketch, startNano, endNano, baseAttributes, topLevel, statusCode) {
+  #addDistribution (distributions, sketch, startNano, endNano, baseAttributes, baseKey, topLevel, statusCode) {
     if (!sketch || sketch.count === 0) return
 
     const attributes = {
@@ -156,7 +158,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       'datadog.span.top_level': topLevel,
       'status.code': statusCode,
     }
-    const key = stableStringify(attributes)
+    const key = `${baseKey},${topLevel},${statusCode}`
     const existing = distributions.get(key)
     if (existing) {
       existing.sketch.merge(sketch)
