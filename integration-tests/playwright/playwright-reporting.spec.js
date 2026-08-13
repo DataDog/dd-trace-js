@@ -346,6 +346,35 @@ versions.forEach((version) => {
     })
 
     if (satisfies(version, '>=1.60.0') || version === 'latest') {
+      it('does not abort when console.error is immutable during reporter finalization', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              PLAYWRIGHT_THROWING_REPORTER: '1',
+              PLAYWRIGHT_REPORTER_IMMUTABLE_CONSOLE_ERROR: '1',
+              TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+            },
+          }
+        )
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.ok(events.find(event => event.type === 'test'))
+            const testSession = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSession, 'expected test_session_end event')
+            assert.strictEqual(testSession.content.meta[TEST_STATUS], 'pass')
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
+
       context('programmatic reruns', () => {
         it('restores console.error after every run with the same config', async (receiver, run) => {
           let testOutput = ''

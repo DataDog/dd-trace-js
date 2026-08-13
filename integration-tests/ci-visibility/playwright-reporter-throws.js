@@ -1,7 +1,21 @@
 'use strict'
 
 class ThrowingReporter {
+  onBegin () {
+    if (!process.env.PLAYWRIGHT_REPORTER_IMMUTABLE_CONSOLE_ERROR) return
+
+    this.consoleErrorDescriptor = Object.getOwnPropertyDescriptor(console, 'error')
+    Object.defineProperty(console, 'error', {
+      ...this.consoleErrorDescriptor,
+      writable: false,
+    })
+  }
+
   onEnd () {
+    if (process.env.PLAYWRIGHT_REPORTER_IMMUTABLE_CONSOLE_ERROR) {
+      Object.defineProperty(console, 'error', this.consoleErrorDescriptor)
+      return
+    }
     if (process.env.PLAYWRIGHT_REPORTER_THROWS_ON_EXIT) return
     if (process.env.PLAYWRIGHT_REPORTER_CUSTOM_STACK) {
       Error.prepareStackTrace = (error, callSites) => error.message === 'Playwright reporter error provenance'

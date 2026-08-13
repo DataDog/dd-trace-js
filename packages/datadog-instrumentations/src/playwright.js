@@ -1390,7 +1390,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       try {
         await getChannelPromise(testSessionFinishCh, {
           status: 'fail',
-          error,
+          error: hasReporterError ? reporterError : error,
           isEarlyFlakeDetectionEnabled,
           isEarlyFlakeDetectionFaulty,
           isTestManagementTestsEnabled,

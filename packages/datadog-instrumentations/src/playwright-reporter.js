@@ -21,7 +21,7 @@ function isPlaywrightReporterError (message) {
   try {
     Error.prepareStackTrace = (_, callSites) => callSites
     const stack = new Error('Playwright reporter error provenance').stack
-    return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(stack?.[2]?.toString() || '')
+    return PLAYWRIGHT_REPORTER_ERROR_CALLER_RE.test(`at ${stack?.[2]?.toString() || ''}`)
   } finally {
     Error.prepareStackTrace = originalPrepareStackTrace
   }
@@ -36,8 +36,10 @@ class DatadogPlaywrightReporter {
   static restoreConsoleError () {
     // eslint-disable-next-line no-console
     if (console.error === DatadogPlaywrightReporter.consoleError) {
-      // eslint-disable-next-line no-console
-      console.error = DatadogPlaywrightReporter.originalConsoleError
+      try {
+        // eslint-disable-next-line no-console
+        console.error = DatadogPlaywrightReporter.originalConsoleError
+      } catch {}
     }
     DatadogPlaywrightReporter.consoleError = undefined
     DatadogPlaywrightReporter.originalConsoleError = undefined
@@ -53,15 +55,25 @@ class DatadogPlaywrightReporter {
     // Playwright 1.60 and 1.61 only expose reporter errors through this exact console call.
     // eslint-disable-next-line no-console
     const originalConsoleError = console.error
-    DatadogPlaywrightReporter.originalConsoleError = originalConsoleError
     const reporter = this
-    // eslint-disable-next-line no-console
-    DatadogPlaywrightReporter.consoleError = console.error = function (message, error) {
+    const consoleError = function (message, error) {
       if (isPlaywrightReporterError(message)) {
         reporter.onError(error)
       }
       return originalConsoleError.apply(this, arguments)
     }
+    try {
+      // eslint-disable-next-line no-console
+      console.error = consoleError
+    } catch {
+      return
+    }
+    // An accessor may ignore the assignment without throwing.
+    // eslint-disable-next-line no-console
+    if (console.error !== consoleError) return
+
+    DatadogPlaywrightReporter.originalConsoleError = originalConsoleError
+    DatadogPlaywrightReporter.consoleError = consoleError
   }
 
   /**
