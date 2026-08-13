@@ -1638,7 +1638,7 @@ class CypressPlugin {
         if (error || latestError) {
           this.testSuiteSpan.setTag('error', error || latestError)
         }
-        const canRunAfterRun = !this.cypressConfig.isInteractive ||
+        const canRunAfterRun = this.cypressConfig.isTextTerminal ||
           this.cypressConfig.experimentalInteractiveRunEvents
         const exporter = this.tracer._tracer._exporter
         if (canRunAfterRun && exporter?.deferTestSuiteSpan) exporter.deferTestSuiteSpan(this.testSuiteSpan)

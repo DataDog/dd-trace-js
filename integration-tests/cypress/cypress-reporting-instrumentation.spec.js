@@ -2144,14 +2144,18 @@ if (requestedVersion === 'latest' &&
 
     for (const [description, cypressConfig, shouldDefer] of [
       ['does not retain completed suites without an after:run boundary', {
+        isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
       }, false],
       ['retains completed suites in terminal runs', {
-        isInteractive: false,
+        isTextTerminal: true,
+        // Cypress 12 can leave this true during `cypress run`.
+        isInteractive: true,
         experimentalInteractiveRunEvents: false,
       }, true],
       ['retains completed suites when interactive run events are enabled', {
+        isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: true,
       }, true],
