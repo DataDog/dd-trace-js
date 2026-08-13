@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -24,6 +24,24 @@ describe('SpanProcessor', () => {
   let config
   let SpanSampler
   let sample
+
+  function makeSpan (spanId, parentSpanId, service, duration) {
+    const tags = { 'service.name': service }
+    const context = {
+      _trace: trace,
+      _spanId: spanId,
+      _parentId: parentSpanId,
+      _sampling: {},
+      getTag: (key) => tags[key],
+      getTags: () => tags,
+      setTag: (key, value) => { tags[key] = value },
+    }
+    return {
+      _duration: duration,
+      tracer: sinon.stub().returns(tracer),
+      context: sinon.stub().returns(context),
+    }
+  }
 
   before(() => {
     require('../src/process-tags').initialize()
@@ -294,6 +312,89 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
+  })
+
+  it('should preserve service-entry top-level state across a partial flush', () => {
+    const rootId = {}
+    const sameServiceChildId = {}
+    const differentServiceChildId = {}
+    const remoteParentId = {}
+    const root = makeSpan(rootId, remoteParentId, 'web', 100)
+    const sameServiceChild = makeSpan(sameServiceChildId, rootId, 'web')
+    const differentServiceChild = makeSpan(differentServiceChildId, rootId, 'postgres')
+    spanFormat.callsFake(span => {
+      const context = span.context()
+      const topLevel = context.getTag(TOP_LEVEL_KEY)
+      return {
+        service: context.getTag('service.name'),
+        parent_id: context._parentId,
+        metrics: topLevel === undefined ? {} : { [TOP_LEVEL_KEY]: topLevel },
+      }
+    })
+    processor = new SpanProcessor(exporter, prioritySampler, config, {})
+    processor._stats = { onSpanFinished: sinon.stub() }
+    config.flushMinSpans = 1
+    trace.started = [root, sameServiceChild, differentServiceChild]
+    trace.finished = [root]
+
+    processor.process(root)
+
+    assert.deepStrictEqual(trace.started, [sameServiceChild, differentServiceChild])
+    assert.strictEqual(sameServiceChild.context().getTag(TOP_LEVEL_KEY), undefined)
+    assert.strictEqual(differentServiceChild.context().getTag(TOP_LEVEL_KEY), 1)
+
+    sameServiceChild._duration = 100
+    differentServiceChild._duration = 100
+    trace.finished = [sameServiceChild, differentServiceChild]
+    processor.process(differentServiceChild)
+
+    const sameServiceChildFormatted = spanFormat.getCall(1).returnValue
+    const differentServiceChildFormatted = spanFormat.getCall(2).returnValue
+    assert.ok(!Object.hasOwn(sameServiceChildFormatted.metrics, TOP_LEVEL_KEY))
+    assert.strictEqual(differentServiceChildFormatted.metrics[TOP_LEVEL_KEY], 1)
+  })
+
+  it('should mark a different-service child created after its parent is partially flushed', () => {
+    const rootId = {}
+    const activeId = {}
+    const childId = {}
+    const remoteParentId = {}
+    const root = makeSpan(rootId, remoteParentId, 'web', 100)
+    const active = makeSpan(activeId, rootId, 'web')
+    spanFormat.callsFake(span => {
+      const context = span.context()
+      const topLevel = context.getTag(TOP_LEVEL_KEY)
+      return { metrics: topLevel === undefined ? {} : { [TOP_LEVEL_KEY]: topLevel } }
+    })
+    processor = new SpanProcessor(exporter, prioritySampler, config, {})
+    processor._stats = { onSpanFinished: sinon.stub() }
+    config.flushMinSpans = 1
+    trace.started = [root, active]
+    trace.finished = [root]
+
+    processor.process(root)
+
+    const child = makeSpan(childId, rootId, 'postgres', 100)
+    trace.started.push(child)
+    trace.finished = [child]
+    processor.process(child)
+
+    assert.strictEqual(spanFormat.secondCall.returnValue.metrics[TOP_LEVEL_KEY], 1)
+  })
+
+  it('should mark a span with a remote parent as top level', () => {
+    const span = makeSpan({}, {}, 'web', 100)
+    spanFormat.callsFake(span => {
+      const context = span.context()
+      return { metrics: { [TOP_LEVEL_KEY]: context.getTag(TOP_LEVEL_KEY) } }
+    })
+    processor = new SpanProcessor(exporter, prioritySampler, config, {})
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    assert.strictEqual(spanFormat.firstCall.returnValue.metrics[TOP_LEVEL_KEY], 1)
   })
 
   describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
