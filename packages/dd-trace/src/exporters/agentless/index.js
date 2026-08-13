@@ -3,11 +3,19 @@
 const { URL } = require('node:url')
 const os = require('node:os')
 
+const { channel } = require('dc-polyfill')
+
 const log = require('../../log')
 const { entityId } = require('../common/docker')
 const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one AgentlessExporter is ever live in a real process, so replacing the subscription on
+// construction is safe - it just keeps tests (which build several) from piling up listeners.
+let unsubscribeBatchReset = null
 
 /**
  * Agentless exporter for APM trace intake.
@@ -55,6 +63,12 @@ class AgentlessExporter {
       site,
       metadata,
     })
+
+    // A clone resume shouldn't flush spans buffered before the snapshot under its own identity.
+    unsubscribeBatchReset?.()
+    const onIdentityRefresh = () => this._writer.resetPendingBatch()
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeBatchReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
     if (ddTrace?.beforeExitHandlers) {

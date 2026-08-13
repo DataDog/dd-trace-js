@@ -73,4 +73,10 @@ describe('common Writer', () => {
     sinon.assert.notCalled(encoder.reset)
     sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, done)
   })
+
+  it('resetPendingBatch discards the pending encoded batch', () => {
+    writer.resetPendingBatch()
+
+    sinon.assert.calledOnce(encoder.reset)
+  })
 })
