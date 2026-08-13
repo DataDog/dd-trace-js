@@ -1,13 +1,13 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+
+const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
-
-const { DatadogNodeServerProvider } = require('./require-provider')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -19,9 +19,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
-
-  /** @type {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} */
-  #ffeConfig
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
@@ -52,112 +49,19 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   }
 
   /**
-   * Stores the current configuration and updates the base provider.
-   *
-   * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1 | undefined} configuration
-   * @returns {void}
+   * @param {import('@openfeature/core').EvaluationContext} [context]
+   * @returns {Promise<void>}
    */
-  setConfiguration (configuration) {
-    this.#ffeConfig = configuration
-    super.setConfiguration(configuration)
-  }
+  initialize (context) {
+    const promise = super.initialize(context)
 
-  /**
-   * Resolves a boolean flag and normalizes its canonical result.
-   *
-   * @param {string} flagKey
-   * @param {boolean} defaultValue
-   * @param {import('@openfeature/server-sdk').EvaluationContext} context
-   * @param {import('@openfeature/server-sdk').Logger} logger
-   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<boolean>>}
-   */
-  resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
-    return super.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
-  }
+    // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
+    // otherwise keep an idle process (a short script, a serverless handler) alive for up to
+    // `initializationTimeoutMs` while waiting for configuration to arrive.
+    // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
+    this.initController?.timeoutId?.unref?.()
 
-  /**
-   * Resolves a string flag and normalizes its canonical result.
-   *
-   * @param {string} flagKey
-   * @param {string} defaultValue
-   * @param {import('@openfeature/server-sdk').EvaluationContext} context
-   * @param {import('@openfeature/server-sdk').Logger} logger
-   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<string>>}
-   */
-  resolveStringEvaluation (flagKey, defaultValue, context, logger) {
-    return super.resolveStringEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
-  }
-
-  /**
-   * Resolves a number flag and normalizes its canonical result.
-   *
-   * @param {string} flagKey
-   * @param {number} defaultValue
-   * @param {import('@openfeature/server-sdk').EvaluationContext} context
-   * @param {import('@openfeature/server-sdk').Logger} logger
-   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<number>>}
-   */
-  resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
-    return super.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
-  }
-
-  /**
-   * Resolves an object flag and normalizes its canonical result.
-   *
-   * @template {import('@openfeature/server-sdk').JsonValue} T
-   * @param {string} flagKey
-   * @param {T} defaultValue
-   * @param {import('@openfeature/server-sdk').EvaluationContext} context
-   * @param {import('@openfeature/server-sdk').Logger} logger
-   * @returns {Promise<import('@openfeature/server-sdk').ResolutionDetails<T>>}
-   */
-  resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
-    return super.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
-      .then(result => this.#normalizeResolution(flagKey, result))
-  }
-
-  /**
-   * Converts provider results to the canonical FFE reason contract.
-   *
-   * @template {import('@openfeature/server-sdk').FlagValue} T
-   * @param {string} flagKey
-   * @param {import('@openfeature/server-sdk').ResolutionDetails<T>} result
-   * @returns {import('@openfeature/server-sdk').ResolutionDetails<T>}
-   */
-  #normalizeResolution (flagKey, result) {
-    if (result?.reason !== 'TARGETING_MATCH' && result?.reason !== 'DEFAULT') {
-      return result
-    }
-
-    const allocations = this.#ffeConfig?.flags?.[flagKey]?.allocations
-    if (!Array.isArray(allocations)) {
-      return result
-    }
-
-    const allocation = allocations.find(item => item.key === result.flagMetadata?.allocationKey)
-    if (!allocation || allocation.rules?.length || !Array.isArray(allocation.splits)) {
-      return result
-    }
-
-    const flag = this.#ffeConfig.flags[flagKey]
-    const selectedSplit = allocation.splits.find(split => {
-      const variant = flag.variations?.[split.variationKey]
-      return variant?.key === result.variant || split.variationKey === result.variant
-    })
-    if (!selectedSplit) {
-      return result
-    }
-
-    const hasTimeBounds = allocation.startAt !== undefined || allocation.endAt !== undefined
-    if (hasTimeBounds && allocation.splits.length === 1 && !selectedSplit.shards?.length) {
-      return { ...result, reason: 'DEFAULT' }
-    }
-
-    const reason = selectedSplit?.shards?.length ? 'SPLIT' : 'STATIC'
-    return { ...result, reason }
+    return promise
   }
 
   /**

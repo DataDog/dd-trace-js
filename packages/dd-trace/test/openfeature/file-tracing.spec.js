@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { mkdirSync, mkdtempSync, rmSync, symlinkSync } = require('node:fs')
-const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const { describe, it } = require('mocha')
@@ -11,10 +9,8 @@ const { describe, it } = require('mocha')
 const { NODE_MAJOR } = require('../../../../version')
 
 const repoRoot = path.resolve(__dirname, '../../../..')
-const expectedPackageFiles = [
-  'node_modules/@datadog/openfeature-node-server/package.json',
-  'node_modules/@datadog/flagging-core/package.json',
-  'node_modules/spark-md5/package.json',
+const expectedTracedFiles = [
+  'vendor/dist/@datadog/openfeature-node-server/index.js',
 ]
 
 if (NODE_MAJOR < 20) {
@@ -25,52 +21,86 @@ if (NODE_MAJOR < 20) {
 // eslint-disable-next-line import/order
 const { nodeFileTrace } = require('@vercel/nft')
 
-/**
- * @param {string} entrypoint
- */
-async function assertTracesProvider (entrypoint) {
-  const { fileList } = await nodeFileTrace([entrypoint], { base: repoRoot })
-
-  for (const expectedPackageFile of expectedPackageFiles) {
-    assert.ok(fileList.has(expectedPackageFile), `Expected trace to include ${expectedPackageFile}`)
-  }
-}
-
 describe('OpenFeature file tracing', () => {
-  it('traces the provider dependency tree through the runtime wrapper', async () => {
-    await assertTracesProvider(path.join(repoRoot, 'packages/dd-trace/src/openfeature/flagging_provider.js'))
+  it('traces the provider dependency tree through tracer.openfeature', async function () {
+    this.timeout(30000)
+    const entrypoint = path.join(repoRoot, 'packages/dd-trace/src/proxy.js')
+    const { fileList } = await nodeFileTrace([entrypoint], { base: repoRoot })
+
+    for (const expectedTracedFile of expectedTracedFiles) {
+      assert.ok(fileList.has(expectedTracedFile), `Expected trace to include ${expectedTracedFile}`)
+    }
   })
 
-  it('traces the provider dependency tree through the explicit entrypoint', async () => {
-    await assertTracesProvider(path.join(repoRoot, 'openfeature.js'))
+  it('loads the provider through tracer.openfeature', () => {
+    const tracerPath = JSON.stringify(path.join(repoRoot, 'packages/dd-trace'))
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--eval',
+        `const tracer = require(${tracerPath}); tracer.init({ plugins: false }); ` +
+        "require('@openfeature/server-sdk'); if (!tracer.openfeature) throw new Error('no provider')",
+      ],
+      { encoding: 'utf8' }
+    )
+
+    assert.strictEqual(result.status, 0, result.stderr)
   })
 
-  it('loads the provider through the explicit entrypoint', () => {
-    require(path.join(repoRoot, 'openfeature.js'))
+  it('does not throw when accessed and registered before `@openfeature/server-sdk` is loaded', () => {
+    const tracerPath = JSON.stringify(path.join(repoRoot, 'packages/dd-trace'))
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--eval',
+        `const tracer = require(${tracerPath}); tracer.init({ plugins: false }); ` +
+        'const provider = tracer.openfeature; ' +
+        "const { OpenFeature } = require('@openfeature/server-sdk'); " +
+        'OpenFeature.setProvider(provider)',
+      ],
+      { encoding: 'utf8' }
+    )
+
+    assert.strictEqual(result.status, 0, result.stderr)
   })
 
-  it('loads the explicit entrypoint as a CommonJS and ESM package subpath', () => {
-    const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'dd-trace-openfeature-'))
-    const nodeModulesPath = path.join(fixtureRoot, 'node_modules')
+  it('does not load active OpenFeature modules before application access', () => {
+    const packagePath = path.join(repoRoot, 'packages/dd-trace')
+    const script = `
+      const tracer = require(${JSON.stringify(packagePath)})
+      tracer.init()
+      const modules = [
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/exporters/common/client-library-headers'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/index'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/exposures'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flagging_provider'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/configuration_source'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/agentless_configuration_source'))}),
+        require.resolve(${JSON.stringify(path.join(repoRoot, 'vendor/dist/@datadog/openfeature-node-server'))}),
+        require.resolve('@openfeature/server-sdk'),
+        require.resolve('@openfeature/core')
+      ]
+      process.stdout.write(JSON.stringify(modules.map(module => require.cache[module] !== undefined)))
+    `
+    for (const featureFlagsEnabled of ['false', 'true']) {
+      for (const remoteConfigurationEnabled of ['false', 'true']) {
+        for (const tracingEnabled of ['false', 'true']) {
+          const result = spawnSync(process.execPath, ['-e', script], {
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              DD_FEATURE_FLAGS_ENABLED: featureFlagsEnabled,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_REMOTE_CONFIGURATION_ENABLED: remoteConfigurationEnabled,
+              DD_TRACE_ENABLED: tracingEnabled,
+              DD_TRACE_STARTUP_LOGS: 'false',
+            },
+          })
 
-    try {
-      mkdirSync(nodeModulesPath)
-      symlinkSync(repoRoot, path.join(nodeModulesPath, 'dd-trace'), 'junction')
-      const commonJsResult = spawnSync(
-        process.execPath,
-        ['--eval', "require('dd-trace/openfeature')"],
-        { cwd: fixtureRoot, encoding: 'utf8' }
-      )
-      assert.strictEqual(commonJsResult.status, 0, commonJsResult.stderr)
-
-      const esmResult = spawnSync(
-        process.execPath,
-        ['--input-type=module', '--eval', "import 'dd-trace/openfeature.js'"],
-        { cwd: fixtureRoot, encoding: 'utf8' }
-      )
-      assert.strictEqual(esmResult.status, 0, esmResult.stderr)
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true })
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), Array(9).fill(false))
+        }
+      }
     }
   })
 })
