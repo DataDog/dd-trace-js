@@ -2,16 +2,21 @@
 
 const { randomUUID } = require('node:crypto')
 
-// Dataset record: { input, expectedOutput?, metadata?, id }.
+/** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
+
+const { tagOperationsAreEmpty, validateTagsList } = require('./util')
+
+// Dataset record: { input, expectedOutput?, metadata?, id, tags? }.
 // IDs are generated locally unless the caller supplies one.
 class DatasetRecord {
-  constructor (input, expectedOutput = null, metadata = {}, id = null) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null, tags = []) {
     if (id != null && (typeof id !== 'string' || id.length === 0)) {
       throw new Error('record id must be a non-empty string')
     }
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
+    this.tags = validateTagsList(tags)
     this.id = id ?? randomUUID()
   }
 }
@@ -21,22 +26,61 @@ function versionFromMutationResult (result) {
 }
 
 function serializedRecord (record) {
-  return {
+  const output = {
     id: record.id,
     input: record.input,
     expected_output: record.expectedOutput ?? null,
     metadata: record.metadata ?? {},
   }
+  if (record.tags.length > 0) output.tags = record.tags
+  return output
 }
 
 function serializedRecordUpdate (update) {
   const output = { id: update.id }
   if (Object.hasOwn(update, 'input') && update.input !== undefined) output.input = update.input
-  if (Object.hasOwn(update, 'expectedOutput') && update.expectedOutput !== undefined) {
-    output.expected_output = update.expectedOutput
-  }
   if (Object.hasOwn(update, 'metadata') && update.metadata !== undefined) output.metadata = update.metadata
+  if (Object.hasOwn(update, 'tagOperations')) {
+    output.tag_operations = serializedTagOperations(update.tagOperations)
+  }
   return output
+}
+
+function serializedTagOperations (operations) {
+  const output = {}
+  if (Object.hasOwn(operations, 'add')) output.add = operations.add
+  if (Object.hasOwn(operations, 'remove')) output.remove = operations.remove
+  if (Object.hasOwn(operations, 'replace')) output.set = operations.replace
+  return output
+}
+
+function mergeTagOperations (operations, operation, tags) {
+  if (operation === 'replace') return { replace: [...tags] }
+  if (Object.hasOwn(operations, 'replace')) {
+    const replaced = new Set(operations.replace)
+    for (const tag of tags) {
+      if (operation === 'add') replaced.add(tag)
+      else replaced.delete(tag)
+    }
+    return { replace: [...replaced].sort() }
+  }
+
+  const add = new Set(operations.add)
+  const remove = new Set(operations.remove)
+  for (const tag of tags) {
+    if (operation === 'add') {
+      if (remove.has(tag)) remove.delete(tag)
+      else add.add(tag)
+    } else if (add.has(tag)) {
+      add.delete(tag)
+    } else {
+      remove.add(tag)
+    }
+  }
+  const merged = {}
+  if (add.size > 0) merged.add = [...add].sort()
+  if (remove.size > 0) merged.remove = [...remove].sort()
+  return merged
 }
 
 function valuesAreEqual (left, right) {
@@ -63,21 +107,25 @@ class Dataset {
   #newRecordsById
   #updatedRecordsById
   #deletedRecordIds
+  #pendingTagOperations
   #id
   #projectId
   #version
   #latestVersion
   #pushPromise
+  #filterTags
 
-  constructor (client, name, description = '') {
+  constructor (client, name, description = '', filterTags = []) {
     this.#client = client
     this.#name = name
     this.#description = description
+    this.#filterTags = validateTagsList(filterTags)
     this.#records = []
     this.#recordsById = new Map()
     this.#newRecordsById = new Map()
     this.#updatedRecordsById = new Map()
     this.#deletedRecordIds = new Set()
+    this.#pendingTagOperations = new Map()
     this.#id = null
     this.#projectId = null
     this.#version = null
@@ -86,8 +134,8 @@ class Dataset {
   }
 
   // Build a Dataset that already exists remotely (used by pullDataset).
-  static fromExisting (client, name, description, id, projectId, records, version, latestVersion) {
-    const dataset = new Dataset(client, name, description)
+  static fromExisting (client, name, description, id, projectId, records, version, latestVersion, filterTags) {
+    const dataset = new Dataset(client, name, description, filterTags)
     dataset.#id = id
     dataset.#projectId = projectId
     dataset.#version = version ?? null
@@ -97,11 +145,67 @@ class Dataset {
   }
 
   // Append a record. Accepts a DatasetRecord or (input, expectedOutput?, metadata?).
-  addRecord (recordOrInput, expectedOutput, metadata) {
+  addRecord (recordOrInput, expectedOutput, metadata, tags) {
     const record = recordOrInput instanceof DatasetRecord
       ? recordOrInput
-      : new DatasetRecord(recordOrInput, expectedOutput, metadata)
+      : new DatasetRecord(recordOrInput, expectedOutput, metadata, null, tags)
     this.#addRecord(record)
+    return this
+  }
+
+  /**
+   * Add tags to a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {Dataset} This dataset for chaining.
+   */
+  addTags (index, tags) {
+    const validated = validateTagsList(tags)
+    const record = this.#recordAt(index)
+    const next = new Set(record.tags)
+    const added = []
+    for (const tag of validated) {
+      if (next.has(tag)) continue
+      next.add(tag)
+      added.push(tag)
+    }
+    record.tags = [...next].sort()
+    this.#queueTagOperation(record.id, 'add', added)
+    return this
+  }
+
+  /**
+   * Remove tags from a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {Dataset} This dataset for chaining.
+   */
+  removeTags (index, tags) {
+    const validated = validateTagsList(tags)
+    const record = this.#recordAt(index)
+    const next = new Set(record.tags)
+    const removed = []
+    for (const tag of validated) {
+      if (!next.has(tag)) continue
+      next.delete(tag)
+      removed.push(tag)
+    }
+    record.tags = [...next].sort()
+    this.#queueTagOperation(record.id, 'remove', removed)
+    return this
+  }
+
+  /**
+   * Replace all tags on a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {Dataset} This dataset for chaining.
+   */
+  replaceTags (index, tags) {
+    const validated = validateTagsList(tags)
+    const record = this.#recordAt(index)
+    record.tags = validated
+    this.#queueTagOperation(record.id, 'replace', validated)
     return this
   }
 
@@ -129,7 +233,9 @@ class Dataset {
     if (this.#newRecordsById.has(record.id)) return this
 
     const update = this.#updatedRecordsById.get(record.id) ?? { id: record.id }
-    for (const field of providedFields) update[field] = record[field]
+    if (this.#pendingTagOperations.has(record.id)) {
+      update.tagOperations = this.#pendingTagOperations.get(record.id)
+    }
     this.#updatedRecordsById.set(record.id, update)
     return this
   }
@@ -147,8 +253,29 @@ class Dataset {
     if (this.#newRecordsById.delete(record.id)) return this
 
     this.#updatedRecordsById.delete(record.id)
+    this.#pendingTagOperations.delete(record.id)
     this.#deletedRecordIds.add(record.id)
     return this
+  }
+
+  #queueTagOperation (recordId, operation, tags) {
+    if (operation !== 'replace' && tags.length === 0) return
+    const operations = mergeTagOperations(this.#pendingTagOperations.get(recordId) ?? {}, operation, tags)
+    if (tagOperationsAreEmpty(operations)) {
+      this.#pendingTagOperations.delete(recordId)
+      const update = this.#updatedRecordsById.get(recordId)
+      if (update) {
+        delete update.tagOperations
+        if (Object.keys(update).length === 1) this.#updatedRecordsById.delete(recordId)
+      }
+      return
+    }
+    this.#pendingTagOperations.set(recordId, operations)
+    if (!this.#newRecordsById.has(recordId)) {
+      const update = this.#updatedRecordsById.get(recordId) ?? { id: recordId }
+      update.tagOperations = operations
+      this.#updatedRecordsById.set(recordId, update)
+    }
   }
 
   name () {
@@ -181,6 +308,10 @@ class Dataset {
 
   latestVersion () {
     return this.#latestVersion
+  }
+
+  filterTags () {
+    return [...this.#filterTags]
   }
 
   // Dashboard URL for this dataset, or null until pushed/pulled.
@@ -252,6 +383,9 @@ class Dataset {
     const updateRecords = []
     const updatePayloads = new Map()
     for (const [recordId, update] of this.#updatedRecordsById) {
+      const tagOperations = this.#pendingTagOperations.get(recordId)
+      if (tagOperations) update.tagOperations = tagOperations
+      else delete update.tagOperations
       const payload = serializedRecordUpdate(update)
       updateRecords.push(payload)
       updatePayloads.set(recordId, payload)
@@ -286,6 +420,7 @@ class Dataset {
       }
       if (valuesAreEqual(serializedRecord(current), payload)) {
         this.#newRecordsById.delete(recordId)
+        this.#pendingTagOperations.delete(recordId)
         continue
       }
 
@@ -299,6 +434,7 @@ class Dataset {
       const current = this.#updatedRecordsById.get(recordId)
       if (current && valuesAreEqual(serializedRecordUpdate(current), payload)) {
         this.#updatedRecordsById.delete(recordId)
+        this.#pendingTagOperations.delete(recordId)
       }
     }
 

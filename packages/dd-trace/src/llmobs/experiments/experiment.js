@@ -11,13 +11,14 @@ const {
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   sleep,
   stringify,
   validateEvaluatorName,
 } = require('./util')
 
 // One span per experiment row (LLM Obs experiment span wire format).
-function toSpan (row, metadata, ids, spanName, userTags) {
+function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   const meta = {
     input: row.input ?? null,
     output: row.output ?? null,
@@ -41,6 +42,7 @@ function toSpan (row, metadata, ids, spanName, userTags) {
     status: row.isError ? 'error' : 'ok',
     meta,
     tags: buildTags(userTags, {
+      ...recordTagsToObject(recordTags),
       experiment_id: ids.experimentId,
       run_id: ids.runId,
       run_iteration: ids.runIteration,
@@ -119,6 +121,8 @@ class Experiment {
     this.#evaluators = normalizeEvaluators(options.evaluators, 'row')
     this.#summaryEvaluators = normalizeEvaluators(options.summaryEvaluators, 'summary')
     this.#config = { ...options.config }
+    const filterTags = this.#dataset.filterTags()
+    if (filterTags.length > 0) this.#config.filtered_record_tags = filterTags
     this.#tags = { ...options.tags }
     this.#experimentId = null
   }
@@ -248,7 +252,7 @@ class Experiment {
             datasetRecordId,
             runId,
             runIteration,
-          }, this.#task.name || this.#name, this.#tags))
+          }, this.#task.name || this.#name, this.#tags, record.tags))
         }
       }
 
@@ -313,7 +317,7 @@ class Experiment {
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    const tags = buildExperimentTagObject(this.#tags, autoTags)
+    const tags = buildExperimentTagObject(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
       () => this.#task(record.input, this.#config, record.metadata),

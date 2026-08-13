@@ -22,6 +22,26 @@ function hasEntries (value) {
   return false
 }
 
+function validateTagsList (tags) {
+  if (tags == null) return []
+  if (!Array.isArray(tags)) throw new TypeError('Tags must be an array of strings')
+  for (const tag of tags) {
+    if (typeof tag !== 'string') throw new TypeError('Each tag must be a string')
+    if (!tag.includes(':')) {
+      throw new Error(`Tag '${tag}' is malformed. Tags must be in 'key:value' format (e.g., 'env:prod').`)
+    }
+  }
+  return [...tags]
+}
+
+function tagOperationsAreEmpty (operations) {
+  return operations == null || (
+    !Object.hasOwn(operations, 'replace') &&
+    !Object.hasOwn(operations, 'add') &&
+    !Object.hasOwn(operations, 'remove')
+  )
+}
+
 /**
  * @param {string} name
  */
@@ -187,6 +207,20 @@ function buildExperimentTagObject (userTags, autoTags) {
 }
 
 /**
+ * @param {string[] | undefined} tags
+ * @returns {Record<string, string>}
+ */
+function recordTagsToObject (tags) {
+  const result = {}
+  if (!Array.isArray(tags)) return result
+  for (const tag of tags) {
+    const separator = tag.indexOf(':')
+    if (separator > 0) result[tag.slice(0, separator)] = tag.slice(separator + 1)
+  }
+  return result
+}
+
+/**
  * @param {number} ms
  * @returns {Promise<void>}
  */
@@ -214,7 +248,10 @@ module.exports = {
   inferMetricType,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   sleep,
   stringify,
+  tagOperationsAreEmpty,
   validateEvaluatorName,
+  validateTagsList,
 }
