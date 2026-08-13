@@ -37,7 +37,7 @@ describe('metrics', () => {
     })
 
     it('should defer loading sketch encoder until a distribution is used', () => {
-      const Sketch = sinon.stub()
+      const Sketch = sinon.stub().returns({ accept: sinon.stub() })
       const loadSketchConstructor = sinon.stub().returns(Sketch)
       const sketchModule = {
         '@noCallThru': true,
@@ -60,10 +60,13 @@ describe('metrics', () => {
       sinon.assert.notCalled(loadSketchConstructor)
 
       localMetrics.manager.namespace('test').distribution('duration')
+      sinon.assert.notCalled(loadSketchConstructor)
+
+      localMetrics.manager.namespace('test').distribution('duration').track(42)
       sinon.assert.calledOnce(loadSketchConstructor)
       sinon.assert.calledOnce(Sketch)
 
-      localMetrics.manager.namespace('test').distribution('other.duration')
+      localMetrics.manager.namespace('test').distribution('other.duration').track(1)
       sinon.assert.calledOnce(loadSketchConstructor)
       sinon.assert.calledTwice(Sketch)
     })
@@ -524,10 +527,10 @@ describe('metrics', () => {
 
       assert.strictEqual(metric.pointCount, 0)
       assert.strictEqual(metric.hasPoints(), false)
-      assert.strictEqual(metric.sketch.count, 0)
+      assert.strictEqual(metric.sketch, undefined)
     })
 
-    it('should reset state', () => {
+    it('should reset state without rebuilding the sketch', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name')
 
@@ -536,7 +539,22 @@ describe('metrics', () => {
 
       assert.strictEqual(metric.pointCount, 0)
       assert.strictEqual(metric.hasPoints(), false)
-      assert.strictEqual(metric.sketch.count, 0)
+      assert.strictEqual(metric.sketch, undefined)
+    })
+
+    it('should recreate the sketch lazily after reset', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track(1)
+      const sketch = metric.sketch
+      metric.reset()
+      metric.track(2)
+
+      assert.notStrictEqual(metric.sketch, sketch)
+      assert.strictEqual(metric.sketch.count, 1)
+      assert.strictEqual(metric.pointCount, 1)
+      assert.strictEqual(metric.hasPoints(), true)
     })
 
     it('should convert to json', () => {

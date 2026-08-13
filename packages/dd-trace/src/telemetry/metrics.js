@@ -117,7 +117,7 @@ class DistributionMetric extends Metric {
   constructor (namespace, metric, common, tags) {
     super(namespace, metric, common, tags)
 
-    this.sketch = createSketch()
+    this.sketch = undefined
     this.pointCount = 0
   }
 
@@ -130,7 +130,7 @@ class DistributionMetric extends Metric {
    */
   reset () {
     super.reset()
-    this.sketch = createSketch()
+    this.sketch = undefined
     this.pointCount = 0
   }
 
@@ -147,6 +147,10 @@ class DistributionMetric extends Metric {
    */
   track (value = 1) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return
+
+    if (this.sketch === undefined) {
+      this.sketch = createSketch()
+    }
 
     this.sketch.accept(value)
     this.pointCount++
