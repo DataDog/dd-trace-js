@@ -162,6 +162,47 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.calledOnce(done)
     })
 
+    it('drains queued batches and waits for earlier size-triggered exports', () => {
+      const batches = []
+      const callbacks = []
+      const flushCallbacks = []
+      let activeExports = 0
+      const completeFlushes = () => {
+        if (activeExports !== 0) return
+        while (flushCallbacks.length > 0) flushCallbacks.shift()()
+      }
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => {
+          batches.push(records)
+          activeExports++
+          callbacks.push(() => {
+            activeExports--
+            done({ code: 0 })
+            completeFlushes()
+          })
+        },
+        flush: (done) => {
+          if (activeExports === 0) done()
+          else flushCallbacks.push(done)
+        },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      for (let index = 0; index < 5; index++) {
+        processor.onEmit({ body: index }, { name: 'test' })
+      }
+      processor.forceFlush(done)
+
+      assert.deepStrictEqual(batches.map(batch => batch.map(record => record.body)), [
+        [0, 1], [2, 3], [4],
+      ])
+      callbacks.shift()()
+      callbacks.shift()()
+      callbacks.shift()()
+
+      sinon.assert.calledOnce(done)
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]

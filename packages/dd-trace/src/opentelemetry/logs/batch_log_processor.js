@@ -60,12 +60,15 @@ class BatchLogRecordProcessor {
     this.#clearTimer()
     const flushNext = () => {
       if (this.#logRecords.length === 0) {
-        // A size-triggered batch can still be in flight after it leaves this queue.
+        // The queue is empty after a size/timer batch is handed to the exporter, but
+        // its HTTP request can still be in flight. Join it before lifecycle completion.
         if (typeof this.exporter.flush === 'function') this.exporter.flush(done)
         else done?.()
         return
       }
 
+      // Drain queued records one batch at a time; the final exporter flush joins
+      // earlier size-triggered batches that are still in flight.
       const logRecords = this.#logRecords.splice(0, this.#maxExportBatchSize)
       this.exporter.export(logRecords, flushNext)
     }
