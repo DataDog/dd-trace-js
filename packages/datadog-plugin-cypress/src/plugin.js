@@ -9,6 +9,7 @@ const { manualPluginOwner } = require('./finalization')
 const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
 const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
 const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
+const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -23,6 +24,7 @@ const noopTask = {
   'dd:addTags': () => {
     return null
   },
+  [DD_CYPRESS_NOOP_TASK_HANDLER]: true,
 }
 
 module.exports = function CypressPlugin (on, config) {

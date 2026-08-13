@@ -18,6 +18,7 @@ const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
 const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
 const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
 const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
+const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
@@ -223,6 +224,14 @@ function supportsErrorAwareFinalization (manualPlugin) {
  */
 function isCurrentDatadogTaskRegistration (handler) {
   return !!handler && handler[DD_CYPRESS_TASK_HANDLER] === manualPluginOwner
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ * @returns {boolean} whether the manual plugin registered only fallback tasks
+ */
+function isDatadogNoopTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_NOOP_TASK_HANDLER] === true
 }
 
 /**
@@ -534,7 +543,8 @@ function registerDdTraceHooks (
   }
 
   if (manualPlugin.detected &&
-    (manualPlugin.ownsCurrentPlugin ||
+    (manualPlugin.isNoop ||
+      manualPlugin.ownsCurrentPlugin ||
       supportsErrorAwareFinalization(manualPlugin) ||
       !setupNodeEventsCh.hasSubscribers)) {
     for (const handler of userBeforeRunHandlers) on('before:run', handler)
@@ -603,6 +613,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       afterScreenshotHandler: undefined,
       taskHandler: undefined,
       ownsCurrentPlugin: false,
+      isNoop: false,
     }
     const recentRegistrations = []
 
@@ -621,12 +632,14 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
           manualPlugin.ownsCurrentPlugin = isCurrentDatadogTaskRegistration(handler)
+          manualPlugin.isNoop = isDatadogNoopTaskRegistration(handler)
           const afterRun = recentRegistrations.at(-1)
           const afterSpec = recentRegistrations.at(-2)
           const possibleAfterScreenshot = recentRegistrations.at(-3)
           const hasAfterScreenshot = possibleAfterScreenshot?.event === 'after:screenshot'
           const beforeRun = hasAfterScreenshot ? recentRegistrations.at(-4) : possibleAfterScreenshot
-          if (beforeRun?.event === 'before:run' &&
+          if (!manualPlugin.isNoop &&
+            beforeRun?.event === 'before:run' &&
             afterSpec?.event === 'after:spec' &&
             afterRun?.event === 'after:run') {
             manualPlugin.beforeRunHandler ||= beforeRun.handler

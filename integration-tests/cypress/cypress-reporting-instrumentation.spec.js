@@ -2657,6 +2657,7 @@ if (requestedVersion === 'latest' &&
 
       it('preserves user handlers when a no-op manual plugin only registers tasks', async () => {
         const projectRoot = createProjectRoot()
+        const userBeforeRunHandler = sinon.stub()
         const userAfterSpecHandler = sinon.stub()
         const userAfterRunHandler = sinon.stub()
         const userAfterScreenshotHandler = sinon.stub().returns({ path: 'renamed.png' })
@@ -2665,6 +2666,7 @@ if (requestedVersion === 'latest' &&
           'dd:beforeEach': sinon.stub(),
           'dd:afterEach': sinon.stub(),
           'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.noop-task.handler')]: true,
         }
         const setupNodeEventsChannel = {
           hasSubscribers: true,
@@ -2677,9 +2679,10 @@ if (requestedVersion === 'latest' &&
              * @returns {void}
              */
             setupNodeEvents (on) {
+              on('after:screenshot', userAfterScreenshotHandler)
+              on('before:run', userBeforeRunHandler)
               on('after:spec', userAfterSpecHandler)
               on('after:run', userAfterRunHandler)
-              on('after:screenshot', userAfterScreenshotHandler)
               on('task', noopTaskHandler)
             },
           },
@@ -2696,14 +2699,16 @@ if (requestedVersion === 'latest' &&
           handlers[event] = handler
         }, { projectRoot, supportFile: false, isInteractive: false })
 
+        await handlers['before:run']({})
         await handlers['after:spec'](spec, results)
         assert.deepStrictEqual(await handlers['after:screenshot'](screenshot), { path: 'renamed.png' })
         await handlers['after:run']({ totalPassed: 1 })
 
+        sinon.assert.calledOnce(userBeforeRunHandler)
         sinon.assert.calledOnceWithExactly(userAfterSpecHandler, spec, results)
         sinon.assert.calledOnceWithExactly(userAfterScreenshotHandler, screenshot)
         sinon.assert.calledOnce(userAfterRunHandler)
-        sinon.assert.calledOnce(setupNodeEventsChannel.publish)
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
       })
 
       for (const event of ['after:run', 'after:spec']) {
