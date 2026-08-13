@@ -3,6 +3,10 @@
 const log = require('../../log')
 const { ExternalExperiment } = require('./experiment')
 
+const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
+const NOOP_SPAN_ID = '0000000000000000'
+const NOOP_TRACE_ID = '00000000000000000000000000000000'
+
 class NoopDataset {
   #name
   #description
@@ -89,10 +93,15 @@ class NoopExperiment {
   }
 
   /**
-   * @returns {Promise<{experimentId: null, spanId: null, traceId: null, url: null}>}
+   * @returns {Promise<{experimentId: string, spanId: string, traceId: string, url: null}>}
    */
   submitSpan () {
-    return Promise.resolve({ experimentId: null, spanId: null, traceId: null, url: null })
+    return Promise.resolve({
+      experimentId: NOOP_EXPERIMENT_ID,
+      spanId: NOOP_SPAN_ID,
+      traceId: NOOP_TRACE_ID,
+      url: null,
+    })
   }
 
   /**

@@ -4102,9 +4102,9 @@ declare namespace tracer {
     }
 
     interface ExternalExperimentSpan {
-      experimentId: string | null
-      spanId: string | null
-      traceId: string | null
+      experimentId: string
+      spanId: string
+      traceId: string
       url: string | null
     }
 
@@ -4128,7 +4128,7 @@ declare namespace tracer {
       url (): string | null
       submitSpan (input?: ExternalExperimentSpanInput): Promise<ExternalExperimentSpan>
       submitEvaluationMetrics (
-        span: { experimentId?: string | null, spanId: string | null, traceId: string | null },
+        span: { experimentId?: string, spanId: string, traceId: string },
         metrics: ExternalExperimentMetric[]
       ): Promise<void>
       close (options?: ExternalExperimentCloseOptions): Promise<void>
