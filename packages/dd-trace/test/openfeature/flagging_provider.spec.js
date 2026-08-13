@@ -240,15 +240,25 @@ describe('FlaggingProvider', () => {
 
   describe('targeting regex conformance', () => {
     const fixtureFile = path.join(fixtureRoot, 'regex-conformance', 'targeting-regex-conformance.json')
-    const regexCases = JSON.parse(fs.readFileSync(fixtureFile, 'utf8')).cases
-      // The production evaluator uses native ECMAScript RegExp, not RE2JS.
-      // Until the fixture records ECMAScript observations, test only common expectations.
-      .filter(regexCase => typeof regexCase.expectedCompile === 'boolean')
+    const fixture = JSON.parse(fs.readFileSync(fixtureFile, 'utf8'))
+    const regexCases = fixture.cases
 
-    assert.strictEqual(regexCases.length, 67)
+    assert.strictEqual(fixture.schema, 'datadog.ffe.targeting-regex-conformance/v1')
+    assert.strictEqual(fixture.schemaVersion, 1)
+    assert.strictEqual(fixture.contractVersion, 'targeting-regex-v1')
+    assert.strictEqual(regexCases.length, 75)
+    assert.strictEqual(new Set(regexCases.map(regexCase => regexCase.id)).size, 75)
+    assert.strictEqual(
+      regexCases.filter(regexCase => typeof regexCase.expectedCompile === 'boolean').length,
+      66
+    )
 
     for (const regexCase of regexCases) {
-      it(`should evaluate ${regexCase.id}`, async () => {
+      // The production evaluator uses native ECMAScript RegExp, not RE2JS.
+      // The fixture has no ECMAScript engine key, so keep divergent cases visible
+      // as skips instead of silently dropping them from the reported test count.
+      const run = typeof regexCase.expectedCompile === 'boolean' ? it : it.skip
+      run(`should evaluate ${regexCase.id}`, async () => {
         const expectedCompile = regexCase.expectedCompile
         const expectedMatch = regexCase.expectedMatch
         const provider = new FlaggingProvider(mockTracer, mockConfig)
