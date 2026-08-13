@@ -385,6 +385,7 @@ export interface GeneratedConfig {
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_UNDICI_ENABLED: boolean;
@@ -1105,6 +1106,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_STARTUP_LOGS: boolean;
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_TELEMETRY_ENABLED: boolean;

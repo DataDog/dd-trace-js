@@ -126,6 +126,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -212,6 +213,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)

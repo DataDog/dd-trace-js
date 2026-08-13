@@ -34,6 +34,12 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @redis/client,redis,1.1.0,6.1.0,True
 @smithy/core,aws-sdk,3.24.0,3.31.0,True
 @smithy/smithy-client,aws-sdk,1.0.3,4.14.15,True
+@supabase/auth-js,supabase,2.112.2,2.112.2,True
+@supabase/functions-js,supabase,2.112.2,2.112.2,True
+@supabase/postgrest-js,supabase,2.112.2,2.112.2,True
+@supabase/realtime-js,supabase,2.112.2,2.112.2,True
+@supabase/storage-js,supabase,2.112.2,2.112.2,True
+@supabase/supabase-js,supabase,2.112.2,2.112.2,True
 @wdio/local-runner,mocha,9.0.0,9.30.0,True
 aerospike,aerospike,4.0.0,6.7.1,True
 ai,ai,4.0.0,7.0.38,True

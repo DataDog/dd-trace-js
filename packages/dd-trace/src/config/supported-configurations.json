@@ -3929,6 +3929,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_SUPABASE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED": [
       {
         "implementation": "A",
