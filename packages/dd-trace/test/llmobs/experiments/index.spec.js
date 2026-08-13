@@ -269,8 +269,12 @@ describe('LLMObs Experiments facade', () => {
         expectedOutput: record.expectedOutput,
         metadata: record.metadata,
       })), [
-        { id: 'r1', input: firstRecord.input, expectedOutput: firstRecord.expectedOutput, metadata: firstRecord.metadata },
-        { id: 'r2', input: secondRecord.input, expectedOutput: secondRecord.expectedOutput, metadata: secondRecord.metadata },
+        {
+          id: 'r1', input: firstRecord.input, expectedOutput: firstRecord.expectedOutput, metadata: firstRecord.metadata,
+        },
+        {
+          id: 'r2', input: secondRecord.input, expectedOutput: secondRecord.expectedOutput, metadata: secondRecord.metadata,
+        },
       ])
       assert.deepEqual(dataset.recordIds(), ['r1', 'r2'])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })

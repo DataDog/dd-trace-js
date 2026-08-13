@@ -3873,6 +3873,14 @@ declare namespace tracer {
 
     interface Dataset {
       addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
+      /** Update fields on an existing dataset record. */
+      update (index: number, fields: {
+        input?: JSONType
+        expectedOutput?: JSONType
+        metadata?: Record<string, JSONType>
+      }): Dataset
+      /** Delete an existing dataset record. */
+      delete (index: number): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string

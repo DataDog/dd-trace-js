@@ -30,12 +30,7 @@ function serializedRecord (record) {
 }
 
 function serializedRecordUpdate (update) {
-  const output = {
-    id: update.id,
-    input: null,
-    expected_output: null,
-    metadata: null,
-  }
+  const output = { id: update.id }
   if (Object.hasOwn(update, 'input')) output.input = update.input
   if (Object.hasOwn(update, 'expectedOutput')) output.expected_output = update.expectedOutput
   if (Object.hasOwn(update, 'metadata')) output.metadata = update.metadata
@@ -208,7 +203,7 @@ class Dataset {
 
   #enqueuePush (push) {
     const next = this.#pushPromise.then(push, push)
-    this.#pushPromise = next.then(() => undefined, () => undefined)
+    this.#pushPromise = next.then(() => {}, () => {})
     return next
   }
 
@@ -294,7 +289,8 @@ class Dataset {
       }
 
       this.#newRecordsById.delete(recordId)
-      const update = updateFromInsertedRecord(recordId, current, payload)
+      const update = this.#updatedRecordsById.get(recordId) ??
+        updateFromInsertedRecord(recordId, current, payload)
       if (Object.keys(update).length > 1) this.#updatedRecordsById.set(recordId, update)
     }
 

@@ -104,6 +104,75 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(dataset.latestVersion(), 3)
   })
 
+  it('batches record updates and deletes without sending omitted fields', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('before', 'expected', { row: 0 }, 'record-0')],
+      ['record-0'],
+      1,
+      1
+    )
+      .update(0, { metadata: { row: 1 } })
+      .addRecord('new')
+
+    dataset.delete(1)
+    await dataset.push()
+
+    const attributes = requests.find(request => request.method === 'batchUpdateDatasetRecords').attributes
+    assert.deepEqual(attributes.update_records, [{ id: 'record-0', metadata: { row: 1 } }])
+    assert.deepEqual(attributes.insert_records, [])
+    assert.deepEqual(attributes.delete_records, [])
+
+    dataset.delete(0)
+    await dataset.push()
+    const deleteRequest = requests.at(-1)
+    assert.deepEqual(deleteRequest.attributes.delete_records, ['record-0'])
+  })
+
+  it('preserves local updates made while a push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('before', null, {}, 'record-0')],
+      ['record-0'],
+      1,
+      1
+    )
+    const push = dataset.update(0, { input: 'during' }).push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.update(0, { metadata: { changed: true } })
+    resolvePush()
+    await push
+    await dataset.push()
+
+    const updates = requests
+      .filter(request => request.method === 'batchUpdateDatasetRecords')
+      .map(request => request.attributes.update_records[0])
+    assert.deepEqual(updates, [
+      { id: 'record-0', input: 'during' },
+      { id: 'record-0', input: 'during', metadata: { changed: true } },
+    ])
+  })
+
   it('keeps evaluator results aligned for summary evaluators when rows fail', async () => {
     const { client: c } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo')
