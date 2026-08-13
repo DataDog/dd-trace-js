@@ -34,6 +34,7 @@ function flushAll (tracer, done, options) {
   const traceExporter = tracer?._exporter
   const traceFlusher = traceExporter?.flush
   const spanStatsFlusher = tracer?._processor?._stats?.forceFlush
+  // TODO: Include DSM after DataStreamsProcessor exposes a completion-aware flush API.
   let pending = telemetryFlushers.size +
     (typeof traceFlusher === 'function' ? 1 : 0) +
     (typeof spanStatsFlusher === 'function' ? 1 : 0)

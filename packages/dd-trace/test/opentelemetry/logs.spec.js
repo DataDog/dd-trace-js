@@ -203,6 +203,27 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.calledOnce(done)
     })
 
+    it('does not wait for records emitted after the flush boundary', () => {
+      const exports = []
+      let firstExportDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => {
+          exports.push(records.map(record => record.body))
+          if (records[0].body === 'before') firstExportDone = done
+        },
+        flush: done => done(),
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'before' }, { name: 'test' })
+      processor.forceFlush(done)
+      processor.onEmit({ body: 'after' }, { name: 'test' })
+      firstExportDone({ code: 0 })
+
+      assert.deepStrictEqual(exports, [['before']])
+      sinon.assert.calledOnce(done)
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]
