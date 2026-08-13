@@ -66,6 +66,36 @@ function cleanupPrecompiledSourceLineDist (cwd) {
   fs.rmSync(path.join(cwd, CYPRESS_PRECOMPILED_SPEC_DIST_DIR), { recursive: true, force: true })
 }
 
+/**
+ * Replaces the installed standalone Cypress finalizers with their pre-deferral implementations.
+ *
+ * @param {string} packageDirectory installed dd-trace package directory
+ * @returns {() => void} restoration callback
+ */
+function installOldCypressLifecycleHelpers (packageDirectory) {
+  const pluginDirectory = path.join(packageDirectory, 'packages', 'datadog-plugin-cypress', 'src')
+  const backups = []
+
+  for (const lifecycle of ['after-run', 'after-spec']) {
+    const filename = path.join(pluginDirectory, `${lifecycle}.js`)
+    const backup = `${filename}.current`
+    const method = lifecycle === 'after-run' ? 'afterRun' : 'afterSpec'
+
+    fs.renameSync(filename, backup)
+    fs.writeFileSync(filename, '\'use strict\'\n\n' +
+      'const cypressPlugin = require(\'./cypress-plugin\')\n\n' +
+      `module.exports = cypressPlugin.${method}.bind(cypressPlugin)\n`)
+    backups.push([filename, backup])
+  }
+
+  return () => {
+    for (const [filename, backup] of backups) {
+      fs.rmSync(filename, { force: true })
+      fs.renameSync(backup, filename)
+    }
+  }
+}
+
 function compilePrecompiledTypeScriptSpecs (cwd, env) {
   try {
     execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd, env })
@@ -932,12 +962,32 @@ moduleTypes.forEach(({
       }
     )
 
-    over10It('uses current finalization when a different manual plugin copy has the old handler contract',
-      async () => {
+    for (const {
+      lifecycle,
+      enableHelper,
+      rejectAfterPlugin,
+      errorMessage,
+    } of [
+        {
+          lifecycle: 'after:run',
+          enableHelper: 'CYPRESS_ENABLE_AFTER_RUN_CUSTOM',
+          rejectAfterPlugin: 'CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN',
+          errorMessage: 'manual after:run failed after Datadog',
+        },
+        {
+          lifecycle: 'after:spec',
+          enableHelper: 'CYPRESS_ENABLE_AFTER_SPEC_CUSTOM',
+          rejectAfterPlugin: 'CYPRESS_REJECT_AFTER_SPEC_AFTER_PLUGIN',
+          errorMessage: 'manual after:spec failed after Datadog',
+        },
+      ]) {
+      over10It(`defers an older direct ${lifecycle} helper to current finalization`, async () => {
+        const manualPackageDir = path.join(cwd, 'node_modules', 'dd-trace')
         const externalPackageDir = path.join(cwd, 'external-tracer', 'node_modules', 'dd-trace')
         fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
         fs.mkdirSync(path.dirname(externalPackageDir), { recursive: true })
-        fs.cpSync(path.join(cwd, 'node_modules', 'dd-trace'), externalPackageDir, { recursive: true })
+        fs.cpSync(manualPackageDir, externalPackageDir, { recursive: true })
+        const restoreLifecycleHelpers = installOldCypressLifecycleHelpers(manualPackageDir)
 
         const legacyConfigFile = type === 'esm'
           ? 'cypress-legacy-plugin.config.mjs'
@@ -954,8 +1004,9 @@ moduleTypes.forEach(({
                 ...envVars,
                 NODE_OPTIONS: `-r ${path.join(externalPackageDir, 'ci', 'init')}`,
                 CYPRESS_BASE_URL: webAppBaseUrl,
-                CYPRESS_REJECT_AFTER_SPEC_AFTER_PLUGIN: '1',
                 CYPRESS_SIMULATE_OLD_MANUAL_PLUGIN: '1',
+                [enableHelper]: '1',
+                [rejectAfterPlugin]: '1',
                 SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
               },
             }
@@ -972,10 +1023,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
                 assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
-                assert.match(
-                  testSessionTraceEvents[0].content.meta[ERROR_MESSAGE],
-                  /manual after:spec failed after Datadog/
-                )
+                assert.match(testSessionTraceEvents[0].content.meta[ERROR_MESSAGE], new RegExp(errorMessage))
               }
 
               const testEvent = events.find(event =>
@@ -996,9 +1044,11 @@ moduleTypes.forEach(({
           assert.notStrictEqual(exitCode, 0, `cypress process should fail\n${testOutput}`)
           assert.doesNotMatch(testOutput, /Multiple attempts to register the following task/)
         } finally {
+          restoreLifecycleHelpers()
           fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
         }
       })
+    }
 
     over10It('reports real test statuses when supportFile is false', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
