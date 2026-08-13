@@ -629,8 +629,8 @@ function wrapRunnerEmit (Runner) {
         if (hasPropagatedFrameworkError) return
 
         hasPropagatedFrameworkError = true
-        process.removeListener('uncaughtException', this.uncaught)
-        process.removeListener('unhandledRejection', this.unhandled)
+        if (typeof this.uncaught === 'function') process.removeListener('uncaughtException', this.uncaught)
+        if (typeof this.unhandled === 'function') process.removeListener('unhandledRejection', this.unhandled)
         process.nextTick(() => { throw frameworkError })
       }
 
