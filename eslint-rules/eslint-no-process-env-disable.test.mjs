@@ -34,6 +34,11 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
       filename: path.join(process.cwd(), 'ci/diagnose.js'),
       options: [{ allowFiles: ['ci/diagnose.js'] }],
     },
+    {
+      code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
+      filename: path.join(process.cwd(), 'packages/example/src/ci/init.js'),
+      options: [{ allowFiles: ['packages/example/src/ci/init.js'] }],
+    },
   ],
   invalid: [
     {
