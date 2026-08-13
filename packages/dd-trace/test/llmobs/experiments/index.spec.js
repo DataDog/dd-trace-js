@@ -104,6 +104,11 @@ describe('LLMObs Experiments facade', () => {
     return { listDatasetRecords }
   }
 
+  function stubPullDatasetClientForRetry (options) {
+    sinon.restore()
+    return stubPullDatasetClient(options)
+  }
+
   describe('createExperiments gating', () => {
     it('returns a no-op when LLM Obs is disabled', () => {
       const warn = sinon.spy(log, 'warn')
@@ -206,6 +211,10 @@ describe('LLMObs Experiments facade', () => {
         }],
       })
       dataset.addRecord('input only')
+      dataset.update(0, { input: 'updated', expectedOutput: null, metadata: null })
+      dataset.update(10, { input: 'ignored' })
+      dataset.delete(1)
+      dataset.delete(10)
 
       assert.equal(dataset.name(), 'd')
       assert.equal(dataset.description(), 'desc')
@@ -215,15 +224,14 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.latestVersion(), null)
       assert.deepEqual(dataset.recordIds(), [])
       assert.equal(dataset.url(), null)
-      assert.deepEqual(dataset.records(), [
-        {
-          id: 'r1',
-          input: { question: 'q' },
-          expectedOutput: { answer: 'a' },
-          metadata: { source: 'test' },
-        },
-        { id: null, input: 'input only', expectedOutput: null, metadata: {} },
-      ])
+      assert.deepEqual(dataset.records(), [{
+        id: 'r1',
+        input: 'updated',
+        expectedOutput: null,
+        metadata: {},
+      }])
+      dataset.addRecord('after push')
+      assert.equal(dataset.records().length, 2)
       assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
 
       const pulled = await exp.pullDataset('pulled')
@@ -326,6 +334,26 @@ describe('LLMObs Experiments facade', () => {
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
         /Failed to fetch records for dataset 'remote-dataset' in project 'my-app': records failed/
+      )
+    })
+
+    it('surfaces malformed pulled records and pagination failures', async () => {
+      stubPullDatasetClient({
+        datasets: [datasetResource()],
+        pages: [{ records: [{ input: 'missing-id' }], after: '' }],
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Dataset records pulled from the backend must have an id/
+      )
+
+      stubPullDatasetClientForRetry({
+        datasets: [datasetResource()],
+        pages: [{ records: [], after: 'next' }],
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
+        /Failed to fetch records for dataset/
       )
     })
 

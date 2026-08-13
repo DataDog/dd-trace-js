@@ -130,8 +130,7 @@ class Dataset {
 
     const update = this.#updatedRecordsById.get(record.id) ?? { id: record.id }
     for (const field of providedFields) update[field] = record[field]
-    if (Object.keys(update).length > 1) this.#updatedRecordsById.set(record.id, update)
-    else this.#updatedRecordsById.delete(record.id)
+    this.#updatedRecordsById.set(record.id, update)
     return this
   }
 
@@ -293,7 +292,7 @@ class Dataset {
       this.#newRecordsById.delete(recordId)
       const update = this.#updatedRecordsById.get(recordId) ??
         updateFromInsertedRecord(recordId, current, payload)
-      if (Object.keys(update).length > 1) this.#updatedRecordsById.set(recordId, update)
+      this.#updatedRecordsById.set(recordId, update)
     }
 
     for (const [recordId, payload] of pending.updatePayloads) {
