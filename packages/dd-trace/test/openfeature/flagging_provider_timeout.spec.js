@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { ProviderEvents } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -60,6 +61,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       './configuration_source': {
         create: sinon.stub(),
       },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
 
@@ -91,6 +93,21 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     // Verify initialization is no longer in progress
     assert.strictEqual(provider.initController.isInitializing(), false)
+  })
+
+  it('does not keep the process alive while waiting for configuration', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    const initPromise = provider.initialize()
+
+    initPromise.catch(() => {
+      // Expected to reject on timeout
+    })
+
+    assert.strictEqual(provider.initController.timeoutId.hasRef(), false)
+
+    await clock.tickAsync(30000)
+    await initPromise.catch(() => {})
   })
 
   it('should not timeout if configuration is set before 30 seconds', async () => {

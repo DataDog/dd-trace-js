@@ -279,10 +279,10 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.0.2":
-  version "2.0.2"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.0.2.tgz#304b93f12fe63619d5bb140023dfcecf56f38017"
-  integrity sha512-647eJuiOVzCEk50His94wjSlOgJCbHIJv4cAW425eW3GqQJC2Y73qGBYV1/s9oBsAmsUNa90tc+ETunfUH2hKQ==
+"@datadog/openfeature-node-server@2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.1.0.tgz#28a6eba85bfda1ad4c7564812a19364c255b14cf"
+  integrity sha512-6nzVv7d5budwJTqh/k52L7cUcl3bNsg/zYrWAniHVBlf2cyYH2dH20xwZ40kEkBVfhoaJRelQIg0qbNeoVmJlw==
   dependencies:
     "@datadog/flagging-core" "2.0.2"
 
