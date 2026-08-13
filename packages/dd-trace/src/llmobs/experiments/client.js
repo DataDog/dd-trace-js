@@ -196,7 +196,7 @@ class ExperimentsClient {
     const resources = Array.isArray(response?.records)
       ? response.records
       : (Array.isArray(response?.data) ? response.data : [])
-    return resources.map(datasetRecordFromResource)
+    return datasetMutationResultFromResources(resources)
   }
 
   async batchUpdateDatasetRecords (projectId, datasetId, attributes) {

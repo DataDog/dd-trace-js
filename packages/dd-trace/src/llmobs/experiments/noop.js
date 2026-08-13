@@ -17,7 +17,7 @@ class NoopDataset {
       input: record.inputData,
       expectedOutput: record.expectedOutput ?? null,
       metadata: record.metadata ?? {},
-      tags: record.tags ?? [],
+      ...(record.tags === undefined ? {} : { tags: record.tags }),
     }))
   }
 
@@ -27,7 +27,7 @@ class NoopDataset {
       input,
       expectedOutput: expectedOutput ?? null,
       metadata: metadata ?? {},
-      tags: tags ?? [],
+      ...(tags === undefined ? {} : { tags }),
     })
     return this
   }
