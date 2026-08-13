@@ -58,19 +58,28 @@ class BatchLogRecordProcessor {
    */
   forceFlush (done) {
     this.#clearTimer()
+    // Flush only records present at this boundary. New records belong to the
+    // later request that produced them and must not extend this lifecycle flush.
+    const logRecords = this.#logRecords
+    this.#logRecords = []
+    let pending = 2
+    const complete = () => {
+      if (--pending === 0) done?.()
+    }
+
+    // Join exports already active at this boundary before draining this snapshot.
+    if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
+    else complete()
+
     const flushNext = () => {
-      if (this.#logRecords.length === 0) {
-        // The queue is empty after a size/timer batch is handed to the exporter, but
-        // its HTTP request can still be in flight. Join it before lifecycle completion.
-        if (typeof this.exporter.flush === 'function') this.exporter.flush(done)
-        else done?.()
+      if (logRecords.length === 0) {
+        complete()
         return
       }
 
-      // Drain queued records one batch at a time; the final exporter flush joins
-      // earlier size-triggered batches that are still in flight.
-      const logRecords = this.#logRecords.splice(0, this.#maxExportBatchSize)
-      this.exporter.export(logRecords, flushNext)
+      // Drain the boundary snapshot one batch at a time.
+      const batch = logRecords.splice(0, this.#maxExportBatchSize)
+      this.exporter.export(batch, flushNext)
     }
     flushNext()
   }
