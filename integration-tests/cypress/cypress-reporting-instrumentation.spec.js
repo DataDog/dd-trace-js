@@ -484,48 +484,61 @@ moduleTypes.forEach(({
       assert.match(testOutput, /\[custom:after:run:resolved\]/)
     })
 
-    over10It('reports the session when a custom after:run handler rejects', async () => {
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-      const customHooksConfigFile = type === 'esm'
-        ? 'cypress-custom-after-hooks.config.mjs'
-        : 'cypress-custom-after-hooks.config.js'
+    for (const { testName, rejectionVariable, expectedError } of [
+      {
+        testName: 'reports the session when a custom after:run handler rejects',
+        rejectionVariable: 'CYPRESS_REJECT_AFTER_RUN',
+        expectedError: /custom after:run failed/,
+      },
+      {
+        testName: 'reports a string rejection from a custom after:run handler',
+        rejectionVariable: 'CYPRESS_REJECT_AFTER_RUN_WITH_STRING',
+        expectedError: /custom after:run string rejection/,
+      },
+    ]) {
+      over10It(testName, async () => {
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        const customHooksConfigFile = type === 'esm'
+          ? 'cypress-custom-after-hooks.config.mjs'
+          : 'cypress-custom-after-hooks.config.js'
 
-      childProcess = exec(
-        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
-        {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            CYPRESS_REJECT_AFTER_RUN: '1',
-            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
-          },
-        }
-      )
-
-      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) => url.endsWith('/api/v2/citestcycle'),
-        (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-            const event = events.find(event => event.type === eventType)
-            assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(event.content.error, 1)
-            assert.match(event.content.meta[ERROR_MESSAGE], /custom after:run failed/)
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              [rejectionVariable]: '1',
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
           }
-        },
-        { hardTimeout: 60000 }
-      )
+        )
 
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
+        const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              const event = events.find(event => event.type === eventType)
+              assert.ok(event, `expected ${eventType} event`)
+              assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(event.content.error, 1)
+              assert.match(event.content.meta[ERROR_MESSAGE], expectedError)
+            }
+          },
+          { hardTimeout: 60000 }
+        )
 
-      assert.notStrictEqual(exitCode, 0)
-    })
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.notStrictEqual(exitCode, 0)
+      })
+    }
 
     for (const { testName, rejectionVariable, expectedError } of [
       {
@@ -767,6 +780,7 @@ moduleTypes.forEach(({
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
             CYPRESS_REJECT_AFTER_RUN_AFTER_PLUGIN: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
@@ -813,6 +827,7 @@ moduleTypes.forEach(({
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
+                CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
                 [rejectionVariable]: '1',
                 SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
               },
@@ -2176,6 +2191,62 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      for (const event of ['after:run', 'after:spec']) {
+        it(`defers a wrapped legacy ${event} helper to the manual plugin finalizer`, async () => {
+          const projectRoot = createProjectRoot()
+          const legacyFinalizer = sinon.stub()
+          const legacyHelper = proxyquire(`../../packages/datadog-plugin-cypress/src/${event.replace(':', '-')}`, {
+            './cypress-plugin': {
+              [event === 'after:run' ? 'afterRun' : 'afterSpec']: legacyFinalizer,
+            },
+          })
+          const datadogHandler = sinon.stub()
+          datadogHandler[Symbol.for(`dd-trace.cypress.${event.replace(':', '-')}.handler`)] = true
+          const rejection = `${event} string rejection`
+          const userHandler = sinon.stub().callsFake(() => Promise.reject(rejection))
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               * @returns {void}
+               */
+              setupNodeEvents (on) {
+                on(event, (...args) => legacyHelper(...args))
+                on(event, datadogHandler)
+                on(event, userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig } = loadCypressConfig()
+          const eventArguments = event === 'after:run'
+            ? [{ totalPassed: 1 }]
+            : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
+
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((registeredEvent, handler) => {
+            handlers[registeredEvent] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          await assert.rejects(handlers[event](...eventArguments), error => error === rejection)
+          sinon.assert.notCalled(legacyFinalizer)
+          sinon.assert.calledOnce(userHandler)
+          sinon.assert.calledOnce(datadogHandler)
+          const finalizerError = datadogHandler.lastCall.args.at(-1)
+          assert.ok(finalizerError instanceof Error)
+          assert.strictEqual(finalizerError.message, rejection)
+
+          if (event === 'after:spec') await handlers['after:run']({})
+        })
+      }
+
       for (const { position, finalization } of [
         { position: 'before', finalization: 'rejects' },
         { position: 'before', finalization: 'throws' },

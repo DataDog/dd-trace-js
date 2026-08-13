@@ -3,6 +3,7 @@
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const log = require('../../dd-trace/src/log')
+const { normalizeUserHandlerError, runUserHandler } = require('./finalization')
 
 /**
  * Runs the Datadog finalizer even when a user Cypress handler fails, while
@@ -16,8 +17,7 @@ function finalizeAfterUserHandlers (userHandlers, finalizer) {
   return userHandlers.then(
     () => finalizer(),
     userError => Promise.resolve().then(() => {
-      const finalizerError = userError || new Error('Cypress user handler rejected without an error')
-      return finalizer(finalizerError)
+      return finalizer(normalizeUserHandlerError(userError))
     }).then(
       () => { throw userError },
       finalizerError => {
@@ -55,7 +55,7 @@ class CypressPlugin extends Plugin {
       const registerAfterRunWithCleanup = (afterRunHandler) => {
         on('after:run', (results) => {
           const chain = userAfterRunHandlers.reduce(
-            (p, h) => p.then(() => h(results)),
+            (p, h) => p.then(() => runUserHandler(() => h(results))),
             Promise.resolve()
           )
           if (afterRunHandler) {
@@ -108,7 +108,7 @@ class CypressPlugin extends Plugin {
         // (the chained registration replaces the one plugin.js set, so it must include it).
         if (userAfterSpecHandlers.length > 0) {
           on('after:spec', (spec, results) => userAfterSpecHandlers.reduce(
-            (chain, handler) => chain.then(() => handler(spec, results)),
+            (chain, handler) => chain.then(() => runUserHandler(() => handler(spec, results))),
             Promise.resolve()
           ))
         }
@@ -123,7 +123,7 @@ class CypressPlugin extends Plugin {
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(
-          (p, h) => p.then(() => h(spec, results)),
+          (p, h) => p.then(() => runUserHandler(() => h(spec, results))),
           Promise.resolve()
         )
         return finalizeAfterUserHandlers(chain, userError => cypressPlugin.afterSpec(spec, results, userError))

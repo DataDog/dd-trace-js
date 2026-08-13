@@ -7,6 +7,7 @@ const { pathToFileURL } = require('url')
 
 const log = require('../../dd-trace/src/log')
 const { getSegment } = require('../../dd-trace/src/util')
+const { normalizeUserHandlerError, runUserHandler } = require('../../datadog-plugin-cypress/src/finalization')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
@@ -417,8 +418,7 @@ function finalizeAfterUserHandlers (userHandlers, finalizer) {
   return userHandlers.then(
     () => finalizer(),
     userError => Promise.resolve().then(() => {
-      const finalizerError = userError || new Error('Cypress user handler rejected without an error')
-      return finalizer(finalizerError)
+      return finalizer(normalizeUserHandlerError(userError))
     }).then(
       () => { throw userError },
       finalizationError => {
@@ -449,8 +449,11 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler) {
   }
 
   on('after:spec', (spec, results) => {
+    const callHandler = datadogHandler
+      ? handler => runUserHandler(() => handler(spec, results))
+      : handler => handler(spec, results)
     const chain = userHandlers.reduce(
-      (promise, handler) => promise.then(() => handler(spec, results)),
+      (promise, handler) => promise.then(() => callHandler(handler)),
       Promise.resolve()
     )
     if (!datadogHandler) return chain
@@ -493,8 +496,11 @@ function registerDdTraceHooks (
       : userAfterRunHandlers
 
     on('after:run', (results) => {
+      const callHandler = datadogHandler
+        ? handler => runUserHandler(() => handler(results))
+        : handler => handler(results)
       const chain = handlers.reduce(
-        (p, h) => p.then(() => h(results)),
+        (promise, handler) => promise.then(() => callHandler(handler)),
         Promise.resolve()
       )
       if (!datadogHandler) return chain.finally(cleanupWrapper)

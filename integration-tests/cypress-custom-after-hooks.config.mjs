@@ -28,6 +28,10 @@ export default defineConfig({
         if (process.env.CYPRESS_REJECT_AFTER_RUN) {
           return Promise.reject(new Error('custom after:run failed'))
         }
+        if (process.env.CYPRESS_REJECT_AFTER_RUN_WITH_STRING) {
+          // eslint-disable-next-line prefer-promise-reject-errors
+          return Promise.reject('custom after:run string rejection')
+        }
         return new Promise((resolve) => {
           setTimeout(() => {
             // eslint-disable-next-line no-console
