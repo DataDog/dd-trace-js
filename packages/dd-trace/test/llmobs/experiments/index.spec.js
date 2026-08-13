@@ -724,11 +724,21 @@ describe('LLMObs Experiments facade', () => {
 
       const recorder = await experiments.startExperiment({ name: 'disabled' })
       assert.equal(recorder.name(), 'disabled')
+      assert.equal(recorder.experimentId(), '00000000-0000-0000-0000-000000000000')
       assert.equal(recorder.url(), null)
       assert.equal(typeof recorder.start, 'undefined')
       assert.equal(typeof recorder.run, 'undefined')
-      assert.deepEqual(await recorder.submitSpan(), { experimentId: null, spanId: null, traceId: null, url: null })
-      await recorder.submitEvaluationMetrics({ spanId: 'span', traceId: null }, [{ label: 'score', value: 1 }])
+      assert.deepEqual(await recorder.submitSpan(), {
+        experimentId: '00000000-0000-0000-0000-000000000000',
+        spanId: '0000000000000000',
+        traceId: '00000000000000000000000000000000',
+        url: null,
+      })
+      await recorder.submitEvaluationMetrics({
+        experimentId: recorder.experimentId(),
+        spanId: '0000000000000000',
+        traceId: '00000000000000000000000000000000',
+      }, [{ label: 'score', value: 1 }])
       await recorder.close({ status: 'completed' })
 
       sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
