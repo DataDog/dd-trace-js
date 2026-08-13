@@ -5,6 +5,7 @@ const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const { enterRoute } = require('./route')
 
 class RouterPlugin extends WebPlugin {
   static id = 'router'
@@ -123,20 +124,13 @@ class RouterPlugin extends WebPlugin {
   }
 
   #updateContext (req, context, route, span) {
-    if (!route || route === '/' || route === '*') {
-      route = ''
+    if (context) {
+      enterRoute(context, route)
+      return context
     }
 
-    if (context) {
-      context.stack.push(route)
-
-      route = context.stack.join('')
-
-      // Longer route is more likely to be the actual route handler route.
-      if (isMoreSpecificThan(route, context.route)) {
-        context.route = route
-      }
-      return context
+    if (!route || route === '/' || route === '*') {
+      route = ''
     }
 
     // Five-property shape pinned at allocation so every request shares the
@@ -152,30 +146,6 @@ class RouterPlugin extends WebPlugin {
     this.#contexts.set(req, context)
     return context
   }
-}
-
-function isMoreSpecificThan (routeA, routeB) {
-  // Concrete paths beat catch-all wildcards (`/*splat`, `/api/*`) on the same
-  // request so that `/foo/bar` wins over `/foo/*splat` regardless of length.
-  if (routeA && routeB) {
-    const aWild = hasWildcard(routeA)
-    const bWild = hasWildcard(routeB)
-    if (aWild !== bWild) return !aWild
-  }
-  if (!routeIsRegex(routeA) && routeIsRegex(routeB)) {
-    return true
-  }
-  return routeA.length > routeB.length
-}
-
-function routeIsRegex (route) {
-  return route.includes('(/')
-}
-
-function hasWildcard (route) {
-  // RegExp routes are encoded as `(/.../)` and may legitimately contain `*`,
-  // so only treat plain string patterns as wildcards.
-  return !routeIsRegex(route) && route.includes('*')
 }
 
 module.exports = RouterPlugin
