@@ -3,41 +3,15 @@
 const { LRUCache } = require('../../../vendor/dist/lru-cache')
 
 /**
- * @typedef {{ signature?: string, type?: string, name?: string }} RequestOperation
+ * @typedef {{ signature: string, type: import('graphql').OperationTypeNode, name?: string }} RequestOperation
  */
 
-const operationTypes = new Set(['query', 'mutation', 'subscription'])
 const requestCacheMax = 500
 
-// Mercurius funnels every operation through `fastifyGraphQl`, but the parsed
-// document — and therefore the operation signature/type/name — is only known
-// once mercurius parses internally. The top-level request span opens before
-// that, and on the JIT warm path neither parse/validate nor execute fires, so
-// the span would otherwise be left with only the provisional resource. The cold
-// path caches the computed metadata; the request boundary reads it back on the
-// warm path. Bounded so a flood of distinct queries can't grow it without limit.
-//
-// The key is the operation name plus the raw query text, not the source alone:
-// mercurius keys its document LRU by source but compiles the JIT for a single
-// `operationName`, and the compiled query then serves that operation for every
-// later request that shares the source — regardless of the `operationName` those
-// requests ask for. A source-only key would hand a warm request for operation B
-// the metadata of whichever operation was cached last for that source (A),
-// mislabeling the span. Operation names cannot contain a newline, so it is a
-// safe separator that keeps the two parts from colliding.
-// A validated document lets a later JIT-only sibling calculate only its requested signature.
-// Keep it weak so the tracer never extends its lifetime beyond mercurius's own cache.
-// Mercurius also accepts a pre-parsed document AST as the source, which reaches
-// the request boundary as an object rather than query text — so there is no
-// string to key the LRU by. Mercurius keys its own document LRU by that source
-// object's identity, and the same object reaches the boundary on the warm path,
-// so a WeakMap keyed by the caller-owned document retains the validated clone
-// and lazily calculated operation metadata without mutating the source. It
-// releases with the source object.
 /**
  * @typedef {{
- *   document?: WeakRef<import('graphql').DocumentNode>,
- *   operations: Map<string | undefined, RequestOperation>
+ *   document: WeakRef<import('graphql').DocumentNode>,
+ *   operations: Map<string, RequestOperation>
  * }} DocumentOperations
  */
 
@@ -78,28 +52,28 @@ function getRequestCache (owner, configuredLimit) {
 }
 
 /**
- * @param {string} source - The raw query text; the same key mercurius uses.
- * @param {string | undefined} operationName - The requested operation name.
+ * @param {string | null | undefined} operationName
+ * @param {boolean} calculateSignature
  * @returns {string}
  */
-function requestOperationKey (source, operationName) {
-  return `${operationName ?? ''}\n${source}`
+function operationCacheKey (operationName, calculateSignature) {
+  return `${calculateSignature === false ? 0 : 1}\n${operationName ?? ''}`
 }
 
 /**
- * @param {unknown} source - Query text on the common path; a pre-parsed
- *   document AST otherwise. Any other shape (mercurius rejects it before
- *   execute) has no cache entry and yields undefined.
- * @param {string | undefined} operationName - The requested operation name.
- * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
+ * @param {unknown} source
+ * @param {string | null | undefined} operationName
+ * @param {boolean} calculateSignature
  * @param {RequestCache | undefined} requestCache
  * @returns {RequestOperation | undefined}
  */
 function getCachedRequestOperation (source, operationName, calculateSignature, requestCache) {
   if (requestCache === undefined) return
 
+  const operationKey = operationCacheKey(operationName, calculateSignature)
   if (typeof source === 'string') {
-    const key = requestOperationKey(source, operationName)
+    // GraphQL operation names cannot contain newlines, so source text cannot collide with this prefix.
+    const key = `${operationKey}\n${source}`
     let operation = requestCache.operations.get(key)
     if (operation !== undefined) return operation
 
@@ -107,6 +81,8 @@ function getCachedRequestOperation (source, operationName, calculateSignature, r
     if (document === undefined) return
 
     operation = getRequestOperation(document, operationName, calculateSignature)
+    if (operation === undefined) return
+
     requestCache.operations.set(key, operation)
     return operation
   }
@@ -115,20 +91,18 @@ function getCachedRequestOperation (source, operationName, calculateSignature, r
   const cached = requestCache.documentOperations.get(source)
   if (cached === undefined) return
 
-  let operation = cached.operations.get(operationName)
-  const document = cached.document?.deref()
+  let operation = cached.operations.get(operationKey)
+  const document = cached.document.deref()
   if (operation !== undefined || document === undefined) return operation
 
   operation = getRequestOperation(document, operationName, calculateSignature)
-  cached.operations.set(operationName, operation)
+  if (operation === undefined) return
+
+  cached.operations.set(operationKey, operation)
   return operation
 }
 
 /**
- * A string source keys the text LRU; a document AST keys the WeakMap. Any other
- * shape has no usable key — mercurius rejects it before execute, so the warm
- * path never reaches the request span for it either.
- *
  * @param {unknown} source
  * @returns {source is string | object}
  */
@@ -137,28 +111,33 @@ function isCacheableSource (source) {
 }
 
 /**
- * Select the operation definition matching `operationName`, or the first one
- * when no name is given (graphql/mercurius default selection).
- *
  * @param {import('graphql').DocumentNode | undefined} document
- * @param {string | undefined} operationName
+ * @param {string | null | undefined} operationName
  * @returns {import('graphql').OperationDefinitionNode | undefined}
  */
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) return
 
+  let operation
   for (const definition of document.definitions) {
-    if (operationTypes.has(definition?.operation) &&
-        (!operationName || definition.name?.value === operationName)) {
-      return definition
+    if (definition.kind !== 'OperationDefinition') continue
+
+    if (operationName != null) {
+      if (definition.name?.value === operationName) return definition
+      continue
     }
+
+    if (operation !== undefined) return
+    operation = definition
   }
+
+  return operation
 }
 
 /**
  * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
  * @param {string} signature
- * @param {string | undefined} type
+ * @param {import('graphql').OperationTypeNode | undefined} type
  * @param {string | undefined} name
  */
 function refineRequestSpanMetadata (requestSpan, signature, type, name) {
@@ -171,33 +150,15 @@ function refineRequestSpanMetadata (requestSpan, signature, type, name) {
 }
 
 /**
- * Refine the top-level graphql.request span (mercurius) from the parsed
- * document and cache the metadata so the JIT warm path — where no sub-span
- * fires — can recover the same tags at the request boundary.
- *
- * This runs at the first boundary that has the document (validate on the cold
- * path, which also precedes a pre-execute validation failure). It is idempotent
- * across the later execute boundary via the `ddRequestRefined` flag, and a
- * no-op for graphql-js/apollo/yoga, which never open a request span.
- *
- * A successfully validated document is retained so a later request selecting
- * a JIT-only sibling can derive only that sibling's metadata at the request
- * boundary, without reparsing, revalidating, or eagerly signing every sibling.
- *
  * @param {{
  *   ddRequestRefined?: boolean,
  *   setTag: (key: string, value: string) => unknown
  * } | undefined} requestSpan
  * @param {import('graphql').DocumentNode | undefined} document
- * @param {unknown} requestSource - The raw source the request boundary saw:
- *   query text on the common path, a pre-parsed document AST otherwise. The
- *   cache is keyed by it, not by the parsed document, so the request boundary
- *   recovers the metadata on the warm path from the same value mercurius keys
- *   its own document LRU by. Any other shape has no usable key and is not
- *   cached (the warm path never reaches this span for it either).
- * @param {string | undefined} operationName - The requested operation name.
- * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
- * @param {boolean} validated - Whether graphql validation completed without errors.
+ * @param {unknown} requestSource
+ * @param {string | null | undefined} operationName
+ * @param {boolean} calculateSignature
+ * @param {boolean} validated
  * @param {RequestCache | undefined} requestCache
  */
 function refineRequestSpan (
@@ -211,58 +172,73 @@ function refineRequestSpan (
 ) {
   /* istanbul ignore if: validate only refines after the request span and parsed document exist. */
   if (!requestSpan || requestSpan.ddRequestRefined || !document) return
-  requestSpan.ddRequestRefined = true
 
   const operation = getRequestOperation(document, operationName, calculateSignature)
+  if (operation === undefined) return
+
   const { signature, type, name } = operation
+  refineRequestSpanMetadata(requestSpan, signature, type, name)
 
-  if (signature) requestSpan.setTag('resource.name', signature)
-  if (type) requestSpan.setTag('graphql.operation.type', type)
-  if (name) requestSpan.setTag('graphql.operation.name', name)
-
-  if (!requestCache || !isCacheableSource(requestSource)) return
-
-  cacheRequestOperation(requestCache, requestSource, operationName, operation, validated ? document : undefined)
+  if (!validated || !requestCache || !isCacheableSource(requestSource)) return
+  cacheRequestOperation(
+    requestCache,
+    requestSource,
+    operationName,
+    calculateSignature,
+    operation,
+    document
+  )
 }
 
 /**
  * @param {RequestCache} requestCache
- * @param {string | import('graphql').DocumentNode} source - Query text keys the
- *   text LRU; a caller-owned document AST keys the WeakMap (never mutated).
- * @param {string | undefined} operationName - The requested operation name.
+ * @param {string | object} source
+ * @param {string | null | undefined} operationName
+ * @param {boolean} calculateSignature
  * @param {RequestOperation} operation
- * @param {import('graphql').DocumentNode | undefined} document - Retained only after successful validation.
+ * @param {import('graphql').DocumentNode} document
  */
-function cacheRequestOperation (requestCache, source, operationName, operation, document) {
+function cacheRequestOperation (
+  requestCache,
+  source,
+  operationName,
+  calculateSignature,
+  operation,
+  document
+) {
+  const operationKey = operationCacheKey(operationName, calculateSignature)
+  const documentRef = new WeakRef(document)
   if (typeof source === 'string') {
-    requestCache.operations.set(requestOperationKey(source, operationName), operation)
-    if (document !== undefined) {
-      requestCache.documents.set(source, new WeakRef(document))
-    }
+    requestCache.operations.set(`${operationKey}\n${source}`, operation)
+    requestCache.documents.set(source, documentRef)
     return
   }
 
   let cached = requestCache.documentOperations.get(source)
   if (cached === undefined) {
-    cached = { operations: new Map() }
+    cached = {
+      document: documentRef,
+      operations: new Map(),
+    }
     requestCache.documentOperations.set(source, cached)
+  } else {
+    cached.document = documentRef
   }
-  if (document !== undefined) {
-    cached.document = new WeakRef(document)
-  }
-  cached.operations.set(operationName, operation)
+  cached.operations.set(operationKey, operation)
 }
 
 /**
  * @param {import('graphql').DocumentNode} document
- * @param {string | undefined} operationName
+ * @param {string | null | undefined} operationName
  * @param {boolean} calculateSignature
- * @returns {RequestOperation}
+ * @returns {RequestOperation | undefined}
  */
 function getRequestOperation (document, operationName, calculateSignature) {
   const operation = getOperation(document, operationName)
-  const type = operation?.operation
-  const name = operation?.name?.value
+  if (operation === undefined) return
+
+  const type = operation.operation
+  const name = operation.name?.value
   return {
     signature: getSignature(document, name, type, calculateSignature),
     type,
@@ -376,6 +352,13 @@ function getBaseTypeName (type) {
 
 let tools
 
+/**
+ * @param {import('graphql').DocumentNode} document
+ * @param {string | undefined} operationName
+ * @param {import('graphql').OperationTypeNode} operationType
+ * @param {boolean} [calculate]
+ * @returns {string}
+ */
 function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
@@ -392,14 +375,10 @@ function getSignature (document, operationName, operationType, calculate) {
     }
   }
 
-  if (operationType) {
-    if (operationName) {
-      return `${operationType} ${operationName}`
-    }
-    return operationType
+  if (operationName) {
+    return `${operationType} ${operationName}`
   }
-
-  return operationName ?? ''
+  return operationType
 }
 
 module.exports = {

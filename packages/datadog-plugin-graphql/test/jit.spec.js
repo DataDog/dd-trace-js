@@ -299,6 +299,23 @@ describe('Plugin', () => {
             const rewritten = rewrite(content, filename, format)
             assert.notStrictEqual(rewritten, content, `${filePath} was not rewritten as ${format}`)
             assert.match(rewritten, /ddTraceRuntime/, `${filePath} lost the runtime hooks as ${format}`)
+
+            const wrappedQueryIndex = rewritten.indexOf('const __apm$wrapped =')
+            const returnedQueryIndex = rewritten.indexOf('const ret =', wrappedQueryIndex)
+            const queryEndIndex = rewritten.indexOf('return ret[fnName]', returnedQueryIndex)
+            assert.notStrictEqual(wrappedQueryIndex, -1, `${filePath} did not hoist the wrapped query as ${format}`)
+            assert.ok(returnedQueryIndex > wrappedQueryIndex, `${filePath} hoisted the query after ret as ${format}`)
+            assert.ok(queryEndIndex > returnedQueryIndex, `${filePath} lost the returned query as ${format}`)
+
+            const queryWrapper = rewritten.slice(returnedQueryIndex, queryEndIndex)
+            const subscriberGuardIndex = queryWrapper.indexOf('if (!tr_ch_apm_hasSubscribers')
+            const argumentsIndex = queryWrapper.indexOf('const __apm$arguments =')
+            assert.notStrictEqual(subscriberGuardIndex, -1, `${filePath} lost the subscriber guard as ${format}`)
+            assert.ok(
+              argumentsIndex > subscriberGuardIndex,
+              `${filePath} allocated before its subscriber guard as ${format}`
+            )
+            assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
           }
         }
       })

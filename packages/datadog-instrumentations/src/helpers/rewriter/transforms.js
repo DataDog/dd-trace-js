@@ -241,17 +241,75 @@ function insertBeforeStatement (root, target, statements) {
 }
 
 /**
+ * @param {import('estree').Node} root
+ * @param {string} selector
+ * @returns {import('estree').Node}
+ */
+function queryOne (root, selector) {
+  const matches = query(root, selector)
+  assert.strictEqual(matches.length, 1, `expected one match for ${selector}`)
+  return matches[0]
+}
+
+/**
  * @param {object} _state
  * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
  */
-function configureGraphqlJitExecute (_state, node) {
-  const [context] = query(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
-  const [tracedBody] = query(
+function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const tracedDeclaration = queryOne(
     node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
+  )
+  const tracedBody = queryOne(
+    tracedDeclaration,
     'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement'
   )
+  const wrappedDeclaration = queryOne(
+    tracedBody,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$wrapped"])'
+  )
+  const wrapped = queryOne(wrappedDeclaration, 'VariableDeclarator[id.name="__apm$wrapped"]')
+  const subscriberGuard = queryOne(
+    node,
+    'IfStatement[test.operator="!"][consequent.type="ReturnStatement"]' +
+      ':has(CallExpression[callee.name="__apm$traced"])'
+  )
+  const activeCall = queryOne(
+    node,
+    'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"] > ' +
+      'CallExpression[callee.name="__apm$traced"]'
+  )
+  const activeTry = queryOne(
+    node,
+    'TryStatement:has(' +
+      'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"]' +
+    ')'
+  )
 
-  assert(context && tracedBody, 'configureGraphqlJitExecute: incomplete orchestrion wrapper')
+  assert(wrapped.init, 'configureGraphqlJitExecute: wrapped query has no implementation')
+
+  const createBoundQuery = ancestry.find(ancestor =>
+    ancestor.type === 'FunctionDeclaration' && ancestor.id?.name === 'createBoundQuery'
+  )
+  assert(createBoundQuery, 'configureGraphqlJitExecute: createBoundQuery not found')
+
+  const retDeclaration = queryOne(
+    createBoundQuery,
+    'VariableDeclaration:has(VariableDeclarator[id.name="ret"])'
+  )
+  assert.strictEqual(
+    query(createBoundQuery, 'VariableDeclarator[id.name="__apm$wrapped"]').length,
+    1,
+    'configureGraphqlJitExecute: ambiguous wrapped query declaration'
+  )
+  assert.strictEqual(
+    query(wrapped.init, 'ThisExpression, Super, MetaProperty, Identifier[name="arguments"]').length,
+    0,
+    'configureGraphqlJitExecute: original query depends on its invocation scope'
+  )
 
   const properties = parse(`({
     ddDocument: document,
@@ -263,13 +321,35 @@ function configureGraphqlJitExecute (_state, node) {
 
   context.properties.push(...properties)
 
-  tracedBody.body.unshift(...parse(`
+  const [abortCondition] = parse(`
     if (__apm$ctx.ddAborted) {
       const __apm$abortError = new Error('Aborted')
       __apm$abortError.name = 'AbortError'
       throw __apm$abortError
     }
-  `).body)
+  `).body
+
+  assert(
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, [wrappedDeclaration]),
+    'configureGraphqlJitExecute: could not hoist original query'
+  )
+
+  const fastCall = subscriberGuard.consequent.argument
+  fastCall.callee = parse('__apm$wrapped.apply').body[0].expression
+  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
+  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
+  activeCall.callee = parse('__apm$wrapped.apply').body[0].expression
+  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
+  activeTry.block.body.unshift(abortCondition)
+
+  const statements = node.body.body
+  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
+  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
+  assert.notStrictEqual(subscriberGuardIndex, -1, 'configureGraphqlJitExecute: subscriber guard is not top-level')
+  assert.notStrictEqual(tracedDeclarationIndex, -1, 'configureGraphqlJitExecute: traced declaration is not top-level')
+  statements.splice(subscriberGuardIndex, 1)
+  statements.splice(statements.indexOf(tracedDeclaration), 1)
+  statements.unshift(subscriberGuard)
 }
 
 /**
@@ -292,7 +372,6 @@ function configureGraphqlJitDeferredField (_state, node) {
 
   const [descriptor] = parse(`
     const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
-      arguments: args,
       fieldName,
       fieldNodes,
       returnType: fieldType,

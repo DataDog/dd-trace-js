@@ -221,6 +221,53 @@ describe('Plugin', () => {
         ])
       })
 
+      it('does not label an unknown operation as a valid sibling', () => {
+        const query = 'query KnownOperation { hello }'
+        const operationName = 'UnknownOperation'
+        const assertion = agent.assertSomeTraces(traces => {
+          const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const execute = traces[0].find(span => span.name === 'graphql.execute')
+          assert.ok(request, 'expected a failed graphql.request span')
+          assert.ok(execute, 'expected a failed graphql.execute span')
+          assert.strictEqual(request.error, 1)
+          assert.strictEqual(request.meta['graphql.operation.name'], operationName)
+          assert.strictEqual(request.meta['graphql.operation.type'], undefined)
+          assert.doesNotMatch(request.resource, /KnownOperation/)
+          assert.strictEqual(execute.error, 1)
+          assert.strictEqual(execute.meta['graphql.operation.name'], operationName)
+          assert.strictEqual(execute.meta['graphql.operation.type'], undefined)
+          assert.doesNotMatch(execute.resource, /KnownOperation/)
+        })
+
+        return Promise.all([
+          assertion,
+          axios.post(`http://localhost:${port}/graphql`, { query, operationName }),
+        ])
+      })
+
+      it('does not select an unnamed operation from an ambiguous document', () => {
+        const query = 'query AmbiguousFirst { hello } query AmbiguousSecond { hello }'
+        const assertion = agent.assertSomeTraces(traces => {
+          const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const execute = traces[0].find(span => span.name === 'graphql.execute')
+          assert.ok(request, 'expected a failed graphql.request span')
+          assert.ok(execute, 'expected a failed graphql.execute span')
+          assert.strictEqual(request.error, 1)
+          assert.strictEqual(request.meta['graphql.operation.name'], undefined)
+          assert.strictEqual(request.meta['graphql.operation.type'], undefined)
+          assert.doesNotMatch(request.resource, /AmbiguousFirst|AmbiguousSecond/)
+          assert.strictEqual(execute.error, 1)
+          assert.strictEqual(execute.meta['graphql.operation.name'], undefined)
+          assert.strictEqual(execute.meta['graphql.operation.type'], undefined)
+          assert.doesNotMatch(execute.resource, /AmbiguousFirst|AmbiguousSecond/)
+        })
+
+        return Promise.all([
+          assertion,
+          axios.post(`http://localhost:${port}/graphql`, { query }),
+        ])
+      })
+
       it('opens a request span for an anonymous operation', () => {
         const query = '{ hello(name: "anon") }'
 
@@ -298,8 +345,6 @@ describe('Plugin', () => {
       })
 
       it('preserves mercurius errors for invalid source values', async () => {
-        // Neither value has a usable cache key, so the boundary skips caching rather than key a
-        // WeakMap by a primitive. A bare Error would also accept a TypeError thrown by us.
         await assert.rejects(app.graphql(null), { message: /Must provide document/ })
         await assert.rejects(app.graphql(42), { name: 'TypeError', message: /not iterable/ })
       })
@@ -376,9 +421,7 @@ describe('Plugin', () => {
       it('labels the selected operation on the JIT warm path', async () => {
         const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
 
-        // Cold validation retains the parsed document and selected metadata.
         await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'First' })
-        // The first JIT-only sibling request derives and caches only its own metadata.
         await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' })
 
         const assertion = agent.assertSomeTraces(traces => {
@@ -402,6 +445,45 @@ describe('Plugin', () => {
           assertion,
           axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' }),
         ])
+      })
+
+      it('uses the current signature config on the JIT warm path', async () => {
+        const tracer = require('../../dd-trace')
+        const enabledQuery = 'query ReconfiguredEnabled { hello(name: "enabled") }'
+        const disabledQuery = 'query ReconfiguredDisabled { hello(name: "disabled") }'
+
+        try {
+          tracer.use('graphql', { signature: false, source: true })
+          await axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
+          await axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
+
+          tracer.use('graphql', { signature: true, source: true })
+          const enabledAssertion = agent.assertSomeTraces(traces => {
+            const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+            assert.ok(request, 'expected a graphql.request span after enabling signatures')
+            assert.strictEqual(request.resource, 'query ReconfiguredEnabled{hello(name:"")}')
+          }, { spanResourceMatch: /ReconfiguredEnabled\{/ })
+          await Promise.all([
+            enabledAssertion,
+            axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery }),
+          ])
+
+          await axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
+          await axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
+
+          tracer.use('graphql', { signature: false, source: true })
+          const disabledAssertion = agent.assertSomeTraces(traces => {
+            const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+            assert.ok(request, 'expected a graphql.request span after disabling signatures')
+            assert.strictEqual(request.resource, 'query ReconfiguredDisabled')
+          }, { spanResourceMatch: /^query ReconfiguredDisabled$/ })
+          await Promise.all([
+            disabledAssertion,
+            axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery }),
+          ])
+        } finally {
+          tracer.use('graphql', { signature: true, source: true })
+        }
       })
 
       describe('with the default source config', () => {

@@ -183,56 +183,108 @@ describe('graphql signature memoization', () => {
     const source = 'query A { a } query B { b }'
     const ast = parse(source)
     const span = { setTag: sinon.spy() }
-    const requestCache = getRequestCache({}, undefined)
 
     const printsBefore = printSpy.callCount
-    refineRequestSpan(span, ast, source, 'A', true, true, requestCache)
+    refineRequestSpan(span, ast, source, 'A', true, false, undefined)
     assert.equal(printSpy.callCount - printsBefore, 1)
-
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'A', true, requestCache), {
-      signature: 'query A{a}',
-      type: 'query',
-      name: 'A',
-    })
-    assert.equal(printSpy.callCount - printsBefore, 1)
-
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'B', true, requestCache), {
-      signature: 'query B{b}',
-      type: 'query',
-      name: 'B',
-    })
-    assert.equal(printSpy.callCount - printsBefore, 2)
-
-    getCachedRequestOperation(source, 'B', true, requestCache)
-    assert.equal(printSpy.callCount - printsBefore, 2)
+    assert.deepStrictEqual(span.setTag.args, [
+      ['resource.name', 'query A{a}'],
+      ['graphql.operation.type', 'query'],
+      ['graphql.operation.name', 'A'],
+    ])
   })
 
-  it('does not retain an invalid document for sibling requests', () => {
-    const source = 'query InvalidA { a } query InvalidB { b }'
-    const ast = parse(source)
+  it('skips fragment definitions while selecting a request operation', () => {
+    const source = 'fragment Fields on Query { a } query Selected { ...Fields }'
     const span = { setTag: sinon.spy() }
-    const requestCache = getRequestCache({}, undefined)
 
-    refineRequestSpan(span, ast, source, 'InvalidA', true, false, requestCache)
+    refineRequestSpan(span, parse(source), source, 'Selected', false, false, undefined)
 
-    assert.equal(getCachedRequestOperation(source, 'InvalidB', true, requestCache), undefined)
+    assert.deepStrictEqual(span.setTag.args, [
+      ['resource.name', 'query Selected'],
+      ['graphql.operation.type', 'query'],
+      ['graphql.operation.name', 'Selected'],
+    ])
   })
 
-  it('retains a later valid document for a pre-parsed source and derives a sibling lazily', () => {
-    const source = parse('query ObjectA { a } query ObjectB { b }')
-    const invalidDocument = parse('query ObjectA { a } query ObjectB { b }')
-    const validDocument = parse('query ObjectA { a } query ObjectB { b }')
+  it('does not refine a request span for an unknown operation', () => {
+    const span = { setTag: sinon.spy() }
+    const source = 'query Known { a }'
+    const document = parse(source)
+    const requestCache = getRequestCache({}, undefined)
+    const printsBefore = printSpy.callCount
+
+    refineRequestSpan(span, document, source, 'Unknown', true, true, requestCache)
+
+    assert.strictEqual(span.setTag.callCount, 0)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+    assert.strictEqual(getCachedRequestOperation(source, 'Known', true, requestCache), undefined)
+  })
+
+  it('does not refine a request span for ambiguous operations without a name', () => {
+    const span = { setTag: sinon.spy() }
+    const document = parse('query First { a } query Second { b }')
+    const requestCache = getRequestCache({}, undefined)
+    const printsBefore = printSpy.callCount
+
+    refineRequestSpan(span, document, document, undefined, true, true, requestCache)
+
+    assert.strictEqual(span.setTag.callCount, 0)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+    assert.strictEqual(getCachedRequestOperation(document, 'First', true, requestCache), undefined)
+  })
+
+  it('keys request metadata by signature mode', () => {
+    const source = 'query Reconfigured { field(value: "secret") }'
+    const document = parse(source)
     const requestCache = getRequestCache({}, undefined)
 
-    refineRequestSpan({ setTag: sinon.spy() }, invalidDocument, source, 'ObjectA', true, false, requestCache)
-    assert.equal(getCachedRequestOperation(source, 'ObjectB', true, requestCache), undefined)
+    refineRequestSpan({ setTag: noop }, document, source, 'Reconfigured', false, true, requestCache)
 
-    refineRequestSpan({ setTag: sinon.spy() }, validDocument, source, 'ObjectA', true, true, requestCache)
-    assert.deepStrictEqual(getCachedRequestOperation(source, 'ObjectB', true, requestCache), {
-      signature: 'query ObjectB{b}',
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', false, requestCache), {
+      signature: 'query Reconfigured',
       type: 'query',
-      name: 'ObjectB',
+      name: 'Reconfigured',
     })
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', true, requestCache), {
+      signature: 'query Reconfigured{field(value:"")}',
+      type: 'query',
+      name: 'Reconfigured',
+    })
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', false, requestCache), {
+      signature: 'query Reconfigured',
+      type: 'query',
+      name: 'Reconfigured',
+    })
+  })
+
+  it('does not cache an unknown operation after retaining a validated source', () => {
+    const source = 'query Known { field }'
+    const document = parse(source)
+    const requestCache = getRequestCache({}, undefined)
+
+    refineRequestSpan({ setTag: noop }, document, source, 'Known', true, true, requestCache)
+    const printsBefore = printSpy.callCount
+
+    assert.strictEqual(getCachedRequestOperation(source, 'Unknown', true, requestCache), undefined)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+  })
+
+  it('derives only valid siblings for a retained pre-parsed source', () => {
+    const document = parse('query First { first } query Second { second }')
+    const requestCache = getRequestCache({}, undefined)
+
+    refineRequestSpan({ setTag: noop }, document, document, 'First', true, true, requestCache)
+
+    assert.deepStrictEqual(getCachedRequestOperation(document, 'Second', true, requestCache), {
+      signature: 'query Second{second}',
+      type: 'query',
+      name: 'Second',
+    })
+    refineRequestSpan({ setTag: noop }, document, document, 'Second', true, true, requestCache)
+    const printsBefore = printSpy.callCount
+    assert.strictEqual(getCachedRequestOperation(document, 'Unknown', true, requestCache), undefined)
+    assert.strictEqual(printSpy.callCount, printsBefore)
   })
 
   it('recomputes for a different document instance even if the source is identical', () => {
@@ -390,8 +442,8 @@ describe('graphql signature fallback', () => {
     try {
       const { getSignature } = require('../../src/utils')
 
-      assert.equal(getSignature({}, 'Q', 'query'), 'query Q')
-      assert.equal(getSignature({}, 'Q'), 'Q')
+      assert.equal(getSignature(parse('query Q { f }'), 'Q', 'query'), 'query Q')
+      assert.equal(getSignature(parse('{ f }'), undefined, 'query'), 'query')
     } finally {
       loadableModule._load = originalLoad
       delete require.cache[utilsPath]

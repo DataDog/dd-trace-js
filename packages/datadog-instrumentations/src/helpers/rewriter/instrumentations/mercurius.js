@@ -5,11 +5,11 @@
 // the per-request entry point). Wrapping that one function gives a single
 // top-level span per operation regardless of how the query reaches mercurius
 // — HTTP POST/GET, batched queries, or a programmatic `app.graphql()` call —
-// and regardless of whether the query runs through graphql's `execute` (cold)
-// or a JIT-compiled query (warm), where no `graphql.execute` span fires.
+// and regardless of whether the query runs through graphql's `execute` or its
+// JIT-compiled equivalent.
 //
 // The function name and signature `(source, context, variables, operationName)`
-// are stable across the supported major range (verified against 10.x and 16.x),
+// are stable across the supported major range (verified against 13.x and 16.x),
 // so a `functionName` match needs no per-version file paths.
 const FASTIFY_GRAPHQL_CONTEXT = 'FunctionDeclaration[id.name="fastifyGraphQl"]:has(Identifier[name="opts"]) ' +
   'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression'

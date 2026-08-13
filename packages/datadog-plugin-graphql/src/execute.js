@@ -25,7 +25,7 @@ const {
  *   rootValue?: unknown,
  *   contextValue?: unknown,
  *   variableValues?: Record<string, unknown>,
- *   operationName?: string,
+ *   operationName?: string | null,
  *   fieldResolver?: GraphQLFieldResolver
  * }} ExecutionArguments
  * @typedef {(value: unknown) => unknown} ThenableCallback
@@ -261,7 +261,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const operation = getOperation(document, args.operationName)
 
     const type = operation?.operation
-    const name = operation?.name?.value ?? args.operationName
+    const name = operation?.name?.value ?? args.operationName ?? undefined
+    let signature = name ?? ''
     const source = this.config.source && docSource
 
     // Apollo Server may execute a cached document without parsing it first.
@@ -274,10 +275,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
-    const signature = getSignature(document, name, type, this.config.signature)
     const requestStore =
       /** @type {{ graphqlRequestSpan?: DatadogSpan } | undefined} */ (legacyStorage.getStore())
-    refineRequestSpanMetadata(requestStore?.graphqlRequestSpan, signature, type, name)
+    if (type !== undefined) {
+      signature = getSignature(
+        /** @type {import('graphql').DocumentNode} */ (document),
+        name,
+        type,
+        this.config.signature
+      )
+      refineRequestSpanMetadata(requestStore?.graphqlRequestSpan, signature, type, name)
+    }
 
     ctx.collapse = this.config.collapse
 
