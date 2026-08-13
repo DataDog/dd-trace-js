@@ -79,8 +79,9 @@ function initializeOpenTelemetryMetrics (config) {
 
   const meterProvider = new MeterProvider({ reader })
   metrics.setGlobalMeterProvider(meterProvider)
-  // Retain only the current global provider when the tracer reinitializes.
+  // Remove the old provider callback so lifecycle retention flushes only this global provider.
   unregisterTelemetryFlusher?.()
+  // Include the final metric collection and export in lifecycle retention.
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => meterProvider.forceFlush(done))
 }
 

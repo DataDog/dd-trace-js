@@ -10,12 +10,14 @@ const log = require('./log')
 const telemetryFlushers = new Set()
 
 /**
- * Registers a configured telemetry pipeline for lifecycle flushing.
+ * Registers a configured telemetry pipeline so serverless lifecycle retention
+ * waits for its final export alongside trace delivery.
  * @param {TelemetryFlusher} flusher
- * @returns {() => void} Removes the telemetry flusher.
+ * @returns {() => void} Removes this pipeline when its provider is replaced.
  */
 function registerTelemetryFlusher (flusher) {
   telemetryFlushers.add(flusher)
+  // Avoid retaining a replaced provider or flushing it alongside the new one.
   return () => telemetryFlushers.delete(flusher)
 }
 
