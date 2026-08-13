@@ -315,31 +315,8 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Set the configuration with APM_TRACING lib_config remote config settings.
-   * Resolves keys via `optionsTable` (option names, e.g. `sampleRate`), unlike
-   * `setRemoteConfigFromSdkConfig`, which is keyed by env var name.
-   *
-   * @param {TracerOptions|null} options - Configurations received via Remote
-   *   Config or null to reset all remote configuration
-   */
-  setRemoteConfigFromLibConfig (options) {
-    // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCConfigMerger` class
-    undo(this, 'remote_config')
-
-    // Special case: if options is null, nothing to apply
-    // This happens when all remote configs are removed
-    if (options !== null) {
-      this.#applyOptions(options, 'remote_config')
-    }
-
-    this.#applyCalculated()
-  }
-
-  /**
    * Set the configuration with SDK_CONFIGURATION remote config settings.
-   * Resolves env-var names via `configurationsTable` instead of the option names
-   * `setRemoteConfigFromLibConfig` uses, since this payload is keyed by env var name.
+   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
    *
    * @param {Record<string, string>|null} options - Env-var-keyed configs received via the
    *   SDK_CONFIGURATION remote config product, or null to reset all remote configuration

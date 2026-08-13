@@ -2,23 +2,10 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
-const tagger = require('../tagger')
 
 module.exports = {
   enable,
 }
-
-/**
- * @typedef {object} RemoteConfigOptions
- * @property {boolean} [dynamic_instrumentation_enabled] - Enable Dynamic Instrumentation
- * @property {boolean} [code_origin_enabled] - Enable code origin tagging for spans
- * @property {Array<{header: string, tag_name?: string}>} [tracing_header_tags] - HTTP headers to tag
- * @property {Array<string>} [tracing_tags] - Global tags (format: "key:value")
- * @property {number} [tracing_sampling_rate] - Global sampling rate (0.0-1.0)
- * @property {boolean} [log_injection_enabled] - Enable trace context log injection
- * @property {boolean} [tracing_enabled] - Enable/disable tracing globally
- * @property {Array<object>} [tracing_sampling_rules] - Trace sampling rules configuration
- */
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -31,16 +18,11 @@ class RCConfigMerger {
   /**
    * @param {string} currentService - Current service name
    * @param {string} currentEnv - Current environment name
-   * @param {(conf: object) => (RemoteConfigOptions|undefined)} getPayload - Extracts the settings
-   *   map from a raw RC config object. APM_TRACING delivers two distinct config object shapes under
-   *   the same product (`lib_config` for the legacy per-setting object, `sdk_config` for the flat
-   *   env-var-keyed map) — this is how a single merger class serves either.
    */
-  constructor (currentService, currentEnv, getPayload) {
+  constructor (currentService, currentEnv) {
     this.configs = new Map() // config_id -> { conf, priority }
     this.currentService = currentService
     this.currentEnv = currentEnv
-    this.getPayload = getPayload
   }
 
   /**
@@ -134,7 +116,7 @@ class RCConfigMerger {
   /**
    * Get merged config with higher priority configs overriding lower priority ones
    *
-   * @returns {RemoteConfigOptions|null} Merged config object or null if no configs present
+   * @returns {Record<string, string>|null} Merged config object or null if no configs present
    */
   getMergedConfig () {
     if (this.configs.size === 0) return null
@@ -144,7 +126,7 @@ class RCConfigMerger {
     const merged = [...this.configs.values()]
       .sort((a, b) => a.priority - b.priority)
       .reduce((merged, { conf }) => {
-        const payload = this.getPayload(conf)
+        const payload = conf.sdk_config
         if (payload != null) hasConfig = true
         return Object.assign(merged, payload)
       }, {})
@@ -161,121 +143,34 @@ class RCConfigMerger {
  * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
 function enable (rc, config, onConfigUpdated) {
-  // This tracer supports receiving config subsets via the APM_TRACING product handler.
+  // This tracer supports receiving multiple simultaneous targeted configs under the APM_TRACING
+  // product (e.g. an org-level and a service-level config) and merging them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
-
-  // Tracing
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
-
-  // Log Management
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
-
-  // Debugger
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
-
-  // Code Origin
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
 
   // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
   rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
 
-  const libConfigManager = new RCConfigMerger(config.service, config.env, (conf) => conf.lib_config)
-  const sdkConfigManager = new RCConfigMerger(config.service, config.env, (conf) => conf.sdk_config)
+  const sdkConfigManager = new RCConfigMerger(config.service, config.env)
 
-  // Subscribe (setBatchHandler used below doesn't automatically subscribe)
+  // SDK_CONFIGURATION has no RC product of its own — the backend delivers it as a config object
+  // (a flat `sdk_config` map) under the APM_TRACING product.
   rc.subscribeProducts('APM_TRACING')
 
-  // SDK_CONFIGURATION has no RC product of its own — the backend delivers it as a distinct config
-  // object (a flat `sdk_config` map) under the same APM_TRACING product as the legacy `lib_config`
-  // object, so a single product subscription/handler must route each item by payload shape, not by
-  // product name.
   rc.setBatchHandler(['APM_TRACING'], (transaction) => {
     const { toUnapply, toApply, toModify } = transaction
 
     for (const item of toUnapply) {
-      const manager = item.file?.sdk_config ? sdkConfigManager : libConfigManager
-      manager.removeConfig(item.id)
+      sdkConfigManager.removeConfig(item.id)
       transaction.ack(item.path)
     }
 
     for (const item of [...toApply, ...toModify]) {
-      const manager = item.file?.sdk_config ? sdkConfigManager : libConfigManager
-      manager.addConfig(item.id, item.file)
+      sdkConfigManager.addConfig(item.id, item.file)
       transaction.ack(item.path)
     }
 
-    // SDK_CONFIGURATION fully drives config application when present, regardless of whether
-    // APM_TRACING also has active config this turn.
-    const mergedSdkConfig = sdkConfigManager.getMergedConfig()
-    if (mergedSdkConfig) {
-      config.setRemoteConfigFromSdkConfig(mergedSdkConfig)
-    } else {
-      /** @type {import('../config').TracerOptions|null|RemoteConfigOptions} */
-      let mergedLibConfig = libConfigManager.getMergedConfig()
-
-      if (mergedLibConfig) {
-        mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
-      }
-
-      config.setRemoteConfigFromLibConfig(mergedLibConfig)
-    }
+    config.setRemoteConfigFromSdkConfig(sdkConfigManager.getMergedConfig())
 
     onConfigUpdated()
   })
-}
-
-/**
- * @param {RemoteConfigOptions} libConfig
- * @returns {import('../config').TracerOptions}
- */
-function transformRemoteConfigToLocalOption (libConfig) {
-  const normalizedConfig = {}
-  for (const [name, value] of Object.entries(libConfig)) {
-    if (value !== null) {
-      normalizedConfig[optionLookupTable[name] ?? name] = transformers[name]?.(value) ?? value
-    }
-  }
-  return normalizedConfig
-}
-
-// This is intermediate solution until remote config is reworked to handle all known entries with proper names
-const optionLookupTable = {
-  dynamic_instrumentation_enabled: 'dynamicInstrumentation.enabled',
-  code_origin_enabled: 'codeOriginForSpans.enabled',
-  tracing_sampling_rate: 'sampleRate',
-  log_injection_enabled: 'logInjection',
-  tracing_enabled: 'DD_TRACE_ENABLED',
-  tracing_sampling_rules: 'samplingRules',
-  tracing_header_tags: 'headerTags',
-  tracing_tags: 'tags',
-}
-
-const transformers = {
-  tracing_sampling_rules (samplingRules) {
-    for (const rule of samplingRules) {
-      if (rule.tags) {
-        const reformattedTags = {}
-        for (const tag of rule.tags) {
-          reformattedTags[tag.key] = tag.value_glob
-        }
-        rule.tags = reformattedTags
-      }
-    }
-    return samplingRules
-  },
-  tracing_header_tags (headerTags) {
-    return headerTags?.map(tag => {
-      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-    })
-  },
-  tracing_tags (tags) {
-    const normalizedTags = {}
-    tagger.add(normalizedTags, tags)
-    return normalizedTags
-  },
 }

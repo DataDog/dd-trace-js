@@ -174,7 +174,7 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfigFromLibConfig: sinon.spy(),
+      setRemoteConfigFromSdkConfig: sinon.spy(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -346,7 +346,7 @@ describe('TracerProxy', () => {
 
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
 
-        sinon.assert.calledWith(config.setRemoteConfigFromLibConfig, conf)
+        sinon.assert.calledWith(config.setRemoteConfigFromSdkConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
       })
@@ -496,7 +496,7 @@ describe('TracerProxy', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfigFromLibConfig = remoteConfig => {
+        config.setRemoteConfigFromSdkConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
@@ -514,7 +514,7 @@ describe('TracerProxy', () => {
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfigFromLibConfig = remoteConfig => {
+        config.setRemoteConfigFromSdkConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
@@ -547,12 +547,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -573,7 +573,7 @@ describe('TracerProxy', () => {
         config.telemetry = {}
         config.appsec.enabled = true
         config.iast.enabled = true
-        config.setRemoteConfigFromLibConfig = conf => {
+        config.setRemoteConfigFromSdkConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
         }
 
@@ -1119,10 +1119,10 @@ describe('TracerProxy', () => {
 })
 
 // Helper function to create APM_TRACING batch transaction objects
-function createApmTracingTransaction (configId, libConfig, action = 'apply') {
+function createApmTracingTransaction (configId, sdkConfig, action = 'apply') {
   const item = {
     id: configId,
-    file: { lib_config: libConfig },
+    file: { sdk_config: sdkConfig },
     path: `datadog/1/APM_TRACING/${configId}`,
   }
 
