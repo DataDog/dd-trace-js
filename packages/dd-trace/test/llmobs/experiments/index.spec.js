@@ -292,8 +292,8 @@ describe('LLMObs Experiments facade', () => {
       ])
       assert.deepEqual(dataset.recordIds(), ['r1', 'r2'])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 2 }])
-      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', version: 2 }])
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', tags: [], version: 2 }])
+      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', tags: [], version: 2 }])
     })
 
     it('uses the latest dataset version when no version is requested', async () => {
@@ -305,7 +305,7 @@ describe('LLMObs Experiments facade', () => {
       const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 })
 
       assert.equal(dataset.version(), 5)
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', version: 5 }])
+      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', tags: [], version: 5 }])
     })
 
     it('surfaces list failures from the backend client', async () => {
