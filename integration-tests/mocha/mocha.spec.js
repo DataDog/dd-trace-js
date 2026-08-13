@@ -352,6 +352,39 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   }
 
+  it('finalizes a failed session when a custom reporter throws undefined', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/passing.js ' +
+      '--reporter ./ci-visibility/mocha-reporter-throws.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_REPORTER_THROW_EVENT: 'end',
+          MOCHA_REPORTER_THROWS_UNDEFINED: '1',
+        },
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.notStrictEqual(exitCode, 0)
+  })
+
   it('stops the test body when a custom reporter throws after beforeEach', async function () {
     this.timeout(20_000)
     childProcess = exec(

@@ -314,7 +314,7 @@ function getOnEndHandler (isParallel, onDone) {
       status = 'fail'
     }
 
-    if (frameworkError) {
+    if (arguments.length > 0) {
       status = 'fail'
     } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
@@ -361,7 +361,7 @@ function getOnEndHandler (isParallel, onDone) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
-      isFrameworkError: !!frameworkError,
+      isFrameworkError: arguments.length > 0,
     }, () => {
       onDone()
       onFrameworkErrorDone?.()
@@ -564,12 +564,13 @@ function wrapRunnerEmit (Runner) {
 
     if (!runnerStarted.has(this)) return emit.apply(this, arguments)
 
+    const hasPendingFrameworkError = runnerFrameworkErrors.has(this)
     const pendingFrameworkError = runnerFrameworkErrors.get(this)
     if (event !== 'end') {
       try {
         return emit.apply(this, arguments)
       } catch (error) {
-        if (!pendingFrameworkError) {
+        if (!hasPendingFrameworkError) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
           stopFutureHooks(this)
@@ -580,7 +581,7 @@ function wrapRunnerEmit (Runner) {
           else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
-            if (event === 'test end' && !test._ddTestFinishPublished) {
+            if (event === 'test end' && !test._ddTestFinishStarted) {
               runnerTestEndHandlers.get(this)?.(test)
             }
           }
@@ -594,28 +595,36 @@ function wrapRunnerEmit (Runner) {
     runnerTestEndHandlers.delete(this)
     runnerStarted.delete(this)
     let result
+    let hasFrameworkError = hasPendingFrameworkError
     let frameworkError = pendingFrameworkError
     try {
       result = emit.apply(this, arguments)
     } catch (error) {
-      frameworkError ||= error
+      if (!hasFrameworkError) {
+        hasFrameworkError = true
+        frameworkError = error
+        runnerFrameworkErrors.set(this, error)
+      }
     }
-    runnerFrameworkErrors.delete(this)
 
     adjustRunnerFailuresOnce(this)
 
-    if (frameworkError) {
+    if (hasFrameworkError) {
+      const finalizationError = frameworkError instanceof Error
+        ? frameworkError
+        : new Error(String(frameworkError))
       let hasPropagatedFrameworkError = false
       const propagateFrameworkError = () => {
         if (hasPropagatedFrameworkError) return
 
         hasPropagatedFrameworkError = true
         process.removeListener('uncaughtException', this.uncaught)
+        process.removeListener('unhandledRejection', this.unhandled)
         process.nextTick(() => { throw frameworkError })
       }
 
       try {
-        endHandler.call(this, frameworkError, propagateFrameworkError)
+        endHandler.call(this, finalizationError, propagateFrameworkError)
       } catch (finalizerError) {
         log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
         propagateFrameworkError()
@@ -979,6 +988,7 @@ addHook({
       adjustRunnerFailuresOnce(this)
       if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
       onRunDone(this.failures)
+      runnerFrameworkErrors.delete(this)
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
@@ -1402,6 +1412,7 @@ addHook({
       adjustRunnerFailuresOnce(this)
       if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
       onRunDone(this.failures)
+      runnerFrameworkErrors.delete(this)
     }
 
     this.prependOnceListener('start', getOnStartHandler(frameworkVersion))

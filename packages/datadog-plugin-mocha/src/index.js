@@ -486,11 +486,14 @@ class MochaPlugin extends CiPlugin {
         if (exporter.deferTestSuiteSpan) {
           exporter.deferTestSuiteSpan(testSuiteSpan)
           testSuiteSpan.finish()
-        } else {
+        } else if (exporter.exportDeferredTestSuiteSpans) {
+          const finishTime = this._now()
           this._pendingTestSuiteSpans.push({
             span: testSuiteSpan,
-            finishTime: testSuiteSpan._getTime(),
+            finishTime,
           })
+        } else {
+          testSuiteSpan.finish()
         }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }

@@ -701,6 +701,9 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     if (test._ddShouldSkipEfdRetry) {
       return
     }
+    const shouldWaitForHitProbe = test._retriedTest?._ddShouldWaitForHitProbe
+    if (test._ddTestFinishPublished || (shouldWaitForHitProbe && test._ddTestFinishStarted)) return
+    if (shouldWaitForHitProbe) test._ddTestFinishStarted = true
     const ctx = getTestContext(test)
     const status = getTestStatus(test)
     const shouldFinishTest = ctx && (
@@ -734,7 +737,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
-    if (test._retriedTest?._ddShouldWaitForHitProbe) {
+    if (shouldWaitForHitProbe) {
       await waitForHitProbe()
     }
 
@@ -894,10 +897,12 @@ function getOnFailHandler (isMain, config) {
     }
     if (testContext) {
       if (isHook) {
-        err.message = `${testOrHook.fullTitle()}: ${err.message}`
-        testContext.err = err
+        const hookError = new Error(`${testOrHook.fullTitle()}: ${err.message}`, { cause: err })
+        hookError.name = err.name
+        hookError.stack = err.stack
+        testContext.err = hookError
         errorCh.runStores(testContext, () => {})
-        const testFinishInfo = getTestFinishInfo(test, 'fail', config, err)
+        const testFinishInfo = getTestFinishInfo(test, 'fail', config, hookError)
         // ATR never retries hook failures: this.retries(N) is set in runnableWrapper
         // which only runs when the test function executes — hooks bypass that path,
         // so _retries stays at -1 and getIsLastRetry returns false, leaving finalStatus
