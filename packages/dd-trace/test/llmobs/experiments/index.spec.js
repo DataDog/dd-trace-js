@@ -347,8 +347,18 @@ describe('LLMObs Experiments facade', () => {
       const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
         records: [
-          { inputData: { q: 'apple' }, expectedOutput: 'APPLE', metadata: { row: 0 } },
-          { inputData: { q: 'car' }, expectedOutput: 'CAR', metadata: { row: 1 } },
+          {
+            id: '72c42c47-1949-4b6c-8d5f-dc89d1116b53',
+            inputData: { q: 'apple' },
+            expectedOutput: 'APPLE',
+            metadata: { row: 0 },
+          },
+          {
+            id: '8139a365-5aa4-41c0-aa39-7b13a49f5301',
+            inputData: { q: 'car' },
+            expectedOutput: 'CAR',
+            metadata: { row: 1 },
+          },
         ],
       }))
 
@@ -398,7 +408,12 @@ describe('LLMObs Experiments facade', () => {
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
-        records: [{ inputData: { value: 1 }, expectedOutput: { value: 2 }, metadata: { source: 'backend-test' } }],
+        records: [{
+          id: 'f1a85430-c609-49e8-bb84-3f6bcc6e32cf',
+          inputData: { value: 1 },
+          expectedOutput: { value: 2 },
+          metadata: { source: 'backend-test' },
+        }],
       }))
 
       const result = await exp.experiment({
