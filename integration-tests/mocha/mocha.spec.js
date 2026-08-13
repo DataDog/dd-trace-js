@@ -628,6 +628,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           MOCHA_REPORTER_THROW_EVENT: 'suite end',
+          MOCHA_REPORT_RUNNER_EMIT_OWNER: '1',
         },
       }
     )
@@ -665,6 +666,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       eventsPromise,
     ])
     assert.match(testOutput, /custom Mocha reporter failed/)
+    assert.match(testOutput, /MOCHA RUNNER OWNS EMIT: false/)
     assert.notStrictEqual(exitCode, 0, testOutput)
   })
 

@@ -523,6 +523,7 @@ function stopCurrentHook (runner, hook) {
   const hookUp = runner.hookUp
   const run = hook.run
 
+  stopRemainingCurrentHooks(runner, hook)
   runner.hook = function (name, onDone) {
     runner.hook = hookMethod
     onDone()
@@ -1570,8 +1571,6 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  wrapRunnerEmit(ParallelBufferedRunner)
-
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)

@@ -1,7 +1,13 @@
 'use strict'
 
+const fs = require('node:fs')
+
 module.exports = function ThrowingReporter (runner) {
   const event = process.env.MOCHA_REPORTER_THROW_EVENT || 'end'
+
+  if (process.env.MOCHA_REPORT_RUNNER_EMIT_OWNER) {
+    fs.writeSync(2, `MOCHA RUNNER OWNS EMIT: ${Object.hasOwn(Object.getPrototypeOf(runner), 'emit')}\n`)
+  }
 
   runner.on(event, runnable => {
     if ((event === 'pass' || event === 'test end') && runnable.parent.title !== 'mocha-test-pass-two') return
