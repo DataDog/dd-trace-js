@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { RuleTester } from 'eslint'
 
 import noProcessEnvDisable from './eslint-no-process-env-disable.mjs'
@@ -24,12 +26,12 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
     '// eslint-enable eslint-rules/eslint-process-env',
     {
       code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
-      filename: '/repo/ci/init.js',
+      filename: path.join(process.cwd(), 'ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
     },
     {
       code: '/* eslint-disable no-console, eslint-rules/eslint-process-env */\nprocess.env.CI',
-      filename: String.raw`C:\repo\ci\diagnose.js`,
+      filename: path.join(process.cwd(), 'ci/diagnose.js'),
       options: [{ allowFiles: ['ci/diagnose.js'] }],
     },
   ],
@@ -61,7 +63,13 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
         '// eslint-disable-next-line eslint-rules/eslint-process-env',
         'process.env.NODE_ENV',
       ].join('\n'),
-      filename: '/repo/ci/init.js',
+      filename: path.join(process.cwd(), 'ci/init.js'),
+      options: [{ allowFiles: ['ci/init.js'] }],
+      errors: [{ messageId: 'noProcessEnvDisable' }],
+    },
+    {
+      code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',
+      filename: path.join(process.cwd(), 'packages/example/src/ci/init.js'),
       options: [{ allowFiles: ['ci/init.js'] }],
       errors: [{ messageId: 'noProcessEnvDisable' }],
     },

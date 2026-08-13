@@ -48,7 +48,6 @@ const SRC_FILES = [
   'packages/*/src/**/*.mjs',
 ]
 
-// Existing direct environment consumers may retain one suppression each. New exceptions must be added explicitly.
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   '.mochamultireporterrc.js',
   'ci/diagnose.js',
@@ -59,6 +58,7 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/datadog-esbuild/index.js',
   'packages/datadog-esbuild/src/log.js',
   'packages/datadog-instrumentations/src/cypress-config.js',
+  'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
   'packages/datadog-webpack/src/log.js',
   'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',

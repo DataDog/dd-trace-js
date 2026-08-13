@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 const PROCESS_ENV_RULE = 'eslint-rules/eslint-process-env'
 
 function isProcessEnvDisable (comment) {
@@ -6,10 +8,6 @@ function isProcessEnvDisable (comment) {
 
   const [ruleList] = match[1].split(/\s+--(?:\s|$)/u, 1)
   return ruleList.split(',').some(rule => rule.trim() === PROCESS_ENV_RULE)
-}
-
-function matchesFile (filename, allowedFile) {
-  return filename === allowedFile || filename.endsWith(`/${allowedFile}`)
 }
 
 export default {
@@ -38,9 +36,9 @@ export default {
   },
 
   create (context) {
-    const filename = (context.filename || context.getFilename?.() || '').replaceAll('\\', '/')
+    const filename = path.relative(context.cwd, context.filename || context.getFilename?.() || '').replaceAll('\\', '/')
     const allowFiles = context.options[0]?.allowFiles ?? []
-    let remainingAllowedDirectives = allowFiles.some(file => matchesFile(filename, file)) ? 1 : 0
+    let remainingAllowedDirectives = allowFiles.includes(filename) ? 1 : 0
 
     return {
       Program () {
