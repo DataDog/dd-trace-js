@@ -440,7 +440,7 @@ function normalizeHeaderLookup (headers) {
 }
 
 function setFlatHeader (headers, name, value) {
-  const result = headers.slice()
+  const result = [...headers]
   let headerFound = false
 
   for (let i = 0; i < result.length; i += 2) {
