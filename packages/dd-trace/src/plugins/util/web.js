@@ -334,26 +334,26 @@ const web = {
       // through unchanged, so all standard methods are uppercase; the
       // `toLowerCase` fallback covers any non-standard caller.
       let headersModified = false
+      const hasStatusMessage = (statusMessage && typeof statusMessage === 'string')
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
-        headers = typeof statusMessage === 'string' ? headers : statusMessage
-        const headersObj = Array.isArray(headers) ? flatHeadersToObject(headers) : headers
-        const mergedHeaders = { ...res.getHeaders(), ...headersObj }
+        headers = hasStatusMessage ? headers : statusMessage
+        const headersAreArray = Array.isArray(headers)
+        const headersLookup = normalizeHeaderLookup(headers)
+        const mergedHeaders = { ...res.getHeaders(), ...headersLookup }
 
         if (isOriginAllowed(req, mergedHeaders)) {
           const allowedHeaders = computeAllowedHeaders(req, mergedHeaders)
           if (allowedHeaders) {
-            // if the original headers is an array preserve it as an array to prevent
-            // overwriting duplicated key.
-            headers = Array.isArray(headers)
+            headers = headersAreArray
               ? setFlatHeader(headers, 'access-control-allow-headers', allowedHeaders)
-              : { ...headersObj, 'access-control-allow-headers': allowedHeaders }
+              : setObjectHeader(headers, 'access-control-allow-headers', allowedHeaders)
             headersModified = true
           }
         }
       }
 
       if (headersModified) {
-        if (typeof statusMessage === 'string') {
+        if (hasStatusMessage) {
           return writeHead.call(this, statusCode, statusMessage, headers)
         }
         return writeHead.call(this, statusCode, headers)
@@ -423,11 +423,19 @@ function splitHeader (str) {
   return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
 }
 
-function flatHeadersToObject (headers) {
+function normalizeHeaderLookup (headers) {
   const result = {}
-  for (let i = 0; i < headers.length; i += 2) {
-    result[headers[i].toLowerCase()] = headers[i + 1]
+
+  if (Array.isArray(headers)) {
+    for (let i = 0; i < headers.length; i += 2) {
+      result[headers[i].toLowerCase()] = headers[i + 1]
+    }
+  } else if (headers) {
+    for (const key of Object.keys(headers)) {
+      result[key.toLowerCase()] = headers[key]
+    }
   }
+
   return result
 }
 
@@ -444,6 +452,28 @@ function setFlatHeader (headers, name, value) {
 
   if (!headerFound) {
     result.push(name, value)
+  }
+
+  return result
+}
+
+function setObjectHeader (headers, name, value) {
+  const result = {}
+  let headerFound = false
+
+  if (headers) {
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === name) {
+        result[key] = value
+        headerFound = true
+      } else {
+        result[key] = headers[key]
+      }
+    }
+  }
+
+  if (!headerFound) {
+    result[name] = value
   }
 
   return result
