@@ -1283,7 +1283,7 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats, error) {
+  afterRun (suiteStats, error, shouldFailFinishedSuites = true) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
@@ -1296,7 +1296,7 @@ class CypressPlugin {
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
       for (const span of this.finishedTestSuiteSpans) {
-        if (error) {
+        if (error && shouldFailFinishedSuites) {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', error)
         }
@@ -1659,7 +1659,7 @@ class CypressPlugin {
 
     if (error) {
       this.abortPendingScreenshotUploads(error)
-      return this.afterRun(undefined, error)
+      return this.afterRun(undefined, error, false)
     }
 
     const screenshotUploadsPromise = waitForScreenshotUploads()

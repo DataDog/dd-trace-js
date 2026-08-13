@@ -13,7 +13,9 @@ module.exports = defineConfig({
           // eslint-disable-next-line prefer-promise-reject-errors
           return Promise.reject()
         }
-        if (process.env.CYPRESS_REJECT_AFTER_SPEC) {
+        if (process.env.CYPRESS_REJECT_AFTER_SPEC &&
+          (process.env.CYPRESS_REJECT_AFTER_SPEC === '1' ||
+            process.env.CYPRESS_REJECT_AFTER_SPEC === spec.relative)) {
           return Promise.reject(new Error('custom after:spec failed'))
         }
         return new Promise((resolve) => {

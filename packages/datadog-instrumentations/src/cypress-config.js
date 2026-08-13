@@ -483,6 +483,7 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
+ * @param {Function[]} userBeforeRunHandlers user's before:run handlers collected from wrappedOn
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
  * @param {Function[]} userAfterScreenshotHandlers user's after:screenshot handlers collected from wrappedOn
@@ -492,6 +493,7 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
 function registerDdTraceHooks (
   on,
   config,
+  userBeforeRunHandlers,
   userAfterSpecHandlers,
   userAfterRunHandlers,
   userAfterScreenshotHandlers,
@@ -535,6 +537,7 @@ function registerDdTraceHooks (
     (manualPlugin.ownsCurrentPlugin ||
       supportsErrorAwareFinalization(manualPlugin) ||
       !setupNodeEventsCh.hasSubscribers)) {
+    for (const handler of userBeforeRunHandlers) on('before:run', handler)
     registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
@@ -543,12 +546,15 @@ function registerDdTraceHooks (
   }
 
   if (manualPlugin.detected) {
+    userBeforeRunHandlers = userBeforeRunHandlers.filter(handler => handler !== manualPlugin.beforeRunHandler)
     userAfterSpecHandlers = userAfterSpecHandlers.filter(handler => handler !== manualPlugin.afterSpecHandler)
     userAfterRunHandlers = userAfterRunHandlers.filter(handler => handler !== manualPlugin.afterRunHandler)
     userAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
       handler => handler !== manualPlugin.afterScreenshotHandler
     )
   }
+
+  for (const handler of userBeforeRunHandlers) on('before:run', handler)
 
   if (!setupNodeEventsCh.hasSubscribers) {
     registerNoopHandlers()
@@ -585,11 +591,13 @@ function registerDdTraceHooks (
  */
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
+    const userBeforeRunHandlers = []
     const userAfterSpecHandlers = []
     const userAfterRunHandlers = []
     const userAfterScreenshotHandlers = []
     const manualPlugin = {
       detected: false,
+      beforeRunHandler: undefined,
       afterSpecHandler: undefined,
       afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
@@ -599,7 +607,9 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     const recentRegistrations = []
 
     const wrappedOn = (event, handler) => {
-      if (event === 'after:spec') {
+      if (event === 'before:run') {
+        userBeforeRunHandlers.push(handler)
+      } else if (event === 'after:spec') {
         userAfterSpecHandlers.push(handler)
         if (isDatadogAfterSpecHandler(handler)) manualPlugin.afterSpecHandler = handler
       } else if (event === 'after:run') {
@@ -616,6 +626,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
             afterScreenshot?.event === 'after:screenshot' &&
             afterSpec?.event === 'after:spec' &&
             afterRun?.event === 'after:run') {
+            manualPlugin.beforeRunHandler ||= beforeRun.handler
             manualPlugin.afterSpecHandler ||= afterSpec.handler
             manualPlugin.afterRunHandler ||= afterRun.handler
             manualPlugin.afterScreenshotHandler ||= afterScreenshot.handler
@@ -638,6 +649,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         return registerDdTraceHooks(
           on,
           mergeReturnedConfig(config, result),
+          userBeforeRunHandlers,
           userAfterSpecHandlers,
           userAfterRunHandlers,
           userAfterScreenshotHandlers,
@@ -649,6 +661,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     return registerDdTraceHooks(
       on,
       mergeReturnedConfig(config, maybePromise),
+      userBeforeRunHandlers,
       userAfterSpecHandlers,
       userAfterRunHandlers,
       userAfterScreenshotHandlers,

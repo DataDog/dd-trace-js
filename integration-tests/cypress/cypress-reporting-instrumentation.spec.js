@@ -268,7 +268,6 @@ moduleTypes.forEach(({
           },
         }
       )
-
       // TODO: remove this once we have figured out flakiness
       childProcess.stdout?.pipe(process.stdout)
       childProcess.stderr?.pipe(process.stderr)
@@ -569,6 +568,69 @@ moduleTypes.forEach(({
         assert.notStrictEqual(exitCode, 0)
       })
     }
+
+    over10It('keeps completed suites passing when a later after:spec handler rejects', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_AFTER_SPEC: 'cypress/e2e/basic-pass.js',
+            SPEC_PATTERN: 'cypress/e2e/{basic-pass,other.cy}.js',
+          },
+        }
+      )
+      let testOutput = ''
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const completedSuite = events.find(event =>
+            event.type === 'test_suite_end' &&
+            event.content.resource === 'test_suite.cypress/e2e/other.cy.js'
+          )
+          const failedSuite = events.find(event =>
+            event.type === 'test_suite_end' &&
+            event.content.resource === 'test_suite.cypress/e2e/basic-pass.js'
+          )
+
+          assert.ok(completedSuite, `expected the completed suite event\n${testOutput}`)
+          assert.strictEqual(completedSuite.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(completedSuite.content.error, 0)
+          assert.ok(failedSuite, 'expected the failed suite event')
+          assert.strictEqual(failedSuite.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(failedSuite.content.error, 1)
+          assert.match(failedSuite.content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.error, 1)
+            assert.match(event.content.meta[ERROR_MESSAGE], /custom after:spec failed/)
+          }
+        },
+        { hardTimeout: 60000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
 
     for (const { testName, rejectionVariable, expectedError } of [
       {
@@ -2438,6 +2500,54 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      it('removes an older manual before:run handler when current auto instrumentation takes ownership', () => {
+        const projectRoot = createProjectRoot()
+        const legacyBeforeRunHandler = sinon.stub()
+        const currentBeforeRunHandler = sinon.stub()
+        const registrations = []
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub().callsFake((payload) => {
+            if (!payload.on) return
+            payload.on('before:run', currentBeforeRunHandler)
+            payload.registered = true
+            payload.cleanupWrapper()
+          }),
+        }
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('before:run', legacyBeforeRunHandler)
+              on('after:screenshot', sinon.stub())
+              on('after:spec', sinon.stub())
+              on('after:run', sinon.stub())
+              on('task', taskHandler)
+            },
+          },
+        }
+        const { cypressConfig } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          registrations.push([event, handler])
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        assert.deepStrictEqual(
+          registrations.filter(([event]) => event === 'before:run'),
+          [['before:run', currentBeforeRunHandler]]
+        )
+      })
+
       it('retains current manual handlers and tasks when an adapter strips lifecycle markers', async () => {
         const projectRoot = createProjectRoot()
         const userError = new Error('user after:spec failed')
