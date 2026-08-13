@@ -66,7 +66,11 @@ const plugins = {
   get 'dd-trace-api' () { return require('../../../datadog-plugin-dd-trace-api/src') },
   get elasticsearch () { return require('../../../datadog-plugin-elasticsearch/src') },
   get electron () { return require('../../../datadog-plugin-electron/src') },
-  get express () { return require('../../../datadog-plugin-express/src') },
+  get express () {
+    return nativePlugins
+      ? require('../native-spans/plugins/express')
+      : require('../../../datadog-plugin-express/src')
+  },
   get fastify () { return require('../../../datadog-plugin-fastify/src') },
   get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },
   get fs () { return require('../../../datadog-plugin-fs/src') },
@@ -138,7 +142,11 @@ const plugins = {
   get redis () { return require('../../../datadog-plugin-redis/src') },
   get restify () { return require('../../../datadog-plugin-restify/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
-  get router () { return require('../../../datadog-plugin-router/src') },
+  get router () {
+    return nativePlugins
+      ? require('../native-spans/plugins/router')
+      : require('../../../datadog-plugin-router/src')
+  },
   get 'selenium-webdriver' () { return require('../../../datadog-plugin-selenium/src') },
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },

@@ -22,8 +22,9 @@ pub const KIND_ENTER_CONTEXT_NEW: u32 = 16;
 pub const KIND_WEB_REQUEST_START: u32 = 17;
 pub const KIND_WEB_REQUEST_FINISH: u32 = 18;
 pub const KIND_SPAN_ERROR: u32 = 19;
+pub const KIND_MIDDLEWARE_START: u32 = 20;
 
-pub const KIND_COUNT: usize = 20;
+pub const KIND_COUNT: usize = 21;
 
 /// Record width in words, kind tag included, indexed by kind. A zero entry marks
 /// an unassigned tag, which decode treats as a corrupt stream and bails on.
@@ -48,6 +49,7 @@ pub const WIDTHS: [u8; KIND_COUNT] = {
     widths[KIND_WEB_REQUEST_START as usize] = 11;
     widths[KIND_WEB_REQUEST_FINISH as usize] = 8;
     widths[KIND_SPAN_ERROR as usize] = 6;
+    widths[KIND_MIDDLEWARE_START as usize] = 11;
     widths
 };
 
@@ -64,7 +66,7 @@ pub const DOUBLE_COUNTS: [u8; KIND_COUNT] = {
 
 /// Strings with fixed ids on both sides. Outside the resettable id range, so they
 /// never appear in a `REGISTER_STRING` record. Append only, never reorder.
-pub const RESERVED_STRINGS: [&str; 47] = [
+pub const RESERVED_STRINGS: [&str; 50] = [
     "",
     "operation.name",
     "service.name",
@@ -114,6 +116,9 @@ pub const RESERVED_STRINGS: [&str; 47] = [
     // `http.method` and the rest of that family are already reserved above.
     "web.request",
     "express.request",
+    "router",
+    "router.middleware",
+    "express.middleware",
 ];
 
 /// Framework ids carried by `WEB_REQUEST_FINISH`. The operation name, the `component`
@@ -124,6 +129,10 @@ pub const RESERVED_STRINGS: [&str; 47] = [
 #[allow(dead_code)]
 pub const FRAMEWORK_HTTP: u32 = 0;
 pub const FRAMEWORK_EXPRESS: u32 = 1;
+
+/// Which host dispatched a middleware layer. Separate from `FRAMEWORK_*`: those name the
+/// server framework, these the router.
+pub const MIDDLEWARE_EXPRESS: u32 = 1;
 
 pub const FIRST_DYNAMIC_STRING_ID: u32 = 64;
 

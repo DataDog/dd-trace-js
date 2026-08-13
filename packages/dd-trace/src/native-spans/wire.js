@@ -40,8 +40,9 @@ const KIND_ENTER_CONTEXT_NEW = 16
 const KIND_WEB_REQUEST_START = 17
 const KIND_WEB_REQUEST_FINISH = 18
 const KIND_SPAN_ERROR = 19
+const KIND_MIDDLEWARE_START = 20
 
-const KIND_COUNT = 20
+const KIND_COUNT = 21
 
 /** Record width in words, kind tag included, indexed by kind. */
 const WIDTHS = new Uint8Array(KIND_COUNT)
@@ -96,6 +97,15 @@ WIDTHS[KIND_WEB_REQUEST_START] = 11
 // that its three strings get their own record rather than three empty words on every
 // successful request.
 WIDTHS[KIND_WEB_REQUEST_FINISH] = 8
+// [segmentIdHi, segmentIdLo, spanIdHi, spanIdLo, parentIdHi, parentIdLo, startHi, startLo,
+//  resourceId, framework]
+//
+// A middleware span's shape is fixed apart from its handler name: no type, no span kind,
+// and a `component` / `_dd.integration` pair that follows from the framework word. Only
+// the handler name is interned. There is no matching finish record, because a plain
+// `FINISH` already carries nothing but the duration — a specialized one would save
+// nothing, so middleware reuses it.
+WIDTHS[KIND_MIDDLEWARE_START] = 11
 // [idHi, idLo, messageId, typeId, stackId]
 //
 // Not web-specific: an error is an error. Every span reaches this instead of the four
@@ -168,6 +178,9 @@ const RESERVED_STRINGS = [
   // `http.method` and the rest of that family are already reserved above.
   'web.request',
   'express.request',
+  'router',
+  'router.middleware',
+  'express.middleware',
 ]
 
 /**
@@ -177,6 +190,14 @@ const RESERVED_STRINGS = [
  */
 const FRAMEWORK_HTTP = 0
 const FRAMEWORK_EXPRESS = 1
+
+/**
+ * Which host dispatched a middleware layer. Separate from `FRAMEWORK_*` above: those name
+ * the server framework, these name the router, and an express app's own layers dispatch as
+ * `router` rather than `express`.
+ */
+const MIDDLEWARE_ROUTER = 0
+const MIDDLEWARE_EXPRESS = 1
 
 /**
  * First id handed out by the per-flush interning table. Reserved ids occupy
@@ -211,11 +232,14 @@ module.exports = {
   KIND_SET_TAG_NUMBER_ID,
   KIND_SET_TAG_STRING,
   KIND_SET_TAG_STRING_ID,
+  KIND_MIDDLEWARE_START,
   KIND_SPAN_ERROR,
   KIND_SPAN_START,
   KIND_WEB_REQUEST_FINISH,
   KIND_WEB_REQUEST_START,
   MAX_RECORD_WORDS,
+  MIDDLEWARE_EXPRESS,
+  MIDDLEWARE_ROUTER,
   RESERVED_STRINGS,
   WIDTHS,
 }

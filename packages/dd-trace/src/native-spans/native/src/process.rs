@@ -17,7 +17,7 @@ use std::rc::Rc;
 use crate::decode::Event;
 use crate::encode;
 use crate::wire::{
-    FRAMEWORK_EXPRESS, KEY_ERROR, KEY_ERROR_MESSAGE, KEY_ERROR_STACK, KEY_ERROR_TYPE,
+    FRAMEWORK_EXPRESS, MIDDLEWARE_EXPRESS, KEY_ERROR, KEY_ERROR_MESSAGE, KEY_ERROR_STACK, KEY_ERROR_TYPE,
     KEY_HTTP_STATUS_CODE, KEY_OPERATION_NAME, KEY_RESOURCE_NAME, KEY_SERVICE_NAME, KEY_SPAN_KIND,
     KEY_SPAN_TYPE,
 };
@@ -45,6 +45,9 @@ const META_TRACE_ID_HIGH: &str = "_dd.p.tid";
 const VALUE_SERVER: &str = "server";
 const VALUE_WEB: &str = "web";
 const NAME_WEB_REQUEST: &str = "web.request";
+const NAME_ROUTER_MIDDLEWARE: &str = "router.middleware";
+const NAME_EXPRESS_MIDDLEWARE: &str = "express.middleware";
+const COMPONENT_ROUTER: &str = "router";
 const NAME_EXPRESS_REQUEST: &str = "express.request";
 const COMPONENT_HTTP: &str = "http";
 const COMPONENT_EXPRESS: &str = "express";
@@ -113,6 +116,9 @@ struct ConstantKeys {
     name_express_request: Rc<str>,
     component_http: Rc<str>,
     component_express: Rc<str>,
+    component_router: Rc<str>,
+    name_router_middleware: Rc<str>,
+    name_express_middleware: Rc<str>,
     span_links: Rc<str>,
     events: Rc<str>,
     base_service: Rc<str>,
@@ -142,6 +148,9 @@ impl ConstantKeys {
             name_express_request: Rc::from(NAME_EXPRESS_REQUEST),
             component_http: Rc::from(COMPONENT_HTTP),
             component_express: Rc::from(COMPONENT_EXPRESS),
+            component_router: Rc::from(COMPONENT_ROUTER),
+            name_router_middleware: Rc::from(NAME_ROUTER_MIDDLEWARE),
+            name_express_middleware: Rc::from(NAME_EXPRESS_MIDDLEWARE),
             span_links: Rc::from(META_SPAN_LINKS),
             events: Rc::from(META_EVENTS),
             base_service: Rc::from(META_BASE_SERVICE),
@@ -505,6 +514,46 @@ impl Assembler {
                         || segment.finished >= self.flush_min_spans
                     {
                         completed.push((segment_id, 0));
+                    }
+                }
+                Event::MiddlewareStart {
+                    segment_id,
+                    span_id,
+                    parent_id,
+                    start,
+                    resource,
+                    framework,
+                } => {
+                    let express = framework == MIDDLEWARE_EXPRESS;
+                    let name = Rc::clone(if express {
+                        &self.keys.name_express_middleware
+                    } else {
+                        &self.keys.name_router_middleware
+                    });
+                    let component = Rc::clone(if express {
+                        &self.keys.component_express
+                    } else {
+                        &self.keys.component_router
+                    });
+                    let component_key = Rc::clone(&self.keys.component);
+                    let integration_key = Rc::clone(&self.keys.integration);
+
+                    let mut builder = self
+                        .pool
+                        .pop()
+                        .unwrap_or_else(|| SpanBuilder::new(span_id, parent_id, start));
+                    builder.reuse(span_id, parent_id, start);
+                    builder.name = Some(name);
+                    builder.resource = Some(resource);
+                    builder.meta.push((component_key, Rc::clone(&component)));
+                    builder.meta.push((integration_key, component));
+
+                    if let Some(segment) = self.segments.get_mut(&segment_id) {
+                        segment.spans.push(builder);
+                        self.last_span = Some((span_id, segment_id, segment.spans.len() - 1));
+                        self.span_segments.insert(span_id, segment_id);
+                    } else {
+                        self.pool.push(builder);
                     }
                 }
                 Event::SpanError {

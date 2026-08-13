@@ -24,7 +24,7 @@ use crate::wire::{
     KIND_ADD_LINK, KIND_ADD_LINK_ID, KIND_COUNT, KIND_ENTER_CONTEXT_KEEP_LAST,
     KIND_ENTER_CONTEXT_NEW, KIND_FINISH, KIND_FINISH_ID, KIND_PROCESS_INFO, KIND_REGISTER_STRING,
     KIND_SEGMENT_START, KIND_SET_TAG_NUMBER, KIND_SET_TAG_NUMBER_ID, KIND_SET_TAG_STRING,
-    KIND_SET_TAG_STRING_ID, KIND_SPAN_START, KIND_SPAN_ERROR, KIND_WEB_REQUEST_FINISH,
+    KIND_SET_TAG_STRING_ID, KIND_SPAN_START, KIND_MIDDLEWARE_START, KIND_SPAN_ERROR, KIND_WEB_REQUEST_FINISH,
     KIND_WEB_REQUEST_START, RESERVED_STRINGS, WIDTHS,
 };
 
@@ -103,6 +103,17 @@ pub enum Event {
         duration: u64,
         status_code: u32,
         route: Rc<str>,
+        framework: u32,
+    },
+    /// A middleware layer. Its name, `component` and `_dd.integration` all follow from the
+    /// framework word, and it has no type and no span kind, so only the handler name is
+    /// sent. It finishes through the plain `Finish` record.
+    MiddlewareStart {
+        segment_id: u64,
+        span_id: u64,
+        parent_id: u64,
+        start: u64,
+        resource: Rc<str>,
         framework: u32,
     },
     /// A failed span, of any kind. Written only on failure, so nothing about errors is
@@ -289,6 +300,18 @@ pub fn decode(events: &[u32], doubles: &[f64], strings: &[u8]) -> Vec<Event> {
                     status_code: fields[4],
                     route: table.get(fields[5]),
                     framework: fields[6],
+                });
+            }
+            KIND_MIDDLEWARE_START => {
+                let span_id = lanes_to_u64(fields[2], fields[3]);
+                last_explicit = span_id;
+                decoded.push(Event::MiddlewareStart {
+                    segment_id: lanes_to_u64(fields[0], fields[1]),
+                    span_id,
+                    parent_id: lanes_to_u64(fields[4], fields[5]),
+                    start: lanes_to_u64(fields[6], fields[7]),
+                    resource: table.get(fields[8]),
+                    framework: fields[9],
                 });
             }
             KIND_SPAN_ERROR => {

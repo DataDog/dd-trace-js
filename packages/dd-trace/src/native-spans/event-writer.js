@@ -23,6 +23,7 @@ const {
   KIND_SET_TAG_STRING,
   KIND_SET_TAG_STRING_ID,
   KIND_SPAN_START,
+  KIND_MIDDLEWARE_START,
   KIND_SPAN_ERROR,
   KIND_WEB_REQUEST_FINISH,
   KIND_WEB_REQUEST_START,
@@ -477,6 +478,50 @@ class EventWriter {
   }
 
   /**
+   * A middleware span in one record.
+   *
+   * The generic equivalent is a `SPAN_START` plus four tags — the operation name, the
+   * resource, `component` and `_dd.integration` — around 24 words and five interning
+   * lookups. This is 11 words and one lookup, because only the handler name varies: the
+   * name and both tags follow from the framework word, and a middleware span has no type
+   * and no span kind. There is no specialized finish; a plain `FINISH` already carries
+   * nothing but the duration.
+   *
+   * @param {import('./span_context')} context
+   * @param {number} startHi
+   * @param {number} startLo
+   * @param {string} resource The handler's name, or `<anonymous>`.
+   * @param {number} framework One of `MIDDLEWARE_*` in `./wire`.
+   */
+  middlewareStart (context, startHi, startLo, resource, framework) {
+    if (this.#eventCursor >= EVENT_LIMIT || this.#stringCursor >= STRING_LIMIT) this.flush()
+
+    const resourceId = this.#intern(resource)
+
+    const segmentId = context._segmentId
+    const spanId = context._spanId
+    const parentId = context._parentId
+    const events = this.#events
+    const cursor = this.#eventCursor
+
+    events[cursor] = KIND_MIDDLEWARE_START
+    events[cursor + 1] = segmentId.hi
+    events[cursor + 2] = segmentId.lo
+    events[cursor + 3] = spanId.hi
+    events[cursor + 4] = spanId.lo
+    events[cursor + 5] = parentId.hi
+    events[cursor + 6] = parentId.lo
+    events[cursor + 7] = startHi
+    events[cursor + 8] = startLo
+    events[cursor + 9] = resourceId
+    events[cursor + 10] = framework
+    this.#eventCursor = cursor + 11
+
+    this.#lastExplicitContext = context
+    this.#pendingContext = context
+  }
+
+  /**
    * `[idHi, idLo, messageId, typeId, stackId]` — one record for a failed span, of any
    * kind.
    *
@@ -652,6 +697,8 @@ class NoopEventWriter extends EventWriter {
   addLink () {}
 
   addEvent () {}
+
+  middlewareStart () {}
 
   spanError () {}
 
