@@ -7,12 +7,17 @@ const { pathToFileURL } = require('url')
 
 const log = require('../../dd-trace/src/log')
 const { getSegment } = require('../../dd-trace/src/util')
-const { normalizeUserHandlerError, runUserHandler } = require('../../datadog-plugin-cypress/src/finalization')
+const {
+  finalizeAfterUserHandlers,
+  manualPluginOwner,
+  runUserHandler,
+} = require('../../datadog-plugin-cypress/src/finalization')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
 const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
 const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
+const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
 const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
@@ -210,6 +215,14 @@ function isDatadogAfterSpecHandler (handler) {
 function supportsErrorAwareFinalization (manualPlugin) {
   return isDatadogAfterSpecHandler(manualPlugin.afterSpecHandler) &&
     isDatadogAfterRunHandler(manualPlugin.afterRunHandler)
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ * @returns {boolean} whether the current manual Datadog plugin owns the task map
+ */
+function isCurrentDatadogTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_TASK_HANDLER] === manualPluginOwner
 }
 
 /**
@@ -416,29 +429,6 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
 }
 
 /**
- * Runs the Datadog finalizer after user handlers while preserving the user
- * error as the framework-visible failure.
- *
- * @param {Promise<void>} userHandlers collected user-handler chain
- * @param {(userError?: unknown) => unknown} finalizer Datadog finalizer
- * @returns {Promise<unknown>} finalizer result
- */
-function finalizeAfterUserHandlers (userHandlers, finalizer) {
-  return userHandlers.then(
-    () => finalizer(),
-    userError => Promise.resolve().then(() => {
-      return finalizer(normalizeUserHandlerError(userError))
-    }).then(
-      () => { throw userError },
-      finalizationError => {
-        log.error('Datadog Cypress finalizer failed after a user handler error', finalizationError)
-        throw userError
-      }
-    )
-  )
-}
-
-/**
  * Registers one Cypress after:spec handler that runs every collected handler
  * in registration order. Cypress 10+ otherwise keeps only the last handler.
  *
@@ -542,7 +532,9 @@ function registerDdTraceHooks (
   }
 
   if (manualPlugin.detected &&
-    (supportsErrorAwareFinalization(manualPlugin) || !setupNodeEventsCh.hasSubscribers)) {
+    (manualPlugin.ownsCurrentPlugin ||
+      supportsErrorAwareFinalization(manualPlugin) ||
+      !setupNodeEventsCh.hasSubscribers)) {
     registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
@@ -602,7 +594,9 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
       taskHandler: undefined,
+      ownsCurrentPlugin: false,
     }
+    const recentRegistrations = []
 
     const wrappedOn = (event, handler) => {
       if (event === 'after:spec') {
@@ -616,14 +610,23 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterSpecHandler ||= userAfterSpecHandlers.at(-1)
-          manualPlugin.afterRunHandler ||= userAfterRunHandlers.at(-1)
-          manualPlugin.afterScreenshotHandler ||= userAfterScreenshotHandlers.at(-1)
+          manualPlugin.ownsCurrentPlugin = isCurrentDatadogTaskRegistration(handler)
+          const [beforeRun, afterScreenshot, afterSpec, afterRun] = recentRegistrations
+          if (beforeRun?.event === 'before:run' &&
+            afterScreenshot?.event === 'after:screenshot' &&
+            afterSpec?.event === 'after:spec' &&
+            afterRun?.event === 'after:run') {
+            manualPlugin.afterSpecHandler ||= afterSpec.handler
+            manualPlugin.afterRunHandler ||= afterRun.handler
+            manualPlugin.afterScreenshotHandler ||= afterScreenshot.handler
+          }
           manualPlugin.taskHandler = handler
         } else {
           on(event, handler)
         }
       }
+      recentRegistrations.push({ event, handler })
+      if (recentRegistrations.length > 4) recentRegistrations.shift()
     }
 
     const maybePromise = originalSetupNodeEvents

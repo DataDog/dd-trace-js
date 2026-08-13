@@ -2,8 +2,11 @@
 
 const { AsyncLocalStorage } = require('node:async_hooks')
 
+const log = require('../../dd-trace/src/log')
+
 const DD_CYPRESS_USER_HANDLER_CONTEXT = Symbol.for('dd-trace.cypress.user-handler.context')
 const userHandlerContext = globalThis[DD_CYPRESS_USER_HANDLER_CONTEXT] ||= new AsyncLocalStorage()
+const manualPluginOwner = {}
 
 /**
  * Runs a Cypress user handler while allowing wrapped legacy Datadog helpers to
@@ -41,7 +44,32 @@ function normalizeUserHandlerError (reason) {
   }
 }
 
+/**
+ * Runs the Datadog finalizer after user handlers while preserving the user
+ * error as the framework-visible failure.
+ *
+ * @param {Promise<void>} userHandlers collected user-handler chain
+ * @param {(userError?: unknown) => unknown} finalizer Datadog finalizer
+ * @returns {Promise<unknown>} finalizer result
+ */
+function finalizeAfterUserHandlers (userHandlers, finalizer) {
+  return userHandlers.then(
+    () => finalizer(),
+    userError => Promise.resolve().then(() => {
+      return finalizer(normalizeUserHandlerError(userError))
+    }).then(
+      () => { throw userError },
+      finalizerError => {
+        log.error('Datadog Cypress finalizer failed after a user handler error', finalizerError)
+        throw userError
+      }
+    )
+  )
+}
+
 module.exports = {
+  finalizeAfterUserHandlers,
+  manualPluginOwner,
   normalizeUserHandlerError,
   runUserHandler,
   shouldDeferLegacyFinalization,

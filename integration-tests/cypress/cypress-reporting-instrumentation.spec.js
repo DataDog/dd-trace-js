@@ -797,6 +797,51 @@ moduleTypes.forEach(({
       assert.match(testOutput, /\[custom:after:spec:manual\]/)
     })
 
+    over10It('keeps same-copy manual tasks when an adapter wraps its lifecycle handlers', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+      let testOutput = ''
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_SIMULATE_OLD_MANUAL_PLUGIN: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (data) => { testOutput += data })
+      childProcess.stderr?.on('data', (data) => { testOutput += data })
+
+      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.strictEqual(events.filter(event => event.type === 'test_session_end').length, 1)
+          assert.strictEqual(events.filter(event => event.type === 'test_module_end').length, 1)
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+        },
+        { hardTimeout: 60000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+      assert.doesNotMatch(testOutput, /The task 'dd:/)
+      assert.doesNotMatch(testOutput, /Multiple attempts to register the following task/)
+    })
+
     over10It('reports a failed test session trace when a handler after the manual plugin rejects', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const legacyConfigFile = type === 'esm'
@@ -2084,21 +2129,32 @@ if (requestedVersion === 'latest' &&
     /**
      * @param {object} [fsStub] filesystem overrides
      * @param {() => string} [randomUUID] UUID generator
-     * @returns {{ cypressConfig: object, errors: string[], warnings: string[] }} loaded instrumentation and logs
+     * @param {object} [setupNodeEventsChannel] setup-node-events diagnostic channel
+     * @returns {{
+     *   cypressConfig: object,
+     *   errors: string[],
+     *   manualPluginOwner: object,
+     *   warnings: string[]
+     * }} loaded instrumentation and logs
      */
-    function loadCypressConfig (fsStub, randomUUID) {
+    function loadCypressConfig (fsStub, randomUUID, setupNodeEventsChannel) {
       const warnings = []
       let uuid = 0
+      const log = {
+        error: (...args) => errors.push(format(...args)),
+        warn: (...args) => warnings.push(format(...args)),
+      }
+      const finalization = proxyquire('../../packages/datadog-plugin-cypress/src/finalization', {
+        '../../dd-trace/src/log': log,
+      })
       const stubs = {
         crypto: {
           randomUUID: randomUUID || (() => `uuid-${++uuid}`),
         },
-        '../../dd-trace/src/log': {
-          error: (...args) => errors.push(format(...args)),
-          warn: (...args) => warnings.push(format(...args)),
-        },
+        '../../datadog-plugin-cypress/src/finalization': finalization,
+        '../../dd-trace/src/log': log,
         './helpers/instrument': {
-          channel: () => ({ hasSubscribers: false, publish: () => {} }),
+          channel: () => setupNodeEventsChannel || { hasSubscribers: false, publish: () => {} },
         },
       }
 
@@ -2107,6 +2163,7 @@ if (requestedVersion === 'latest' &&
       return {
         cypressConfig: proxyquire('../../packages/datadog-instrumentations/src/cypress-config', stubs),
         errors,
+        manualPluginOwner: finalization.manualPluginOwner,
         warnings,
       }
     }
@@ -2381,6 +2438,112 @@ if (requestedVersion === 'latest' &&
     })
 
     describe('manual plugin', () => {
+      it('retains current manual handlers and tasks when an adapter strips lifecycle markers', async () => {
+        const projectRoot = createProjectRoot()
+        const userError = new Error('user after:spec failed')
+        const userHandler = sinon.stub().rejects(userError)
+        const datadogAfterSpecHandler = sinon.stub()
+        const datadogAfterRunHandler = sinon.stub()
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const { cypressConfig, manualPluginOwner } = loadCypressConfig(
+          undefined,
+          undefined,
+          setupNodeEventsChannel
+        )
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('before:run', sinon.stub())
+              on('after:screenshot', sinon.stub())
+              on('after:spec', (...args) => datadogAfterSpecHandler(...args))
+              on('after:run', (...args) => datadogAfterRunHandler(...args))
+              on('task', taskHandler)
+              on('after:spec', userHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const spec = { relative: 'cypress/e2e/basic-pass.js' }
+        const results = { stats: { passes: 1 } }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        await assert.rejects(handlers['after:spec'](spec, results), error => error === userError)
+        sinon.assert.calledOnceWithExactly(datadogAfterSpecHandler, spec, results, userError)
+        assert.strictEqual(handlers.task, taskHandler)
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
+        await handlers['after:run']({ totalPassed: 1 })
+      })
+
+      it('preserves user handlers when a no-op manual plugin only registers tasks', async () => {
+        const projectRoot = createProjectRoot()
+        const userAfterSpecHandler = sinon.stub()
+        const userAfterRunHandler = sinon.stub()
+        const userAfterScreenshotHandler = sinon.stub().returns({ path: 'renamed.png' })
+        const noopTaskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('after:spec', userAfterSpecHandler)
+              on('after:run', userAfterRunHandler)
+              on('after:screenshot', userAfterScreenshotHandler)
+              on('task', noopTaskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+        const spec = { relative: 'cypress/e2e/basic-pass.js' }
+        const results = { stats: { passes: 1 } }
+        const screenshot = { path: 'original.png' }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        await handlers['after:spec'](spec, results)
+        assert.deepStrictEqual(await handlers['after:screenshot'](screenshot), { path: 'renamed.png' })
+        await handlers['after:run']({ totalPassed: 1 })
+
+        sinon.assert.calledOnceWithExactly(userAfterSpecHandler, spec, results)
+        sinon.assert.calledOnceWithExactly(userAfterScreenshotHandler, screenshot)
+        sinon.assert.calledOnce(userAfterRunHandler)
+        sinon.assert.calledOnce(setupNodeEventsChannel.publish)
+      })
+
       for (const event of ['after:run', 'after:spec']) {
         for (const position of ['before', 'after']) {
           it(`supports an older manual ${event} handler registered ${position} the user handler`, async () => {
@@ -2403,6 +2566,8 @@ if (requestedVersion === 'latest' &&
                  */
                 setupNodeEvents (on) {
                   if (position === 'before') on(event, userHandler)
+                  on('before:run', sinon.stub())
+                  on('after:screenshot', sinon.stub())
                   on('after:spec', datadogAfterSpecHandler)
                   on('after:run', datadogAfterRunHandler)
                   on('task', taskHandler)
@@ -2452,7 +2617,10 @@ if (requestedVersion === 'latest' &&
              * @returns {void}
              */
             setupNodeEvents (on) {
+              on('before:run', sinon.stub())
+              on('after:screenshot', sinon.stub())
               on('after:spec', datadogAfterSpecHandler)
+              on('after:run', sinon.stub())
               on('task', taskHandler)
             },
           },

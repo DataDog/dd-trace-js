@@ -2,31 +2,7 @@
 
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const log = require('../../dd-trace/src/log')
-const { normalizeUserHandlerError, runUserHandler } = require('./finalization')
-
-/**
- * Runs the Datadog finalizer even when a user Cypress handler fails, while
- * preserving the user's error as the framework-visible failure.
- *
- * @param {Promise<void>} userHandlers
- * @param {(userError?: unknown) => unknown} finalizer
- * @returns {Promise<unknown>}
- */
-function finalizeAfterUserHandlers (userHandlers, finalizer) {
-  return userHandlers.then(
-    () => finalizer(),
-    userError => Promise.resolve().then(() => {
-      return finalizer(normalizeUserHandlerError(userError))
-    }).then(
-      () => { throw userError },
-      finalizerError => {
-        log.error('Datadog Cypress finalizer failed after a user handler error', finalizerError)
-        throw userError
-      }
-    )
-  )
-}
+const { finalizeAfterUserHandlers, runUserHandler } = require('./finalization')
 
 /**
  * Cypress plugin handles setup-node-events from the instrumentation layer
