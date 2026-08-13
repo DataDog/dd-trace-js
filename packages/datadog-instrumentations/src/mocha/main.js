@@ -63,6 +63,16 @@ require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
+/**
+ * @typedef {{ replacement: Function, run: Function }} ReporterReplacement
+ * @typedef {{
+ *   createFileRunner?: ReporterReplacement,
+ *   hookRuns: Map<object, ReporterReplacement>,
+ *   pendingTests: Map<object, { hadPending: boolean, pending: unknown }>,
+ *   tests: Set<object>
+ * }} RunnerRecoveryState
+ */
+
 const patched = new WeakSet()
 const runnerEndHandlers = new WeakMap()
 const runnerHookMethods = new WeakMap()
@@ -70,6 +80,8 @@ const runnerTestEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
 const runnerStarted = new WeakSet()
+const runnerRecoveryStates = new WeakMap()
+const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
@@ -390,6 +402,88 @@ function adjustRunnerFailuresOnce (runner) {
 }
 
 /**
+ * Returns the mutations that must be restored after reporter-error recovery.
+ *
+ * @param {object} runner
+ * @returns {RunnerRecoveryState}
+ */
+function getRunnerRecoveryState (runner) {
+  let state = runnerRecoveryStates.get(runner)
+  if (!state) {
+    state = {
+      hookRuns: new Map(),
+      pendingTests: new Map(),
+      tests: new Set(),
+    }
+    runnerRecoveryStates.set(runner, state)
+  }
+  return state
+}
+
+/**
+ * Marks a test pending for the aborted run while retaining its reusable state.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function markTestPending (runner, test) {
+  const state = getRunnerRecoveryState(runner)
+  if (!state.pendingTests.has(test)) {
+    state.pendingTests.set(test, {
+      hadPending: Object.hasOwn(test, 'pending'),
+      pending: test.pending,
+    })
+  }
+  state.tests.add(test)
+  test.pending = true
+  test._ddReporterStartFailed = true
+}
+
+/**
+ * Marks a completed test for immediate reporter-error finalization.
+ *
+ * @param {object} runner
+ * @param {object} test
+ * @returns {void}
+ */
+function markTestTerminal (runner, test) {
+  getRunnerRecoveryState(runner).tests.add(test)
+  test._ddReporterTerminalFailed = true
+}
+
+/**
+ * Restores test and hook state changed only to abort the current run.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function restoreReporterMutations (runner) {
+  const state = runnerRecoveryStates.get(runner)
+  if (!state) return
+
+  runnerRecoveryStates.delete(runner)
+  for (const [test, { hadPending, pending }] of state.pendingTests) {
+    if (hadPending) test.pending = pending
+    else delete test.pending
+  }
+  for (const test of state.tests) {
+    delete test._ddTestFinishStarted
+    delete test._ddTestFinishPublished
+    delete test._ddIsFinalAttempt
+    delete test._ddHookFailed
+    delete test._ddReporterStartFailed
+    delete test._ddReporterTerminalFailed
+  }
+  for (const [hook, { replacement, run }] of state.hookRuns) {
+    if (hook.run === replacement) hook.run = run
+  }
+  if (state.createFileRunner && runner._createFileRunner === state.createFileRunner.replacement) {
+    runner._createFileRunner = state.createFileRunner.run
+  }
+}
+
+/**
  * Prevents Mocha from entering hooks or the test body after a test-start reporter error.
  *
  * @param {object} runner
@@ -400,8 +494,7 @@ function stopCurrentTest (runner, test) {
   const hookDown = runner.hookDown
   const hookUp = runner.hookUp
 
-  test.pending = true
-  test._ddReporterStartFailed = true
+  markTestPending(runner, test)
   runner.hookDown = function (name, onDone) {
     runner.hookDown = hookDown
     onDone()
@@ -440,10 +533,7 @@ function stopCurrentHook (runner, hook) {
   hook.run = function (onDone) {
     hook.run = run
     const test = hook.ctx?.currentTest
-    if (test) {
-      test.pending = true
-      test._ddReporterStartFailed = true
-    }
+    if (test) markTestPending(runner, test)
     onDone()
   }
 }
@@ -458,7 +548,7 @@ function stopCurrentHook (runner, hook) {
 function stopAfterEachHooks (runner, test) {
   const hookUp = runner.hookUp
 
-  test._ddReporterTerminalFailed = true
+  markTestTerminal(runner, test)
   runner.hookUp = function (name, onDone) {
     runner.hookUp = hookUp
     onDone()
@@ -497,10 +587,11 @@ function restoreFutureHooks (runner) {
 /**
  * Stops hooks remaining in the currently executing hook array.
  *
+ * @param {object} runner
  * @param {object} hook
  * @returns {boolean} whether the completed hook was a before-each hook
  */
-function stopRemainingCurrentHooks (hook) {
+function stopRemainingCurrentHooks (runner, hook) {
   const hookLists = [hook.parent?._beforeAll, hook.parent?._beforeEach, hook.parent?._afterEach, hook.parent?._afterAll]
 
   for (const hooks of hookLists) {
@@ -510,10 +601,12 @@ function stopRemainingCurrentHooks (hook) {
     for (let index = hookIndex + 1; index < hooks.length; index++) {
       const remainingHook = hooks[index]
       const run = remainingHook.run
-      remainingHook.run = function (onDone) {
+      const replacement = function (onDone) {
         remainingHook.run = run
         onDone()
       }
+      getRunnerRecoveryState(runner).hookRuns.set(remainingHook, { replacement, run })
+      remainingHook.run = replacement
     }
     return hooks === hook.parent._beforeEach
   }
@@ -528,10 +621,9 @@ function stopRemainingCurrentHooks (hook) {
  * @returns {void}
  */
 function stopAfterHookEnd (runner, hook) {
-  if (!stopRemainingCurrentHooks(hook) || !runner.test) return
+  if (!stopRemainingCurrentHooks(runner, hook) || !runner.test) return
 
-  runner.test.pending = true
-  runner.test._ddReporterStartFailed = true
+  markTestPending(runner, runner.test)
 }
 
 /**
@@ -547,6 +639,28 @@ function stopRootSuite (runner) {
     runner.runSuite = runSuite
     onDone()
   }
+}
+
+function skipParallelFile () {}
+
+function createSkippedParallelFileRunner () {
+  return skipParallelFile
+}
+
+/**
+ * Prevents a parallel run-start reporter error from scheduling test workers.
+ *
+ * @param {object} runner
+ * @returns {void}
+ */
+function stopParallelWorkers (runner) {
+  const state = getRunnerRecoveryState(runner)
+  if (state.createFileRunner) return
+
+  const run = runner._createFileRunner
+  const replacement = createSkippedParallelFileRunner
+  state.createFileRunner = { replacement, run }
+  runner._createFileRunner = replacement
 }
 
 /**
@@ -578,18 +692,21 @@ function wrapRunnerEmit (Runner) {
           runnerFrameworkErrors.set(this, error)
           this.abort()
           stopFutureHooks(this)
-          if (event === 'start') stopRootSuite(this)
-          else if (event === 'test') stopCurrentTest(this, arguments[1])
+          if (event === 'start') {
+            if (parallelRunners.has(this)) stopParallelWorkers(this)
+            else stopRootSuite(this)
+          } else if (event === 'test') stopCurrentTest(this, arguments[1])
           else if (event === 'hook') stopCurrentHook(this, arguments[1])
           else if (event === 'hook end') {
             const hook = arguments[1]
             stopAfterHookEnd(this, hook)
             const test = hook.ctx?.currentTest
             if (test && hook.parent?._afterEach?.includes(hook)) {
-              test._ddReporterTerminalFailed = true
+              markTestTerminal(this, test)
               if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(this)?.(test)
             }
-          } else if (event === 'pass' || event === 'fail' || event === 'retry' || event === 'test end') {
+          } else if (event === 'pending' || event === 'pass' || event === 'fail' || event === 'retry' ||
+            event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
             if (event === 'test end' && !test._ddTestFinishStarted) {
@@ -603,6 +720,8 @@ function wrapRunnerEmit (Runner) {
 
     runnerEndHandlers.delete(this)
     restoreFutureHooks(this)
+    restoreReporterMutations(this)
+    parallelRunners.delete(this)
     runnerTestEndHandlers.delete(this)
     runnerStarted.delete(this)
     let result
@@ -1420,6 +1539,7 @@ addHook({
     runnerFailuresAdjusted.delete(this)
     runnerFrameworkErrors.delete(this)
     runnerStarted.delete(this)
+    parallelRunners.add(this)
     arguments[0] = () => {
       adjustRunnerFailuresOnce(this)
       if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1

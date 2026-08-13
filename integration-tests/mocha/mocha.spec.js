@@ -246,7 +246,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       } else if (reporterEvent === 'hook end') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/passing-with-after-each.js'
       } else if (reporterEvent === 'pending') {
-        reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping.js'
+        reporterTestFile = './ci-visibility/mocha-plugin-tests/skipping-with-after-each.js'
       } else if (reporterEvent === 'retry') {
         reporterTestFile = './ci-visibility/mocha-plugin-tests/retries.js'
       } else if (reporterEvent === 'pass' || reporterEvent === 'test end') {
@@ -302,7 +302,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           if (reporterEvent === 'test end' || reporterEvent === 'hook end' || reporterEvent === 'pending') {
             let expectedTestName = 'mocha-test-pass-two can pass'
             if (reporterEvent === 'hook end') expectedTestName = 'mocha-reporter-hook-end can pass'
-            else if (reporterEvent === 'pending') expectedTestName = 'mocha-test-skip can skip'
+            else if (reporterEvent === 'pending') expectedTestName = 'mocha-reporter-pending-after-each can skip'
             const testEvents = events.filter(event =>
               event.type === 'test' && event.content.meta[TEST_NAME] === expectedTestName
             )
@@ -353,7 +353,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         reporterEvent === 'hook') {
         assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
       }
-      if (['pass', 'fail', 'retry', 'test end'].includes(reporterEvent)) {
+      if (['pass', 'fail', 'pending', 'retry', 'test end'].includes(reporterEvent)) {
         assert.doesNotMatch(testOutput, /MOCHA AFTER EACH EXECUTED/)
       }
       assert.notStrictEqual(exitCode, 0, testOutput)
@@ -533,6 +533,94 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     assert.match(testOutput, /custom Mocha reporter failed/)
     assert.notStrictEqual(exitCode, 0, testOutput)
   })
+
+  onlyLatestIt('does not schedule parallel workers when the coordinator reporter throws on start', async function () {
+    this.timeout(20_000)
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+      ' ./ci-visibility/mocha-plugin-tests/reporter-run-start.js' +
+      ' ./ci-visibility/test/ci-visibility-test-2.js' +
+      ' --reporter ./ci-visibility/mocha-reporter-throws.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_REPORTER_THROW_EVENT: 'start',
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        assert.strictEqual(events.some(event => event.type === 'test'), false)
+        assert.strictEqual(events.some(event => event.type === 'test_suite_end'), false)
+        for (const eventType of ['test_session_end', 'test_module_end']) {
+          const event = events.find(event => event.type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.error, 1)
+          assert.match(event.content.meta[ERROR_MESSAGE], /custom Mocha reporter failed/)
+        }
+      },
+      { hardTimeout: 20_000 }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    assert.match(testOutput, /custom Mocha reporter failed/)
+    assert.doesNotMatch(testOutput, /MOCHA (?:BEFORE|AFTER|TEST)/)
+    assert.notStrictEqual(exitCode, 0, testOutput)
+  })
+
+  for (const reporterEvent of ['test', 'hook end']) {
+    onlyLatestIt(`restores reusable Mocha state after a reporter throws on ${reporterEvent}`, async function () {
+      this.timeout(20_000)
+      childProcess = exec('node ./ci-visibility/run-mocha-reporter-rerun.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_REUSABLE_REPORTER_EVENT: reporterEvent,
+        },
+      })
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event =>
+            event.type === 'test' &&
+            event.content.meta[TEST_NAME] === 'mocha-reporter-reusable-run runs again after reporter recovery'
+          )
+          assert.deepStrictEqual(
+            testEvents.map(event => event.content.meta[TEST_STATUS]).sort(),
+            ['pass', 'skip'],
+            testOutput
+          )
+          const sessionEvents = events.filter(event => event.type === 'test_session_end')
+          assert.deepStrictEqual(
+            sessionEvents.map(event => event.content.meta[TEST_STATUS]).sort(),
+            ['fail', 'pass'],
+            testOutput
+          )
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.match(testOutput, /MOCHA FIRST RUN ERROR: custom reusable Mocha reporter failed/)
+      assert.match(testOutput, /MOCHA SECOND RUN FAILURES: 0/)
+      assert.strictEqual((testOutput.match(/MOCHA REUSABLE SECOND HOOK EXECUTED/g) || []).length, 1)
+      assert.strictEqual((testOutput.match(/MOCHA REUSABLE TEST EXECUTED/g) || []).length, 1)
+    })
+  }
 
   it('reports a completed suite when the process exits before session finalization', async function () {
     this.timeout(20_000)
