@@ -131,7 +131,7 @@ module.exports = class Plugin {
    * Bind the tracer store to a diagnostic channel with a transform function.
    *
    * @param {string} channelName Diagnostic channel name.
-   * @param {(data: unknown) => object} transform Transform to compute the bound store.
+   * @param {(data: unknown) => object | undefined} transform Transform to compute the bound store.
    * @returns {void}
    */
   addBind (channelName, transform) {
