@@ -21,6 +21,8 @@ const {
   TEST_BROWSER_NAME,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_OWNERS,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
@@ -77,6 +79,7 @@ function getTestByName (tests, name) {
 describe(`vitest@${vitestVersion} Browser Mode`, function () {
   this.timeout(180_000)
 
+  const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
   let childProcess
   let cwd
   let receiver
@@ -101,8 +104,9 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     await receiver.stop()
   })
 
-  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0) {
-    childProcess = exec('./node_modules/.bin/vitest run', {
+  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0, extraArguments = []) {
+    const cliArguments = extraArguments.length > 0 ? ` ${extraArguments.join(' ')}` : ''
+    childProcess = exec(`./node_modules/.bin/vitest run${cliArguments}`, {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
@@ -185,6 +189,50 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     const [exitCode] = await Promise.all([
       runVitest('browser-reporting.mjs'),
       payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles known test names containing a closing script tag', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'
+    receiver.setSettings({ known_tests_enabled: true })
+    receiver.setKnownTests({
+      vitest: {
+        [testSuite]: [
+          'known test containing </script> in its name',
+        ],
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting runs the test body in the browser'
+      ).meta[TEST_STATUS], 'pass')
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting reports skipped browser tests'
+      ).meta[TEST_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-reporting.mjs', {
+        VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles test commands containing a closing script tag', async () => {
+    const exitCode = await runVitest('browser-reporting.mjs', {
+      VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+    }, 0, [
+      "--testNamePattern='runs the test body|</script>'",
     ])
 
     assert.strictEqual(exitCode, 0, testOutput)
@@ -697,6 +745,38 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
           assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
         }
       }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+        },
+        faulty_session_threshold: 0,
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const [testSession] = getEventContents(events, 'test_session_end')
+      assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+      assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
     })
 
     const [exitCode] = await Promise.all([

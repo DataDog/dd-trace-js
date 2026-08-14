@@ -171,7 +171,7 @@ function createWorkerConfiguration () {
 }
 
 /**
- * Configures a Jasmine worker for reporting-only execution and notifies its coordinator.
+ * Configures a Jasmine worker and waits for its coordinator-owned optimization settings.
  *
  * @param {{_jrunner?: {env?: {addReporter?: (reporter: object) => void}}, _specs?: string[]}} adapter
  * @param {{
@@ -185,13 +185,7 @@ function initializeJasmineWorker (adapter, context) {
     return
   }
 
-  workerConfigurationCh.publish({
-    libraryConfig: createWorkerConfiguration(),
-    repositoryRoot: undefined,
-    specs: adapter?._specs || [],
-    testFramework: TEST_FRAMEWORK,
-    testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
-  })
+  const specs = adapter?._specs || []
 
   if (jasmineDoneCh.hasSubscribers) {
     adapter?._jrunner?.env?.addReporter?.({
@@ -220,9 +214,10 @@ function initializeJasmineWorker (adapter, context) {
     /**
      * Releases Jasmine initialization exactly once.
      *
+     * @param {object} [configuration]
      * @returns {void}
      */
-    function finish () {
+    function finish (configuration = createWorkerConfiguration()) {
       if (finished) {
         return
       }
@@ -230,6 +225,13 @@ function initializeJasmineWorker (adapter, context) {
       clearTimeout(timeout)
       process.off('message', onMessage)
       process.off('disconnect', finish)
+      workerConfigurationCh.publish({
+        libraryConfig: configuration,
+        repositoryRoot: configuration.repositoryRoot,
+        specs,
+        testFramework: TEST_FRAMEWORK,
+        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+      })
       onDone()
     }
 
@@ -241,7 +243,7 @@ function initializeJasmineWorker (adapter, context) {
      */
     function onMessage (message) {
       if (message?.name === WORKER_READY_RESPONSE && message.content?.requestId === requestId) {
-        finish()
+        finish(message.content.configuration)
       }
     }
 
@@ -447,6 +449,18 @@ function getMochaFrameworkData (frameworkData) {
 }
 
 /**
+ * Applies the worker configuration for an EFD session with faulty known-tests data.
+ *
+ * @param {object} configuration
+ * @returns {void}
+ */
+function setEarlyFlakeDetectionFaulty (configuration) {
+  configuration.isEarlyFlakeDetectionEnabled = false
+  configuration.isEarlyFlakeDetectionFaulty = true
+  configuration.isKnownTestsEnabled = false
+}
+
+/**
  * Applies settings and requests the enabled non-TIA datasets once for the whole run.
  *
  * @param {CoordinatorState} state
@@ -498,9 +512,11 @@ function configureCoordinator (state, response) {
     pendingRequests++
     requestCoordinatorData(state, knownTestsCh, ({ err, knownTests } = {}) => {
       const mochaKnownTests = getMochaFrameworkData(knownTests)
-      if (err || !mochaKnownTests) {
+      if (err) {
         configuration.isEarlyFlakeDetectionEnabled = false
         configuration.isKnownTestsEnabled = false
+      } else if (mochaKnownTests === undefined) {
+        setEarlyFlakeDetectionFaulty(configuration)
       } else {
         configuration.knownTests = { mocha: mochaKnownTests }
       }
@@ -564,7 +580,6 @@ function initializeCoordinator (state, onDone) {
 
   try {
     libraryConfigurationCh.runStores({
-      basicReportingOnly: state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER,
       disableTestImpactAnalysis: true,
       frameworkVersion: state.frameworkVersion,
       isParallel: state.maxActiveWorkers > 1,
@@ -727,9 +742,7 @@ function updateEarlyFlakeDetectionFaultyState (state, files) {
     configuration.earlyFlakeDetectionFaultyThreshold
   )
   if (isFaulty) {
-    configuration.isEarlyFlakeDetectionEnabled = false
-    configuration.isEarlyFlakeDetectionFaulty = true
-    configuration.isKnownTestsEnabled = false
+    setEarlyFlakeDetectionFaulty(configuration)
   }
 }
 
@@ -809,15 +822,16 @@ function handleWorkerMessage (state, workerRecord, message) {
   }
 
   if (message.name === WORKER_READY) {
-    initializeCoordinator(state, () => {
+    initializeCoordinator(state, configuration => {
       if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
+        updateEarlyFlakeDetectionFaultyState(state, workerRecord.specs)
         startWorkerSuites(workerRecord, workerRecord.specs)
       }
       if (message.content?.requestId) {
         sendWorkerMessage(workerRecord, {
           origin: 'datadog',
           name: WORKER_READY_RESPONSE,
-          content: { requestId: message.content.requestId },
+          content: { configuration, requestId: message.content.requestId },
         })
       }
     })

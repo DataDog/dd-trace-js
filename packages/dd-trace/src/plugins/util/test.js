@@ -8,17 +8,18 @@ const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
+const { parse } = require('../../../../../vendor/dist/jest-docblock')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../carrier')
 const id = require('../../id')
 const {
   incrementCountMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../ci-visibility/telemetry')
-
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
@@ -195,6 +196,8 @@ const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_COVERAGE_PAYLOAD_CODE = 101
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 const VITEST_WORKER_TELEMETRY_PAYLOAD_CODE = 103
+const VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE = 104
+const VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE = 105
 
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
@@ -489,6 +492,8 @@ module.exports = {
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
@@ -504,6 +509,7 @@ module.exports = {
   getTestParametersString,
   finishAllTraceSpans,
   getTestParentSpan,
+  isMarkedAsUnskippable,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -544,6 +550,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getFailedTestReplayPromise,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -844,7 +851,7 @@ function getTestTypeFromFramework (testFramework) {
  */
 function finishAllTraceSpans (span) {
   for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span) {
+    if (traceSpan !== span && traceSpan._duration === undefined) {
       traceSpan.finish()
     }
   }
@@ -901,10 +908,10 @@ function setRumTestCorrelation (context, activeSpan) {
  * @returns {import('../../opentracing/span_context')}
  */
 function getTestParentSpan (tracer, testExecutionId) {
-  return tracer.extract('text_map', {
-    'x-datadog-trace-id': testExecutionId || id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-  })
+  const carrier = /** @type {Record<string, unknown>} */ ({})
+  writeDatadogTraceId(carrier, testExecutionId || id().toString(10))
+  writeDatadogParentId(carrier, '0000000000000000')
+  return tracer.extract('text_map', carrier)
 }
 
 function getTestCommonTags (name, suite, version, testFramework) {
@@ -939,6 +946,62 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replaceAll(path.sep, '/')
+}
+
+const globalDocblockRegExp = /^\s*(\/\*\*?(.|\r?\n)*?\*\/)/
+const MAX_COMMENTS_CHECKED = 10
+
+function isMarkedAsUnskippable (test) {
+  let testSource
+
+  try {
+    testSource = fs.readFileSync(test.path, 'utf8')
+  } catch {
+    return false
+  }
+
+  const re = globalDocblockRegExp
+  re.lastIndex = 0
+  let commentsChecked = 0
+
+  while (testSource.length) {
+    const match = re.exec(testSource)
+    if (!match) break
+    const comment = match[1]
+
+    let docblocks
+    try {
+      docblocks = parse(comment)
+    } catch {
+      // Skip unparsable comment and continue scanning
+      if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+        return false
+      }
+      continue
+    }
+
+    if (docblocks?.datadog) {
+      try {
+        // @ts-expect-error The datadog type is defined by us and may only be a string.
+        return JSON.parse(docblocks.datadog).unskippable
+      } catch {
+        // If the @datadog block comment is present but malformed, we'll run the suite
+        log.warn('@datadog block comment is malformed.')
+        return true
+      }
+    }
+
+    if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+      return false
+    }
+
+    // To stop as soon as no doc blocks are found, slice the source. That way the
+    // regexp works by using the `^` anchor. Without it, it would continue
+    // scanning the rest of the file.
+    testSource = testSource.slice(match[0].length)
+  }
+
+  return false
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
@@ -1540,6 +1603,22 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+/**
+ * Combines the optional Failed Test Replay operations that must settle before a retry.
+ *
+ * @param {{setProbePromise?: Promise<void>, finishTestPromise?: Promise<void>}} promises
+ * @returns {Promise<void>|undefined}
+ */
+function getFailedTestReplayPromise (promises) {
+  if (promises.setProbePromise && promises.finishTestPromise) {
+    return Promise.all([
+      promises.setProbePromise,
+      promises.finishTestPromise,
+    ]).then(() => {})
+  }
+  return promises.setProbePromise || promises.finishTestPromise
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

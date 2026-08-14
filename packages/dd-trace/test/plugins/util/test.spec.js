@@ -46,6 +46,7 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getLibraryCapabilitiesTags,
+  finishAllTraceSpans,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
@@ -66,6 +67,32 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('finishAllTraceSpans', () => {
+  it('does not finish completed spans twice', () => {
+    const tracer = { _config: getConfig() }
+    const processor = { process () {} }
+    const prioritySampler = { sample () {} }
+    const rootSpan = new Span(tracer, processor, prioritySampler, { operationName: 'root' })
+    const completedSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'completed',
+      parent: rootSpan.context(),
+    })
+    const activeSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'active',
+      parent: rootSpan.context(),
+    })
+    sinon.spy(completedSpan, 'finish')
+    sinon.spy(activeSpan, 'finish')
+    completedSpan.finish()
+    completedSpan.finish.resetHistory()
+
+    finishAllTraceSpans(rootSpan)
+
+    sinon.assert.notCalled(completedSpan.finish)
+    sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
 
 describe('library capabilities', () => {
   it('advertises TIA for Vitest unless the execution mode does not support it', () => {
@@ -173,6 +200,16 @@ describe('RUM test correlation', () => {
       'x-datadog-trace-id': '123456789',
       'x-datadog-parent-id': '0000000000000000',
     })
+  })
+
+  it('generates a test execution ID when none is preallocated', () => {
+    const parentSpan = {}
+    const extract = sinon.stub().returns(parentSpan)
+
+    assert.strictEqual(getTestParentSpan({ extract }), parentSpan)
+    sinon.assert.calledOnce(extract)
+    assert.match(extract.firstCall.args[1]['x-datadog-trace-id'], /^\d+$/)
+    assert.strictEqual(extract.firstCall.args[1]['x-datadog-parent-id'], '0000000000000000')
   })
 })
 

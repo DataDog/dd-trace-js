@@ -1222,7 +1222,28 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const result = await start.apply(this, arguments)
+    let result
+    try {
+      result = await start.apply(this, arguments)
+    } catch (error) {
+      try {
+        await getChannelPromise(sessionFinishCh, {
+          status: 'fail',
+          error,
+          isSuitesSkipped,
+          numSkippedSuites: skippedSuites.length,
+          hasUnskippableSuites: isUnskippable,
+          hasForcedToRunSuites: isForcedToRun,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+          isParallel,
+        })
+      } catch (finalizationError) {
+        log.error('Cucumber test session finalization error: %s', finalizationError)
+      }
+      throw error
+    }
     const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage

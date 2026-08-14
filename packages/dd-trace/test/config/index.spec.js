@@ -766,6 +766,19 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
+  it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, undefined)
+  })
+
+  it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_TRACES_SAMPLER = 'always_off'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, 0)
+  })
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
@@ -845,6 +858,42 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+  })
+
+  describe('HTTP server error statuses', () => {
+    it('should default to 500-599', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
+
+    it('should initialize from DD_TRACE_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES', value: '400-499', origin: 'env_var' },
+      ])
+    })
+
+    it('should fall back to DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '400-499')
+    })
+
+    it('should prefer DD_TRACE_HTTP_SERVER_ERROR_STATUSES over DD_HTTP_SERVER_ERROR_STATUSES', () => {
+      process.env.DD_HTTP_SERVER_ERROR_STATUSES = '400-499'
+      process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = '500-599'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
+    })
   })
 
   it('should initialize with the correct defaults', () => {

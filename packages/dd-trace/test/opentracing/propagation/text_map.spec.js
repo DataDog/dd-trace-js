@@ -113,6 +113,19 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(carrier.baggage, undefined)
     })
 
+    it('should log injection through the managed field projection', () => {
+      const carrier = {}
+      config.tracePropagationStyle.inject = ['datadog']
+
+      propagator.inject(createContext(), carrier)
+
+      sinon.assert.called(log.debug)
+      assert.strictEqual(log.debug.lastCall.args[0](), [
+        'Inject into carrier:',
+        '{"x-datadog-trace-id":"123","x-datadog-parent-id":"456"}.',
+      ].join(' '))
+    })
+
     it('should handle non-string values', () => {
       const carrier = {}
       const baggageItems = {
@@ -446,6 +459,21 @@ describe('TextMapPropagator', () => {
       assert.ok(!('x-b3-traceid' in carrier))
     })
 
+    it('should inject the optional parent ID into the b3 single header', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456'),
+        parentId: id('0000000000000789'),
+        sampling: { priority: USER_KEEP },
+      })
+      config.tracePropagationStyle.inject = [B3_SINGLE_STYLE]
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1-0000000000000789')
+    })
+
     if (DD_MAJOR >= 6) {
       it('should treat inject:["b3"] as the single-header form on v6', () => {
         const carrier = {}
@@ -509,6 +537,20 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       assert.ok(!('traceparent' in carrier))
+    })
+
+    it('should preserve other tracestate vendors when APM tracing is disabled', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        tracestate: TraceState.fromString('other=value,dd=s:1'),
+      })
+      config.apmTracingEnabled = false
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier.traceparent, undefined)
+      assert.strictEqual(carrier.tracestate, 'other=value')
     })
 
     it('should skip injection of datadog headers without the feature flag', () => {
@@ -1027,6 +1069,109 @@ describe('TextMapPropagator', () => {
           foo: 'bar',
         },
       }))
+    })
+
+    it('should return null for an aws-sqsd header that parses to null', () => {
+      assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': 'null' }), null)
+    })
+
+    it('should return null when the carrier carries a trace id but no parent id', () => {
+      const spanContext = propagator.extract({ 'x-datadog-trace-id': '123' })
+
+      assert.strictEqual(spanContext, null)
+    })
+
+    it('should return null for an all-zero trace id', () => {
+      textMap['x-datadog-trace-id'] = '0000'
+
+      assert.strictEqual(propagator.extract(textMap), null)
+    })
+
+    it('should resolve repeated trace and parent id fields to the last ones', () => {
+      textMap['x-datadog-trace-id'] = ['123', '456']
+      textMap['x-datadog-parent-id'] = ['1', '2']
+
+      const spanContext = propagator.extract(textMap)
+
+      // Combining them instead would extract the concatenation `123,456` as trace `1686`.
+      assert.strictEqual(spanContext.toTraceId(), '456')
+      assert.strictEqual(spanContext.toSpanId(), '2')
+    })
+
+    it('should resolve a repeated sampling priority to the last one', () => {
+      textMap['x-datadog-sampling-priority'] = ['0', '2']
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+    })
+
+    it('should resolve a repeated origin to the last one', () => {
+      textMap['x-datadog-origin'] = ['rum', 'synthetics']
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.strictEqual(spanContext._trace.origin, 'synthetics')
+    })
+
+    it('should combine repeated trace tag fields', () => {
+      textMap['x-datadog-tags'] = ['_dd.p.foo=bar', '_dd.p.baz=qux']
+
+      const spanContext = propagator.extract(textMap)
+
+      assertObjectContains(spanContext._trace.tags, {
+        '_dd.p.foo': 'bar',
+        '_dd.p.baz': 'qux',
+      })
+    })
+
+    it('should measure the trace tag length limit against the combined fields', () => {
+      // 9 + 1 separator + 502 = 512, the configured maximum.
+      textMap['x-datadog-tags'] = ['_dd.p.a=1', `_dd.p.b=${'x'.repeat(494)}`]
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.strictEqual(spanContext._trace.tags['_dd.p.a'], '1')
+    })
+
+    it('should not extract trace tags when the combined fields exceed the limit', () => {
+      textMap['x-datadog-tags'] = ['_dd.p.a=1', `_dd.p.b=${'x'.repeat(495)}`]
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.ok(!('_dd.p.a' in spanContext._trace.tags))
+    })
+
+    it('should combine repeated baggage fields without crashing on a non-string one', () => {
+      textMap.baggage = [Symbol('unsendable'), 'foo=bar']
+
+      propagator.extract(textMap)
+
+      assert.deepStrictEqual(getAllBaggageItems(), { foo: 'bar' })
+    })
+
+    it('should still extract the context when a list-valued field is not a string', () => {
+      textMap['x-datadog-tags'] = 42
+      textMap.baggage = 42
+
+      const spanContext = propagator.extract(textMap)
+
+      assert.strictEqual(spanContext.toTraceId(), '123')
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should resolve a repeated aws-sqsd header to the last one', () => {
+      const carrier = {
+        'x-aws-sqsd-attr-_datadog': [
+          JSON.stringify({ 'x-datadog-trace-id': '111', 'x-datadog-parent-id': '222' }),
+          JSON.stringify({ 'x-datadog-trace-id': '333', 'x-datadog-parent-id': '444' }),
+        ],
+      }
+
+      const spanContext = propagator.extract(carrier)
+
+      assert.strictEqual(spanContext.toTraceId(), '333')
+      assert.strictEqual(spanContext.toSpanId(), '444')
     })
 
     it('should skip extraction of datadog headers without the feature flag', () => {
@@ -1608,6 +1753,22 @@ describe('TextMapPropagator', () => {
         }))
       })
 
+      it('should support the debug flag in the full syntax', () => {
+        textMap.b3 = '0000000000000123-0000000000000456-d'
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      })
+
+      it('should support the unsampled flag in the full syntax', () => {
+        textMap.b3 = '0000000000000123-0000000000000456-0'
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+      })
+
       it('should support unsampled traces', () => {
         textMap.b3 = '0'
 
@@ -1826,9 +1987,29 @@ describe('TextMapPropagator', () => {
 
       it('should ignore non-string traceparent values without crashing', () => {
         config.tracePropagationStyle.extract = ['tracecontext']
-        for (const value of [['00-bad'], { foo: 'bar' }, 42, true]) {
+        for (const value of [['00-bad'], { foo: 'bar' }, 42, true, [42]]) {
           assert.strictEqual(propagator.extract({ traceparent: value }), null)
         }
+      })
+
+      it('should reject a repeated traceparent field', () => {
+        textMap.traceparent = [
+          '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
+          '00-99998888777766665555444433332222-1111000022223333-01',
+        ]
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        assert.strictEqual(propagator.extract(textMap), null)
+      })
+
+      it('should accept a single traceparent field represented as an array', () => {
+        textMap.traceparent = ['00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01']
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
+        assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
       })
 
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
@@ -2073,8 +2254,17 @@ describe('TextMapPropagator', () => {
 
       it('returns undefined when the b3 single header is present but not a string', () => {
         assert.strictEqual(testPropagator._extractB3SingleContext({ b3: 123 }), undefined)
-        assert.strictEqual(testPropagator._extractB3SingleContext({ b3: ['0'] }), undefined)
         assert.strictEqual(testPropagator._extractB3SingleContext({ b3: undefined }), undefined)
+        assert.strictEqual(testPropagator._extractB3SingleContext({ b3: [123] }), undefined)
+      })
+
+      it('resolves a repeated b3 single header to the last field the sender wrote', () => {
+        const context = testPropagator._extractB3SingleContext({
+          b3: ['1111aaaa2222bbbb-3333cccc4444dddd-1', '5555eeee6666ffff-7777aaaa8888bbbb-1'],
+        })
+
+        assert.strictEqual(context.toTraceId(true), '0000000000000000' + '5555eeee6666ffff')
+        assert.strictEqual(context.toSpanId(true), '7777aaaa8888bbbb')
       })
 
       it('still parses a real b3 single header', () => {
@@ -2094,7 +2284,23 @@ describe('TextMapPropagator', () => {
       it('still extracts when only the b3 sampled flag is present', () => {
         const b3 = testPropagator._extractB3MultipleHeaders({ 'x-b3-sampled': '1' })
 
-        assert.deepStrictEqual(b3, { 'x-b3-sampled': '1' })
+        assert.deepStrictEqual(b3, { sampled: '1' })
+      })
+
+      it('resolves repeated b3-multi fields to the last ones', () => {
+        const b3 = testPropagator._extractB3MultipleHeaders({
+          'x-b3-traceid': ['1111aaaa2222bbbb', '5555eeee6666ffff'],
+          'x-b3-spanid': ['3333cccc4444dddd', '7777aaaa8888bbbb'],
+          'x-b3-sampled': ['0', '1'],
+          'x-b3-flags': ['0', '1'],
+        })
+
+        assert.deepStrictEqual(b3, {
+          traceId: '5555eeee6666ffff',
+          spanId: '7777aaaa8888bbbb',
+          sampled: '1',
+          flags: '1',
+        })
       })
 
       it('still extracts a full b3-multi carrier', () => {
@@ -2105,9 +2311,9 @@ describe('TextMapPropagator', () => {
         })
 
         assert.deepStrictEqual(b3, {
-          'x-b3-traceid': '1111aaaa2222bbbb',
-          'x-b3-spanid': '3333cccc4444dddd',
-          'x-b3-sampled': '1',
+          traceId: '1111aaaa2222bbbb',
+          spanId: '3333cccc4444dddd',
+          sampled: '1',
         })
       })
     })
@@ -2151,6 +2357,13 @@ describe('TextMapPropagator', () => {
           x: 'y',
           'multi-dash': 'still-works',
         })
+      })
+
+      it('resolves a repeated ot-baggage- field to the last one', () => {
+        propagator._extractLegacyBaggageItems({
+          'ot-baggage-foo': ['stale', 'current'],
+        }, baggageContext)
+        assert.deepStrictEqual(baggageContext._baggageItems, { foo: 'current' })
       })
 
       it('skips the bare ot-baggage- prefix without a suffix', () => {
