@@ -1,6 +1,11 @@
 'use strict'
 
 const log = require('../../log')
+const { ExternalExperiment } = require('./experiment')
+
+const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
+const NOOP_SPAN_ID = '0000000000000000'
+const NOOP_TRACE_ID = '00000000000000000000000000000000'
 
 class NoopDataset {
   #name
@@ -29,6 +34,20 @@ class NoopDataset {
       metadata: metadata ?? {},
       ...(tags === undefined ? {} : { tags }),
     })
+    return this
+  }
+
+  update (index, fields) {
+    const record = this.#records[index]
+    if (record == null) return this
+    if (Object.hasOwn(fields, 'input')) record.input = fields.input
+    if (Object.hasOwn(fields, 'expectedOutput')) record.expectedOutput = fields.expectedOutput ?? null
+    if (Object.hasOwn(fields, 'metadata')) record.metadata = fields.metadata ?? {}
+    return this
+  }
+
+  delete (index) {
+    this.#records.splice(index, 1)
     return this
   }
 
@@ -119,9 +138,11 @@ class NoopDataset {
 
 class NoopExperiment {
   #name
+  #external
 
-  constructor (name = '') {
+  constructor (name = '', external = false) {
     this.#name = name
+    this.#external = external
   }
 
   name () {
@@ -129,7 +150,7 @@ class NoopExperiment {
   }
 
   experimentId () {
-    return null
+    return this.#external ? NOOP_EXPERIMENT_ID : null
   }
 
   url () {
@@ -139,6 +160,32 @@ class NoopExperiment {
   run () {
     return Promise.resolve({ experimentId: null, rows: [], url: null })
   }
+
+  /**
+   * @returns {Promise<{experimentId: string, spanId: string, traceId: string, url: null}>}
+   */
+  submitSpan () {
+    return Promise.resolve({
+      experimentId: NOOP_EXPERIMENT_ID,
+      spanId: NOOP_SPAN_ID,
+      traceId: NOOP_TRACE_ID,
+      url: null,
+    })
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  submitEvaluationMetrics () {
+    return Promise.resolve()
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  close () {
+    return Promise.resolve()
+  }
 }
 
 // No-op Experiments used when LLM Observability is disabled or the API/APP keys
@@ -146,9 +193,11 @@ class NoopExperiment {
 // throwing, so intentionally disabled experiments remain graceful.
 class NoopExperiments {
   #reason
+  #startExperiment
 
-  constructor (reason) {
+  constructor (reason, options = {}) {
     this.#reason = reason || 'LLMObs experiments are not available'
+    this.#startExperiment = options.startExperiment
   }
 
   #warn () {
@@ -168,6 +217,19 @@ class NoopExperiments {
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  /**
+   * @param {object} options
+   * @returns {Promise<ExternalExperiment>}
+   */
+  startExperiment (options = {}) {
+    if (this.#startExperiment !== undefined && options.projectName) {
+      return this.#startExperiment(options)
+    }
+
+    this.#warn()
+    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }
 }
 

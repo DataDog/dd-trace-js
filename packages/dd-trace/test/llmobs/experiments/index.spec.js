@@ -170,7 +170,11 @@ describe('LLMObs Experiments facade', () => {
 
       exp.createDataset('d')
 
-      sinon.assert.calledWith(warn, sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/))
+      sinon.assert.calledWith(
+        warn,
+        'LLMObs experiments unavailable: %s',
+        sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/)
+      )
     })
   })
 
@@ -461,6 +465,344 @@ describe('LLMObs Experiments facade', () => {
       assert.match(result.url, /^https:\/\//)
       assert.equal(result.rows.length, 1)
       assert.deepEqual(result.rows[0].evaluations, { exact: true })
+    })
+  })
+
+  describe('externally-driven experiments', () => {
+    function stubExperimentRecorderClient () {
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').resolves('proj')
+      sinon.stub(ExperimentsClient.prototype, 'createDataset').resolves({
+        id: () => 'dataset',
+        version: () => 1,
+      })
+      sinon.stub(ExperimentsClient.prototype, 'createExperiment').resolves({
+        experimentId: 'exp',
+        rows: [],
+        url: 'https://app.datadoghq.com/llm/experiments/exp',
+      })
+      sinon.stub(ExperimentsClient.prototype, 'postExperimentEvents').resolves()
+      sinon.stub(ExperimentsClient.prototype, 'updateExperiment').resolves()
+    }
+
+    it('honors projectName override when no global project is configured', async () => {
+      stubExperimentRecorderClient()
+      const warn = sinon.spy(log, 'warn')
+
+      const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
+      const recorder = await exp.startExperiment({
+        name: 'override-run',
+        projectName: 'override-project',
+        dataset: { id: 'dataset' },
+      })
+
+      assert.equal(recorder.experimentId(), 'exp')
+      sinon.assert.calledOnce(ExperimentsClient.prototype.createExperiment)
+      sinon.assert.notCalled(warn)
+    })
+
+    it('starts an experiment, submits a generated row span, and submits metrics for that span', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'eve-run',
+        description: 'eve eval run',
+        tags: { source: 'eve' },
+        metadata: { suite: 'smoke' },
+        config: { revision: 'abc123' },
+      })
+      assert.equal(recorder.experimentId(), 'exp')
+      assert.equal(recorder.name(), 'eve-run')
+      assert.equal(recorder.url(), 'https://app.datadoghq.com/llm/experiments/exp')
+      assert.equal(typeof recorder.start, 'undefined')
+      assert.equal(typeof recorder.run, 'undefined')
+
+      const span = await recorder.submitSpan({
+        name: 'smoke eval',
+        input: 'Say hello.',
+        output: { message: 'hello' },
+        expectedOutput: 'hello',
+        metadata: { verdict: 'passed' },
+        tags: { eval: 'smoke' },
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedAt: '2026-01-01T00:00:01.000Z',
+      })
+
+      assert.equal(span.experimentId, 'exp')
+      assert.match(span.spanId, /^[a-f0-9]{16}$/)
+      assert.match(span.traceId, /^[a-f0-9]{32}$/)
+
+      await recorder.submitEvaluationMetrics(span, [
+        { label: 'gate_succeeded', value: true },
+        { label: 'similarity', value: 0.92 },
+        { label: 'verdict', value: 'passed' },
+        { label: 'details', value: { assertions: 3 } },
+        { label: 'judge_error', error: new Error('judge unavailable') },
+      ])
+      await recorder.close({ status: 'completed' })
+
+      sinon.assert.calledWith(ExperimentsClient.prototype.createDataset, 'proj', {
+        name: 'eve-run dataset',
+        description: "Placeholder dataset for externally-driven experiment 'eve-run'",
+      })
+      sinon.assert.calledWith(ExperimentsClient.prototype.createExperiment, {
+        name: 'eve-run',
+        project_id: 'proj',
+        dataset_id: 'dataset',
+        description: 'eve eval run',
+        ensure_unique: true,
+        run_count: 1,
+        dataset_version: 1,
+        config: { revision: 'abc123' },
+        metadata: { suite: 'smoke', tags: ['source:eve'] },
+      })
+
+      const submittedSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
+      assert.equal(submittedSpan.span_id, span.spanId)
+      assert.equal(submittedSpan.trace_id, span.traceId)
+      assert.equal(submittedSpan.project_id, 'proj')
+      assert.equal(submittedSpan.name, 'smoke eval')
+      assert.equal(submittedSpan.start_ns, new Date('2026-01-01T00:00:00.000Z').getTime() * 1e6)
+      assert.equal(submittedSpan.duration, 1_000_000_000)
+      assert.deepEqual(submittedSpan.meta, {
+        input: 'Say hello.',
+        output: { message: 'hello' },
+        expected_output: 'hello',
+        metadata: { verdict: 'passed' },
+      })
+      assert.equal(submittedSpan.dataset_id, 'dataset')
+      const runTag = submittedSpan.tags.find(tag => tag.startsWith('run_id:'))
+      assert.match(runTag, /^run_id:[a-f0-9]{16}$/)
+      assert.deepEqual(new Set(submittedSpan.tags), new Set([
+        'source:eve',
+        'eval:smoke',
+        'experiment_id:exp',
+        'dataset_id:dataset',
+        runTag,
+        'run_iteration:0',
+      ]))
+
+      const metrics = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].metrics
+      assert.equal(metrics.length, 5)
+      assert.deepEqual(metrics.map(metric => metric.span_id), Array(5).fill(span.spanId))
+      assert.deepEqual(metrics.map(metric => metric.tags), Array(5).fill(['source:eve', 'experiment_id:exp']))
+      assert.equal(metrics[0].metric_type, 'boolean')
+      assert.equal(metrics[0].boolean_value, true)
+      assert.equal(metrics[1].metric_type, 'score')
+      assert.equal(metrics[1].score_value, 0.92)
+      assert.equal(metrics[2].metric_type, 'categorical')
+      assert.equal(metrics[2].categorical_value, 'passed')
+      assert.equal(metrics[3].metric_type, 'json')
+      assert.deepEqual(metrics[3].json_value, { assertions: 3 })
+      assert.deepEqual(metrics[4].error, { message: 'judge unavailable' })
+      sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', { status: 'completed' })
+    })
+
+    it('rejects invalid external metric labels before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-label-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics(span, [
+          { label: 'score', value: 1 },
+          { label: 'bad name', value: 1 },
+        ]),
+        /Evaluator name 'bad name' is invalid/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('rejects external metrics for a different experiment before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-experiment-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ ...span, experimentId: 'other-exp' }, [{ label: 'score', value: 1 }]),
+        /Experiment span belongs to 'other-exp', not 'exp'/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('skips external metrics without a value or error', async () => {
+      stubExperimentRecorderClient()
+      const warn = sinon.spy(log, 'warn')
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-shape-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await recorder.submitEvaluationMetrics(span, [
+        { label: 'valid_metric', value: 1 },
+        { label: 'null_metric', value: null },
+        { label: 'undefined_metric', value: undefined },
+        { label: 'score' },
+      ])
+      sinon.assert.calledOnce(ExperimentsClient.prototype.postExperimentEvents)
+      const metrics = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].metrics
+      assert.deepEqual(metrics.map(metric => metric.label), ['valid_metric', 'null_metric'])
+      assert.equal(metrics[1].metric_type, 'json')
+      assert.deepEqual(metrics[1].json_value, { value: null })
+
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+      await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+      sinon.assert.calledThrice(warn)
+      sinon.assert.calledWith(
+        warn,
+        'LLMObs experiments: skipping external metric %s because it has neither value nor error',
+        'undefined_metric'
+      )
+      sinon.assert.calledWith(
+        warn,
+        'LLMObs experiments: skipping external metric %s because it has neither value nor error',
+        'score'
+      )
+    })
+
+    it('requires external metric trace ids before posting events', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'metric-trace-run',
+        dataset: { id: 'dataset' },
+      })
+      const span = await recorder.submitSpan({ input: 'x' })
+      ExperimentsClient.prototype.postExperimentEvents.resetHistory()
+
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ ...span, traceId: null }, [{ label: 'score', value: 1 }]),
+        /Experiment trace id is required/
+      )
+      await assert.rejects(
+        () => recorder.submitEvaluationMetrics({ spanId: span.spanId }, [{ label: 'score', value: 1 }]),
+        /Experiment trace id is required/
+      )
+      sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
+    })
+
+    it('omits null dataset versions when starting external experiments', async () => {
+      stubExperimentRecorderClient()
+
+      await createExperiments(enabledConfig()).startExperiment({
+        name: 'null-version-run',
+        dataset: { id: 'dataset', version: null },
+      })
+
+      const attributes = ExperimentsClient.prototype.createExperiment.firstCall.args[0]
+      assert.equal(Object.hasOwn(attributes, 'dataset_version'), false)
+    })
+
+    it('defaults errored external closes to failed and surfaces close failures', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'close-run',
+        dataset: { id: 'dataset' },
+      })
+
+      await recorder.close({ error: new Error('boom') })
+      sinon.assert.calledWith(ExperimentsClient.prototype.updateExperiment, 'exp', {
+        status: 'failed',
+        error: 'boom',
+      })
+
+      ExperimentsClient.prototype.updateExperiment.resetHistory()
+      ExperimentsClient.prototype.updateExperiment.rejects(new Error('HTTP 500'))
+      await assert.rejects(
+        () => recorder.close({ status: 'completed' }),
+        /HTTP 500/
+      )
+      sinon.assert.calledOnce(ExperimentsClient.prototype.updateExperiment)
+    })
+
+    it('records row error metadata and falls back for invalid timestamps', async () => {
+      stubExperimentRecorderClient()
+
+      const recorder = await createExperiments(enabledConfig()).startExperiment({
+        name: 'error-run',
+        dataset: { id: 'dataset', version: 7 },
+      })
+
+      await recorder.submitSpan({
+        name: 'string error',
+        input: 'bad input',
+        error: 'row failed',
+        startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      await recorder.submitSpan({
+        name: 'object error',
+        input: 'bad input',
+        error: { type: 'ValueError', message: 'bad row', stack: 'stack' },
+        startedAt: '2026-01-01T00:00:01.000Z',
+      })
+
+      const fallbackMs = Date.UTC(2026, 0, 1, 0, 0, 2)
+      const clock = sinon.useFakeTimers({ now: fallbackMs })
+      try {
+        await recorder.submitSpan({
+          name: 'invalid date',
+          input: 'bad date',
+          startedAt: new Date('invalid'),
+          completedAt: new Date('invalid'),
+        })
+      } finally {
+        clock.restore()
+      }
+
+      const stringErrorSpan = ExperimentsClient.prototype.postExperimentEvents.firstCall.args[1].spans[0]
+      assert.equal(stringErrorSpan.status, 'error')
+      assert.equal(stringErrorSpan.duration, 0)
+      assert.deepEqual(stringErrorSpan.meta.error, { type: 'Error', message: 'row failed', stack: '' })
+
+      const objectErrorSpan = ExperimentsClient.prototype.postExperimentEvents.secondCall.args[1].spans[0]
+      assert.equal(objectErrorSpan.status, 'error')
+      assert.deepEqual(objectErrorSpan.meta.error, { type: 'ValueError', message: 'bad row', stack: 'stack' })
+
+      const invalidDateSpan = ExperimentsClient.prototype.postExperimentEvents.thirdCall.args[1].spans[0]
+      assert.equal(invalidDateSpan.start_ns, fallbackMs * 1e6)
+      assert.equal(invalidDateSpan.duration, 0)
+      assert.doesNotMatch(invalidDateSpan.trace_id, /NaN/)
+      sinon.assert.notCalled(ExperimentsClient.prototype.createDataset)
+    })
+
+    it('supports no-op external experiments when LLM Obs is disabled', async () => {
+      const warn = sinon.spy(log, 'warn')
+      const experiments = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
+
+      const recorder = await experiments.startExperiment({ name: 'disabled' })
+      assert.equal(recorder.name(), 'disabled')
+      assert.equal(recorder.experimentId(), '00000000-0000-0000-0000-000000000000')
+      assert.equal(recorder.url(), null)
+      assert.equal(typeof recorder.start, 'undefined')
+      assert.equal(typeof recorder.run, 'undefined')
+      assert.deepEqual(await recorder.submitSpan(), {
+        experimentId: '00000000-0000-0000-0000-000000000000',
+        spanId: '0000000000000000',
+        traceId: '00000000000000000000000000000000',
+        url: null,
+      })
+      await recorder.submitEvaluationMetrics({
+        experimentId: recorder.experimentId(),
+        spanId: '0000000000000000',
+        traceId: '00000000000000000000000000000000',
+      }, [{ label: 'score', value: 1 }])
+      await recorder.close({ status: 'completed' })
+
+      sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
   })
 })

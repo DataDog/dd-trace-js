@@ -4064,6 +4064,79 @@ declare namespace tracer {
       url: string
     }
 
+    type ExternalExperimentTimestamp = number | string | Date
+
+    interface StartExperimentDatasetOptions {
+      /** Existing dataset id. When omitted, a placeholder dataset is created. */
+      id?: string
+      /** Dataset version to associate with the experiment. */
+      version?: number
+      /** Placeholder dataset name. Defaults to `<experiment name> dataset`. */
+      name?: string
+      /** Placeholder dataset description. */
+      description?: string
+    }
+
+    interface StartExperimentOptions {
+      name: string
+      description?: string
+      /** Override the configured project name for this external experiment. */
+      projectName?: string
+      dataset?: StartExperimentDatasetOptions
+      config?: Record<string, JSONType>
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+    }
+
+    interface ExternalExperimentSpanInput {
+      name?: string
+      input?: JSONType
+      output?: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, string>
+      startedAt?: ExternalExperimentTimestamp
+      completedAt?: ExternalExperimentTimestamp
+      durationMs?: number
+      error?: string | Error | { type?: string, name?: string, message?: string, stack?: string }
+      datasetRecordId?: string
+      runId?: string
+      runIteration?: number
+    }
+
+    interface ExternalExperimentSpan {
+      experimentId: string
+      spanId: string
+      traceId: string
+      url: string | null
+    }
+
+    interface ExternalExperimentMetric {
+      label: string
+      value?: JSONType
+      error?: string | Error
+      timestamp?: ExternalExperimentTimestamp
+      tags?: Record<string, string>
+      source?: string
+    }
+
+    interface ExternalExperimentCloseOptions {
+      status?: string
+      error?: string | Error
+    }
+
+    interface ExternalExperiment {
+      experimentId (): string
+      name (): string
+      url (): string | null
+      submitSpan (input?: ExternalExperimentSpanInput): Promise<ExternalExperimentSpan>
+      submitEvaluationMetrics (
+        span: { experimentId?: string, spanId: string, traceId: string },
+        metrics: ExternalExperimentMetric[]
+      ): Promise<void>
+      close (options?: ExternalExperimentCloseOptions): Promise<void>
+    }
+
     interface DatasetPushResult {
       /** Number of records from this push that were confirmed with a record id. */
       pushedCount: number
@@ -4128,6 +4201,8 @@ declare namespace tracer {
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
       experiment (options: ExperimentOptions): Experiment
+      /** Start an externally-driven experiment. */
+      startExperiment (options: StartExperimentOptions): Promise<ExternalExperiment>
     }
 
     interface LLMObservabilitySpan {
