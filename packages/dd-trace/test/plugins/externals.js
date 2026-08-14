@@ -78,6 +78,10 @@ module.exports = {
       versions: ['>=3'],
     },
     {
+      name: '@aws-sdk/client-eventbridge',
+      versions: ['>=3'],
+    },
+    {
       name: '@aws-sdk/client-sfn',
       versions: ['>=3'],
     },
@@ -99,6 +103,10 @@ module.exports = {
     },
   ],
   bullmq: [
+    {
+      name: 'ioredis',
+      dep: true,
+    },
     {
       name: 'redis',
       versions: ['>=4'],

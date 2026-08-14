@@ -14,8 +14,10 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+const id = require('./id')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
+const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -150,9 +152,24 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forSpan (span) {
     const aggKey = new SpanAggKey(span)
-    const key = aggKey.toString()
+    const baseKey = aggKey.toString()
+    const parentId = span.parent_id
+    if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
+      aggKey.isTraceRoot = parentId.equals(ZERO_ID)
+    }
+    const key = this.#includeTraceRoot ? `${baseKey},${aggKey.isTraceRoot}` : baseKey
 
     if (!this.has(key)) {
       this.set(key, new SpanAggStats(aggKey))
@@ -163,9 +180,19 @@ class SpanBuckets extends Map {
 }
 
 class TimeBuckets extends Map {
+  #includeTraceRoot
+
+  /**
+   * @param {boolean} [includeTraceRoot]
+   */
+  constructor (includeTraceRoot = false) {
+    super()
+    this.#includeTraceRoot = includeTraceRoot
+  }
+
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new SpanBuckets(this.#includeTraceRoot))
     }
 
     return this.get(time)
@@ -192,7 +219,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets()
+    this.buckets = new TimeBuckets(Boolean(otlpExporter))
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
