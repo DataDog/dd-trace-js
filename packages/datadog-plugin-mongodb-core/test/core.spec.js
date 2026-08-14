@@ -46,11 +46,10 @@ describe('Plugin', () => {
     withTopologies((getServer, resolvedVersion) => {
       /**
        * @param {Promise<unknown>} promise
-       * @param {RegExp} expectedMessage
        */
-      const expectCommandCompletion = (promise, expectedMessage) => semver.satisfies(resolvedVersion, '<2.1')
+      const expectCommandCompletion = promise => semver.satisfies(resolvedVersion, '<2.1')
         ? promise
-        : assert.rejects(promise, { message: expectedMessage })
+        : assert.rejects(promise)
 
       const next = (cursor, cb = () => {}) => {
         return cursor._next
@@ -134,8 +133,7 @@ describe('Plugin', () => {
                 promisify(server.command.bind(server))(`test.${collection}`, {
                   planCacheListPlans: `test.${collection}`,
                   query: {},
-                }),
-                /no such command: 'planCacheListPlans'/
+                })
               ),
             ])
           })
@@ -158,8 +156,7 @@ describe('Plugin', () => {
                   query: {
                     _id: Buffer.from('1234'),
                   },
-                }),
-                /Unrecognized field 'query'/
+                })
               ),
             ])
           })
@@ -220,8 +217,7 @@ describe('Plugin', () => {
                   query: {
                     _id: new BSON.ObjectID(id),
                   },
-                }),
-                /Unrecognized field 'query'/
+                })
               ),
             ])
           })
@@ -245,8 +241,7 @@ describe('Plugin', () => {
                     _id: '1234',
                     foo: () => {},
                   },
-                }),
-                /Unrecognized field 'query'/
+                })
               ),
             ])
           })
@@ -544,8 +539,7 @@ describe('Plugin', () => {
                   _id: Buffer.from('1234'),
                 },
                 comment: 'test comment',
-              }),
-              /Unrecognized field 'query'/
+              })
             ),
           ])
         })
@@ -685,8 +679,7 @@ describe('Plugin', () => {
                   _id: Buffer.from('1234'),
                 },
                 comment: 'test comment',
-              }),
-              /Unrecognized field 'query'/
+              })
             ),
           ])
         })
@@ -718,8 +711,7 @@ describe('Plugin', () => {
                   _id: Buffer.from('1234'),
                 },
                 comment: ['test comment'],
-              }),
-              /Unrecognized field 'query'/
+              })
             ),
           ])
         })

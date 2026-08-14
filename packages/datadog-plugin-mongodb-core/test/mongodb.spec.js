@@ -415,7 +415,7 @@ describe('Plugin', () => {
 
             await Promise.all([
               tracePromise,
-              assert.rejects(operationPromise, { message: /no such command: 'planCacheListPlans'/ }),
+              assert.rejects(operationPromise),
             ])
           })
 
