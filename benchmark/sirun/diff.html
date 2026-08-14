@@ -96,6 +96,7 @@ function diffPctElem(elemName, beforeStats, afterStats, prop) {
 
 function summaryStats(summary) {
   let count = 0
+  let instructionCount = 0
   let instructions = 1
   let mem = 1
   for (const testName in summary) {
@@ -109,12 +110,15 @@ function summaryStats(summary) {
       }
       count++
       const variant = test[variantName]
-      instructions *= variant.instructions
+      if (variant.instructions !== undefined) {
+        instructionCount++
+        instructions *= variant.instructions
+      }
       mem *= variant.summary['max.res.size'].mean
     }
   }
   return {
-    instructions: Math.pow(instructions, 1/count),
+    instructions: Math.pow(instructions, 1/instructionCount),
     mem: Math.pow(mem, 1/count)
   }
 }
