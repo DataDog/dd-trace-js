@@ -51,7 +51,7 @@ describe('release metadata', () => {
             __typename: 'PullRequest',
             number: 123,
             title: 'fix(core): preserve the complete pull request context',
-            author: { login: 'pull-request-author' },
+            author: { __typename: 'User', login: 'pull-request-author' },
             labels: {
               nodes: [{ name: 'appsec' }, { name: 'ai-guard' }],
               pageInfo: { hasNextPage: false },
@@ -214,7 +214,7 @@ describe('release metadata', () => {
     }])
   })
 
-  it('hydrates pull request metadata without a merge commit', () => {
+  it('omits bot pull request authors without a merge commit', () => {
     const capture = sinon.stub().returns(JSON.stringify({
       data: {
         repository: {
@@ -222,7 +222,7 @@ describe('release metadata', () => {
             __typename: 'PullRequest',
             number: 123,
             title: 'feat(core)!: remove legacy context',
-            author: { login: 'pull-request-author' },
+            author: { __typename: 'Bot', login: 'gh-worker-campaigns-3e9aa4' },
             labels: { nodes: [{ name: 'appsec' }], pageInfo: { hasNextPage: false } },
             files: {
               nodes: [{ path: 'packages/dd-trace/src/index.js', changeType: 'MODIFIED' }],
@@ -241,11 +241,12 @@ describe('release metadata', () => {
     assert.deepStrictEqual(entries, [{
       sha: 'pull-request-123',
       subject: 'feat(core)!: remove legacy context (#123)',
-      contributors: [{ name: '@pull-request-author', login: 'pull-request-author' }],
+      contributors: [],
       labels: ['appsec'],
       files: ['packages/dd-trace/src/index.js'],
     }])
     assert.doesNotMatch(capture.firstCall.args[0], /commit0:/)
+    assert.match(capture.firstCall.args[0], /author \{ __typename login \}/)
   })
 
   it('rejects truncated contributor and label metadata', () => {
