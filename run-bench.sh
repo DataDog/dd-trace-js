@@ -2,65 +2,67 @@
 #
 # Wrapper for the native-spans Express benchmark.
 #
-# Sets up an installed candidate checkout and runs
+# Reinstalls a candidate checkout in place and runs
 # `benchmark/native-spans-express/run.js` against it with --candidate-dir, so
 # the benchmark uses a stable, pre-installed candidate instead of creating a
 # throwaway worktree and reinstalling it on every run.
 #
+# The candidate's git ref is whatever is already checked out at
+# --candidate-dir — manage worktrees/refs yourself (e.g. with separate
+# gitrees), this script only (re)installs dependencies and runs the
+# benchmark.
+#
 # By default the candidate is installed with the RELEASE versions of
-# @datadog/libdatadog / libdatadog (whatever the candidate ref's committed
+# @datadog/libdatadog / libdatadog (whatever the candidate's committed
 # yarn.lock pins, i.e. the published npm package) — what you want for
 # benchmarking.
 #
 # Usage:
-#   benchmark/native-spans-express/run-bench.sh [--local] [bench args...]
+#   run-bench.sh --candidate-dir <path> [--local] [bench args...]
 #
-#   --local   instead of the release package, rebuild the local
-#             ../libdatadog-nodejs (which compiles ../libdatadog) and symlink
-#             it into the candidate's node_modules.
+# Options:
+#   --candidate-dir <path> Candidate checkout to install and benchmark (required)
+#   --local                Instead of the release package, rebuild the local
+#                           ../libdatadog-nodejs (which compiles ../libdatadog)
+#                           and symlink it into the candidate's node_modules.
 #
 #   All other args are forwarded to run.js, e.g. --smoke, --workload, etc.
-#
-# Env:
-#   CANDIDATE_REF   git ref for the candidate (default: bengl/native-spans-attempt-3)
-#   CANDIDATE_DIR   where to keep the candidate worktree (default: ../candidate-native-spans)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIBDATADOG_NODEJS="$ROOT/../libdatadog-nodejs"
-CANDIDATE_REF="${CANDIDATE_REF:-bengl/native-spans-attempt-3}"
-CANDIDATE_DIR="${CANDIDATE_DIR:-$(cd "$ROOT/.." && pwd)/candidate-native-spans}"
 
+CANDIDATE_DIR=""
 LOCAL=0
 ARGS=()
-for arg in "$@"; do
-  case "$arg" in
-    --local) LOCAL=1 ;;
-    *) ARGS+=("$arg") ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --candidate-dir)
+      CANDIDATE_DIR="${2:?--candidate-dir requires a value}"
+      shift 2
+      ;;
+    --local)
+      LOCAL=1
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
   esac
 done
 
-if ! git -C "$ROOT" rev-parse --verify "$CANDIDATE_REF^{commit}" >/dev/null 2>&1; then
-  echo "error: git ref '$CANDIDATE_REF' not found in $ROOT" >&2
+if [ -z "$CANDIDATE_DIR" ]; then
+  echo "error: --candidate-dir <path> is required" >&2
   exit 1
 fi
-
-# --- 1. candidate checkout --------------------------------------------------
-if [ -d "$CANDIDATE_DIR" ]; then
-  current="$(git -C "$CANDIDATE_DIR" rev-parse HEAD 2>/dev/null || true)"
-  target="$(git -C "$ROOT" rev-parse "$CANDIDATE_REF^{commit}")"
-  if [ "$current" != "$target" ]; then
-    echo "refreshing candidate worktree ($current -> $target)"
-    git -C "$ROOT" worktree remove --force "$CANDIDATE_DIR" 2>/dev/null \
-      || rm -rf "$CANDIDATE_DIR"
-    git -C "$ROOT" worktree add --detach "$CANDIDATE_DIR" "$CANDIDATE_REF"
-  fi
-else
-  echo "creating candidate worktree at $CANDIDATE_DIR"
-  git -C "$ROOT" worktree add --detach "$CANDIDATE_DIR" "$CANDIDATE_REF"
+if [ ! -d "$CANDIDATE_DIR" ]; then
+  echo "error: candidate directory not found: $CANDIDATE_DIR" >&2
+  exit 1
 fi
+CANDIDATE_DIR="$(cd "$CANDIDATE_DIR" && pwd)"
 
-# --- 2. install candidate with release versions ----------------------------
+# --- 1. install candidate with release versions ----------------------------
 # Restore committed manifests (in case a previous --local run touched them) and
 # drop any local symlink so yarn re-installs the release package.
 git -C "$CANDIDATE_DIR" checkout -- package.json yarn.lock 2>/dev/null || true
@@ -72,14 +74,14 @@ fi
 # file to force yarn to re-resolve the full tree from the lockfile. This is
 # what guarantees the release @datadog/libdatadog comes back after a --local run.
 rm -f "$CANDIDATE_DIR/node_modules/.yarn-integrity"
-echo "installing candidate ($CANDIDATE_REF) with release deps..."
+echo "installing candidate ($CANDIDATE_DIR) with release deps..."
 (cd "$CANDIDATE_DIR" && yarn install --frozen-lockfile --non-interactive)
 if [ ! -d "$CANDIDATE_DIR/node_modules/@datadog/libdatadog" ]; then
   echo "release @datadog/libdatadog missing after install; forcing reinstall"
   (cd "$CANDIDATE_DIR" && yarn install --frozen-lockfile --non-interactive --force)
 fi
 
-# --- 3. optional: use local libdatadog-nodejs ------------------------------
+# --- 2. optional: use local libdatadog-nodejs ------------------------------
 if [ "$LOCAL" = 1 ]; then
   if [ ! -d "$LIBDATADOG_NODEJS" ]; then
     echo "error: local libdatadog-nodejs not found at $LIBDATADOG_NODEJS" >&2
@@ -92,6 +94,6 @@ if [ "$LOCAL" = 1 ]; then
   echo "linked local libdatadog-nodejs into candidate"
 fi
 
-# --- 4. run the benchmark ---------------------------------------------------
-echo "running benchmark: candidate=$CANDIDATE_DIR ref=$CANDIDATE_REF local=$LOCAL"
+# --- 3. run the benchmark ---------------------------------------------------
+echo "running benchmark: candidate=$CANDIDATE_DIR local=$LOCAL"
 exec node "$ROOT/benchmark/native-spans-express/run.js" --candidate-dir "$CANDIDATE_DIR" "${ARGS[@]}"
