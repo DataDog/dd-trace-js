@@ -509,12 +509,15 @@ describe('release changelog', () => {
     ))
   })
 
-  it('renders only contributor avatars in the footer', () => {
+  it('renders only linked contributors and prefers them over name-only duplicates', () => {
     const changelog = createReleaseChangelog([
       {
         sha: 'abc001',
         subject: 'feat(appsec): add thing (#1)',
-        contributors: [{ name: '@Zoe', login: 'Zoe' }],
+        contributors: [
+          { name: 'alice' },
+          { name: '@Zoe', login: 'Zoe' },
+        ],
       },
       {
         sha: 'abc002',
@@ -523,6 +526,7 @@ describe('release changelog', () => {
           { name: '@alice', login: 'alice' },
           { name: '@bob', login: 'bob' },
           { name: '@Zoe', login: 'Zoe' },
+          { name: 'bob' },
           { name: 'Jane Doe' },
         ],
       },

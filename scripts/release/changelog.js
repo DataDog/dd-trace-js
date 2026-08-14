@@ -295,7 +295,10 @@ function isInternalOnly (files) {
 function addContributors (contributors, additions) {
   for (const contributor of additions) {
     const identity = contributor.login?.toLowerCase() ?? contributor.name.toLowerCase()
-    if (!contributors.has(identity)) contributors.set(identity, contributor)
+    const existing = contributors.get(identity)
+    if (existing === undefined || (existing.login === undefined && contributor.login !== undefined)) {
+      contributors.set(identity, contributor)
+    }
   }
 }
 
