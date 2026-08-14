@@ -10,15 +10,10 @@ const tracer = require('../../dd-trace')
 const { withAwsSdkVersions } = require('./spec_helpers')
 
 const EVENTBRIDGE_EVENT_MAX_BYTES = 1024 * 1024
-const TEST_TRACE_ID = '456853219676779160'
-const TEST_SPAN_ID = '456853219676779160'
-const TEST_PARENT_ID = '0000000000000000'
-const TEST_DATADOG_CONTEXT = {
-  'x-datadog-trace-id': TEST_TRACE_ID,
-  'x-datadog-parent-id': TEST_SPAN_ID,
-  'x-datadog-sampling-priority': '1',
-}
-const EVENTBRIDGE_CONTEXT_BYTES = Buffer.byteLength(`,"_datadog":${JSON.stringify(TEST_DATADOG_CONTEXT)}`)
+
+// The propagation headers the tracer injects for `span`, and the bytes they add to a detail.
+let expectedContext
+let expectedContextBytes
 
 /**
  * @param {number} size
@@ -35,46 +30,19 @@ function makeEventDetail (size) {
  * @returns {string}
  */
 function makeEventDetailForInjectedSize (size) {
-  return makeEventDetail(size - EVENTBRIDGE_CONTEXT_BYTES)
+  return makeEventDetail(size - expectedContextBytes)
 }
 
 describe('EventBridge', () => {
   let span
   withAwsSdkVersions((version, moduleName) => {
-    let traceId
-    let parentId
-    let spanId
     before(() => {
       tracer.init()
-      span = {
-        finish: sinon.spy(() => {}),
-        context: () => {
-          return {
-            _sampling: {
-              priority: 1,
-            },
-            _trace: {
-              started: [],
-              origin: '',
-            },
-            _traceFlags: {
-              sampled: 1,
-            },
-            _baggageItems: {},
-            'x-datadog-trace-id': traceId,
-            'x-datadog-parent-id': parentId,
-            'x-datadog-sampling-priority': '1',
-            toTraceId: () => {
-              return traceId
-            },
-            toSpanId: () => {
-              return spanId
-            },
-          }
-        },
-        addTags: sinon.stub(),
-        setTag: sinon.stub(),
-      }
+      // A hand-rolled span context cannot satisfy the propagators, which silently drop the whole
+      // injection when one of them throws.
+      span = tracer.startSpan('aws.request')
+      expectedContext = tracer._tracer.inject(span.context(), 'text_map')
+      expectedContextBytes = Buffer.byteLength(`,"_datadog":${JSON.stringify(expectedContext)}`)
       tracer._tracer.startSpan = sinon.spy(() => {
         return span
       })
@@ -118,18 +86,12 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       eventbridge.requestInject(span.context(), request)
 
       assert.deepStrictEqual(request.params, {
         Entries: [{
-          Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{' +
-            '"x-datadog-trace-id":"456853219676779160",' +
-            '"x-datadog-parent-id":"456853219676779160",' +
-            '"x-datadog-sampling-priority":"1"' +
-          '}}',
+          Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":' +
+            `${JSON.stringify(expectedContext)}}`,
         }],
       })
     })
@@ -147,13 +109,10 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       eventbridge.requestInject(span.context(), request)
 
       assert.strictEqual(Buffer.byteLength(request.params.Entries[0].Detail), EVENTBRIDGE_EVENT_MAX_BYTES - 1)
-      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, TEST_DATADOG_CONTEXT)
+      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, expectedContext)
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {
@@ -169,9 +128,6 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       const originalDetail = request.params.Entries[0].Detail
       eventbridge.requestInject(span.context(), request)
 
@@ -191,9 +147,6 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       const originalDetails = request.params.Entries.map((entry) => entry.Detail)
       eventbridge.requestInject(span.context(), request)
 
@@ -217,9 +170,6 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       const originalDetail = request.params.Entries[0].Detail
       eventbridge.requestInject(span.context(), request)
 
@@ -238,13 +188,10 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = TEST_TRACE_ID
-      spanId = TEST_SPAN_ID
-      parentId = TEST_PARENT_ID
       const originalSecondDetail = request.params.Entries[1].Detail
       eventbridge.requestInject(span.context(), request)
 
-      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, TEST_DATADOG_CONTEXT)
+      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, expectedContext)
       assert.strictEqual(request.params.Entries[1].Detail, originalSecondDetail)
     })
 
