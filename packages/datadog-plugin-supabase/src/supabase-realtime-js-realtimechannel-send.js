@@ -22,8 +22,8 @@ class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
         'messaging.system': 'supabase',
         'messaging.destination.name': destination,
         'messaging.destination.kind': 'topic',
-        'messaging.operation': 'send'
-      }
+        'messaging.operation': 'send',
+      },
     }, ctx)
 
     return ctx.currentStore
