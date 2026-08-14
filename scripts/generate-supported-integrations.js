@@ -216,14 +216,43 @@ async function fetchPackageVersions (dependency) {
 }
 
 /**
+ * @param {string} supportedRange
+ * @returns {string}
+ */
+function simplifySupportedRange (supportedRange) {
+  const ranges = [...new Set(supportedRange.split(' || '))]
+  const result = []
+
+  for (let index = 0; index < ranges.length; index++) {
+    const range = ranges[index]
+    let covered = false
+
+    for (let otherIndex = 0; otherIndex < ranges.length; otherIndex++) {
+      if (otherIndex === index) continue
+      const otherRange = ranges[otherIndex]
+      if (!semver.subset(range, otherRange)) continue
+
+      if (!semver.subset(otherRange, range) || otherIndex < index) {
+        covered = true
+        break
+      }
+    }
+
+    if (!covered) result.push(range)
+  }
+
+  return result.join(' || ')
+}
+
+/**
  * @param {string} dependency
  * @param {InstrumentationDeclaration[]} declarations
  * @param {string} nodeVersion
  * @param {string[]} packageVersions
- * @returns {string[]}
+ * @returns {{ supportedRange: string|undefined, tested: string[] }}
  */
-function resolveTestedVersions (dependency, declarations, nodeVersion, packageVersions) {
-  const { versionList } = resolvePluginVersions({
+function resolveDependencyVersions (dependency, declarations, nodeVersion, packageVersions) {
+  const { versionList, unversioned: supportedRange } = resolvePluginVersions({
     name: dependency,
     declarations,
     nodeVersion,
@@ -238,7 +267,10 @@ function resolveTestedVersions (dependency, declarations, nodeVersion, packageVe
     if (!brokenVersionReason(dependency, version)) testedVersions.add(version)
   }
 
-  return [...testedVersions].sort(semver.compare)
+  return {
+    supportedRange: supportedRange === undefined ? undefined : simplifySupportedRange(supportedRange),
+    tested: [...testedVersions].sort(semver.compare),
+  }
 }
 
 /**
@@ -268,50 +300,60 @@ async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVer
   const rows = []
   for (const [dependency, integration] of plugins) {
     const builtin = isBuiltin(dependency)
-    const nodeVersions = {}
-    let hasNodeVersions = false
+    const versionsBySupport = new Map()
 
-    for (const { key, version: nodeVersion } of nodeProfiles) {
-      if (builtin) {
-        nodeVersions[key] = {
-          minimum_package_version: '',
-          maximum_package_version: '',
-          tested_versions: [''],
+    for (const { version: nodeVersion } of nodeProfiles) {
+      let supportedRange = '*'
+      let tested = []
+
+      if (!builtin) {
+        const declarations = instrumentations.get(nodeVersion)?.get(dependency)
+        if (!declarations) continue
+        const resolved = resolveDependencyVersions(
+          dependency,
+          declarations,
+          nodeVersion,
+          availableVersions.get(dependency)
+        )
+        if (resolved.tested.length === 0) continue
+        supportedRange = resolved.supportedRange
+        tested = resolved.tested
+      }
+
+      const supportKey = JSON.stringify([supportedRange, tested])
+      let versionSupport = versionsBySupport.get(supportKey)
+      if (!versionSupport) {
+        versionSupport = {
+          testedRuntimes: { node: [] },
+          supportedRange,
+          tested,
         }
-        hasNodeVersions = true
-        continue
+        versionsBySupport.set(supportKey, versionSupport)
       }
-
-      const declarations = instrumentations.get(nodeVersion)?.get(dependency)
-      if (!declarations) continue
-      const testedVersions = resolveTestedVersions(
-        dependency,
-        declarations,
-        nodeVersion,
-        availableVersions.get(dependency)
-      )
-      if (testedVersions.length === 0) continue
-
-      nodeVersions[key] = {
-        minimum_package_version: testedVersions[0],
-        maximum_package_version: testedVersions.at(-1),
-        tested_versions: testedVersions,
-      }
-      hasNodeVersions = true
+      versionSupport.testedRuntimes.node.push(nodeVersion)
     }
 
-    if (hasNodeVersions) {
+    if (versionsBySupport.size > 0) {
+      const versions = [...versionsBySupport.values()]
+      for (const versionSupport of versions) {
+        versionSupport.testedRuntimes.node.sort(semver.rcompare)
+      }
+      versions.sort((left, right) =>
+        semver.rcompare(left.testedRuntimes.node[0], right.testedRuntimes.node[0])
+      )
+
       rows.push({
-        dependency: normalizeDependency(dependency),
-        integration,
-        'auto-instrumented': true,
-        node_versions: nodeVersions,
+        dependencyName: normalizeDependency(dependency),
+        integrationName: integration,
+        autoInstrumented: true,
+        versions,
       })
     }
   }
 
   return rows.sort((left, right) =>
-    left.integration.localeCompare(right.integration) || left.dependency.localeCompare(right.dependency)
+    left.integrationName.localeCompare(right.integrationName) ||
+    left.dependencyName.localeCompare(right.dependencyName)
   )
 }
 
