@@ -16,7 +16,7 @@ class SupabasePlugin extends CompositePlugin {
     SupabaseStorageBucketApiListBucketsPlugin,
     SupabaseRealtimeChannelSendPlugin,
     SupabaseFunctionsClientInvokePlugin,
-    SupabasePostgrestBuilderThenPlugin
+    SupabasePostgrestBuilderThenPlugin,
   }
 }
 

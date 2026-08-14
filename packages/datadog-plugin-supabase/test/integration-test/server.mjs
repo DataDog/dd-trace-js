@@ -87,7 +87,7 @@ async function executeOperations () {
   const storage = new StorageClient(`${SUPABASE_URL}/storage/v1`, { apikey: SUPABASE_KEY }, testFetch)
   await storage.listBuckets()
 
-  const realtime = new RealtimeClient(`wss://project.supabase.co/realtime/v1`, {
+  const realtime = new RealtimeClient('wss://project.supabase.co/realtime/v1', {
     params: { apikey: SUPABASE_KEY },
     fetch: testFetch,
     timeout: 100,
