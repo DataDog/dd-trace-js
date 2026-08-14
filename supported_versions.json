@@ -1,0 +1,2599 @@
+[
+    {
+        "dependencyName": "aerospike",
+        "integrationName": "aerospike",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4",
+                "tested": [
+                    "4.0.0",
+                    "4.0.5",
+                    "5.13.2",
+                    "6.7.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "ai",
+        "integrationName": "ai",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4.0.0 <7.0.0 || >=6.0.0",
+                "tested": [
+                    "4.0.0",
+                    "5.0.236",
+                    "6.0.0",
+                    "6.0.255",
+                    "7.0.0",
+                    "7.0.59"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "amqp10",
+        "integrationName": "amqp10",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3",
+                "tested": [
+                    "3.0.0",
+                    "3.6.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "amqplib",
+        "integrationName": "amqplib",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.5.3",
+                "tested": [
+                    "0.5.3",
+                    "0.10.9",
+                    "1.2.0",
+                    "2.0.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@anthropic-ai/sdk",
+        "integrationName": "anthropic",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.14.0 <0.33.0 || >=0.33.0",
+                "tested": [
+                    "0.14.0",
+                    "0.32.1",
+                    "0.33.0",
+                    "0.116.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@apollo/gateway",
+        "integrationName": "apollo",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.3.0",
+                "tested": [
+                    "2.3.0",
+                    "2.6.0",
+                    "2.14.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "avsc",
+        "integrationName": "avsc",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=5.0.0",
+                "tested": [
+                    "5.0.0",
+                    "5.7.9"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@aws/durable-execution-sdk-js",
+        "integrationName": "aws-durable-execution-sdk-js",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.1.0",
+                "tested": [
+                    "1.1.0",
+                    "1.1.7",
+                    "2.2.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@aws-sdk/smithy-client",
+        "integrationName": "aws-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3",
+                "tested": [
+                    "3.0.0",
+                    "3.374.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@smithy/core",
+        "integrationName": "aws-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.24.0",
+                "tested": [
+                    "3.24.0",
+                    "3.31.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@smithy/smithy-client",
+        "integrationName": "aws-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.0.3",
+                "tested": [
+                    "1.0.3",
+                    "1.1.0",
+                    "2.5.1",
+                    "3.7.0",
+                    "4.14.16"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "aws-sdk",
+        "integrationName": "aws-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.1.35",
+                "tested": [
+                    "2.1.35",
+                    "2.3.0",
+                    "2.1693.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@azure/cosmos",
+        "integrationName": "azure-cosmos",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4.4.1",
+                "tested": [
+                    "4.4.1",
+                    "4.10.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "durable-functions",
+        "integrationName": "azure-durable-functions",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3",
+                "tested": [
+                    "3.0.0",
+                    "3.5.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@azure/event-hubs",
+        "integrationName": "azure-event-hubs",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=6.0.0",
+                "tested": [
+                    "6.0.0",
+                    "6.0.4"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@azure/functions",
+        "integrationName": "azure-functions",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4",
+                "tested": [
+                    "4.0.0",
+                    "4.16.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@azure/service-bus",
+        "integrationName": "azure-service-bus",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=7.9.2",
+                "tested": [
+                    "7.9.2",
+                    "7.9.5"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "bullmq",
+        "integrationName": "bullmq",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=5.66.0",
+                "tested": [
+                    "5.66.0",
+                    "5.81.3",
+                    "6.0.11"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "bunyan",
+        "integrationName": "bunyan",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.8.15",
+                    "2.0.5"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "cassandra-driver",
+        "integrationName": "cassandra-driver",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.0.0",
+                "tested": [
+                    "3.0.0",
+                    "3.2.2",
+                    "3.3.0",
+                    "3.6.0",
+                    "4.3.1",
+                    "4.4.0",
+                    "4.9.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:child_process",
+        "integrationName": "child_process",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "@anthropic-ai/claude-agent-sdk",
+        "integrationName": "claude-agent-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.2.113",
+                "tested": [
+                    "0.2.113",
+                    "0.3.226"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@confluentinc/kafka-javascript",
+        "integrationName": "confluentinc-kafka-javascript",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.0.0",
+                "tested": [
+                    "1.0.0",
+                    "1.10.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "connect",
+        "integrationName": "connect",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.4.0 || >=3 <3.4.0 || 2.2.2",
+                "tested": [
+                    "2.2.2",
+                    "3.0.0",
+                    "3.3.5",
+                    "3.4.0",
+                    "3.7.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "couchbase",
+        "integrationName": "couchbase",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "^3.0.7 || >=3.2.2",
+                "tested": [
+                    "3.0.7",
+                    "3.1.3",
+                    "3.2.2",
+                    "3.2.7",
+                    "4.7.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@cucumber/cucumber",
+        "integrationName": "cucumber",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=7.3.0 || >=7.0.0 <11.0.0",
+                "tested": [
+                    "7.0.0",
+                    "7.2.1",
+                    "7.3.0",
+                    "7.3.2",
+                    "8.11.1",
+                    "9.6.0",
+                    "10.9.0",
+                    "11.0.0",
+                    "11.3.0",
+                    "12.9.0",
+                    "13.0.0",
+                    "13.1.1",
+                    "13.2.0",
+                    "13.2.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "cypress",
+        "integrationName": "cypress",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=12.0.0",
+                "tested": [
+                    "12.0.0",
+                    "12.17.4",
+                    "13.17.0",
+                    "14.5.4",
+                    "15.20.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:dns",
+        "integrationName": "dns",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "@elastic/elasticsearch",
+        "integrationName": "elasticsearch",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=5.6.16 <8 || >=8",
+                "tested": [
+                    "5.6.16",
+                    "5.6.22",
+                    "6.8.8",
+                    "7.17.14",
+                    "8.0.0",
+                    "8.19.2",
+                    "9.5.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@elastic/transport",
+        "integrationName": "elasticsearch",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=8 <9 || >=9",
+                "tested": [
+                    "8.0.0",
+                    "8.10.2",
+                    "9.0.0",
+                    "9.4.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "elasticsearch",
+        "integrationName": "elasticsearch",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=10",
+                "tested": [
+                    "10.0.0",
+                    "10.1.3",
+                    "11.0.1",
+                    "12.1.3",
+                    "13.3.1",
+                    "14.2.2",
+                    "15.5.0",
+                    "16.7.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "electron",
+        "integrationName": "electron",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=37.0.0",
+                "tested": [
+                    "37.0.0",
+                    "37.10.3",
+                    "38.8.6",
+                    "39.8.10",
+                    "40.10.6",
+                    "41.10.5",
+                    "42.9.0",
+                    "43.3.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "express",
+        "integrationName": "express",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4",
+                "tested": [
+                    "4.0.0",
+                    "4.2.0",
+                    "4.3.0",
+                    "4.22.2",
+                    "5.0.0",
+                    "5.2.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "fastify",
+        "integrationName": "fastify",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.14.6",
+                    "2.0.0",
+                    "2.15.3",
+                    "3.0.0",
+                    "3.29.5",
+                    "4.29.1",
+                    "5.11.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "find-my-way",
+        "integrationName": "find-my-way",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.18.1",
+                    "2.2.5",
+                    "3.0.5",
+                    "4.5.1",
+                    "5.6.0",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.2.2",
+                    "9.7.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:fs",
+        "integrationName": "fs",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "@google-cloud/pubsub",
+        "integrationName": "google-cloud-pubsub",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.2",
+                "tested": [
+                    "1.2.0",
+                    "1.7.3",
+                    "2.19.4",
+                    "3.7.5",
+                    "4.11.0",
+                    "5.3.1",
+                    "6.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@google-cloud/vertexai",
+        "integrationName": "google-cloud-vertexai",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.12.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@google/genai",
+        "integrationName": "google-genai",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.19.0",
+                "tested": [
+                    "1.19.0",
+                    "1.52.0",
+                    "2.16.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "graphql",
+        "integrationName": "graphql",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.10",
+                "tested": [
+                    "0.10.0",
+                    "0.13.2",
+                    "16.14.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mercurius",
+        "integrationName": "graphql",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=13",
+                "tested": [
+                    "13.0.0",
+                    "13.4.1",
+                    "14.1.0",
+                    "15.1.0",
+                    "16.10.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@grpc/grpc-js",
+        "integrationName": "grpc",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.0.3",
+                "tested": [
+                    "1.0.3",
+                    "1.1.3",
+                    "1.1.4",
+                    "1.14.4"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@hapi/hapi",
+        "integrationName": "hapi",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=17.9",
+                "tested": [
+                    "17.9.0",
+                    "18.4.1",
+                    "19.2.0",
+                    "20.3.0",
+                    "21.4.10"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "hapi",
+        "integrationName": "hapi",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=16",
+                "tested": [
+                    "16.0.0",
+                    "16.8.4",
+                    "17.0.0",
+                    "17.8.5",
+                    "18.1.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "hono",
+        "integrationName": "hono",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4",
+                "tested": [
+                    "4.0.0",
+                    "4.13.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:http",
+        "integrationName": "http",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:https",
+        "integrationName": "http",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:http2",
+        "integrationName": "http2",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "ioredis",
+        "integrationName": "ioredis",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2 <4 || >=4 <4.11.0 || >=4.11.0 <5 || >=5",
+                "tested": [
+                    "2.0.0",
+                    "2.5.0",
+                    "3.2.2",
+                    "4.0.0",
+                    "4.10.4",
+                    "4.11.0",
+                    "4.31.0",
+                    "5.0.0",
+                    "5.11.1",
+                    "6.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "iovalkey",
+        "integrationName": "iovalkey",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.0.1",
+                "tested": [
+                    "0.0.1",
+                    "0.4.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@happy-dom/jest-environment",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=10.0.0",
+                "tested": [
+                    "10.0.0",
+                    "10.11.2",
+                    "11.2.0",
+                    "12.10.3",
+                    "13.10.1",
+                    "14.12.3",
+                    "15.11.7",
+                    "16.8.1",
+                    "17.6.3",
+                    "18.0.1",
+                    "19.0.2",
+                    "20.11.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@jest/core",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@jest/test-sequencer",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@jest/transform",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0 <30.0.0 || >=30.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-circus",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-config",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-environment-jsdom",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-environment-node",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-runtime",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.4.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "jest-worker",
+        "integrationName": "jest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=28.0.0 <30.0.0 || >=30.0.0",
+                "tested": [
+                    "28.0.0",
+                    "28.1.3",
+                    "29.7.0",
+                    "30.0.0",
+                    "30.4.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "kafkajs",
+        "integrationName": "kafkajs",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.4",
+                "tested": [
+                    "1.4.0",
+                    "1.16.0",
+                    "2.2.4"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@koa/router",
+        "integrationName": "koa",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=8",
+                "tested": [
+                    "8.0.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.2",
+                    "13.1.1",
+                    "14.0.0",
+                    "15.7.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "koa",
+        "integrationName": "koa",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2",
+                "tested": [
+                    "2.0.0",
+                    "2.16.4",
+                    "3.2.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "koa-router",
+        "integrationName": "koa",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=7",
+                "tested": [
+                    "7.0.0",
+                    "7.4.0",
+                    "8.0.8",
+                    "9.4.0",
+                    "10.1.1",
+                    "11.0.2",
+                    "12.0.1",
+                    "13.1.1",
+                    "14.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@langchain/core",
+        "integrationName": "langchain",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.1",
+                "tested": [
+                    "0.1.0",
+                    "1.2.5"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@langchain/langgraph",
+        "integrationName": "langgraph",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.1.2",
+                "tested": [
+                    "1.1.2",
+                    "1.4.9"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mariadb",
+        "integrationName": "mariadb",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3 || >=2.0.4 <3",
+                "tested": [
+                    "2.0.4",
+                    "2.5.1",
+                    "2.5.2",
+                    "2.5.6",
+                    "3.0.0",
+                    "3.4.0",
+                    "3.4.1",
+                    "3.5.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "memcached",
+        "integrationName": "memcached",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.2",
+                "tested": [
+                    "2.2.0",
+                    "2.2.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "microgateway-core",
+        "integrationName": "microgateway-core",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.1 <=3.0.0",
+                "tested": [
+                    "2.1.0",
+                    "2.5.17",
+                    "3.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@wdio/local-runner",
+        "integrationName": "mocha",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=9.0.0",
+                "tested": [
+                    "9.0.0",
+                    "9.30.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mocha",
+        "integrationName": "mocha",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=8.0.0",
+                "tested": [
+                    "8.0.0",
+                    "8.4.0",
+                    "9.2.2",
+                    "10.8.2",
+                    "11.8.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mocha-each",
+        "integrationName": "mocha",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.0.1",
+                "tested": [
+                    "2.0.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "workerpool",
+        "integrationName": "mocha",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=6.0.0",
+                "tested": [
+                    "6.0.0",
+                    "6.5.1",
+                    "7.0.0",
+                    "8.0.0",
+                    "9.3.4",
+                    "10.0.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@modelcontextprotocol/sdk",
+        "integrationName": "modelcontextprotocol-sdk",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.27.1",
+                "tested": [
+                    "1.27.1",
+                    "1.30.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "moleculer",
+        "integrationName": "moleculer",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.14",
+                "tested": [
+                    "0.14.0",
+                    "0.15.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mongodb",
+        "integrationName": "mongodb-core",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4.6.0 <6.4.0 || >=3.3 <5 || >=6",
+                "tested": [
+                    "3.3.0",
+                    "3.5.4",
+                    "3.7.4",
+                    "4.0.0",
+                    "4.5.0",
+                    "4.6.0",
+                    "4.10.0",
+                    "4.17.2",
+                    "5.0.0",
+                    "5.9.2",
+                    "6.0.0",
+                    "6.3.0",
+                    "6.4.0",
+                    "6.21.0",
+                    "7.5.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mongodb-core",
+        "integrationName": "mongodb-core",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "2 - 3.1.9 || >=3.2 || ~3.1.10",
+                "tested": [
+                    "2.0.0",
+                    "2.1.20",
+                    "3.1.9",
+                    "3.1.10",
+                    "3.1.11",
+                    "3.2.0",
+                    "3.2.7"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mongoose",
+        "integrationName": "mongoose",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4.6.4 <5 || 5 || 6 || >=7",
+                "tested": [
+                    "4.6.4",
+                    "4.13.21",
+                    "5.0.0",
+                    "5.13.23",
+                    "6.0.0",
+                    "6.13.11",
+                    "7.0.0",
+                    "7.8.12",
+                    "8.24.3",
+                    "9.9.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mysql",
+        "integrationName": "mysql",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2",
+                "tested": [
+                    "2.0.0",
+                    "2.18.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "mysql2",
+        "integrationName": "mysql2",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.11.5 || 1 - 3.11.4",
+                "tested": [
+                    "1.0.0",
+                    "1.7.0",
+                    "2.3.0",
+                    "2.3.3",
+                    "3.11.4",
+                    "3.11.5",
+                    "3.23.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@nats-io/nats-core",
+        "integrationName": "nats",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.0.0",
+                "tested": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@nats-io/transport-node",
+        "integrationName": "nats",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.0.0",
+                "tested": [
+                    "3.0.0",
+                    "3.4.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "node:net",
+        "integrationName": "net",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "*",
+                "tested": []
+            }
+        ]
+    },
+    {
+        "dependencyName": "next",
+        "integrationName": "next",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=11.1 || >=10.2 <11.1",
+                "tested": [
+                    "10.2.0",
+                    "10.2.3",
+                    "11.0.1",
+                    "11.1.0",
+                    "11.1.4",
+                    "12.3.7",
+                    "13.0.0",
+                    "13.1.6",
+                    "13.2.0",
+                    "13.3.0",
+                    "13.5.11",
+                    "14.2.35",
+                    "15.4.1",
+                    "15.5.23",
+                    "16.3.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "nyc",
+        "integrationName": "nyc",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=17",
+                "tested": [
+                    "17.0.0",
+                    "17.1.0",
+                    "18.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "openai",
+        "integrationName": "openai",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3.0.0 <4 || >=4",
+                "tested": [
+                    "3.0.0",
+                    "3.3.0",
+                    "4.0.0",
+                    "4.0.1",
+                    "4.1.0",
+                    "4.17.0",
+                    "4.17.1",
+                    "4.33.1",
+                    "4.34.0",
+                    "4.85.0",
+                    "4.87.0",
+                    "4.104.0",
+                    "5.0.0",
+                    "5.23.2",
+                    "6.49.0",
+                    "7.4.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@openai/agents",
+        "integrationName": "openai-agents",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.7.0",
+                "tested": [
+                    "0.7.0",
+                    "0.14.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@opensearch-project/opensearch",
+        "integrationName": "opensearch",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.2.0",
+                    "2.13.0",
+                    "3.6.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "oracledb",
+        "integrationName": "oracledb",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=5",
+                "tested": [
+                    "5.0.0",
+                    "5.5.0",
+                    "6.10.0",
+                    "7.0.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "pg",
+        "integrationName": "pg",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=8.0.3",
+                "tested": [
+                    "8.0.3",
+                    "8.23.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "pino",
+        "integrationName": "pino",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "2 - 3 || 4 || >=5 <6.8.0 || >=6.8.0",
+                "tested": [
+                    "2.0.0",
+                    "2.16.0",
+                    "3.4.0",
+                    "4.0.0",
+                    "4.17.6",
+                    "5.0.0",
+                    "5.17.0",
+                    "6.7.0",
+                    "6.8.0",
+                    "6.14.0",
+                    "7.11.0",
+                    "8.21.0",
+                    "9.14.0",
+                    "10.3.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "pino-pretty",
+        "integrationName": "pino",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3 || 1 - 2",
+                "tested": [
+                    "1.0.0",
+                    "1.0.1",
+                    "2.6.1",
+                    "3.0.0",
+                    "3.6.1",
+                    "4.8.0",
+                    "5.1.3",
+                    "6.0.0",
+                    "7.6.1",
+                    "8.1.0",
+                    "9.4.1",
+                    "10.3.1",
+                    "11.3.0",
+                    "12.1.0",
+                    "13.1.3"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "playwright",
+        "integrationName": "playwright",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.60.0 || >=1.38.0 <1.60.0",
+                "tested": [
+                    "1.38.0",
+                    "1.55.0",
+                    "1.59.1",
+                    "1.60.0",
+                    "1.62.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@prisma/client",
+        "integrationName": "prisma",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=6.1.0 <7.0.0 || >=7.0.0",
+                "tested": [
+                    "6.1.0",
+                    "6.19.3",
+                    "7.0.0",
+                    "7.9.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "protobufjs",
+        "integrationName": "protobufjs",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=6.8.0",
+                "tested": [
+                    "6.8.0",
+                    "6.11.6",
+                    "7.6.5",
+                    "8.7.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@node-redis/client",
+        "integrationName": "redis",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.0.6"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "@redis/client",
+        "integrationName": "redis",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.1",
+                "tested": [
+                    "1.1.0",
+                    "1.6.1",
+                    "6.2.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "redis",
+        "integrationName": "redis",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=2.6 <4 || >=0.12 <2.6",
+                "tested": [
+                    "0.12.0",
+                    "0.12.1",
+                    "1.0.0",
+                    "2.5.3",
+                    "2.6.0",
+                    "2.8.0",
+                    "3.1.2"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "restify",
+        "integrationName": "restify",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3",
+                "tested": [
+                    "3.0.0",
+                    "3.0.3",
+                    "4.3.4",
+                    "5.2.1",
+                    "6.4.0",
+                    "7.7.0",
+                    "8.6.1",
+                    "9.1.0",
+                    "10.0.0",
+                    "11.1.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "rhea",
+        "integrationName": "rhea",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.0.24",
+                    "2.0.8",
+                    "3.0.5"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "router",
+        "integrationName": "router",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1 <2 || >=2",
+                "tested": [
+                    "1.0.0",
+                    "1.3.8",
+                    "2.0.0",
+                    "2.2.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "selenium-webdriver",
+        "integrationName": "selenium",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=4.11.0",
+                "tested": [
+                    "4.11.0",
+                    "4.47.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "sharedb",
+        "integrationName": "sharedb",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1",
+                "tested": [
+                    "1.0.0",
+                    "1.9.2",
+                    "2.2.6",
+                    "3.3.2",
+                    "4.1.5",
+                    "5.2.2",
+                    "6.0.1"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "tedious",
+        "integrationName": "tedious",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.0.0",
+                "tested": [
+                    "1.0.0",
+                    "1.15.0",
+                    "2.7.1",
+                    "3.0.1",
+                    "4.2.0",
+                    "5.0.3",
+                    "6.7.1",
+                    "7.0.0",
+                    "8.3.1",
+                    "9.2.3",
+                    "10.0.0",
+                    "11.8.0",
+                    "12.3.0",
+                    "13.2.0",
+                    "14.7.0",
+                    "15.1.3",
+                    "16.7.1",
+                    "17.0.0",
+                    "18.6.2",
+                    "19.2.2",
+                    "20.0.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "undici",
+        "integrationName": "undici",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": "^4.4.1 || 5 || >=6.0.0",
+                "tested": [
+                    "4.4.1",
+                    "4.16.0",
+                    "5.0.0",
+                    "5.29.0",
+                    "6.0.0",
+                    "6.28.0",
+                    "7.29.0",
+                    "8.10.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "tinypool",
+        "integrationName": "vitest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=0.8.0",
+                "tested": [
+                    "0.8.0",
+                    "0.9.0",
+                    "1.1.1",
+                    "2.1.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "vitest",
+        "integrationName": "vitest",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=1.6.0 <2.0.5 || >=2.0.5",
+                "tested": [
+                    "1.6.0",
+                    "1.6.1",
+                    "2.0.0",
+                    "2.0.4",
+                    "2.0.5",
+                    "2.1.0",
+                    "2.1.9",
+                    "3.0.0",
+                    "3.0.8",
+                    "3.0.9",
+                    "3.2.0",
+                    "3.2.7",
+                    "4.0.0",
+                    "4.1.10"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "winston",
+        "integrationName": "winston",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=3 || 1 || 2",
+                "tested": [
+                    "1.0.0",
+                    "1.1.2",
+                    "2.0.0",
+                    "2.4.7",
+                    "3.0.0",
+                    "3.19.0"
+                ]
+            }
+        ]
+    },
+    {
+        "dependencyName": "ws",
+        "integrationName": "ws",
+        "autoInstrumented": true,
+        "versions": [
+            {
+                "testedRuntimes": {
+                    "node": [
+                        "26.2.0",
+                        "24.16.0",
+                        "22.22.3"
+                    ]
+                },
+                "supportedRange": ">=8.0.0",
+                "tested": [
+                    "8.0.0",
+                    "8.21.3"
+                ]
+            }
+        ]
+    }
+]
