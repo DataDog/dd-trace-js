@@ -65,6 +65,7 @@ class Profiler extends EventEmitter {
   #profilers
   #spanFinishListener
   #systemInfoReport
+  #tags
   #timer
   #uploadCompression
 
@@ -172,12 +173,13 @@ class Profiler extends EventEmitter {
     if (this.enabled) return true
     this.#enabled = true
 
-    const { exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
       buildProfilingRuntime(config)
     this.#config = config
     this.#exporters = exporters
     this.#flushInterval = flushInterval
     this.#profilers = profilers
+    this.#tags = tags
     this.#uploadCompression = uploadCompression
     this.#systemInfoReport = systemInfoReport
 
@@ -241,7 +243,7 @@ class Profiler extends EventEmitter {
     processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile,
-    }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, this.#tags, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
@@ -325,6 +327,7 @@ class Profiler extends EventEmitter {
 
       const startDate = this.#lastStart
       const endDate = new Date()
+      const tags = this.#tags
       const profiles = []
 
       crashtracker.withProfilerSerializing(() => {
@@ -341,6 +344,7 @@ class Profiler extends EventEmitter {
       })
 
       if (restart) {
+        this.#tags = getProfilingTags(this.#config)
         this._capture(this._timeoutInterval, endDate)
       }
 
@@ -378,7 +382,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, tags, snapshotKind)
         profileSubmittedChannel.publish()
         log.debug('Submitted profiles')
       }
@@ -388,9 +392,15 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #submit (profiles, infos, start, end, snapshotKind) {
-    const tags = getProfilingTags(this.#config)
-
+  /**
+   * @param {Record<string, Buffer|string>} profiles
+   * @param {Record<string, unknown>} infos
+   * @param {Date} start
+   * @param {Date} end
+   * @param {Record<string, string|number|boolean|undefined>} tags
+   * @param {string} snapshotKind
+   */
+  #submit (profiles, infos, start, end, tags, snapshotKind) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {

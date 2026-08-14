@@ -320,7 +320,7 @@ class Tracer extends NoopProxy {
     // cannot produce distinct IDs. Logged at registration, during the image build, where the
     // Dockerfile can still be fixed — not once per clone.
     if (NODE_BUNDLES_OPENSSL) {
-      log.warn(BUNDLED_OPENSSL_WARNING)
+      log.error(BUNDLED_OPENSSL_WARNING)
     }
 
     const ch = channel('http.server.request.start')

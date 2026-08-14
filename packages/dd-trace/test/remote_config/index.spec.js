@@ -927,8 +927,10 @@ describe('RemoteConfig', () => {
         '_dd.rc.client_id:old-client-id',
       ])
 
+      delete rcConfig.tags['_dd.rc.client_id']
       refreshIdentity(rcConfig)
 
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
       const refreshedTags = rcInstance.state.client.client_tracer.tags
       assert.deepStrictEqual(refreshedTags, [
         'runtime-id:runtimeId',
@@ -936,7 +938,7 @@ describe('RemoteConfig', () => {
       ])
     })
 
-    it('should set clientId to the value returned by uuid', () => {
+    it('should set clientId to the value returned by uuid after a client exists', () => {
       const rcConfig = {
         url: new URL('http://127.0.0.1:1337'),
         tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
@@ -945,29 +947,15 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
       refreshIdentity(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
     })
 
-    it('should update config.tags[_dd.rc.client_id] when it exists', () => {
-      const rcConfig = {
-        url: new URL('http://127.0.0.1:1337'),
-        tags: {
-          'runtime-id': 'runtimeId',
-          '_dd.rc.client_id': 'old-client-id',
-        },
-        service: 'serviceName',
-        env: 'serviceEnv',
-        version: 'appVersion',
-        remoteConfig: { pollInterval: 5 },
-      }
-      refreshIdentity(rcConfig)
-
-      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
-    })
-
-    it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
+    it('should not add config.tags[_dd.rc.client_id] before a client exists', () => {
       const rcConfig = {
         url: new URL('http://127.0.0.1:1337'),
         tags: { 'runtime-id': 'runtimeId' },
