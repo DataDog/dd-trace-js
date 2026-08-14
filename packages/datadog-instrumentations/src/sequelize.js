@@ -109,10 +109,12 @@ function sequelizeHasIdleConnection (manager, args) {
 
 /**
  * @param {{ dialectName?: string }|undefined} manager
- * @returns {'mysql2'|'pg'|undefined}
+ * @returns {'mariadb'|'mysql2'|'pg'|undefined}
  */
 function resolveSequelizeDriver (manager) {
   switch (manager?.dialectName) {
+    case 'mariadb':
+      return 'mariadb'
     case 'mysql':
       return 'mysql2'
     case 'postgres':

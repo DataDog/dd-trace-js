@@ -142,6 +142,9 @@ function knexHasIdleConnection (client) {
  */
 function resolveKnexDriver (client) {
   switch (client?.driverName) {
+    case 'cockroachdb':
+    case 'pg-redshift':
+      return 'pg'
     case 'mysql':
       return 'mysql'
     case 'mysql2':

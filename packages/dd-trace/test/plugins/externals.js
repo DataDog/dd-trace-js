@@ -100,6 +100,10 @@ module.exports = {
   ],
   bullmq: [
     {
+      name: 'ioredis',
+      dep: true,
+    },
+    {
       name: 'redis',
       versions: ['>=4'],
     },
@@ -704,6 +708,12 @@ module.exports = {
     {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
     },
     {
       name: 'pg',

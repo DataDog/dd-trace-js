@@ -110,8 +110,7 @@ fi
 # only moves when the Node version changes. Skip it unless this PR's diff touches a
 # node-<major> pin in the versions manifest runall reads above (the single source of
 # truth for the benchmarked Node patch). Fail open -- run it -- when the diff can't be
-# determined, so a Node bump is never silently skipped. The same gate must apply in
-# both loops below, or the global variant-index shard math drops/misassigns variants.
+# determined, so a Node bump is never silently skipped.
 RUN_ASYNC_HOOKS="1"
 if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
   # Capture the diff and its status separately rather than piping straight into
@@ -133,74 +132,134 @@ if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" 
   fi
 fi
 
+# Run a variant from the suite root. Background calls get their own shell and
+# affinity variables, while all result and failure files remain append-only.
+function run_variant {
+  local D=$1
+  local V=$2
+  local CPU_COUNT=$3
+  local CORE=$4
+  local POSITION=$5
+  local CPU_AFFINITY=$CORE
+  local CPU_AFFINITY_SECOND=$((CORE+1))
+  local CPU_DESCRIPTION
+  local VARIANT_OUT
+
+  export CPU_AFFINITY CPU_AFFINITY_SECOND
+  export SIRUN_VARIANT=$V
+
+  if [[ ${CPU_COUNT} -eq 1 ]]; then
+    CPU_DESCRIPTION="core ${CPU_AFFINITY}"
+  else
+    CPU_DESCRIPTION="cores ${CPU_AFFINITY},${CPU_AFFINITY_SECOND}"
+  fi
+  echo "running ${POSITION}, ${D}/${V} in background, pinned to ${CPU_DESCRIPTION}..."
+
+  cd "${D}"
+  VARIANT_OUT=$(mktemp)
+  if time node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}"; then
+    echo "${D}/${V} finished."
+    if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi
+  elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] \
+      && grep -Fqx "${D}/${V}" "$CANDIDATE_PASSED_FILE" 2>/dev/null; then
+    echo "${D}/${V} skipped: passed on the candidate but failed on the older baseline source." >&2
+    # Append-only writes to a single tempfile from parallel subshells are
+    # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
+    echo "${D}/${V}" >> "$SKIPPED_FILE"
+  else
+    echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+    cat "${VARIANT_OUT}" >&2
+    echo "${D}/${V}" >> "$FAILURES_FILE"
+  fi
+  rm -f "${VARIANT_OUT}"
+}
+
 BENCH_COUNT=0
+BENCH_CPU_COUNT=0
+BENCH_WEIGHTS=()
 for D in "${DIRS[@]}"; do
-  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
+  if [[ "${D}" == "async_hooks" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
-  for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
+  for V in $variants; do
+    CPU_COUNT=$(SIRUN_VARIANT=$V node ../get-cpu-count.js)
+    BENCH_COUNT=$((BENCH_COUNT+1))
+    BENCH_CPU_COUNT=$((BENCH_CPU_COUNT+CPU_COUNT))
+    BENCH_WEIGHTS+=("$CPU_COUNT")
+  done
   cd ..
 done
 
-# Auto-shard from the variant count and available cores: each shard pins one variant
-# per core, so the suite needs ceil(BENCH_COUNT / cores) shards. The CI matrix supplies
-# SPLITS shards; fail with the exact number to configure rather than silently dropping
-# variants once the suite outgrows the matrix.
-SHARDS_NEEDED=$(( (BENCH_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
-if [[ ${SPLITS} -lt ${SHARDS_NEEDED} ]]; then
-  echo "${BENCH_COUNT} variants on ${TOTAL_CPU_CORES} cores need ${SHARDS_NEEDED} shards, but SPLITS=${SPLITS}." >&2
-  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks/gitlab-ci.yml to ${SHARDS_NEEDED}." >&2
+# Balance CPU allocations evenly across all configured shards. Most variants use
+# one CPU; worker-thread benchmarks can reserve a second CPU in meta.json.
+GROUP_CORE_SIZE=$(( (BENCH_CPU_COUNT + SPLITS - 1) / SPLITS ))
+if [[ ${GROUP_CORE_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
+  SHARDS_NEEDED=$(( (BENCH_CPU_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
+  echo "${BENCH_COUNT} variants need ${BENCH_CPU_COUNT} CPUs across the suite; ${SPLITS} shards " \
+    "would need ${GROUP_CORE_SIZE} of ${TOTAL_CPU_CORES} cores each." >&2
+  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks/gitlab-ci.yml to at least ${SHARDS_NEEDED}." >&2
   exit 1
 fi
 
-# Balance variants evenly across all configured shards; guaranteed <= cores each by the check above.
-GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
+BENCH_GROUPS=()
+ASSIGNED_GROUP=1
+ASSIGNED_CORES=0
+for CPU_COUNT in "${BENCH_WEIGHTS[@]}"; do
+  if [[ $((ASSIGNED_CORES+CPU_COUNT)) -gt ${GROUP_CORE_SIZE} ]]; then
+    ASSIGNED_GROUP=$((ASSIGNED_GROUP+1))
+    ASSIGNED_CORES=0
+  fi
+  BENCH_GROUPS+=("$ASSIGNED_GROUP")
+  ASSIGNED_CORES=$((ASSIGNED_CORES+CPU_COUNT))
+done
+
+if [[ ${ASSIGNED_GROUP} -gt ${SPLITS} ]]; then
+  echo "CPU reservations need ${ASSIGNED_GROUP} shards after allocation, but SPLITS=${SPLITS}." >&2
+  exit 1
+fi
 
 BENCH_INDEX=0
-BENCH_END=$(($GROUP_SIZE*$GROUP))
-BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
 for D in "${DIRS[@]}"; do
-  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
+  if [[ "${D}" == "async_hooks" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
 
   node ../squash-affinity.js
+  cd ..
 
   for V in $variants; do
-    if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
-      echo "running $((BENCH_INDEX+1)) out of ${BENCH_COUNT}, ${D}/${V} in background, pinned to core ${CPU_AFFINITY}..."
-
-      export SIRUN_VARIANT=$V
-
-      (
-        # Capture output so we can surface it when the variant fails.
-        VARIANT_OUT=$(mktemp)
-        if time node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}"; then
-          echo "${D}/${V} finished."
-          if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi
-        elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] && grep -Fqx "${D}/${V}" "$CANDIDATE_PASSED_FILE" 2>/dev/null; then
-          echo "${D}/${V} skipped: passed on the candidate but failed on the older baseline source." >&2
-          # Append-only writes to a single tempfile from parallel subshells are
-          # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
-          echo "${D}/${V}" >> "$SKIPPED_FILE"
-        else
-          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
-          cat "${VARIANT_OUT}" >&2
-          echo "${D}/${V}" >> "$FAILURES_FILE"
-        fi
-        rm -f "${VARIANT_OUT}"
-      ) &
-      ((CPU_AFFINITY=CPU_AFFINITY+1))
+    CPU_COUNT=${BENCH_WEIGHTS[$BENCH_INDEX]}
+    if [[ ${BENCH_GROUPS[$BENCH_INDEX]} -eq ${GROUP} ]]; then
+      POSITION="$((BENCH_INDEX+1)) out of ${BENCH_COUNT}"
+      run_variant "${D}" "${V}" "${CPU_COUNT}" "${CPU_AFFINITY}" "${POSITION}" &
+      ((CPU_AFFINITY=CPU_AFFINITY+CPU_COUNT))
     fi
 
     BENCH_INDEX=$(($BENCH_INDEX+1))
   done
-
-  cd ..
 done
 
 wait # waits until all tests are complete before continuing
+
+# Node-pin PRs run async_hooks after the final shard's regular variants release
+# their cores. Keeping this Node-only benchmark out of the shard allocation lets
+# the normal suite remain at six 24-core groups without dropping Node coverage.
+if [[ -n "${RUN_ASYNC_HOOKS}" && ${GROUP} -eq ${SPLITS} ]]; then
+  D="async_hooks"
+  cd "${D}"
+  variants="$(node ../get-variants.js)"
+  node ../squash-affinity.js
+  cd ..
+
+  CPU_AFFINITY=${CPUSET_START}
+  for V in $variants; do
+    CPU_COUNT=$(cd "${D}" && SIRUN_VARIANT=$V node ../get-cpu-count.js)
+    run_variant "${D}" "${V}" "${CPU_COUNT}" "${CPU_AFFINITY}" "async_hooks overflow" &
+    ((CPU_AFFINITY=CPU_AFFINITY+CPU_COUNT))
+  done
+  wait
+fi
 
 node ./strip-unwanted-results.js
 

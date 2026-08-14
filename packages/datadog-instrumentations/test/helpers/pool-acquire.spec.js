@@ -13,6 +13,7 @@ const {
   getPoolAcquireCapture,
   isPoolQueryAcquire,
   setPoolAcquireCaptureWaitTime,
+  setPromisePoolConnectionConfig,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,
@@ -156,6 +157,52 @@ describe('helpers/pool-acquire', () => {
         assert.strictEqual(contexts[0][1], contexts[1][1])
         assert.strictEqual(contexts[1][1].conf.database, 'db')
         assert.strictEqual(contexts[1][1].connectionConfig, connection.config)
+        assert.strictEqual(typeof contexts[1][1].poolWaitTime, 'number')
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('moves a mariadb wait to its connection and resolves replica metadata', async () => {
+      const startCh = channel('apm:mariadb:pool:acquire:start')
+      const finishCh = channel('apm:mariadb:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const connection = {}
+        const connectionConfig = { database: 'selected' }
+        setPromisePoolConnectionConfig(connection, connectionConfig)
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.resolve(connection),
+          () => 'mariadb',
+          () => ({ database: 'db' }),
+          () => false
+        )
+        const release = wrapPoolRelease(noop)
+        const query = wrapPromisePoolQueryMethod(async () => {
+          const first = await acquire.call(owner)
+          assert.strictEqual(typeof takePoolWaitTime(first), 'number')
+          release.call(owner, first)
+
+          const second = await acquire.call(owner)
+          release.call(owner, second)
+          assert.strictEqual(takePoolWaitTime(second), undefined)
+        }, () => owner, () => 'mariadb')
+
+        await query()
+        assert.strictEqual(contexts.length, 0)
+
+        await acquire.call(owner)
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+        assert.strictEqual(contexts[0][1], contexts[1][1])
+        assert.strictEqual(contexts[1][1].conf.database, 'db')
+        assert.strictEqual(contexts[1][1].connectionConfig, connectionConfig)
         assert.strictEqual(typeof contexts[1][1].poolWaitTime, 'number')
       } finally {
         startCh.unsubscribe(onStart)

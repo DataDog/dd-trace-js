@@ -862,6 +862,22 @@ describe('plugins/util/web', () => {
       )
     })
 
+    it('merges W3C tracing allow-headers on OPTIONS when allow-origin is *', () => {
+      req.method = 'OPTIONS'
+      req.headers.origin = 'https://example.com'
+      req.headers['access-control-request-headers'] = 'baggage, traceparent, tracestate, x-other'
+      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+
+      const wrapped = web.wrapWriteHead(context)
+      wrapped.call(res, 200)
+
+      assert.ok(res.setHeader.calledOnce)
+      assert.deepStrictEqual(
+        res.setHeader.firstCall.args,
+        [ALLOW_HEADERS, 'baggage,traceparent,tracestate']
+      )
+    })
+
     it('honours headers passed as the second writeHead argument', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
@@ -929,7 +945,7 @@ describe('plugins/util/web', () => {
       )
     })
 
-    it('leaves allow-headers untouched when no datadog header was requested', () => {
+    it('leaves allow-headers untouched when no supported tracing header was requested', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'content-type, x-other'

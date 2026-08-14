@@ -71,6 +71,7 @@ jobs:
       PLUGINS: aerospike
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
@@ -716,7 +717,7 @@ jobs:
           - 5432:5432
     env:
       PLUGINS: knex
-      SERVICES: mysql|mysql2|postgres
+      SERVICES: mysql|postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
@@ -1378,7 +1379,7 @@ jobs:
           - 5432:5432
     env:
       PLUGINS: sequelize
-      SERVICES: mysql2|postgres
+      SERVICES: mysql|postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: ./.github/actions/plugins/test

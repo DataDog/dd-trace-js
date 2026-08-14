@@ -19,7 +19,7 @@ const { performance } = require('node:perf_hooks')
  * @typedef {{ deferred: boolean }} PoolWaitTransfer
  * @typedef {{ transfer: PoolWaitTransfer, waitTime: number }} DeferredPoolWait
  * @typedef {{ pending: boolean, pool: object }} DeferredPoolQueryAcquire
- * @typedef {'mysql'|'mysql2'|'pg'} DatabaseDriver
+ * @typedef {'mariadb'|'mysql'|'mysql2'|'pg'} DatabaseDriver
  * @typedef {{ connection?: object, owner: object, pending: boolean }} PromisePoolQueryAcquire
  * @typedef {{ waitTime?: number }} PoolAcquireCapture
  * @typedef {{
@@ -63,6 +63,9 @@ let deferredPoolWaitCount = 0
 
 /** @type {Record<string, { acquireStartCh: Channel, acquireFinishCh: Channel }>} */
 const promisePoolAcquireChannels = {}
+
+/** @type {WeakMap<object, Record<string, unknown>>} */
+const promisePoolConnectionConfigs = new WeakMap()
 
 const deferredPromisePoolWaitTransfer = { deferred: true }
 
@@ -497,15 +500,25 @@ function createPromisePoolAcquireContext (driver, config) {
  * @param {Record<string, unknown>|undefined} ctx
  * @param {{
  *   config?: Record<string, unknown>,
- *   connectionParameters?: Record<string, unknown>
+ *   connectionParameters?: Record<string, unknown>,
+ *   opts?: Record<string, unknown>
  * }} connection
  * @param {number} waitTime
  */
 function finishPromisePoolAcquireContext (driver, channels, ctx, connection, waitTime) {
   ctx.poolWaitTime = waitTime
   if (driver === 'pg') ctx.params = connection.connectionParameters
+  else if (driver === 'mariadb') ctx.connectionConfig = promisePoolConnectionConfigs.get(connection)
   else ctx.connectionConfig = connection.config
   channels.acquireFinishCh.publish(ctx)
+}
+
+/**
+ * @param {object} connection
+ * @param {Record<string, unknown>} config
+ */
+function setPromisePoolConnectionConfig (connection, config) {
+  promisePoolConnectionConfigs.set(connection, config)
 }
 
 /**
@@ -763,10 +776,11 @@ function runPoolQueryConnectionCallback (
  * @param {unknown} error
  * @param {Record<string, unknown>} acquireCtx
  * @param {AcquireErrorChannels} channels
+ * @param {number} [poolWaitTime]
  */
-function reportPoolAcquireError (start, error, acquireCtx, channels) {
+function reportPoolAcquireError (start, error, acquireCtx, channels, poolWaitTime) {
   acquireCtx.error = error
-  acquireCtx.poolWaitTime = acquireWait(start)
+  acquireCtx.poolWaitTime = poolWaitTime ?? acquireWait(start)
   if (start !== undefined) acquireCtx.startTime = performance.timeOrigin + start
   channels.acquireStartCh.publish(acquireCtx)
   channels.acquireFinishCh.publish(acquireCtx)
@@ -781,11 +795,14 @@ function reportPoolAcquireError (start, error, acquireCtx, channels) {
  * @param {Function} callback
  * @param {unknown} thisArg
  * @param {ArgumentsLike} args
+ * @param {number} [poolWaitTime]
  * @returns {unknown}
  */
-function runPoolAcquireError (start, error, acquireCtx, channels, connectionCtx, callback, thisArg, args) {
+function runPoolAcquireError (
+  start, error, acquireCtx, channels, connectionCtx, callback, thisArg, args, poolWaitTime
+) {
   return channels.connectionFinishCh.runStores(connectionCtx, () => {
-    reportPoolAcquireError(start, error, acquireCtx, channels)
+    reportPoolAcquireError(start, error, acquireCtx, channels, poolWaitTime)
     return callback.apply(thisArg, args)
   })
 }
@@ -858,6 +875,7 @@ function takeClusterAcquire (key) {
 }
 
 module.exports = {
+  acquireWait,
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
   getPoolAcquireCapture,
@@ -867,6 +885,7 @@ module.exports = {
   runWithPoolWait,
   setPoolAcquireCaptureWaitTime,
   setPoolWaitTime,
+  setPromisePoolConnectionConfig,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,

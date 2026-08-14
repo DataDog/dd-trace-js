@@ -10,6 +10,13 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const databases = [
   {
+    client: 'cockroachdb',
+    connection: { database: 'postgres', host: '127.0.0.1', password: 'postgres', user: 'postgres' },
+    driver: 'pg',
+    metric: 'db.pool.wait_time_ms',
+    querySpan: 'pg.query',
+  },
+  {
     client: 'mysql',
     connection: { database: 'db', host: '127.0.0.1', user: 'root' },
     metric: 'mysql.pool.wait_time',
@@ -27,6 +34,13 @@ const databases = [
     metric: 'db.pool.wait_time_ms',
     querySpan: 'pg.query',
   },
+  {
+    client: 'redshift',
+    connection: { database: 'postgres', host: '127.0.0.1', password: 'postgres', user: 'postgres' },
+    driver: 'pg',
+    metric: 'db.pool.wait_time_ms',
+    querySpan: 'pg.query',
+  },
 ]
 
 describe('knex pool acquisition', () => {
@@ -41,7 +55,7 @@ describe('knex pool acquisition', () => {
         let nativePool
 
         before(async () => {
-          tracer = await agent.load(database.client)
+          tracer = await agent.load(database.driver ?? database.client)
         })
 
         after(() => agent.close({ ritmReset: false }))
@@ -49,7 +63,7 @@ describe('knex pool acquisition', () => {
         beforeEach(() => {
           const versionPackage = require(`../../../versions/knex@${version}`)
           knex = versionPackage.get()
-          driver = versionPackage.get(database.client)
+          driver = versionPackage.get(database.driver ?? database.client)
           nativePool = undefined
           client = knex({
             client: database.client,
@@ -60,7 +74,7 @@ describe('knex pool acquisition', () => {
 
         afterEach(async () => {
           await client.destroy()
-          if (nativePool !== undefined) await closeNativePool(nativePool, database.client)
+          if (nativePool !== undefined) await closeNativePool(nativePool, database.driver ?? database.client)
         })
 
         it('adds a pool wait tag to a query instead of creating an acquire span', async () => {
@@ -69,9 +83,11 @@ describe('knex pool acquisition', () => {
           const tracePromise = assertQueryWaitTrace('knex-query-parent', database)
 
           const queryPromise = tracer.scope().activate(parent, () => Promise.resolve(client.raw('SELECT 1 AS one')))
-          await waitForPendingAcquire(client.client.pool)
-          await client.client.releaseConnection(connection)
-          await queryPromise
+          await Promise.all([
+            queryPromise,
+            waitForPendingAcquire(client.client.pool)
+              .finally(() => client.client.releaseConnection(connection)),
+          ])
           parent.finish()
 
           await tracePromise
@@ -85,9 +101,11 @@ describe('knex pool acquisition', () => {
           const transactionPromise = tracer.scope().activate(parent, () => client.transaction(async transaction => {
             await transaction.raw('SELECT 1 AS one')
           }))
-          await waitForPendingAcquire(client.client.pool)
-          await client.client.releaseConnection(connection)
-          await transactionPromise
+          await Promise.all([
+            transactionPromise,
+            waitForPendingAcquire(client.client.pool)
+              .finally(() => client.client.releaseConnection(connection)),
+          ])
           parent.finish()
 
           await tracePromise
@@ -104,7 +122,10 @@ describe('knex pool acquisition', () => {
             for (const span of querySpans) {
               assert.strictEqual(span.metrics[database.metric], undefined)
             }
-            assert.strictEqual(spans.some(span => span.name === `${database.client}.pool.acquire`), false)
+            assert.strictEqual(
+              spans.some(span => span.name === `${database.driver ?? database.client}.pool.acquire`),
+              false
+            )
           }, { spanResourceMatch: /^knex-external-connection-parent$/ })
 
           await tracer.scope().activate(parent, async () => {
@@ -163,7 +184,9 @@ describe('knex pool acquisition', () => {
           const parent = tracer.startSpan('knex-timeout-parent')
           const tracePromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const acquireSpans = spans.filter(span => span.name === `${database.client}.pool.acquire`)
+            const acquireSpans = spans.filter(
+              span => span.name === `${database.driver ?? database.client}.pool.acquire`
+            )
 
             assert.strictEqual(acquireSpans.length, 1)
             assert.strictEqual(acquireSpans[0].error, 1)
@@ -248,7 +271,7 @@ describe('knex pool acquisition', () => {
 
 /**
  * @param {string} parentResource
- * @param {{ client: string, metric: string, querySpan: string }} database
+ * @param {{ client: string, driver?: string, metric: string, querySpan: string }} database
  * @returns {Promise<void>}
  */
 function assertQueryWaitTrace (parentResource, database) {
@@ -259,20 +282,20 @@ function assertQueryWaitTrace (parentResource, database) {
 
     assert.strictEqual(querySpans.length, 1)
     assert.ok(querySpans[0].metrics[database.metric] > 0)
-    assert.strictEqual(spans.some(span => span.name === `${database.client}.pool.acquire`), false)
+    assert.strictEqual(spans.some(span => span.name === `${database.driver ?? database.client}.pool.acquire`), false)
     assert.strictEqual(spans.some(span => span.name === 'knex.pool.acquire'), false)
   }, { spanResourceMatch: new RegExp(`^${parentResource}$`) })
 }
 
 /**
  * @param {string} parentResource
- * @param {{ client: string, metric: string }} database
+ * @param {{ client: string, driver?: string, metric: string }} database
  * @returns {Promise<void>}
  */
 function assertAcquireTrace (parentResource, database) {
   return agent.assertSomeTraces(traces => {
     const spans = traces[0]
-    const acquireSpans = spans.filter(span => span.name === `${database.client}.pool.acquire`)
+    const acquireSpans = spans.filter(span => span.name === `${database.driver ?? database.client}.pool.acquire`)
 
     assert.strictEqual(acquireSpans.length, 1)
     assert.strictEqual(typeof acquireSpans[0].metrics[database.metric], 'number')
@@ -282,11 +305,11 @@ function assertAcquireTrace (parentResource, database) {
 
 /**
  * @param {{ Pool?: Function, createPool?: Function }} driver
- * @param {{ client: string, connection: Record<string, unknown> }} database
+ * @param {{ client: string, connection: Record<string, unknown>, driver?: string }} database
  * @returns {object}
  */
 function createNativePool (driver, database) {
-  if (database.client === 'pg') return new driver.Pool({ ...database.connection, max: 1 })
+  if ((database.driver ?? database.client) === 'pg') return new driver.Pool({ ...database.connection, max: 1 })
   return driver.createPool({ ...database.connection, connectionLimit: 1 })
 }
 
@@ -305,7 +328,9 @@ function closeNativePool (pool, driver) {
  * @returns {Promise<void>}
  */
 async function waitForPendingAcquire (pool) {
-  while (pool.numPendingAcquires() === 0) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (pool.numPendingAcquires() !== 0) return
     await new Promise(resolve => setImmediate(resolve))
   }
+  assert.fail('Expected a pending pool acquisition')
 }
