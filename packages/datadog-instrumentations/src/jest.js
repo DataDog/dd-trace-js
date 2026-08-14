@@ -49,7 +49,7 @@ const {
   getRawJestTestName,
   getJestSuitesToRun,
   removeSeedSuffixFromTestName,
-} = require('../../datadog-plugin-jest/src/util')
+} = require('../../dd-trace/src/plugins/util/jest')
 const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
@@ -97,7 +97,9 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
-const FLUSH_TIMEOUT = 10_000
+// The exporter has a 10-second bounded final-flush deadline. Leave enough time
+// for its completion callback before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = 12_000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
@@ -3066,7 +3068,19 @@ function getCliWrapper (isNewJestVersion) {
         frameworkVersion: jestVersion,
       })
 
-      const result = await runCLI.apply(this, arguments)
+      let result
+      try {
+        result = await runCLI.apply(this, arguments)
+      } catch (error) {
+        try {
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
+            isTestSessionFinalizationError: true,
+          }))
+        } catch (finalizationError) {
+          log.error('Jest test session finalization error: %s', finalizationError)
+        }
+        throw error
+      }
 
       const {
         results: {

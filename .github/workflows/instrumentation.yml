@@ -61,6 +61,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-anthropic-lifecycle:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: anthropic|anthropic-lifecycle
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-aws-sdk:
     runs-on: ubuntu-latest
     permissions:
@@ -382,6 +392,25 @@ jobs:
       id-token: write
     env:
       PLUGINS: multer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-mysql:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      mysql:
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql
+      SERVICES: mysql
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/instrumentations/test

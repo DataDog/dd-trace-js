@@ -14,7 +14,6 @@ const {
   getTestSuiteCommonTags,
   getTestLevelsMetadataTags,
   getTestSessionName,
-  getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -106,19 +105,6 @@ class VitestPlugin extends CiPlugin {
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
       })
-    })
-
-    this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
-      knownTests,
-      testFilepaths,
-      onDone,
-    }) => {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
-        testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
-        knownTests,
-        this.libraryConfig.earlyFlakeDetectionFaultyThreshold
-      )
-      onDone(isFaulty)
     })
 
     this.addBind('ci:vitest:test:start', (ctx) => {
@@ -537,6 +523,7 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
+        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -580,6 +567,7 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:session:finish', ({
       status,
       error,
+      isTestSessionFinalizationError,
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
@@ -602,6 +590,9 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {
+        if (isTestSessionFinalizationError) {
+          this.tracer._exporter.setDeferredTestSuiteError?.(error)
+        }
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
@@ -631,6 +622,7 @@ class VitestPlugin extends CiPlugin {
       if (vitestPool) {
         this.testSessionSpan.setTag(VITEST_POOL, vitestPool)
       }
+      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
