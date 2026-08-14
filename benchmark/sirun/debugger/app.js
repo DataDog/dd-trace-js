@@ -6,17 +6,17 @@
 
 const guard = require('../startup-guard')
 const {
-  CAPTURED_PROBE_INDEX,
   CAPTURE_KIND_INDEX,
   CAPTURE_KIND_NAMES,
   CAPTURE_KINDS,
   COMPLETED_PROBE_INDEX,
+  HANDLED_PROBE_INDEX,
+  MATCHED_CAPTURE_KIND_INDEX,
 } = require('./benchmark-state')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
 const STARTUP_GUARD_MAX_SHARE = Number(process.env.STARTUP_GUARD_MAX_SHARE)
 const TRACK_PROBE_OUTPUT = process.env.TRACK_PROBE_OUTPUT === 'true'
-const CAPTURE_SNAPSHOT = process.env.CAPTURE_SNAPSHOT === 'true'
 const EXPECTED_CAPTURE_KIND = process.env.EXPECTED_CAPTURE_KIND
 const OUTPUT_TIMEOUT = 15_000
 const dataFixture = createData()
@@ -43,8 +43,8 @@ function runLoop () {
 }
 
 /**
- * Run one continuous hot loop, then wait for every selected probe payload. The
- * final barrier makes completed work exact without adding work between hits.
+ * Run one continuous hot loop, then wait for every production pause handler.
+ * The final barrier makes completed work exact without adding work between hits.
  *
  * @returns {void}
  */
@@ -54,8 +54,9 @@ function runCapturedLoop () {
 
   if (!probeCounts) throw new Error('debugger completion counter was not initialized')
   const expectedProbes = OPERATIONS
-  waitForProbeOutput(probeCounts, expectedProbes, () => {
-    validateCapturedProbes(probeCounts, expectedProbes)
+  waitForProbeHandlers(probeCounts, expectedProbes, () => {
+    validateProbePayloads(probeCounts, expectedProbes)
+    validateMeasuredCaptureKinds(probeCounts, expectedProbes)
     stop()
     finish()
   })
@@ -63,28 +64,28 @@ function runCapturedLoop () {
 
 /**
  * Wait without blocking the application thread until the debugger worker has
- * constructed the selected probe payload.
+ * finished each production pause handler.
  *
  * @param {Int32Array} counter
  * @param {number} expected
  * @param {() => void} done
  * @returns {void}
  */
-function waitForProbeOutput (counter, expected, done) {
-  const actual = Atomics.load(counter, COMPLETED_PROBE_INDEX)
+function waitForProbeHandlers (counter, expected, done) {
+  const actual = Atomics.load(counter, HANDLED_PROBE_INDEX)
   if (actual === expected) return done()
-  if (actual > expected) throw new Error(`debugger completed ${actual} of ${expected} expected probe payloads`)
+  if (actual > expected) throw new Error(`debugger handled ${actual} of ${expected} expected breakpoint events`)
 
-  const waiter = Atomics.waitAsync(counter, COMPLETED_PROBE_INDEX, actual, OUTPUT_TIMEOUT)
+  const waiter = Atomics.waitAsync(counter, HANDLED_PROBE_INDEX, actual, OUTPUT_TIMEOUT)
   if (waiter.async) {
-    waiter.value.then(result => finishProbeWait(counter, expected, done, result))
+    waiter.value.then(result => finishHandlerWait(counter, expected, done, result))
   } else {
-    finishProbeWait(counter, expected, done, waiter.value)
+    finishHandlerWait(counter, expected, done, waiter.value)
   }
 }
 
 /**
- * Validate the worker completion count after an atomic wait.
+ * Validate the worker handler count after an atomic wait.
  *
  * @param {Int32Array} counter
  * @param {number} expected
@@ -92,26 +93,43 @@ function waitForProbeOutput (counter, expected, done) {
  * @param {'ok' | 'not-equal' | 'timed-out'} result
  * @returns {void}
  */
-function finishProbeWait (counter, expected, done, result) {
-  const actual = Atomics.load(counter, COMPLETED_PROBE_INDEX)
+function finishHandlerWait (counter, expected, done, result) {
+  const actual = Atomics.load(counter, HANDLED_PROBE_INDEX)
   if (actual === expected) return done()
-  if (result !== 'timed-out' && actual < expected) return waitForProbeOutput(counter, expected, done)
+  if (result === 'timed-out' || actual > expected) {
+    throw new Error(`debugger handled ${actual} of ${expected} expected breakpoint events`)
+  }
 
-  throw new Error(`debugger completed ${actual} of ${expected} expected probe payloads`)
+  waitForProbeHandlers(counter, expected, done)
 }
 
 /**
- * Ensure snapshot probes never silently degrade to the no-snapshot path.
+ * Ensure each handled breakpoint produces one payload.
  *
  * @param {Int32Array} counts
  * @param {number} completed
  * @returns {void}
  */
-function validateCapturedProbes (counts, completed) {
-  const captured = Atomics.load(counts, CAPTURED_PROBE_INDEX)
-  const expected = CAPTURE_SNAPSHOT ? completed : 0
-  if (captured !== expected) {
-    throw new Error(`debugger captured ${captured} of ${expected} expected snapshots`)
+function validateProbePayloads (counts, completed) {
+  const payloads = Atomics.load(counts, COMPLETED_PROBE_INDEX)
+  if (payloads !== completed) {
+    throw new Error(`debugger completed ${payloads} of ${completed} expected probe payloads`)
+  }
+}
+
+/**
+ * Ensure each measured payload uses the expected capture mode.
+ *
+ * @param {Int32Array} counts
+ * @param {number} completed
+ * @returns {void}
+ */
+function validateMeasuredCaptureKinds (counts, completed) {
+  const matched = Atomics.load(counts, MATCHED_CAPTURE_KIND_INDEX)
+  if (matched !== completed) {
+    throw new Error(
+      `debugger produced ${matched} of ${completed} expected ${EXPECTED_CAPTURE_KIND} capture payloads`
+    )
   }
 }
 
@@ -171,8 +189,8 @@ function preflightProbe () {
   if (!probeCounts) throw new Error('debugger completion counter was not initialized')
 
   doSomeWork(0)
-  waitForProbeOutput(probeCounts, 1, () => {
-    validateCapturedProbes(probeCounts, 1)
+  waitForProbeHandlers(probeCounts, 1, () => {
+    validateProbePayloads(probeCounts, 1)
     validateCaptureKind(probeCounts)
     resetProbeCounts(probeCounts)
     setImmediate(runCapturedLoop)

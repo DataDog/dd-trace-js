@@ -12,7 +12,7 @@
         "STARTUP_GUARD_MAX_SHARE": "0.15",
         "OPERATIONS": "250000000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "136"
+        "BREAKPOINT_LINE": "154"
       }
     },
     "line-probe-without-snapshot": {
@@ -22,7 +22,7 @@
         "STARTUP_GUARD_MAX_SHARE": "0.15",
         "OPERATIONS": "17000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "134",
+        "BREAKPOINT_LINE": "152",
         "EXPECTED_CAPTURE_KIND": "none",
         "TRACK_PROBE_OUTPUT": "true"
       }
@@ -35,7 +35,7 @@
         "OPERATIONS": "700",
         "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": "1000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "134",
+        "BREAKPOINT_LINE": "152",
         "CAPTURE_SNAPSHOT": "true",
         "EXPECTED_CAPTURE_KIND": "default",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
@@ -50,7 +50,7 @@
         "OPERATIONS": "12000",
         "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": "1000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "134",
+        "BREAKPOINT_LINE": "152",
         "CAPTURE_SNAPSHOT": "true",
         "EXPECTED_CAPTURE_KIND": "minimal",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",

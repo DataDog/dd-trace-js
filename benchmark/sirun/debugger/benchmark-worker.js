@@ -3,13 +3,16 @@
 const { workerData } = require('node:worker_threads')
 
 const {
-  CAPTURED_PROBE_INDEX,
   CAPTURE_KIND_INDEX,
   CAPTURE_KINDS,
   COMPLETED_PROBE_INDEX,
+  HANDLED_PROBE_INDEX,
+  MATCHED_CAPTURE_KIND_INDEX,
 } = require('./benchmark-state')
 
 require('../noop-request')
+
+const EXPECTED_CAPTURE_KIND = CAPTURE_KINDS[process.env.EXPECTED_CAPTURE_KIND]
 
 /** @type {Int32Array | undefined} */
 let probeCounts
@@ -24,7 +27,7 @@ if (workerData.probeCountBuffer !== undefined) {
   require.cache[sendPath] = { exports: sendAndCount }
 }
 
-require('../../../packages/dd-trace/src/debugger/devtools_client')
+loadDevtoolsClient()
 
 /**
  * @typedef {object} CapturedValue
@@ -38,6 +41,49 @@ require('../../../packages/dd-trace/src/debugger/devtools_client')
  */
 
 /**
+ * Load the production client with its pause handler wrapped so the application
+ * can wait for post-resume formatting to finish.
+ *
+ * @returns {void}
+ */
+function loadDevtoolsClient () {
+  const session = require('../../../packages/dd-trace/src/debugger/devtools_client/session')
+  const originalOn = session.on
+  /**
+   * @param {string | symbol} eventName
+   * @param {(...args: unknown[]) => void} listener
+   * @returns {import('node:events').EventEmitter}
+   */
+  session.on = function benchmarkOn (eventName, listener) {
+    if (eventName !== 'Debugger.paused' || probeCounts === undefined) {
+      return originalOn.call(this, eventName, listener)
+    }
+
+    const paused = /** @type {(event: object) => Promise<void>} */ (listener)
+    /**
+     * @param {object} event
+     * @returns {void}
+     */
+    function benchmarkPaused (event) {
+      paused.call(this, event).then(markProbeHandled)
+    }
+
+    return originalOn.call(this, eventName, benchmarkPaused)
+  }
+
+  try {
+    require('../../../packages/dd-trace/src/debugger/devtools_client')
+  } finally {
+    session.on = originalOn
+  }
+}
+
+function markProbeHandled () {
+  Atomics.add(probeCounts, HANDLED_PROBE_INDEX, 1)
+  Atomics.notify(probeCounts, HANDLED_PROBE_INDEX)
+}
+
+/**
  * Record completion after the production worker has captured and formatted the
  * probe output. The one preflight payload is inspected but not buffered.
  *
@@ -49,20 +95,21 @@ require('../../../packages/dd-trace/src/debugger/devtools_client')
  * @returns {void}
  */
 function sendAndCount (message, logger, dd, snapshot, processTags) {
+  const captureKind = getCaptureKind(snapshot)
   if (preflightPending) {
     preflightPending = false
-    Atomics.store(probeCounts, CAPTURE_KIND_INDEX, getCaptureKind(snapshot))
+    Atomics.store(probeCounts, CAPTURE_KIND_INDEX, captureKind)
   } else {
     send(message, logger, dd, snapshot, processTags)
+    if (captureKind === EXPECTED_CAPTURE_KIND) Atomics.add(probeCounts, MATCHED_CAPTURE_KIND_INDEX, 1)
   }
 
-  if (snapshot.captures !== undefined) Atomics.add(probeCounts, CAPTURED_PROBE_INDEX, 1)
   Atomics.add(probeCounts, COMPLETED_PROBE_INDEX, 1)
   Atomics.notify(probeCounts, COMPLETED_PROBE_INDEX)
 }
 
 /**
- * Classify the preflight output by the production capture shape.
+ * Classify output by the production capture shape.
  *
  * @param {DebuggerSnapshot} snapshot
  * @returns {number}
