@@ -339,7 +339,8 @@ class DataStreamsProcessor {
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
       hash,
-      edgeStartNs,
+      // start the next hop's edge clock here so edge latency stays per-hop
+      edgeStartNs: nowNs,
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,

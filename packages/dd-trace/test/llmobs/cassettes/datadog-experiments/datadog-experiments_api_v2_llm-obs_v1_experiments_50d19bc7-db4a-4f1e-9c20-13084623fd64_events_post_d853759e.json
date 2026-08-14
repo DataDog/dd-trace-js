@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/experiments/50d19bc7-db4a-4f1e-9c20-13084623fd64/events",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "963"
+    },
+    "body": "{\"data\":{\"type\":\"experiments\",\"attributes\":{\"spans\":[{\"span_id\":\"0000000000000001\",\"trace_id\":\"00000000000000000000000000000001\",\"project_id\":\"d19a67cc-ea11-4472-ac84-269366306a3e\",\"dataset_id\":\"0c4f722d-5e55-45ed-9bf2-87608caf4186\",\"name\":\"dd-trace-js-experiments-vcr-client-client-task\",\"start_ns\":1786650105714000000,\"duration\":1000000,\"status\":\"ok\",\"meta\":{\"input\":{\"value\":1},\"output\":{\"value\":2},\"expected_output\":{\"value\":2},\"metadata\":{\"source\":\"client-test\"}},\"tags\":[\"experiment_id:50d19bc7-db4a-4f1e-9c20-13084623fd64\",\"dataset_id:0c4f722d-5e55-45ed-9bf2-87608caf4186\",\"dataset_record_id:2cddd118-7263-41aa-923e-83f33f0f5ee1\"]}],\"metrics\":[{\"metric_source\":\"custom\",\"label\":\"exact\",\"span_id\":\"0000000000000001\",\"trace_id\":\"00000000000000000000000000000001\",\"timestamp_ms\":1786650105714,\"tags\":[\"experiment_id:50d19bc7-db4a-4f1e-9c20-13084623fd64\"],\"experiment_id\":\"50d19bc7-db4a-4f1e-9c20-13084623fd64\",\"metric_type\":\"boolean\",\"boolean_value\":true}]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 202,
+      "message": "Accepted"
+    },
+    "headers": {
+      "content-security-policy": "frame-ancestors 'self'; report-uri https://logs.browser-intake-datadoghq.com/api/v2/logs?dd-api-key=pube4f163c23bbf91c16b8f57f56af9fc58&dd-evp-origin=content-security-policy&ddsource=csp-report&ddtags=site%3Adatadoghq.com",
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "0",
+      "date": "Thu, 13 Aug 2026 19:41:45 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": ""
+  }
+}

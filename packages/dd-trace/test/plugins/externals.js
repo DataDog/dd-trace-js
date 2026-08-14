@@ -104,6 +104,10 @@ module.exports = {
   ],
   bullmq: [
     {
+      name: 'ioredis',
+      dep: true,
+    },
+    {
       name: 'redis',
       versions: ['>=4'],
     },
