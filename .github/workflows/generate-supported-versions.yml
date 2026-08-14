@@ -59,9 +59,9 @@ jobs:
           fi
 
           if [ "$EVENT_NAME" != "pull_request" ] ||
-             [ "$BASE_REF" != "master" ] ||
-             [ "$HEAD_REPO" != "$BASE_REPO" ] ||
-             [[ "$HEAD_REF" == v*.x ]]; then
+            [ "$BASE_REF" != "master" ] ||
+            [ "$HEAD_REPO" != "$BASE_REPO" ] ||
+            [[ "$HEAD_REF" == v*.x ]]; then
             echo "Out of date. Run 'npm run generate:supported-integrations' locally and commit." >&2
             exit 1
           fi

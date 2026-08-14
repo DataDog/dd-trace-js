@@ -43,21 +43,16 @@ describe('generate supported integrations', () => {
     })
 
     assert.deepStrictEqual(rows, [{
-      dependency: 'node:http',
-      integration: 'http',
-      'auto-instrumented': true,
-      node_versions: {
-        24: {
-          minimum_package_version: '',
-          maximum_package_version: '',
-          tested_versions: [''],
+      dependencyName: 'node:http',
+      integrationName: 'http',
+      autoInstrumented: true,
+      versions: [{
+        testedRuntimes: {
+          node: ['26.2.0', '24.16.0'],
         },
-        26: {
-          minimum_package_version: '',
-          maximum_package_version: '',
-          tested_versions: [''],
-        },
-      },
+        supportedRange: '*',
+        tested: [],
+      }],
     }])
   })
 
@@ -74,7 +69,7 @@ describe('generate supported integrations', () => {
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
     })
 
-    assert.deepStrictEqual(Object.keys(rows[0].node_versions), ['24', '26', '28'])
+    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['28.0.0', '26.2.0', '24.16.0'])
   })
 
   it('uses the tested package versions active on each Node.js line', async () => {
@@ -95,22 +90,97 @@ describe('generate supported integrations', () => {
     })
 
     assert.deepStrictEqual(rows, [{
-      dependency: 'express',
-      integration: 'express',
-      'auto-instrumented': true,
-      node_versions: {
-        22: {
-          minimum_package_version: '4.0.0',
-          maximum_package_version: '4.22.1',
-          tested_versions: ['4.0.0', '4.22.1'],
+      dependencyName: 'express',
+      integrationName: 'express',
+      autoInstrumented: true,
+      versions: [{
+        testedRuntimes: {
+          node: ['24.16.0'],
         },
-        24: {
-          minimum_package_version: '4.0.0',
-          maximum_package_version: '5.2.1',
-          tested_versions: ['4.0.0', '4.22.1', '5.2.1'],
+        supportedRange: '>=4 <6',
+        tested: ['4.0.0', '4.22.1', '5.2.1'],
+      }, {
+        testedRuntimes: {
+          node: ['22.22.3'],
         },
-      },
+        supportedRange: '>=4 <5',
+        tested: ['4.0.0', '4.22.1'],
+      }],
     }])
+  })
+
+  it('keeps an open declared package range uncapped', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [
+        { key: '24', version: '24.16.0' },
+        { key: '26', version: '26.2.0' },
+      ],
+      plugins: new Map([['@azure/event-hubs', 'azure-event-hubs']]),
+      instrumentations: new Map([
+        ['24.16.0', new Map([['@azure/event-hubs', [{ versions: ['>=6.0.0'] }]]])],
+        ['26.2.0', new Map([['@azure/event-hubs', [{ versions: ['>=6.0.0'] }]]])],
+      ]),
+      getPackageVersions: () => Promise.resolve(['6.0.0', '6.0.4']),
+    })
+
+    assert.deepStrictEqual(rows, [{
+      dependencyName: '@azure/event-hubs',
+      integrationName: 'azure-event-hubs',
+      autoInstrumented: true,
+      versions: [{
+        testedRuntimes: {
+          node: ['26.2.0', '24.16.0'],
+        },
+        supportedRange: '>=6.0.0',
+        tested: ['6.0.0', '6.0.4'],
+      }],
+    }])
+  })
+
+  it('removes ranges covered by another active declaration', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '24', version: '24.16.0' }],
+      plugins: new Map([['express', 'express']]),
+      instrumentations: new Map([
+        ['24.16.0', new Map([['express', [
+          { versions: ['>=4'] },
+          { versions: ['4'] },
+          { versions: ['>=4.0.0 <4.3.0'] },
+          { versions: ['>=4.3.0 <5.0.0'] },
+          { versions: ['>=5.0.0'] },
+        ]]])],
+      ]),
+      getPackageVersions: () => Promise.resolve(['4.0.0', '4.2.0', '4.3.0', '4.22.1', '5.0.0', '5.2.1']),
+    })
+
+    assert.strictEqual(rows[0].versions[0].supportedRange, '>=4')
+  })
+
+  it('keeps the first of two equivalent active ranges', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '24', version: '24.16.0' }],
+      plugins: new Map([['express', 'express']]),
+      instrumentations: new Map([
+        ['24.16.0', new Map([['express', [
+          { versions: ['4'] },
+          { versions: ['>=4 <5'] },
+        ]]])],
+      ]),
+      getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
+    })
+
+    assert.strictEqual(rows[0].versions[0].supportedRange, '4')
+  })
+
+  it('omits dependencies without instrumentation on a tested runtime', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '24', version: '24.16.0' }],
+      plugins: new Map([['express', 'express']]),
+      instrumentations: new Map([['24.16.0', new Map()]]),
+      getPackageVersions: () => Promise.reject(new Error('Dependencies without hooks do not use npm metadata')),
+    })
+
+    assert.deepStrictEqual(rows, [])
   })
 
   it('omits Node.js lines outside an instrumentation declaration gate', async () => {
@@ -128,7 +198,7 @@ describe('generate supported integrations', () => {
       getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
     })
 
-    assert.deepStrictEqual(Object.keys(rows[0].node_versions), ['24'])
+    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['24.16.0'])
   })
 
   it('reports npm metadata request failures', async () => {
@@ -209,7 +279,7 @@ describe('generate supported integrations', () => {
     try {
       await writeSupportedIntegrations(options)
       const output = readFileSync(outputPath, 'utf8')
-      assert.match(output, /^\[\n {4}\{\n {8}"dependency": "node:fs"/)
+      assert.match(output, /^\[\n {4}\{\n {8}"dependencyName": "node:fs"/)
       assert.strictEqual(await checkSupportedIntegrations(options), true)
 
       writeFileSync(outputPath, '[]\n')
