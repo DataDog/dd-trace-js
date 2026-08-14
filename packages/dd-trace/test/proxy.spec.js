@@ -10,7 +10,6 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { storage } = require('../../datadog-core')
-const featureRegistry = require('../src/feature-registry')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -1316,17 +1315,17 @@ describe('TracerProxy', () => {
       sinon.assert.notCalled(channelMock.publish)
     })
 
-    it('should warn at registration when Node bundles its own OpenSSL', () => {
+    it('should log an error at registration when Node bundles its own OpenSSL', () => {
       buildProxy(true).init()
 
-      sinon.assert.calledOnce(log.warn)
-      assert.match(log.warn.firstCall.args[0], /bundles its own OpenSSL/)
+      sinon.assert.calledOnce(log.error)
+      assert.match(log.error.firstCall.args[0], /bundles its own OpenSSL/)
     })
 
-    it('should not warn when Node links a shared OpenSSL', () => {
+    it('should not log an error when Node links a shared OpenSSL', () => {
       microProxy.init()
 
-      sinon.assert.notCalled(log.warn)
+      sinon.assert.notCalled(log.error)
     })
 
     it('should drain a full UUID batch before publishing datadog:identity:update', () => {

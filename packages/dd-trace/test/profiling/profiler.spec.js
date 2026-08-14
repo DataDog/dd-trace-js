@@ -547,24 +547,43 @@ describe('profiler', function () {
       assert.strictEqual(infos.hasMissingSourceMaps, false)
     })
 
-    it('uses the current tags when exporting', async () => {
+    it('uses the tags captured at each snapshot start', async () => {
+      const exportSpecs = []
+      exporter.export = sinon.stub().callsFake((exportSpec) => {
+        exportSpecs.push(exportSpec)
+        return Promise.resolve()
+      })
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 1)
+      assert.strictEqual(exportSpecs[0].tags['runtime-id'], 'initial-id')
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 2)
+      assert.strictEqual(exportSpecs[1].tags['runtime-id'], 'refreshed-id')
+    })
+
+    it('uses the current snapshot tags for near-OOM exports', async () => {
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
           return Promise.resolve()
         }
       })
-
       const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
       await profiler.start(startOptions)
 
       startOptions.tags['runtime-id'] = 'refreshed-id'
-
-      clock.tick(interval)
+      wallProfiler.start.firstCall.args[0].nearOOMCallback('wall', wallProfile, {})
 
       const { tags } = await exporterPromise
-
-      assert.strictEqual(tags['runtime-id'], 'refreshed-id')
+      assert.strictEqual(tags['runtime-id'], 'initial-id')
     })
   })
 

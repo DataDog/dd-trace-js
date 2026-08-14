@@ -601,10 +601,8 @@ function getTagsString (config, repositoryUrl, commitSHA) {
  */
 function refreshIdentity (config) {
   clientId = uuid()
-  if (config.tags['_dd.rc.client_id']) {
-    config.tags['_dd.rc.client_id'] = clientId
-  }
   if (client !== undefined) {
+    config.tags['_dd.rc.client_id'] = clientId
     client.id = clientId
     client.client_tracer.runtime_id = config.tags['runtime-id']
     const { commitSHA, repositoryUrl } = getGitMetadata(config)

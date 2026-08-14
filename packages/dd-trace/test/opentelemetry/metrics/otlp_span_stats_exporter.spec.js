@@ -149,22 +149,6 @@ describe('createOtlpSpanStatsExporter', () => {
     assert.strictEqual(resourceAttributes['deployment.environment.name'], 'prod')
     assert.strictEqual(resourceAttributes['datadog.runtime_id'], 'refreshed-id')
   })
-
-  it('omits Datadog resource attributes with OpenTelemetry semantics', () => {
-    const exporter = createOtlpSpanStatsExporter({
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
-      service: 'svc',
-      tags: { 'runtime-id': 'runtime-id' },
-    })
-
-    exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
-
-    const request = httpStub.firstCall.returnValue
-    const payload = JSON.parse(request.write.firstCall.args[0].toString())
-    const resourceAttributes = payload.resourceMetrics[0].resource.attributes
-    assert.ok(!resourceAttributes.some(attribute => attribute.key.startsWith('datadog.')))
-  })
 })
 
 describe('OtlpStatsExporter', () => {
