@@ -21,7 +21,7 @@ const propagator = new TextMapPropagator({
   legacyBaggageEnabled: false,
   baggageMaxItems: 64,
   baggageMaxBytes: 8192,
-  tagsHeaderMaxLength: 512,
+  DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
   tracePropagationExtractFirst: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
   baggageTagKeys: ['user.id', 'session.id', 'account.id'],
@@ -41,6 +41,14 @@ const EXTRACT_CARRIER_PERCENT = {
   baggage: 'tenant=acme%20corp,path=%2Forders%2Fnew,note=hello%20world',
 }
 
+const EXTRACT_CARRIER_DATADOG = {
+  'x-datadog-trace-id': '1234567890',
+  'x-datadog-parent-id': '9876543210',
+  'x-datadog-sampling-priority': '1',
+  'x-datadog-origin': 'synthetics',
+  'x-datadog-tags': '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef',
+}
+
 const injectContext = new SpanContext({
   traceId: id('1234567890abcdef'),
   spanId: id('abcdef1234567890'),
@@ -58,6 +66,15 @@ const injectContext = new SpanContext({
 const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
 assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
 
+const sanityDatadogExtract = propagator.extract(EXTRACT_CARRIER_DATADOG)
+assert.strictEqual(sanityDatadogExtract?.toTraceId(), '1234567890')
+assert.strictEqual(sanityDatadogExtract?._sampling.priority, 1)
+assert.strictEqual(sanityDatadogExtract?._trace.origin, 'synthetics')
+assert.deepStrictEqual(sanityDatadogExtract?._trace.tags, {
+  '_dd.p.dm': '-1',
+  '_dd.p.tid': '1234567890abcdef',
+})
+
 const sanityInjected = {}
 propagator.inject(injectContext, sanityInjected)
 assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
@@ -70,6 +87,10 @@ if (VARIANT === 'extract') {
 } else if (VARIANT === 'extract-baggage-percent') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_PERCENT)
+  }
+} else if (VARIANT === 'extract-datadog') {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+    propagator.extract(EXTRACT_CARRIER_DATADOG)
   }
 } else if (VARIANT === 'inject') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
