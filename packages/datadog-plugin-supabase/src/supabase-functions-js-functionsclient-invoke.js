@@ -24,8 +24,8 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
         'span.kind': 'client',
         'http.method': method,
         'http.url': url,
-        'faas.invoked_name': functionName
-      }
+        'faas.invoked_name': functionName,
+      },
     }, ctx)
 
     return ctx.currentStore

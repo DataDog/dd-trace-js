@@ -23,8 +23,8 @@ class SupabaseFetchWithAuthPlugin extends StoragePlugin {
         component: 'supabase',
         'span.kind': 'client',
         'http.method': method,
-        'http.url': url
-      }
+        'http.url': url,
+      },
     }, ctx)
 
     return ctx.currentStore

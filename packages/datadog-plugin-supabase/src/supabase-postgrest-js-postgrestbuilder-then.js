@@ -11,7 +11,7 @@ const operationByMethod = {
   GET: 'SELECT',
   HEAD: 'SELECT',
   PATCH: 'UPDATE',
-  POST: 'INSERT'
+  POST: 'INSERT',
 }
 
 class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
@@ -36,8 +36,8 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
         'db.type': 'postgres',
         'db.name': ctx.self?.schema || 'public',
         'db.operation': operation,
-        'out.host': requestUrl?.hostname
-      }
+        'out.host': requestUrl?.hostname,
+      },
     }, ctx)
 
     const onFulfilled = ctx.arguments?.[0]
