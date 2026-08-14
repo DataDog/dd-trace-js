@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
+const { getAllBaggageItems } = require('../../../packages/dd-trace/src/baggage')
 const id = require('../../../packages/dd-trace/src/id')
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -61,23 +62,29 @@ const injectContext = new SpanContext({
   },
 })
 
-// Pre-flight: confirm extract / inject are doing real work; catches a silent
+// Pre-flight: confirm the selected variant does real work; catches a silent
 // breakage where the duck-typed config is missing a field the propagator now reads.
-const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
-assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
-
-const sanityDatadogExtract = propagator.extract(EXTRACT_CARRIER_DATADOG)
-assert.strictEqual(sanityDatadogExtract?.toTraceId(), '1234567890')
-assert.strictEqual(sanityDatadogExtract?._sampling.priority, 1)
-assert.strictEqual(sanityDatadogExtract?._trace.origin, 'synthetics')
-assert.deepStrictEqual(sanityDatadogExtract?._trace.tags, {
-  '_dd.p.dm': '-1',
-  '_dd.p.tid': '1234567890abcdef',
-})
-
-const sanityInjected = {}
-propagator.inject(injectContext, sanityInjected)
-assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+if (VARIANT === 'extract') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_ASCII)
+  assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+} else if (VARIANT === 'extract-baggage-percent') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_PERCENT)
+  assert.ok(sanityExtract?._traceId, 'extract returned no trace id')
+  assert.strictEqual(getAllBaggageItems().tenant, 'acme corp')
+} else if (VARIANT === 'extract-datadog') {
+  const sanityExtract = propagator.extract(EXTRACT_CARRIER_DATADOG)
+  assert.strictEqual(sanityExtract?.toTraceId(), '1234567890')
+  assert.strictEqual(sanityExtract?._sampling.priority, 1)
+  assert.strictEqual(sanityExtract?._trace.origin, 'synthetics')
+  assert.deepStrictEqual(sanityExtract?._trace.tags, {
+    '_dd.p.dm': '-1',
+    '_dd.p.tid': '1234567890abcdef',
+  })
+} else if (VARIANT === 'inject') {
+  const sanityInjected = {}
+  propagator.inject(injectContext, sanityInjected)
+  assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+}
 
 guard.loopStart()
 if (VARIANT === 'extract') {
