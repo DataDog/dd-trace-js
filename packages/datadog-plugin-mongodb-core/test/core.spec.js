@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const ddpv = require('mocha/package.json').version
@@ -13,6 +13,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/query')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+const traceTimeoutMs = 2_000
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -722,29 +724,29 @@ describe('Plugin', () => {
           injectCommentSpy?.restore()
         })
 
-        it('DBM propagation should inject full mode with traceparent as comment', done => {
-          agent
-            .assertFirstTraceSpan(span => {
-              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-              const spanId = span.span_id.toString(16).padStart(16, '0')
+        it('DBM propagation should inject full mode with traceparent as comment', async () => {
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+            const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(injectCommentSpy.called, true)
-              const comment = injectCommentSpy.getCall(0).returnValue
-              assert.strictEqual(comment,
-                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                'dddbs=\'test-mongodb\',' +
-                'dde=\'tester\',' +
-                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
-                `ddps='${encodeURIComponent(span.meta.service)}',` +
-                `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-01'`
-              )
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(injectCommentSpy.called, true)
+            const comment = injectCommentSpy.getCall(0).returnValue
+            assert.strictEqual(comment,
+              `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+              'dddbs=\'test-mongodb\',' +
+              'dde=\'tester\',' +
+              `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+              `ddps='${encodeURIComponent(span.meta.service)}',` +
+              `ddpv='${ddpv}',` +
+              `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
+              `traceparent='00-${traceId}-${spanId}-01'`
+            )
+          }, { timeoutMs: traceTimeoutMs })
 
-          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+          await Promise.all([
+            tracePromise,
+            promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+          ])
         })
       })
 
@@ -780,24 +782,24 @@ describe('Plugin', () => {
 
         it(
           'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
-          done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-                const spanId = span.span_id.toString(16).padStart(16, '0')
+          async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(injectCommentSpy.called, true)
-                const comment = injectCommentSpy.getCall(0).returnValue
-                assert.match(
-                  comment,
-                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
-                )
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
+              assert.match(
+                comment,
+                new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+              )
+            }, { timeoutMs: traceTimeoutMs })
 
-            server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+            await Promise.all([
+              tracePromise,
+              promisify(server.insert.bind(server))(`test.${collection}`, [{ a: 1 }]),
+            ])
           })
       })
     })

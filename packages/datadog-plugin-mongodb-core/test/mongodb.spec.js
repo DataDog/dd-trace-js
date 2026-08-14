@@ -841,31 +841,31 @@ describe('Plugin', () => {
           injectCommentSpy?.restore()
         })
 
-        it('DBM propagation should inject full mode with traceparent as comment', done => {
-          agent
-            .assertFirstTraceSpan(span => {
-              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-              const spanId = span.span_id.toString(16).padStart(16, '0')
+        it('DBM propagation should inject full mode with traceparent as comment', async () => {
+          const tracePromise = agent.assertFirstTraceSpan(span => {
+            const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+            const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(injectCommentSpy.called, true)
-              const comment = injectCommentSpy.getCall(0).returnValue
-              assert.strictEqual(comment,
-                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                'dddbs=\'test-mongodb\',' +
-                'dde=\'tester\',' +
-                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
-                `ddps='${encodeURIComponent(span.meta.service)}',` +
-                `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-01'`
-              )
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(injectCommentSpy.called, true)
+            const comment = injectCommentSpy.getCall(0).returnValue
+            assert.strictEqual(comment,
+              `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+              'dddbs=\'test-mongodb\',' +
+              'dde=\'tester\',' +
+              `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+              `ddps='${encodeURIComponent(span.meta.service)}',` +
+              `ddpv='${ddpv}',` +
+              `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
+              `traceparent='00-${traceId}-${spanId}-01'`
+            )
+          }, { timeoutMs: traceTimeoutMs })
 
-          collection.find({
-            _id: Buffer.from('1234'),
-          }).toArray()
+          await Promise.all([
+            tracePromise,
+            collection.find({
+              _id: Buffer.from('1234'),
+            }).toArray(),
+          ])
         })
       })
 
@@ -892,26 +892,26 @@ describe('Plugin', () => {
 
         it(
           'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
-          done => {
-            agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
-                const spanId = span.span_id.toString(16).padStart(16, '0')
+          async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(injectCommentSpy.called, true)
-                const comment = injectCommentSpy.getCall(0).returnValue
-                assert.match(
-                  comment,
-                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
-                )
-              })
-              .then(done)
-              .catch(done)
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
+              assert.match(
+                comment,
+                new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+              )
+            }, { timeoutMs: traceTimeoutMs })
 
-            collection.find({
-              _id: Buffer.from('1234'),
-            }).toArray()
+            await Promise.all([
+              tracePromise,
+              collection.find({
+                _id: Buffer.from('1234'),
+              }).toArray(),
+            ])
           })
       })
 
