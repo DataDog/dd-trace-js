@@ -39,6 +39,9 @@ const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+// Cypress 6.7 uses the legacy plugins-file lifecycle, which does not preserve
+// the quarantine session status through v5's error-aware finalization path.
+const testManagementQuarantineIt = DD_MAJOR === 5 && version === '6.7.0' ? it.skip : it
 const MINIMUM_ATTEMPT_TO_FIX_RETRIES = 1
 
 function shouldTestsRun (type) {
@@ -772,7 +775,7 @@ moduleTypes.forEach(({
           }
         }
 
-        it('can disable and quarantine tests', async () => {
+        testManagementQuarantineIt('can disable and quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
           await runDisableAndQuarantineTest(true)
