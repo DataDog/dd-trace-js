@@ -38,56 +38,52 @@ describe('sequelize', () => {
       await User.drop()
     })
 
-    withVersions('mysql2', 'mysql2', () => {
-      withVersions('sequelize', ['express', 'mysql2'], (expressVersion) => {
-        let server, port
+    withVersions('sequelize', 'express', (expressVersion) => {
+      let server, port
 
-        // init tracer
-        before(async () => {
-          await agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
-          appsec.enable(getConfigFresh({
-            appsec: {
+      // init tracer
+      before(async () => {
+        await agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
+        appsec.enable(getConfigFresh({
+          appsec: {
+            enabled: true,
+            rules: path.join(__dirname, 'rules-example.json'),
+            apiSecurity: {
               enabled: true,
-              rules: path.join(__dirname, 'rules-example.json'),
-              apiSecurity: {
-                enabled: true,
-              },
             },
-          }))
+          },
+        }))
+      })
+
+      // close agent
+      after(() => {
+        appsec.disable()
+        return agent.close()
+      })
+
+      // init express
+      before((done) => {
+        const express = require(`../../../../versions/express@${expressVersion}`).get()
+
+        const app = express()
+        app.get('/users', async (req, res) => {
+          const users = await User.findAll()
+          res.json(users)
         })
 
-        // close agent
-        after(() => {
-          appsec.disable()
-          return agent.close()
+        server = app.listen(0, () => {
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          done()
         })
+      })
 
-        // init express
-        before((done) => {
-          const express = require(`../../../../versions/express@${expressVersion}`).get()
+      // stop express
+      after(() => {
+        return server.close()
+      })
 
-          const app = express()
-          app.get('/users', async (req, res) => {
-            const users = await User.findAll()
-            res.json(users)
-          })
-
-          server = app.listen(0, () => {
-            port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-            done()
-          })
-        })
-
-        // stop express
-        after(() => {
-          return server.close()
-        })
-
-        it('Should complete the request on time', (done) => {
-          axios.get(`http://localhost:${port}/users`)
-            .then(() => done())
-            .catch(done)
-        })
+      it('Should complete the request on time', async () => {
+        await axios.get(`http://localhost:${port}/users`)
       })
     })
   })
