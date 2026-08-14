@@ -7,9 +7,18 @@ const { pathToFileURL } = require('url')
 
 const log = require('../../dd-trace/src/log')
 const { getSegment } = require('../../dd-trace/src/util')
+const {
+  finalizeAfterUserHandlers,
+  manualPluginOwner,
+  runUserHandler,
+} = require('../../datadog-plugin-cypress/src/finalization')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
+const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
+const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
+const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
@@ -182,6 +191,47 @@ function isDatadogTaskRegistration (handler) {
     typeof handler['dd:beforeEach'] === 'function' &&
     typeof handler['dd:afterEach'] === 'function' &&
     typeof handler['dd:addTags'] === 'function'
+}
+
+/**
+ * @param {unknown} handler Cypress after:run handler
+ * @returns {boolean} whether this is the handler registered by the manual Datadog plugin
+ */
+function isDatadogAfterRunHandler (handler) {
+  return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_RUN_HANDLER] === true
+}
+
+/**
+ * @param {unknown} handler Cypress after:spec handler
+ * @returns {boolean} whether this is the handler registered by the manual Datadog plugin
+ */
+function isDatadogAfterSpecHandler (handler) {
+  return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_SPEC_HANDLER] === true
+}
+
+/**
+ * @param {object} manualPlugin manual plugin registration state
+ * @returns {boolean} whether the manual plugin supports error-aware finalization
+ */
+function supportsErrorAwareFinalization (manualPlugin) {
+  return isDatadogAfterSpecHandler(manualPlugin.afterSpecHandler) &&
+    isDatadogAfterRunHandler(manualPlugin.afterRunHandler)
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ * @returns {boolean} whether the current manual Datadog plugin owns the task map
+ */
+function isCurrentDatadogTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_TASK_HANDLER] === manualPluginOwner
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ * @returns {boolean} whether the manual plugin registered only fallback tasks
+ */
+function isDatadogNoopTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_NOOP_TASK_HANDLER] === true
 }
 
 /**
@@ -393,15 +443,61 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
  *
  * @param {Function} on Cypress event registration function
  * @param {Function[]} handlers collected after:spec handlers
+ * @param {Function} [datadogHandler] manual Datadog after:spec handler
+ * @param {Function} [cleanup] removes generated support files after an error
  * @returns {void}
  */
-function registerAfterSpecHandlers (on, handlers) {
-  if (handlers.length === 0) return
+function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
+  const userHandlers = datadogHandler
+    ? handlers.filter(handler => handler !== datadogHandler)
+    : handlers
 
-  on('after:spec', (spec, results) => handlers.reduce(
-    (chain, handler) => chain.then(() => handler(spec, results)),
-    Promise.resolve()
-  ))
+  if (userHandlers.length === 0) {
+    if (datadogHandler) {
+      if (cleanup) {
+        on('after:spec', (...args) => Promise.resolve().then(() => datadogHandler(...args)).catch((error) => {
+          cleanup()
+          throw error
+        }))
+      } else {
+        on('after:spec', datadogHandler)
+      }
+    }
+    return
+  }
+
+  on('after:spec', (spec, results) => {
+    const callHandler = datadogHandler
+      ? handler => runUserHandler(() => handler(spec, results))
+      : handler => handler(spec, results)
+    const chain = userHandlers.reduce(
+      (promise, handler) => promise.then(() => callHandler(handler)),
+      Promise.resolve()
+    )
+    if (!datadogHandler) return chain
+    const finalization = finalizeAfterUserHandlers(chain, (...args) => datadogHandler(spec, results, ...args))
+    if (!cleanup) return finalization
+    return finalization.catch((error) => {
+      cleanup()
+      throw error
+    })
+  })
+}
+
+/**
+ * Enables the Cypress lifecycle events needed to finish Test Optimization
+ * sessions in interactive mode.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {void}
+ */
+function enableInteractiveRunEvents (config) {
+  if (config.isInteractive && config.experimentalInteractiveRunEvents !== true) {
+    config.experimentalInteractiveRunEvents = true
+    log.warn(
+      'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.'
+    )
+  }
 }
 
 /**
@@ -412,6 +508,7 @@ function registerAfterSpecHandlers (on, handlers) {
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
+ * @param {Function[]} userBeforeRunHandlers user's before:run handlers collected from wrappedOn
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
  * @param {Function[]} userAfterScreenshotHandlers user's after:screenshot handlers collected from wrappedOn
@@ -421,6 +518,7 @@ function registerAfterSpecHandlers (on, handlers) {
 function registerDdTraceHooks (
   on,
   config,
+  userBeforeRunHandlers,
   userAfterSpecHandlers,
   userAfterRunHandlers,
   userAfterScreenshotHandlers,
@@ -433,13 +531,23 @@ function registerDdTraceHooks (
     if (generatedSupportFiles) cleanupGeneratedFiles(generatedSupportFiles)
   }
 
-  const registerAfterRunWithCleanup = () => {
+  const registerAfterRunWithCleanup = (datadogHandler) => {
+    const handlers = datadogHandler
+      ? userAfterRunHandlers.filter(handler => handler !== datadogHandler)
+      : userAfterRunHandlers
+
     on('after:run', (results) => {
-      const chain = userAfterRunHandlers.reduce(
-        (p, h) => p.then(() => h(results)),
+      const callHandler = datadogHandler
+        ? handler => runUserHandler(() => handler(results))
+        : handler => handler(results)
+      const chain = handlers.reduce(
+        (promise, handler) => promise.then(() => callHandler(handler)),
         Promise.resolve()
       )
-      return chain.finally(cleanupWrapper)
+      if (!datadogHandler) return chain.finally(cleanupWrapper)
+
+      return finalizeAfterUserHandlers(chain, (...args) => datadogHandler(results, ...args))
+        .finally(cleanupWrapper)
     })
   }
 
@@ -450,12 +558,35 @@ function registerDdTraceHooks (
     on('task', noopTask)
   }
 
-  if (manualPlugin.detected) {
-    registerAfterSpecHandlers(on, userAfterSpecHandlers)
+  if (manualPlugin.detected &&
+    (manualPlugin.isNoop ||
+      manualPlugin.ownsCurrentPlugin ||
+      supportsErrorAwareFinalization(manualPlugin) ||
+      !setupNodeEventsCh.hasSubscribers)) {
+    if (manualPlugin.afterRunHandler) {
+      enableInteractiveRunEvents(config)
+      if (manualPlugin.initialConfig !== config) {
+        manualPlugin.initialConfig.experimentalInteractiveRunEvents = config.experimentalInteractiveRunEvents
+      }
+    }
+    for (const handler of userBeforeRunHandlers) on('before:run', handler)
+    registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
-    registerAfterRunWithCleanup()
+    registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
+    on('task', manualPlugin.taskHandler)
     return config
   }
+
+  if (manualPlugin.detected) {
+    userBeforeRunHandlers = userBeforeRunHandlers.filter(handler => handler !== manualPlugin.beforeRunHandler)
+    userAfterSpecHandlers = userAfterSpecHandlers.filter(handler => handler !== manualPlugin.afterSpecHandler)
+    userAfterRunHandlers = userAfterRunHandlers.filter(handler => handler !== manualPlugin.afterRunHandler)
+    userAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
+      handler => handler !== manualPlugin.afterScreenshotHandler
+    )
+  }
+
+  for (const handler of userBeforeRunHandlers) on('before:run', handler)
 
   if (!setupNodeEventsCh.hasSubscribers) {
     registerNoopHandlers()
@@ -483,6 +614,7 @@ function registerDdTraceHooks (
     return config
   }
 
+  enableInteractiveRunEvents(config)
   return payload.configPromise || config
 }
 
@@ -492,28 +624,60 @@ function registerDdTraceHooks (
  */
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
+    const userBeforeRunHandlers = []
     const userAfterSpecHandlers = []
     const userAfterRunHandlers = []
     const userAfterScreenshotHandlers = []
     const manualPlugin = {
       detected: false,
+      initialConfig: config,
+      beforeRunHandler: undefined,
+      afterSpecHandler: undefined,
+      afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
+      taskHandler: undefined,
+      ownsCurrentPlugin: false,
+      isNoop: false,
     }
+    const recentRegistrations = []
 
     const wrappedOn = (event, handler) => {
-      if (event === 'after:spec') {
+      if (event === 'before:run') {
+        userBeforeRunHandlers.push(handler)
+      } else if (event === 'after:spec') {
         userAfterSpecHandlers.push(handler)
+        if (isDatadogAfterSpecHandler(handler)) manualPlugin.afterSpecHandler = handler
       } else if (event === 'after:run') {
         userAfterRunHandlers.push(handler)
+        if (isDatadogAfterRunHandler(handler)) manualPlugin.afterRunHandler = handler
       } else if (event === 'after:screenshot') {
         userAfterScreenshotHandlers.push(handler)
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterScreenshotHandler = userAfterScreenshotHandlers.at(-1)
+          manualPlugin.ownsCurrentPlugin = isCurrentDatadogTaskRegistration(handler)
+          manualPlugin.isNoop = isDatadogNoopTaskRegistration(handler)
+          const afterRun = recentRegistrations.at(-1)
+          const afterSpec = recentRegistrations.at(-2)
+          const possibleAfterScreenshot = recentRegistrations.at(-3)
+          const hasAfterScreenshot = possibleAfterScreenshot?.event === 'after:screenshot'
+          const beforeRun = hasAfterScreenshot ? recentRegistrations.at(-4) : possibleAfterScreenshot
+          if (!manualPlugin.isNoop &&
+            beforeRun?.event === 'before:run' &&
+            afterSpec?.event === 'after:spec' &&
+            afterRun?.event === 'after:run') {
+            manualPlugin.beforeRunHandler ||= beforeRun.handler
+            manualPlugin.afterSpecHandler ||= afterSpec.handler
+            manualPlugin.afterRunHandler ||= afterRun.handler
+            if (hasAfterScreenshot) manualPlugin.afterScreenshotHandler ||= possibleAfterScreenshot.handler
+          }
+          manualPlugin.taskHandler = handler
+        } else {
+          on(event, handler)
         }
-        on(event, handler)
       }
+      recentRegistrations.push({ event, handler })
+      if (recentRegistrations.length > 4) recentRegistrations.shift()
     }
 
     const maybePromise = originalSetupNodeEvents
@@ -525,6 +689,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         return registerDdTraceHooks(
           on,
           mergeReturnedConfig(config, result),
+          userBeforeRunHandlers,
           userAfterSpecHandlers,
           userAfterRunHandlers,
           userAfterScreenshotHandlers,
@@ -536,6 +701,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     return registerDdTraceHooks(
       on,
       mergeReturnedConfig(config, maybePromise),
+      userBeforeRunHandlers,
       userAfterSpecHandlers,
       userAfterRunHandlers,
       userAfterScreenshotHandlers,
