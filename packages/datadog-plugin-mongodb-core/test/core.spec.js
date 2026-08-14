@@ -44,6 +44,10 @@ describe('Plugin', () => {
 
   describe('mongodb-core (core)', () => {
     withTopologies((getServer, resolvedVersion) => {
+      /**
+       * @param {Promise<unknown>} promise
+       * @param {RegExp} expectedMessage
+       */
       const expectCommandCompletion = (promise, expectedMessage) => semver.satisfies(resolvedVersion, '<2.1')
         ? promise
         : assert.rejects(promise, { message: expectedMessage })
