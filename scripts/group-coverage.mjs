@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { argv } from 'node:process'
@@ -40,8 +41,28 @@ const VERSION_RE = /^(?:gte|gt|lte|lt|eq)?\.?\d+(?:\.\d+)*(?:\.(?:and|or|gte|gt|
 // of at most this many libraries, named for their members so the flag still points at a library.
 const MAX_LIBS_PER_BUCKET = 3
 // Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail. `+` is out, so
-// members join with `_`; a name longer than this falls back to a numbered bucket that stays valid.
+// members join with `_`; invalid or overlong names receive a deterministic hash suffix.
 const MAX_FLAG_LENGTH = 45
+const VALID_FLAG_RE = /^[\w.-]{1,45}$/
+const HASH_LENGTH = 8
+const INSTRUMENTATIONS_PREFIX = 'instrumentations-instrumentation-'
+
+/**
+ * Keep readable Codecov flags where possible and deterministically bound every other name.
+ *
+ * @param {string} flag
+ * @returns {string}
+ */
+function codecovFlag (flag) {
+  const readable = flag.startsWith(INSTRUMENTATIONS_PREFIX)
+    ? `instr-${flag.slice(INSTRUMENTATIONS_PREFIX.length)}`
+    : flag
+  if (VALID_FLAG_RE.test(readable)) return readable
+
+  const hash = createHash('sha256').update(flag).digest('hex').slice(0, HASH_LENGTH)
+  const sanitized = readable.replaceAll(/[^\w.-]/g, '_')
+  return `${sanitized.slice(0, MAX_FLAG_LENGTH - HASH_LENGTH - 1)}-${hash}`
+}
 
 /**
  * @param {string} token
@@ -132,7 +153,7 @@ function planGroups (cellsByIntegration) {
 
   for (const [integration, cells] of cellsByIntegration) {
     if (cells.length > 1) {
-      groups.set(integration, [integration])
+      groups.set(codecovFlag(integration), [integration])
       continue
     }
     const area = integration.split('-')[0]
@@ -148,16 +169,14 @@ function planGroups (cellsByIntegration) {
     integrations.sort()
     if (integrations.length <= 2) {
       for (const integration of integrations) {
-        groups.set(integration, [integration])
+        groups.set(codecovFlag(integration), [integration])
       }
       continue
     }
-    let bucket = 0
     for (let i = 0; i < integrations.length; i += MAX_LIBS_PER_BUCKET) {
       const chunk = integrations.slice(i, i + MAX_LIBS_PER_BUCKET)
       const named = `${area}-${chunk.map(integration => integration.slice(area.length + 1)).join('_')}`
-      groups.set(named.length <= MAX_FLAG_LENGTH ? named : `${area}-bucket-${bucket}`, chunk)
-      bucket++
+      groups.set(codecovFlag(named), chunk)
     }
   }
 
