@@ -2,66 +2,63 @@
   "name": "debugger",
   "cachegrind": false,
   "iterations": 5,
-  "instructions": true,
+  "instructions": false,
   "variants": {
     "enabled-but-breakpoint-not-hit": {
-      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
-      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
+      "instructions": true,
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "STARTUP_GUARD_MAX_SHARE": "0.1",
-        "OPERATIONS": "220000",
-        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "STARTUP_GUARD_MAX_SHARE": "0.15",
+        "OPERATIONS": "250000000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "38"
+        "BREAKPOINT_LINE": "154"
       }
     },
     "line-probe-without-snapshot": {
-      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
-      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "STARTUP_GUARD_MAX_SHARE": "0.1",
-        "OPERATIONS": "32000",
-        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "STARTUP_GUARD_MAX_SHARE": "0.15",
+        "OPERATIONS": "17000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "36"
+        "BREAKPOINT_LINE": "152",
+        "EXPECTED_CAPTURE_KIND": "none",
+        "TRACK_PROBE_OUTPUT": "true"
       }
     },
     "line-probe-with-snapshot-default": {
-      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
-      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "STARTUP_GUARD_MAX_SHARE": "0.1",
-        "OPERATIONS": "32000",
-        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "STARTUP_GUARD_MAX_SHARE": "0.15",
+        "OPERATIONS": "700",
+        "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": "1000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "36",
+        "BREAKPOINT_LINE": "152",
         "CAPTURE_SNAPSHOT": "true",
-        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000"
+        "EXPECTED_CAPTURE_KIND": "default",
+        "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
+        "TRACK_PROBE_OUTPUT": "true"
       }
     },
     "line-probe-with-snapshot-minimal": {
-      "setup": "bash -c \"nohup node agent.js >/dev/null 2>&1 &\"",
-      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node agent.js >/dev/null 2>&1 &\"",
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
-        "STARTUP_GUARD_MAX_SHARE": "0.1",
-        "OPERATIONS": "32000",
-        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "STARTUP_GUARD_MAX_SHARE": "0.15",
+        "OPERATIONS": "12000",
+        "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": "1000",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "36",
+        "BREAKPOINT_LINE": "152",
         "CAPTURE_SNAPSHOT": "true",
+        "EXPECTED_CAPTURE_KIND": "minimal",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
         "MAX_REFERENCE_DEPTH": "0",
         "MAX_COLLECTION_SIZE": "0",
         "MAX_FIELD_COUNT": "0",
-        "MAX_LENGTH": "9007199254740991"
+        "MAX_LENGTH": "9007199254740991",
+        "TRACK_PROBE_OUTPUT": "true"
       }
     }
   }
