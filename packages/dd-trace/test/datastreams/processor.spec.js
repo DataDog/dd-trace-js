@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const propagationHash = require('../../src/propagation-hash')
 
@@ -435,6 +436,52 @@ describe('DataStreamsProcessor', () => {
     const [, loop] = recorded
     assert.strictEqual(loop.edgeLatencyNs, 0)
     assert.strictEqual(loop.pathwayLatencyNs, 0)
+  })
+})
+
+describe('DataStreamsProcessor#setCheckpoint payload size', () => {
+  const config = {
+    dsmEnabled: true,
+    hostname: '127.0.0.1',
+    port: 8126,
+    url: new URL('http://127.0.0.1:8126'),
+    env: 'test',
+    version: 'v1',
+    service: 'service1',
+    tags: {},
+  }
+
+  let processor
+  let recorded
+
+  beforeEach(() => {
+    processor = new DataStreamsProcessor(config)
+    clearTimeout(processor.timer)
+    recorded = sinon.stub(processor, 'recordCheckpoint')
+  })
+
+  it('adds the pathway field a producer will inject', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:kafka'], null, undefined, 100)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100 + PATHWAY_FIELD_BYTES)
+  })
+
+  it('reports the payload verbatim when the caller sizes the pathway itself', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:eventbridge'], null, undefined, 100, 0)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100)
+  })
+
+  it('adds a caller-supplied pathway size', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:eventbridge'], null, undefined, 100, 7)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 107)
+  })
+
+  it('never adds the pathway field to a consumer checkpoint', () => {
+    processor.setCheckpoint(['direction:in', 'topic:t', 'type:kafka'], null, undefined, 100)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100)
   })
 })
 

@@ -114,7 +114,7 @@
     "test:integration:plugins:coverage": "yarn services && node ./integration-tests/coverage/run-suite.js \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/${SPEC:-*}*.spec.js\"",
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:release": "mocha \"scripts/release/**/*.spec.js\"",
-    "test:scripts": "mocha \"scripts/helpers/**/*.spec.js\" \"scripts/*.spec.mjs\"",
+    "test:scripts": "mocha \"benchmark/sirun/*.spec.js\" \"scripts/helpers/**/*.spec.js\" \"scripts/*.spec.mjs\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "node scripts/c8-ci.js test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
@@ -187,7 +187,7 @@
     "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",
     "@datadog/pprof": "5.18.0",
-    "@datadog/wasm-js-rewriter": "5.0.1",
+    "@datadog/wasm-js-rewriter": "5.0.3",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
     "oxc-parser": "^0.132.0"
