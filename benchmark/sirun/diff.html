@@ -69,10 +69,16 @@ const beforeStats = summaryStats(beforeSummary)
 const afterStats = summaryStats(afterSummary)
 const goalStats = summaryStats(goalSummary)
 
-document.getElementById('prev-instructions').innerHTML = Math.floor(beforeStats.instructions)
-document.getElementById('curr-instructions').innerHTML = Math.floor(afterStats.instructions)
+if (beforeStats.instructions !== undefined) {
+  document.getElementById('prev-instructions').innerHTML = Math.floor(beforeStats.instructions)
+}
+if (afterStats.instructions !== undefined) {
+  document.getElementById('curr-instructions').innerHTML = Math.floor(afterStats.instructions)
+}
 diffPctElem('diff-instructions', beforeStats, afterStats, 'instructions')
-document.getElementById('goal-instructions').innerHTML = Math.floor(goalStats.instructions)
+if (goalStats.instructions !== undefined) {
+  document.getElementById('goal-instructions').innerHTML = Math.floor(goalStats.instructions)
+}
 diffPctElem('diff-goal-instructions', goalStats, afterStats, 'instructions')
 
 document.getElementById('prev-mem').innerHTML = Math.floor(beforeStats.mem)
@@ -82,6 +88,8 @@ document.getElementById('goal-mem').innerHTML = Math.floor(goalStats.mem)
 diffPctElem('diff-goal-mem', goalStats, afterStats, 'mem')
 
 function diffPctElem(elemName, beforeStats, afterStats, prop) {
+  if (beforeStats[prop] === undefined || afterStats[prop] === undefined) return
+
   const elem = document.getElementById(elemName)
   const val = (100*(afterStats[prop] - beforeStats[prop])/beforeStats[prop]).toFixed(2)
   elem.innerHTML = val
@@ -118,7 +126,7 @@ function summaryStats(summary) {
     }
   }
   return {
-    instructions: Math.pow(instructions, 1/instructionCount),
+    instructions: instructionCount === 0 ? undefined : Math.pow(instructions, 1/instructionCount),
     mem: Math.pow(mem, 1/count)
   }
 }
