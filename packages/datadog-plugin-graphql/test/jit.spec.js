@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { createRequire } = require('node:module')
 const { join } = require('node:path')
+const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
@@ -21,6 +22,20 @@ const generatedCodeLinter = semifies(process.version, require('eslint/package.js
   : undefined
 
 function noop () {}
+
+/**
+ * @param {WeakRef<object>} reference
+ * @returns {Promise<boolean>}
+ */
+async function waitForCollection (reference) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    global.gc()
+    await setImmediatePromise()
+    if (reference.deref() === undefined) return true
+    await setImmediatePromise()
+  }
+  return false
+}
 
 /**
  * @param {string} compilation
@@ -295,28 +310,32 @@ describe('Plugin', () => {
         for (const filePath of filePaths) {
           const filename = join(packageRoot, filePath)
           const content = readFileSync(filename, 'utf8')
-          for (const format of ['commonjs', 'module']) {
-            const rewritten = rewrite(content, filename, format)
-            assert.notStrictEqual(rewritten, content, `${filePath} was not rewritten as ${format}`)
-            assert.match(rewritten, /ddTraceRuntime/, `${filePath} lost the runtime hooks as ${format}`)
+          const format = filePath.endsWith('.mjs') || filePath.includes('/esm/') ? 'module' : 'commonjs'
+          const rewritten = rewrite(content, filename, format)
+          assert.notStrictEqual(rewritten, content, `${filePath} was not rewritten as ${format}`)
+          assert.match(rewritten, /ddTraceRuntime/, `${filePath} lost the runtime hooks as ${format}`)
 
-            const wrappedQueryIndex = rewritten.indexOf('const __apm$wrapped =')
-            const returnedQueryIndex = rewritten.indexOf('const ret =', wrappedQueryIndex)
-            const queryEndIndex = rewritten.indexOf('return ret[fnName]', returnedQueryIndex)
-            assert.notStrictEqual(wrappedQueryIndex, -1, `${filePath} did not hoist the wrapped query as ${format}`)
-            assert.ok(returnedQueryIndex > wrappedQueryIndex, `${filePath} hoisted the query after ret as ${format}`)
-            assert.ok(queryEndIndex > returnedQueryIndex, `${filePath} lost the returned query as ${format}`)
+          const wrappedQueryIndex = rewritten.indexOf('const __apm$wrapped =')
+          const returnedQueryIndex = rewritten.indexOf('const ret =', wrappedQueryIndex)
+          const queryEndIndex = rewritten.indexOf('return ret[fnName]', returnedQueryIndex)
+          assert.notStrictEqual(wrappedQueryIndex, -1, `${filePath} did not hoist the wrapped query as ${format}`)
+          assert.ok(returnedQueryIndex > wrappedQueryIndex, `${filePath} hoisted the query after ret as ${format}`)
+          assert.ok(queryEndIndex > returnedQueryIndex, `${filePath} lost the returned query as ${format}`)
 
-            const queryWrapper = rewritten.slice(returnedQueryIndex, queryEndIndex)
-            const subscriberGuardIndex = queryWrapper.indexOf('if (!tr_ch_apm_hasSubscribers')
-            const argumentsIndex = queryWrapper.indexOf('const __apm$arguments =')
-            assert.notStrictEqual(subscriberGuardIndex, -1, `${filePath} lost the subscriber guard as ${format}`)
-            assert.ok(
-              argumentsIndex > subscriberGuardIndex,
-              `${filePath} allocated before its subscriber guard as ${format}`
-            )
-            assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
-          }
+          const queryWrapper = rewritten.slice(returnedQueryIndex, queryEndIndex)
+          const subscriberGuardIndex = queryWrapper.indexOf('if (!tr_ch_apm_hasSubscribers')
+          const argumentsIndex = queryWrapper.indexOf('const __apm$arguments =')
+          assert.notStrictEqual(subscriberGuardIndex, -1, `${filePath} lost the subscriber guard as ${format}`)
+          assert.ok(
+            argumentsIndex > subscriberGuardIndex,
+            `${filePath} allocated before its subscriber guard as ${format}`
+          )
+          assert.doesNotMatch(
+            queryWrapper,
+            /compilationContext/,
+            `${filePath} retained its compilation context as ${format}`
+          )
+          assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
         }
       })
 
@@ -354,6 +373,50 @@ describe('Plugin', () => {
           assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
         })
         assert.deepStrictEqual(result.data, { hello: 'Ada' })
+      })
+
+      it('releases operation inputs retained through resolver timers', async function () {
+        if (typeof global.gc !== 'function') this.skip()
+
+        let inputReference
+        let timer
+        const RetainedInput = new graphql.GraphQLScalarType({
+          name: 'RetainedInput',
+          serialize: value => value,
+          parseValue: value => value,
+        })
+        const localSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'RetentionQuery',
+            fields: {
+              retained: {
+                type: graphql.GraphQLString,
+                args: { value: { type: RetainedInput } },
+                resolve: () => {
+                  timer = setTimeout(noop, 60_000)
+                  timer.unref()
+                  return 'ok'
+                },
+              },
+            },
+          }),
+        })
+        const document = graphql.parse('query Retention($value: RetainedInput!) { retained(value: $value) }')
+        const { query } = compileQuery(localSchema, document)
+
+        try {
+          await (async () => {
+            const value = Object.freeze({ retained: true })
+            inputReference = new WeakRef(value)
+            const result = await query({}, {}, Object.freeze({ value }))
+
+            assert.strictEqual(result.data.retained, 'ok')
+          })()
+
+          assert.strictEqual(await waitForCollection(inputReference), true)
+        } finally {
+          clearTimeout(timer)
+        }
       })
 
       it('derives anonymous operation metadata', async () => {
@@ -482,17 +545,15 @@ describe('Plugin', () => {
         assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
       })
 
-      it('preserves top-level promise-valued default completion semantics', async () => {
+      it('preserves top-level promise-valued default results', async () => {
         for (const testCase of [
           {
             operationName: 'ResolvedDefaultPromise',
             createValue: () => Promise.resolve('async default'),
-            expectedUpdate: undefined,
           },
           {
             operationName: 'RejectedDefaultPromise',
             createValue: () => Promise.reject(new Error('default rejection')),
-            expectedUpdate: 'default rejection',
           },
         ]) {
           const document = graphql.parse(`query ${testCase.operationName} { defaultHello }`)
@@ -503,31 +564,17 @@ describe('Plugin', () => {
 
           agent.reload('graphql', { enabled: true })
           const { query } = compileQuery(schema, document)
-          const updates = []
-          const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-          /** @param {{ error?: Error | null, field: { fieldName: string } }} message */
-          const onUpdate = ({ error, field }) => {
-            if (field.fieldName === 'defaultHello') updates.push(error?.message)
-          }
+          const result = await executeWithTrace(
+            () => query({ defaultHello: testCase.createValue() }, {}, {}),
+            new RegExp(testCase.operationName),
+            traces => {
+              const resolve = traces[0].find(span =>
+                span.name === 'graphql.resolve' && span.resource === 'defaultHello:String')
+              assert.ok(resolve, 'expected the promise-valued default resolver span')
+            }
+          )
 
-          updateChannel.subscribe(onUpdate)
-          try {
-            const result = await executeWithTrace(
-              () => query({ defaultHello: testCase.createValue() }, {}, {}),
-              new RegExp(testCase.operationName),
-              traces => {
-                const resolve = traces[0].find(span =>
-                  span.name === 'graphql.resolve' && span.resource === 'defaultHello:String')
-                assert.ok(resolve, 'expected the promise-valued default resolver span')
-              }
-            )
-
-            assertSameExecutionResult(result, baseline)
-          } finally {
-            updateChannel.unsubscribe(onUpdate)
-          }
-
-          assert.deepStrictEqual(updates, [testCase.expectedUpdate])
+          assertSameExecutionResult(result, baseline)
         }
       })
 
@@ -864,6 +911,40 @@ describe('Plugin', () => {
         assert.strictEqual(result.errors[0].message, 'default getter boom')
       })
 
+      it('tags errors thrown by an inline default field getter', async () => {
+        const Item = new graphql.GraphQLObjectType({
+          name: 'InlineGetterItem',
+          fields: {
+            value: { type: graphql.GraphQLString },
+          },
+        })
+        const listSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'InlineGetterQuery',
+            fields: {
+              items: { type: new graphql.GraphQLList(Item) },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          listSchema,
+          graphql.parse('query InlineDefaultGetterError { items { value } }')
+        )
+        const item = Object.defineProperty({}, 'value', {
+          get () { throw new Error('inline getter boom') },
+        })
+
+        await executeWithTrace(
+          () => assert.throws(() => query({ items: [item] }, {}, {}), /inline getter boom/),
+          /InlineDefaultGetterError/,
+          traces => {
+            const resolve = traces[0].find(span => span.resource === 'value:String')
+            assert.ok(resolve)
+            assert.strictEqual(resolve.error, 1)
+          }
+        )
+      })
+
       it('keeps collapsed abstract fields distinct and correctly parented by schema coordinate', async () => {
         const { query } = compileQuery(
           buildCoordinateSchema(),
@@ -896,21 +977,16 @@ describe('Plugin', () => {
       })
 
       it('reuses collapsed explicit resolver fields across list items', async () => {
-        const Leaf = new graphql.GraphQLObjectType({
-          name: 'CollapsedExplicitLeaf',
-          fields: {
-            value: {
-              type: graphql.GraphQLString,
-              resolve: source => source.value,
-            },
-          },
-        })
+        const tracer = require('../../dd-trace')
         const Item = new graphql.GraphQLObjectType({
           name: 'CollapsedExplicitItem',
           fields: {
-            leaf: {
-              type: Leaf,
-              resolve: source => source.leaf,
+            value: {
+              type: graphql.GraphQLString,
+              async resolve (source) {
+                await Promise.resolve()
+                return tracer.trace('user.work', () => source.value)
+              },
             },
           },
         })
@@ -921,8 +997,9 @@ describe('Plugin', () => {
               items: {
                 type: new graphql.GraphQLList(Item),
                 resolve: () => [
-                  { leaf: { value: 'one' } },
-                  { leaf: { value: 'two' } },
+                  { value: 'one' },
+                  { value: 'two' },
+                  { value: 'three' },
                 ],
               },
             },
@@ -930,45 +1007,47 @@ describe('Plugin', () => {
         })
         const { query } = compileQuery(
           explicitSchema,
-          graphql.parse('query CollapsedExplicit { items { leaf { value } } }')
+          graphql.parse('query CollapsedExplicit { items { value } }')
         )
 
         const firstResult = await executeWithTrace(() => query({}, {}, {}), /CollapsedExplicit/)
         assert.deepStrictEqual(firstResult.data, {
           items: [
-            { leaf: { value: 'one' } },
-            { leaf: { value: 'two' } },
+            { value: 'one' },
+            { value: 'two' },
+            { value: 'three' },
           ],
         })
 
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-        const updateCalls = new Map()
-        /** @param {{ field: { fieldName: string } }} message */
-        const onUpdate = ({ field }) => {
-          updateCalls.set(field.fieldName, (updateCalls.get(field.fieldName) ?? 0) + 1)
-        }
+        const result = await executeWithTrace(() => tracer.trace('outer', async () => {
+          const result = await query({}, {}, {})
+          tracer.trace('after', () => {})
+          return result
+        }), /CollapsedExplicit/, traces => {
+          const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+          const items = spans.find(span => span.meta['graphql.field.name'] === 'items')
+          const value = spans.find(span => span.meta['graphql.field.name'] === 'value')
+          const userSpans = traces[0].filter(span => span.name === 'user.work')
+          const outer = traces[0].find(span => span.name === 'outer')
+          const after = traces[0].find(span => span.name === 'after')
+          assert.ok(items, 'expected items span')
+          assert.ok(value, 'expected collapsed value span')
+          assert.ok(outer)
+          assert.ok(after)
+          assert.strictEqual(after.parent_id.toString(), outer.span_id.toString())
+          assert.strictEqual(value.parent_id.toString(), items.span_id.toString())
+          assert.strictEqual(userSpans.length, 3)
 
-        updateChannel.subscribe(onUpdate)
-        try {
-          const result = await executeWithTrace(() => query({}, {}, {}), /CollapsedExplicit/, traces => {
-            const spans = traces[0].filter(span => span.name === 'graphql.resolve')
-            const items = spans.find(span => span.meta['graphql.field.name'] === 'items')
-            const leaf = spans.find(span => span.meta['graphql.field.name'] === 'leaf')
-            const value = spans.find(span => span.meta['graphql.field.name'] === 'value')
-            assert.ok(items, 'expected items span')
-            assert.ok(leaf, 'expected collapsed leaf span')
-            assert.ok(value, 'expected collapsed value span')
-            assert.strictEqual(leaf.parent_id.toString(), items.span_id.toString())
-            assert.strictEqual(value.parent_id.toString(), leaf.span_id.toString())
-          })
-          assert.deepStrictEqual(result.data, firstResult.data)
-        } finally {
-          updateChannel.unsubscribe(onUpdate)
-        }
-
-        assert.strictEqual(updateCalls.get('items'), 1)
-        assert.strictEqual(updateCalls.get('leaf'), 2)
-        assert.strictEqual(updateCalls.get('value'), 2)
+          const valueStart = BigInt(value.start)
+          const valueEnd = valueStart + BigInt(value.duration)
+          for (const userSpan of userSpans) {
+            assert.strictEqual(userSpan.parent_id.toString(), value.span_id.toString())
+            const userStart = BigInt(userSpan.start)
+            const userEnd = userStart + BigInt(userSpan.duration)
+            assert.ok(userStart >= valueStart && userEnd <= valueEnd)
+          }
+        })
+        assert.deepStrictEqual(result.data, firstResult.data)
       })
 
       it('keeps uncollapsed list fields distinct and correctly parented', async () => {
@@ -1354,14 +1433,7 @@ describe('Plugin', () => {
       })
 
       it('skips resolver spans when depth is zero', async () => {
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-        let updateCalls = 0
-        const onUpdate = () => {
-          updateCalls++
-        }
-
         agent.reload('graphql', { depth: 0 })
-        updateChannel.subscribe(onUpdate)
         try {
           const { query } = compileQuery(
             schema,
@@ -1379,10 +1451,8 @@ describe('Plugin', () => {
           )
           assert.deepStrictEqual(result.data, { hello: 'world', defaultHello: 'default' })
         } finally {
-          updateChannel.unsubscribe(onUpdate)
           agent.reload('graphql', { variables: ['id', 'name'] })
         }
-        assert.strictEqual(updateCalls, 0)
       })
 
       it('tags the field source on collapsed JIT resolvers', async () => {
@@ -1559,6 +1629,42 @@ describe('Plugin', () => {
         }
       })
 
+      it('throws when the resolver start channel aborts a nested inline default resolver', () => {
+        const User = new graphql.GraphQLObjectType({
+          name: 'ResolverBlockedUser',
+          fields: {
+            name: { type: graphql.GraphQLString },
+          },
+        })
+        const nestedSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'ResolverBlockedQuery',
+            fields: {
+              user: { type: User },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          nestedSchema,
+          graphql.parse('query NestedResolverBlocked { user { name } }')
+        )
+        const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
+        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
+        const onResolverStart = ({ abortController, resolverInfo }) => {
+          if (resolverInfo.name) abortController.abort()
+        }
+
+        resolverStartChannel.subscribe(onResolverStart)
+        try {
+          assert.throws(
+            () => query({ user: { name: 'blocked' } }, {}, {}),
+            { name: 'AbortError' }
+          )
+        } finally {
+          resolverStartChannel.unsubscribe(onResolverStart)
+        }
+      })
+
       it('publishes resolver channels for every collapsed list invocation', async () => {
         const Speed = new graphql.GraphQLEnumType({
           name: 'ResolverListSpeed',
@@ -1663,11 +1769,9 @@ describe('Plugin', () => {
         )
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
         const resolveArguments = new Map([['plain', new Set()], ['value', new Set()]])
         const resolverArguments = []
         const resolverStartCalls = new Map()
-        const updateCalls = new Map()
         const expectedData = {
           items: [
             { value: 'one', plain: 'one' },
@@ -1690,11 +1794,6 @@ describe('Plugin', () => {
           resolverStartCalls.set(fieldName, (resolverStartCalls.get(fieldName) ?? 0) + 1)
           if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
         }
-        /** @param {{ field: { fieldName: string } }} message */
-        const onUpdate = ({ field }) => {
-          updateCalls.set(field.fieldName, (updateCalls.get(field.fieldName) ?? 0) + 1)
-        }
-
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
         try {
@@ -1719,12 +1818,10 @@ describe('Plugin', () => {
             tags: ['a', null],
             text: 'text-default',
           })
-          assert.strictEqual(updateCalls.size, 0)
 
           for (const args of resolveArguments.values()) args.clear()
           resolverArguments.length = 0
           resolverStartCalls.clear()
-          updateChannel.subscribe(onUpdate)
 
           const result = await executeWithTrace(
             () => query({}, {}, {
@@ -1744,7 +1841,6 @@ describe('Plugin', () => {
         } finally {
           resolveStartChannel.unsubscribe(onResolveStart)
           resolverStartChannel.unsubscribe(onResolverStart)
-          updateChannel.unsubscribe(onUpdate)
         }
 
         assert.strictEqual(resolveArguments.get('plain').size, 3)
@@ -1766,8 +1862,6 @@ describe('Plugin', () => {
           tags: ['a', ''],
           text: '',
         })
-        assert.strictEqual(updateCalls.get('plain'), 3)
-        assert.strictEqual(updateCalls.get('value'), 3)
       })
 
       it('publishes coerced arguments without exposing caller-owned values to mutation', async () => {
@@ -2053,168 +2147,6 @@ describe('Plugin', () => {
         }
       })
 
-      it('publishes resolver completion when an inline default getter throws', async () => {
-        const Item = new graphql.GraphQLObjectType({
-          name: 'ThrowingListItem',
-          fields: {
-            value: { type: graphql.GraphQLString },
-          },
-        })
-        const listSchema = new graphql.GraphQLSchema({
-          query: new graphql.GraphQLObjectType({
-            name: 'ThrowingListQuery',
-            fields: {
-              items: { type: new graphql.GraphQLList(Item) },
-            },
-          }),
-        })
-        const { query } = compileQuery(
-          listSchema,
-          graphql.parse('query ThrowingList { items { value } }')
-        )
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-
-        for (const values of [
-          [Object.defineProperty({}, 'value', {
-            get () { throw new Error('first getter boom') },
-          })],
-          [
-            { value: 'first' },
-            Object.defineProperty({}, 'value', {
-              get () { throw new Error('sibling getter boom') },
-            }),
-          ],
-        ]) {
-          const updates = []
-          /** @param {{ error?: Error | null, field: { fieldName: string, infoPath?: object } }} message */
-          const onUpdate = ({ error, field }) => {
-            if (field.fieldName === 'value') {
-              updates.push({ error: error?.message, infoPath: field.infoPath })
-            }
-          }
-
-          updateChannel.subscribe(onUpdate)
-          try {
-            await executeWithTrace(
-              () => assert.throws(() => query({ items: values }, {}, {}), /getter boom/),
-              /ThrowingList/
-            )
-          } finally {
-            updateChannel.unsubscribe(onUpdate)
-          }
-
-          assert.strictEqual(updates.length, values.length)
-          assert.strictEqual(updates.at(-1).infoPath, undefined)
-          assert.match(updates.at(-1).error, /getter boom/)
-        }
-      })
-
-      it('publishes inline default completion when graphql-jit completes each list item', async () => {
-        const Item = new graphql.GraphQLObjectType({
-          name: 'AsyncListItem',
-          fields: {
-            value: { type: graphql.GraphQLString },
-          },
-        })
-        const listSchema = new graphql.GraphQLSchema({
-          query: new graphql.GraphQLObjectType({
-            name: 'AsyncListQuery',
-            fields: {
-              items: { type: new graphql.GraphQLList(Item) },
-            },
-          }),
-        })
-        const { query } = compileQuery(
-          listSchema,
-          graphql.parse('query AsyncList { items { value } }')
-        )
-        let resolveFirst
-        let rejectThird
-        const first = new Promise(resolve => {
-          resolveFirst = resolve
-        })
-        const third = new Promise((_resolve, reject) => {
-          rejectThird = reject
-        })
-        const thirdRejection = assert.rejects(third, { message: 'third rejection' })
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-        const updates = []
-        /** @param {{ error?: Error | null, field: { fieldName: string } }} message */
-        const onUpdate = ({ error, field }) => {
-          if (field.fieldName === 'value') updates.push(error?.message)
-        }
-        const assertion = agent.assertSomeTraces(traces => {
-          const value = traces[0].find(span =>
-            span.name === 'graphql.resolve' && span.resource === 'value:String')
-          assert.ok(value, 'expected the collapsed value resolver span')
-          assert.strictEqual(value.error, 0)
-        }, { spanResourceMatch: /AsyncList/ })
-
-        updateChannel.subscribe(onUpdate)
-        try {
-          const execution = query({
-            items: [
-              { value: first },
-              { value: Promise.resolve('second') },
-              { value: third },
-            ],
-          }, {}, {})
-          assert.deepStrictEqual(updates, [undefined, undefined, undefined])
-          resolveFirst('first')
-          rejectThird(new Error('third rejection'))
-          await Promise.all([assertion, execution, thirdRejection])
-        } finally {
-          updateChannel.unsubscribe(onUpdate)
-        }
-      })
-
-      it('aborts later inline defaults from the completion channel', async () => {
-        const Item = new graphql.GraphQLObjectType({
-          name: 'CompletionAbortItem',
-          fields: {
-            value: { type: graphql.GraphQLString },
-          },
-        })
-        const listSchema = new graphql.GraphQLSchema({
-          query: new graphql.GraphQLObjectType({
-            name: 'CompletionAbortQuery',
-            fields: {
-              items: { type: new graphql.GraphQLList(Item) },
-            },
-          }),
-        })
-        const { query } = compileQuery(
-          listSchema,
-          graphql.parse('query CompletionAbort { items { value } }')
-        )
-        const updateChannel = dc.channel('apm:graphql:resolve:updateField')
-        let valueUpdates = 0
-        /** @param {{ field: { fieldName: string }, rootCtx: { abortController: AbortController } }} message */
-        const onUpdate = ({ field, rootCtx }) => {
-          if (field.fieldName === 'value') {
-            valueUpdates++
-            rootCtx.abortController.abort()
-          }
-        }
-
-        updateChannel.subscribe(onUpdate)
-        try {
-          await executeWithTrace(
-            () => {
-              assert.throws(
-                () => query({ items: [{ value: 'first' }, { value: 'second' }] }, {}, {}),
-                { name: 'AbortError', message: 'Aborted' }
-              )
-            },
-            /CompletionAbort/
-          )
-        } finally {
-          updateChannel.unsubscribe(onUpdate)
-        }
-
-        assert.strictEqual(valueUpdates, 1)
-      })
-
       it('isolates overlapping calls to one compiled query sharing a context value', async () => {
         let releaseSlowResolver = () => {}
         const slowResolver = new Promise(resolve => {
@@ -2394,31 +2326,6 @@ describe('Plugin', () => {
           })
         })
         assert.strictEqual(result.errors.length, 1)
-      })
-
-      it('aborts before a JIT-compiled resolver runs', async () => {
-        const startChannel = dc.channel('apm:graphql:execute:start')
-        /** @param {{ abortController: AbortController }} message */
-        const handler = ({ abortController }) => abortController.abort()
-        const { query } = compileQuery(schema, graphql.parse('query Blocked { hello }'))
-
-        startChannel.subscribe(handler)
-        try {
-          await executeWithTrace(
-            () => {
-              assert.throws(() => query({}, {}, {}), { name: 'AbortError', message: 'Aborted' })
-            },
-            /Blocked/,
-            traces => {
-              const execute = traces[0].find(span => span.name === expectedSchema.server.opName)
-              const resolve = traces[0].find(span => span.name === 'graphql.resolve')
-              assert.strictEqual(execute.error, 0)
-              assert.strictEqual(resolve, undefined)
-            }
-          )
-        } finally {
-          startChannel.unsubscribe(handler)
-        }
       })
 
       it('traces resolvers when the plugin is enabled after compilation', async () => {

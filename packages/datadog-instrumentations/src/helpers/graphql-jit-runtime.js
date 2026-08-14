@@ -383,34 +383,42 @@ function analyzeCompilerPath (path) {
   }
 
   const collapsedPathSegments = []
-  const literalPathKeys = []
-  const runtimePathSegments = []
+  let lastLiteralPathKey
+  let parentPathKey
   let pathDepth = 0
   let pathKey = ''
+  let runtimePath = '['
   let selectionDepth = 0
   for (let index = segments.length - 1; index >= 0; index--) {
     const { key, type } = segments[index]
     pathKey += `${type}:${key}/`
+    if (type === 'meta') continue
+
+    if (pathDepth !== 0) {
+      runtimePath += ', '
+    }
+
     if (type === 'literal') {
       collapsedPathSegments.push(key)
-      literalPathKeys.push(pathKey)
-      runtimePathSegments.push(`'${key}'`)
-      pathDepth++
+      parentPathKey = lastLiteralPathKey
+      lastLiteralPathKey = pathKey
+      runtimePath += `'${key}'`
       selectionDepth++
-    } else if (type === 'variable') {
+    } else {
       collapsedPathSegments.push('*')
-      runtimePathSegments.push(key)
-      pathDepth++
+      runtimePath += key
     }
+    pathDepth++
   }
+  runtimePath += ']'
 
   return {
     collapsedPath: collapsedPathSegments.join('.'),
     collapsedPathSegments,
-    parentPathKey: literalPathKeys.at(-2),
+    parentPathKey,
     pathDepth,
     pathKey,
-    runtimePath: `[${runtimePathSegments.join(', ')}]`,
+    runtimePath,
     selectionDepth,
   }
 }

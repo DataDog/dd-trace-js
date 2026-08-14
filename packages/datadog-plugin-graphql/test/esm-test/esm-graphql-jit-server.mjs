@@ -38,13 +38,6 @@ const warmResult = graphql.execute({
 })
 if (warmResult.errors) throw warmResult.errors[0]
 
-if (process.env.ABORT_GRAPHQL_JIT) {
-  /** @param {{ abortController: AbortController }} message */
-  dc.channel('apm:graphql:execute:start').subscribe(({ abortController }) => {
-    abortController.abort()
-  })
-}
-
 /** @type {Record<string, number>} */
 const resolverCalls = {}
 /** @param {{ resolverInfo: Record<string, unknown> }} message */
@@ -67,19 +60,12 @@ async function handleRequest (request, response) {
     return
   }
 
-  try {
-    const result = await query({}, {}, {})
-    response.writeHead(200, {
-      'Content-Type': 'application/json',
-      'X-Resolver-Calls': JSON.stringify(resolverCalls),
-    })
-    response.end(JSON.stringify(result))
-  } catch (error) {
-    if (error?.name !== 'AbortError') throw error
-
-    response.writeHead(503, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({ error: error.name }))
-  }
+  const result = await query({}, {}, {})
+  response.writeHead(200, {
+    'Content-Type': 'application/json',
+    'X-Resolver-Calls': JSON.stringify(resolverCalls),
+  })
+  response.end(JSON.stringify(result))
 }
 
 const server = createServer(handleRequest)

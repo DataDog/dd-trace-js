@@ -282,13 +282,6 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
     'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"] > ' +
       'CallExpression[callee.name="__apm$traced"]'
   )
-  const activeTry = queryOne(
-    node,
-    'TryStatement:has(' +
-      'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"]' +
-    ')'
-  )
-
   assert(wrapped.init, 'configureGraphqlJitExecute: wrapped query has no implementation')
 
   const createBoundQuery = ancestry.find(ancestor =>
@@ -311,26 +304,22 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
     'configureGraphqlJitExecute: original query depends on its invocation scope'
   )
 
+  const bindings = parse(`
+    const ddResolvers = compilationContext.resolvers
+    const ddSchema = compilationContext.schema
+  `).body
   const properties = parse(`({
     ddDocument: document,
     ddOperationName: operationName,
     ddPlan,
-    ddResolvers: compilationContext.resolvers,
-    ddSchema: compilationContext.schema
+    ddResolvers,
+    ddSchema
   })`).body[0].expression.properties
 
   context.properties.push(...properties)
 
-  const [abortCondition] = parse(`
-    if (__apm$ctx.ddAborted) {
-      const __apm$abortError = new Error('Aborted')
-      __apm$abortError.name = 'AbortError'
-      throw __apm$abortError
-    }
-  `).body
-
   assert(
-    insertBeforeStatement(createBoundQuery.body, retDeclaration, [wrappedDeclaration]),
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, [...bindings, wrappedDeclaration]),
     'configureGraphqlJitExecute: could not hoist original query'
   )
 
@@ -340,7 +329,6 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
   subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
   activeCall.callee = parse('__apm$wrapped.apply').body[0].expression
   activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
-  activeTry.block.body.unshift(abortCondition)
 
   const statements = node.body.body
   const subscriberGuardIndex = statements.indexOf(subscriberGuard)

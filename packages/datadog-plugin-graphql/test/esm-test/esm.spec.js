@@ -191,33 +191,6 @@ describe('Plugin (ESM)', () => {
           })
         })()])
       }).timeout(50000)
-
-      it('should abort GraphQL JIT execution with ESM', async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
-          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.resolve'), false)
-        })
-
-        proc = await spawnPluginIntegrationTestProc(
-          sandboxCwd(),
-          'esm-graphql-jit-server.mjs',
-          agent.port,
-          {
-            ABORT_GRAPHQL_JIT: '1',
-            NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs',
-          }
-        )
-
-        await Promise.all([res, (async () => {
-          const response = await axios.get(`${proc.url}/graphql`, {
-            validateStatus: () => true,
-          })
-          assert.strictEqual(response.status, 503)
-          assert.deepStrictEqual(response.data, { error: 'AbortError' })
-        })()])
-      }).timeout(50000)
     })
   })
 })

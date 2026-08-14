@@ -37,15 +37,6 @@ const legacyStorage = storage('legacy')
 
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
-const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
-// AppSec/WAF abort gate. Published synchronously from bindStart with a
-// payload carrying the abortController; subscribers that call
-// `payload.abortController.abort()` signal a pre-execute abort. bindStart
-// observes the aborted signal by replacing `ctx.arguments[0]` with a Proxy
-// whose getters throw AbortError — the orchestrion-emitted wrapper's
-// `try { __apm$traced() } catch { ...; throw err }` block then propagates
-// the AbortError to the caller of graphql.execute.
-const startExecuteCh = dc.channel('apm:graphql:execute:start')
 
 const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
@@ -71,6 +62,13 @@ let depthDisabled = false
 // operation's variableValues is undefined.
 const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
+let asyncDisposeSymbol = Symbol.asyncDispose
+// @graphql-tools/executor uses this fallback before Node.js exposes Symbol.asyncDispose.
+/* istanbul ignore if */
+if (asyncDisposeSymbol === undefined) {
+  asyncDisposeSymbol = Symbol.for('asyncDispose')
+}
+
 class AbortError extends Error {
   constructor (message) {
     super(message)
@@ -82,20 +80,19 @@ class AbortError extends Error {
  * @param {GraphQLExecutePlugin} plugin
  * @param {DatadogSpan} executeSpan
  * @param {string | undefined} source
- * @param {AbortController} abortController
+ * @param {AbortController | undefined} abortController
  * @param {{ fields: object[] } | undefined} jitPlan
  * @param {Record<string, unknown> | undefined} variableValues
  * @returns {object}
  */
 function createRootContext (plugin, executeSpan, source, abortController, jitPlan, variableValues) {
   const hasIastSub = iastResolveCh.hasSubscribers
-  const hasResolverSub = resolverStartCh.hasSubscribers
-  const hasUpdateFieldSub = updateFieldCh.hasSubscribers
+  const hasResolverSub = abortController !== undefined
   const traceResolvers = plugin.config.depth !== 0
 
   // Read by the generated gate in every inlined default field.
   const traceAll = hasIastSub || hasResolverSub ||
-    (traceResolvers && (hasUpdateFieldSub || !plugin.config.collapse))
+    (traceResolvers && !plugin.config.collapse)
 
   const rootCtx = {
     source,
@@ -108,7 +105,6 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
     depthDisabled: !traceResolvers,
     hasIastSub,
     hasResolverSub,
-    hasUpdateFieldSub,
     jitTraceAll: traceAll,
     jitTraceFirst: !traceAll && traceResolvers && plugin.config.collapse,
     variableValues,
@@ -190,6 +186,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // check also catches primitive contexts.
     if (instrumentedArgs.has(rawArgs?.[0])) {
       ctx.ddSkipped = true
+      ctx.currentStore = legacyStorage.getStore()
       return
     }
 
@@ -220,18 +217,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       wrapFields(schema._mutationType, schema)
       wrapFields(schema._subscriptionType, schema)
     }
-  }
-
-  /**
-   * @param {object} ctx
-   */
-  abortExecution (ctx) {
-    // graphql.execute destructures its first argument before doing work.
-    ctx.arguments[0] = new Proxy({}, {
-      get () { throw new AbortError('Aborted') },
-      // Retain the abort if GraphQL switches to an `in` check.
-      /* istanbul ignore next */ has () { throw new AbortError('Aborted') },
-    })
   }
 
   /**
@@ -288,6 +273,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     ctx.collapse = this.config.collapse
+    ctx.ddOperationType = type
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
@@ -303,24 +289,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     addVariableTags(this.config, span, args.variableValues)
 
-    const abortController = new AbortController()
-
-    // AppSec/WAF synchronous-abort gate. Publish before any resolver-wrapping
-    // work — if a subscriber aborts, none of that work matters because we'll
-    // make execute's body throw AbortError before it reaches any resolvers.
-    // bindStart runs as a bindStore transform on
-    // tracing:orchestrion:graphql:apm:graphql:execute:start, which fires
-    // BEFORE the orchestrion-emitted wrapper publishes its own :start and
-    // BEFORE the wrapped fn runs. The subscriber gets the abortController
-    // synchronously; on return we observe `signal.aborted` and act.
-    if (startExecuteCh.hasSubscribers) {
-      startExecuteCh.publish({ abortController, args })
-      if (abortController.signal.aborted) {
-        ctx.ddAborted = true
-        this.abortExecution(ctx)
-        return ctx.currentStore
-      }
-    }
+    const abortController = resolverStartCh.hasSubscribers ? new AbortController() : undefined
 
     this.wrapExecutionResolvers(ctx, args)
 
@@ -337,14 +306,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
 
+    if (ctx.ddRootCtx && legacyStorage.getStore() !== ctx.currentStore) {
+      legacyStorage.enterWith(ctx.currentStore)
+    }
+
     // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
     // already tagged the span.
     if (ctx.error) {
-      if (ctx.ddAborted) {
-        span.finish()
-      } else {
-        this.#finishSpan(ctx, span)
-      }
+      this.#finishSpan(ctx, span)
       return ctx.parentStore
     }
 
@@ -353,7 +322,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (typeof result?.then === 'function') {
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
-        (err) => this.#finishSpan(ctx, span, undefined, err)
+        (error) => this.#finishSpan(ctx, span, undefined, error)
       )
     } else {
       this.#finishSpan(ctx, span, result)
@@ -363,9 +332,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   error (ctx) {
-    // Pre-execute WAF abort isn't an error condition — opSpan.error must
-    // stay 0 per master's contract.
-    if (ctx.ddAborted) return
     const span = ctx?.currentStore?.span || this.activeSpan
     if (span && ctx?.error) {
       span.setTag('error', ctx.error)
@@ -377,17 +343,30 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {import('../../dd-trace/src/opentracing/span')} span
    * @param {import('graphql').ExecutionResult} [res]
    * @param {unknown} [error]
+   * @param {boolean} [incrementalComplete]
+   * @param {boolean} [finishPendingFields]
    */
-  #finishSpan (ctx, span, res, error) {
+  #finishSpan (ctx, span, res, error, incrementalComplete = false, finishPendingFields = false) {
+    if (!incrementalComplete && error === undefined && ctx.ddOperationType !== 'subscription') {
+      const iterator = getIncrementalIterator(res)
+      if (iterator) {
+        tagIncrementalResult(this.config, span, res?.initialResult)
+        observeIncrementalIterator(iterator, (result, iteratorError, iteratorCancelled, complete) => {
+          tagIncrementalResult(this.config, span, result)
+          if (complete) {
+            this.#finishSpan(ctx, span, res, iteratorError, true, iteratorCancelled)
+          }
+        })
+        return
+      }
+    }
+
     if (error !== undefined) {
       span.setTag('error', error)
     }
 
     if (res?.errors?.length) {
-      span.setTag('error', res.errors[0])
-      for (const err of res.errors) {
-        extractErrorIntoSpanEvent(this.config, span, err)
-      }
+      tagExecutionErrors(this.config, span, res.errors)
     }
 
     if (ctx.ddContextValue) {
@@ -399,12 +378,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     this.config.hooks.execute(span, ctx.ddArgs, res)
 
+    releaseRootContext(ctx.ddRootCtx, finishPendingFields)
     span.finish()
   }
 
   // Public — called from wrapResolve (free function, crosses class boundary).
-  // Resolve-span creation is inline at first-encounter; deferring to a batch
-  // produces a bursty encoder stall when many spans finish together.
+  // Resolve-span creation stays inline so child fields can parent immediately.
   /**
    * @param {object} field
    * @param {object} rootCtx
@@ -424,8 +403,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const source = loc && document.slice(loc.start, loc.end)
 
     // ctx form: startSpan sets field.currentStore = { ...activeStore, span }
-    // without entering it. Only the field's first resolver call runs in that
-    // store (isFirst check in wrapResolve); siblings use field.parentStore.
+    // without entering it. Collapsed siblings reuse that store until execute
+    // completes and finishes the shared span.
     const meta = field.tags ?? {
       'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
       'graphql.field.name': fieldName,
@@ -443,6 +422,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }, field)
 
     field.span = span
+    if (rootCtx.config.collapse) {
+      field.nextResolveField = rootCtx.resolveFields
+      rootCtx.resolveFields = field
+    }
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.#filterVariables(rootCtx, variableValues)
@@ -478,9 +461,39 @@ class GraphQLExecutePlugin extends TracingPlugin {
     return filtered
   }
 
-  // Public — called from wrapResolve. endTime reflects when the resolver
-  // actually completed, not when the field record was created.
-  finishResolveSpan (span, field, error, result, endTime) {
+  /**
+   * @param {object} rootCtx
+   * @param {object} field
+   * @param {unknown} error
+   * @param {unknown} result
+   */
+  completeResolveSpan (rootCtx, field, error, result) {
+    if (rootCtx.resolveFields !== undefined) {
+      this.#completeResolveSpan(field, error, result)
+      return
+    }
+
+    this.#finishResolveSpan(field, error, result, rootCtx.executeSpan._getTime())
+  }
+
+  /**
+   * @param {object} field
+   * @param {unknown} error
+   * @param {unknown} result
+   * @param {number} endTime
+   */
+  #finishResolveSpan (field, error, result, endTime) {
+    this.#completeResolveSpan(field, error, result)
+    field.span.finish(endTime)
+  }
+
+  /**
+   * @param {object} field
+   * @param {unknown} error
+   * @param {unknown} result
+   */
+  #completeResolveSpan (field, error, result) {
+    const { span } = field
     if (error) span.setTag('error', error)
 
     if (this.config.hooks.resolve) {
@@ -493,8 +506,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
         result: typeof result?.then === 'function' ? undefined : result,
       })
     }
-
-    span.finish(endTime)
   }
 }
 
@@ -565,11 +576,11 @@ function wrapResolve (resolve, isJit = false) {
       })
     }
 
-    if (!traceResolver) {
-      if (rootCtx.abortController?.signal.aborted) {
-        throw new AbortError('Aborted')
-      }
+    if (rootCtx.abortController?.signal.aborted) {
+      throw new AbortError('Aborted')
+    }
 
+    if (!traceResolver) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
@@ -610,8 +621,7 @@ function wrapResolve (resolve, isJit = false) {
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
-        // Set by startResolveSpan; currentStore is used by the first resolver
-        // call only, siblings use parentStore (see the isFirst check below).
+        // Set by startResolveSpan; collapsed siblings reuse currentStore.
         parentStore: null,
         currentStore: null,
       }
@@ -634,33 +644,22 @@ function wrapResolve (resolve, isJit = false) {
       } else {
         rootCtx.fields.set(fieldKey, field)
       }
-    }
-
-    // Collapsed siblings still publish updateField (master's contract: one
-    // publish per resolver call, even when the span is collapsed) and route
-    // through callInAsyncScope so the abort signal stops them mid-flight. They
-    // run in the parent store, not field.currentStore: the first sibling's
-    // synchronous resolver already finished the shared graphql.resolve span, so
-    // re-entering its store would parent user spans to a closed span.
-    // eslint-disable-next-line unicorn/prefer-else-if -- Keep sibling early return outside first-field setup.
-    if (!isFirst) {
-      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.parentStore, (err) => {
-        if (updateFieldCh.hasSubscribers) {
-          updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
-        }
-      }, isJit)
+    } else {
+      return callInCollapsedScope(
+        resolve,
+        this,
+        arguments,
+        field,
+        isJit
+      )
     }
 
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
-    const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
+    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
 
-    return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err, res) => {
-      const endTime = executeSpan._getTime()
-      rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime)
-      if (updateFieldCh.hasSubscribers) {
-        updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
-      }
+    return callInAsyncScope(resolve, this, arguments, field.currentStore, (error, res) => {
+      rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, res)
     }, isJit)
   }
 
@@ -721,20 +720,7 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     field = rootCtx.jitFieldsByPath.get(fieldKey)
   }
   if (field) {
-    if (rootCtx.hasUpdateFieldSub) {
-      return callInAsyncScope(
-        resolve,
-        self,
-        callArguments,
-        rootCtx.abortController,
-        field.parentStore,
-        (error) => {
-          updateFieldCh.publish({ rootCtx, field, error, pathString })
-        },
-        true
-      )
-    }
-    return invokeResolver(resolve, self, callArguments, true)
+    return callInCollapsedScope(resolve, self, callArguments, field, true)
   }
 
   field = startJitField(
@@ -746,25 +732,18 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     args,
     info.path
   )
-  const executeSpan = rootCtx.executeSpan
-  const span = field.span
 
   /**
    * @param {unknown} error
    * @param {unknown} result
    */
   const finishField = (error, result) => {
-    const endTime = executeSpan._getTime()
-    rootCtx.plugin.finishResolveSpan(span, field, error, result, endTime)
-    if (rootCtx.hasUpdateFieldSub) {
-      updateFieldCh.publish({ rootCtx, field, error, pathString })
-    }
+    rootCtx.plugin?.completeResolveSpan(rootCtx, field, error, result)
   }
   return callInAsyncScope(
     resolve,
     self,
     callArguments,
-    rootCtx.abortController,
     field.currentStore,
     finishField,
     true
@@ -837,26 +816,16 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
     path ?? descriptor.collapsedPathSegments,
     rootCtx.variableValues
   )
-  const executeSpan = rootCtx.executeSpan
-  const span = field.span
 
   let result
   try {
     result = legacyStorage.run(field.currentStore, () => source[descriptor.fieldName])
   } catch (error) {
-    const endTime = executeSpan._getTime()
-    rootCtx.plugin.finishResolveSpan(span, field, error, undefined, endTime)
-    if (rootCtx.hasUpdateFieldSub) {
-      updateFieldCh.publish({ rootCtx, field, error, pathString })
-    }
+    rootCtx.plugin.completeResolveSpan(rootCtx, field, error)
     throw error
   }
 
-  const endTime = executeSpan._getTime()
-  rootCtx.plugin.finishResolveSpan(span, field, undefined, result, endTime)
-  if (rootCtx.hasUpdateFieldSub) {
-    updateFieldCh.publish({ rootCtx, field, error: null, pathString })
-  }
+  rootCtx.plugin.completeResolveSpan(rootCtx, field, undefined, result)
   return result
 }
 
@@ -910,18 +879,6 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argum
     : rootCtx.jitFieldsByPath.get(`${descriptorId}:${pathString}`)
   if (field === undefined) {
     return resolveJitDefault(rootCtx, descriptorId, source, path)
-  }
-  if (rootCtx.hasUpdateFieldSub) {
-    let result
-    try {
-      result = source[descriptor.fieldName]
-    } catch (error) {
-      updateFieldCh.publish({ rootCtx, field, error, pathString })
-      throw error
-    }
-
-    updateFieldCh.publish({ rootCtx, field, error: null, pathString })
-    return result
   }
   return source[descriptor.fieldName]
 }
@@ -1043,26 +1000,35 @@ function invokeResolver (resolve, self, args, isJit) {
 }
 
 /**
+ * @param {GraphQLFieldResolver} fn
+ * @param {unknown} thisArg
+ * @param {ArgumentsList} args
+ * @param {object} field
+ * @param {boolean} isJit
+ * @returns {unknown}
+ */
+function callInCollapsedScope (fn, thisArg, args, field, isJit) {
+  if (legacyStorage.getStore() !== field.currentStore) {
+    legacyStorage.enterWith(field.currentStore)
+  }
+  return invokeResolver(fn, thisArg, args, isJit)
+}
+
+/**
  * Runs the resolver inside `store`, including any code after an internal
  * `await`. A `.then()` the caller attaches afterward runs outside `store`.
  *
  * @param {GraphQLFieldResolver} fn
  * @param {unknown} thisArg
  * @param {ArgumentsList} args
- * @param {AbortController | undefined} abortController
  * @param {object} store
  * @param {(error: unknown, result?: unknown) => void} callback
  * @param {boolean} isJit
  * @returns {unknown}
  */
-function callInAsyncScope (fn, thisArg, args, abortController, store, callback, isJit) {
-  if (abortController?.signal.aborted) {
-    callback(null, null)
-    throw new AbortError('Aborted')
-  }
-
+function callInAsyncScope (fn, thisArg, args, store, callback, isJit) {
   try {
-    const result = legacyStorage.run(store, () => invokeResolver(fn, thisArg, args, isJit))
+    const result = legacyStorage.run(store, invokeResolver, fn, thisArg, args, isJit)
     if (typeof result?.then === 'function' && (!isJit || (result !== null && typeof result === 'object'))) {
       return observeThenable(result, callback)
     }
@@ -1273,6 +1239,120 @@ function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolve
 
 function isWeakMapKey (value) {
   return value !== null && (typeof value === 'object' || typeof value === 'function')
+}
+
+/**
+ * @param {unknown} result
+ * @returns {object | undefined}
+ */
+function getIncrementalIterator (result) {
+  if (result === null || typeof result !== 'object') return
+
+  if ('initialResult' in result && typeof result.subsequentResults?.next === 'function') {
+    return result.subsequentResults
+  }
+  if (typeof result.next === 'function' && typeof result[Symbol.asyncIterator] === 'function') {
+    return result
+  }
+}
+
+/**
+ * @param {object} iterator
+ * @param {(result?: unknown, error?: unknown, cancelled?: boolean, complete?: boolean) => void} observe
+ */
+function observeIncrementalIterator (iterator, observe) {
+  let activeObserver = observe
+
+  /**
+   * @param {unknown} [result]
+   * @param {unknown} [error]
+   * @param {boolean} [cancelled]
+   * @param {boolean} [complete]
+   */
+  function notify (result, error, cancelled, complete) {
+    if (!activeObserver) return
+
+    const callback = activeObserver
+    if (complete) activeObserver = undefined
+    callback(result, error, cancelled, complete)
+  }
+
+  wrapIteratorMethod(iterator, 'next', false, notify)
+  wrapIteratorMethod(iterator, 'return', true, notify)
+  wrapIteratorMethod(iterator, 'throw', true, notify)
+  wrapIteratorMethod(iterator, asyncDisposeSymbol, true, notify)
+}
+
+/**
+ * @param {object} iterator
+ * @param {string | symbol} name
+ * @param {boolean} terminal
+ * @param {(result?: unknown, error?: unknown, cancelled?: boolean, complete?: boolean) => void} notify
+ */
+function wrapIteratorMethod (iterator, name, terminal, notify) {
+  const method = iterator[name]
+  if (typeof method !== 'function') return
+
+  iterator[name] = function () {
+    const result = method.apply(this, arguments)
+    result.then((value) => {
+      const complete = terminal || value?.done || value?.value?.hasNext === false
+      notify(value?.value, undefined, terminal, complete)
+    }, error => notify(undefined, error, true, true))
+    return result
+  }
+}
+
+/**
+ * @param {object} config
+ * @param {DatadogSpan} span
+ * @param {unknown} result
+ */
+function tagIncrementalResult (config, span, result) {
+  if (result === null || typeof result !== 'object') return
+
+  tagExecutionErrors(config, span, result.errors)
+  if (result.incremental) {
+    for (const entry of result.incremental) {
+      tagExecutionErrors(config, span, entry.errors)
+    }
+  }
+}
+
+/**
+ * @param {object} config
+ * @param {DatadogSpan} span
+ * @param {unknown[] | undefined} errors
+ */
+function tagExecutionErrors (config, span, errors) {
+  if (!errors?.length) return
+
+  if (!span.context().getTag('error')) span.setTag('error', errors[0])
+  for (const error of errors) {
+    extractErrorIntoSpanEvent(config, span, error)
+  }
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {boolean} [finishPendingFields]
+ */
+function releaseRootContext (rootCtx, finishPendingFields) {
+  const endTime = rootCtx.executeSpan._getTime()
+  if (rootCtx.resolveFields !== undefined) {
+    for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+      field.span.finish(endTime)
+    }
+  } else if (finishPendingFields && rootCtx.fields !== undefined) {
+    for (const field of rootCtx.fields.values()) {
+      field.span.finish(endTime)
+    }
+  }
+
+  // Resolver-created async resources retain copied stores that all share this owner.
+  for (const key of Object.keys(rootCtx)) {
+    rootCtx[key] = undefined
+  }
 }
 
 // Fallback resolver used when graphql.execute() is called without an explicit

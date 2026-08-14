@@ -75,13 +75,6 @@ class GraphQLJitExecutePlugin extends GraphQLExecutePlugin {
   }
 
   /**
-   * The transformed JIT wrapper throws after the start channel returns.
-   *
-   * @param {JitExecutionContext} _ctx
-   */
-  abortExecution (_ctx) {}
-
-  /**
    * @param {JitExecutionContext} ctx
    * @param {unknown} _contextValue
    * @param {object} rootCtx

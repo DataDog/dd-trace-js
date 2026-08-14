@@ -23,9 +23,8 @@ class GraphQLPlugin extends CompositePlugin {
       // them.
       request: GraphQLRequestPlugin,
       validate: GraphQLValidatePlugin,
-      // resolve plugin is absorbed into execute: per-field data is recorded
-      // synchronously in wrapResolve, and all graphql.resolve spans are
-      // materialized at execute end.
+      // Resolve handling is absorbed into execute. Spans start inline for
+      // correct parenting; collapsed spans finish when execute completes.
     }
   }
 
