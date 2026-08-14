@@ -62,7 +62,7 @@ describe('test agent helper', () => {
       assert.strictEqual(origin in httpAgent.requests, false)
     })
 
-    it('finishes closing when an active exporter socket closes', async () => {
+    it('finishes closing with active and queued exporter requests', async () => {
       const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
       const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
       process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
@@ -72,20 +72,27 @@ describe('test agent helper', () => {
         await agent.load([])
         const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
         agent.server.prependOnceListener('connection', socket => socket.pause())
-        const request = http.request({
+        const activeRequest = http.request({
           agent: httpAgent,
           host: '127.0.0.1',
           port: agent.port,
         })
-        const socketAssigned = once(request, 'socket')
-        const requestErrored = once(request, 'error')
-        request.end()
+        const socketAssigned = once(activeRequest, 'socket')
+        const activeRequestErrored = once(activeRequest, 'error')
+        activeRequest.end()
         const [socket] = await socketAssigned
         const socketFreeListenerCount = socket.listenerCount('free')
 
-        const closing = agent.close()
-        socket.destroy()
-        await Promise.all([closing, requestErrored])
+        const queuedRequest = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const queuedRequestErrored = once(queuedRequest, 'error')
+        queuedRequest.end()
+        assert.strictEqual(httpAgent.requests[origin].length, 1)
+
+        await Promise.all([agent.close(), activeRequestErrored, queuedRequestErrored])
 
         assert.strictEqual(socket.listenerCount('free'), socketFreeListenerCount)
         assert.strictEqual(origin in httpAgent.sockets, false)

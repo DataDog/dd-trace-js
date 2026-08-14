@@ -920,10 +920,6 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    await waitForExporterIdle(origin)
-
-    const exporterSockets = httpAgent.freeSockets[origin] ?? []
-    const exporterSocketsClosed = exporterSockets.map(socket => once(socket, 'close'))
     const serverClosed = once(closingServer, 'close')
 
     closingListener.close()
@@ -931,6 +927,11 @@ module.exports = {
       socket.end()
     }
     sockets = []
+
+    await waitForExporterIdle(origin)
+
+    const exporterSockets = httpAgent.freeSockets[origin] ?? []
+    const exporterSocketsClosed = exporterSockets.map(socket => once(socket, 'close'))
 
     await Promise.all([serverClosed, ...exporterSocketsClosed])
     this.server = null
