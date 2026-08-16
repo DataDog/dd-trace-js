@@ -13,6 +13,7 @@ const {
 describe('AI Guard evaluation response', () => {
   it('parses the backend response into the internal evaluation contract', () => {
     const sdsFindings = [{ category: 'ssn' }]
+    const redactionReplacements = [{ path: 'messages[0].content', replacement: '<REDACTED>' }]
     const tagProbabilities = { jailbreak: 0.8 }
     const response = {
       data: {
@@ -23,6 +24,7 @@ describe('AI Guard evaluation response', () => {
           sds_findings: sdsFindings,
           tag_probs: tagProbabilities,
           is_blocking_enabled: true,
+          redaction_replacements: redactionReplacements,
         },
       },
     }
@@ -35,6 +37,7 @@ describe('AI Guard evaluation response', () => {
       tagProbabilities,
       hasTagProbabilities: true,
       blockingEnabled: true,
+      redactionReplacements,
     })
   })
 
@@ -47,6 +50,7 @@ describe('AI Guard evaluation response', () => {
       tagProbabilities: {},
       hasTagProbabilities: false,
       blockingEnabled: false,
+      redactionReplacements: undefined,
     })
   })
 
@@ -63,7 +67,8 @@ describe('AI Guard evaluation response', () => {
     })
   }
 
-  it('creates a blocked outcome', () => {
+  it('creates a blocked, redacted outcome', () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
     const evaluation = parseEvaluationResponse({
       data: {
         attributes: {
@@ -73,12 +78,15 @@ describe('AI Guard evaluation response', () => {
           sds_findings: [{ category: 'email_address' }],
           tag_probs: { 'prompt-injection': 0.9 },
           is_blocking_enabled: true,
+          redaction_replacements: [
+            { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+          ],
         },
       },
     })
 
     assert.ok(evaluation)
-    const outcome = createEvaluationOutcome(evaluation, true)
+    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: true })
 
     assert.deepStrictEqual(outcome, {
       result: {
@@ -87,10 +95,98 @@ describe('AI Guard evaluation response', () => {
         tags: ['prompt-injection'],
         tagProbabilities: { 'prompt-injection': 0.9 },
         sds: [{ category: 'email_address' }],
+        messages: [{ role: 'user', content: 'My SSN is <REDACTED>' }],
+        redactionReplacements: [{ path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' }],
       },
       shouldBlock: true,
       hasTagProbabilities: true,
+      redaction: {
+        enabled: true,
+        applied: true,
+        failures: 0,
+      },
     })
+    assert.strictEqual(messages[0].content, 'My SSN is 123-45-6789')
+  })
+
+  it('keeps original messages but reports the backend replacements when redaction is disabled', () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const evaluation = parseEvaluationResponse({
+      data: {
+        attributes: {
+          action: 'ALLOW',
+          redaction_replacements: [
+            { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+          ],
+        },
+      },
+    })
+
+    assert.ok(evaluation)
+    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: false })
+
+    assert.strictEqual(outcome.result.messages, messages)
+    assert.deepStrictEqual(outcome.result.redactionReplacements, [
+      { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+    ])
+    assert.deepStrictEqual(outcome.redaction, {
+      enabled: false,
+      applied: false,
+      failures: 0,
+    })
+  })
+
+  for (const redactionEnabled of [true, false]) {
+    it(`reports no replacements when the backend sends none and redaction is ${
+      redactionEnabled ? 'enabled' : 'disabled'}`, () => {
+      const messages = [{ role: 'user', content: 'Hello' }]
+      const evaluation = parseEvaluationResponse({ data: { attributes: { action: 'ALLOW' } } })
+
+      assert.ok(evaluation)
+      const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled })
+
+      assert.deepStrictEqual(outcome.result.redactionReplacements, [])
+    })
+  }
+
+  it('reports only well-formed replacements while still counting malformed ones as failures', () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const evaluation = parseEvaluationResponse({
+      data: {
+        attributes: {
+          action: 'ALLOW',
+          redaction_replacements: [
+            { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+            { path: 'messages[8].content', replacement: 'unresolvable but well-formed' },
+            'not an object',
+            { path: 'messages[0].content', replacement: 42 },
+            { path: '', replacement: 'empty path' },
+          ],
+        },
+      },
+    })
+
+    assert.ok(evaluation)
+    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: true })
+
+    assert.deepStrictEqual(outcome.result.redactionReplacements, [
+      { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
+      { path: 'messages[8].content', replacement: 'unresolvable but well-formed' },
+    ])
+    assert.strictEqual(outcome.redaction.failures, 4)
+  })
+
+  it('reports no replacements when the backend sends a non-array value', () => {
+    const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
+    const evaluation = parseEvaluationResponse({
+      data: { attributes: { action: 'ALLOW', redaction_replacements: 'not an array' } },
+    })
+
+    assert.ok(evaluation)
+    const outcome = createEvaluationOutcome(messages, evaluation, { block: true, redactionEnabled: true })
+
+    assert.deepStrictEqual(outcome.result.redactionReplacements, [])
+    assert.strictEqual(outcome.redaction.failures, 1)
   })
 
   for (const testCase of [
