@@ -256,35 +256,37 @@ versions.forEach((version) => {
       assert.notStrictEqual(exitCode, 0)
     })
 
-    it('reports the session when a custom reporter throws during onExit', async (receiver, run) => {
-      const proc = run(
-        './node_modules/.bin/playwright test -c playwright.config.js',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            PW_BASE_URL: `http://localhost:${webAppPort}`,
-            PLAYWRIGHT_THROWING_REPORTER: '1',
-            PLAYWRIGHT_REPORTER_THROWS_ON_EXIT: '1',
-            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
-          },
-        }
-      )
-      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-        proc,
-        ({ url }) => url.endsWith('/api/v2/citestcycle'),
-        (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-            const event = events.find(event => event.type === eventType)
-            assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
-            assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter onExit failed/)
+    contextNewVersions('reporter onExit', () => {
+      it('reports the session when a custom reporter throws during onExit', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              PLAYWRIGHT_THROWING_REPORTER: '1',
+              PLAYWRIGHT_REPORTER_THROWS_ON_EXIT: '1',
+              TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+            },
           }
-        }
-      )
-      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
-      assert.notStrictEqual(exitCode, 0)
+        )
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              const event = events.find(event => event.type === eventType)
+              assert.ok(event, `expected ${eventType} event`)
+              assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+              assert.match(event.content.meta[ERROR_MESSAGE], /custom Playwright reporter onExit failed/)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.notStrictEqual(exitCode, 0)
+      })
     })
 
     it('does not replace reporter errors with a custom stack formatter', async (receiver, run) => {
