@@ -9,6 +9,8 @@ export default {
     messages: {
       buildStringDirectly:
         'Build "{{name}}" directly as a string instead of collecting string fragments in an array before joining.',
+      buildLiteralStringDirectly:
+        'Build this string directly instead of joining an array literal.',
     },
   },
 
@@ -97,6 +99,18 @@ export default {
           data: { name: node.id.name },
         })
       },
+
+      /**
+       * @param {import('estree').CallExpression} node
+       */
+      CallExpression (node) {
+        if (!isLiteralJoin(node)) return
+
+        context.report({
+          node,
+          messageId: 'buildLiteralStringDirectly',
+        })
+      },
     }
   },
 }
@@ -130,4 +144,65 @@ function isStaticSeparator (node) {
   if (node === undefined) return true
   if (node.type === 'Literal') return typeof node.value === 'string'
   return node.type === 'TemplateLiteral' && node.expressions.length === 0
+}
+
+/**
+ * @param {import('estree').CallExpression} node
+ * @returns {boolean}
+ */
+function isLiteralJoin (node) {
+  if (
+    node.optional ||
+    node.callee.type !== 'MemberExpression' ||
+    node.callee.computed ||
+    node.callee.optional ||
+    node.callee.property.type !== 'Identifier' ||
+    node.callee.property.name !== 'join' ||
+    node.callee.object.type !== 'ArrayExpression' ||
+    node.arguments.length > 1 ||
+    !isStaticSeparator(node.arguments[0])
+  ) {
+    return false
+  }
+
+  const { elements } = node.callee.object
+  if (elements.some(element => element === null || element.type === 'SpreadElement')) return false
+
+  return isNameJoin(elements, node.arguments[0]) || isConditionalTextJoin(node, elements, node.arguments[0])
+}
+
+/**
+ * @param {Array<import('estree').Expression>} elements
+ * @param {import('estree').Expression | import('estree').SpreadElement | undefined} separator
+ * @returns {boolean}
+ */
+function isNameJoin (elements, separator) {
+  return (
+    separator?.type === 'Literal' &&
+    separator.value === '.' &&
+    elements.length === 2 &&
+    elements.every(element =>
+      element.type === 'MemberExpression' &&
+      !element.computed &&
+      !element.optional &&
+      element.property.type === 'Identifier' &&
+      element.property.name === 'name'
+    )
+  )
+}
+
+/**
+ * @param {import('estree').CallExpression} node
+ * @param {Array<import('estree').Expression>} elements
+ * @param {import('estree').Expression | import('estree').SpreadElement | undefined} separator
+ * @returns {boolean}
+ */
+function isConditionalTextJoin (node, elements, separator) {
+  return (
+    node.parent.type === 'ConditionalExpression' &&
+    separator?.type === 'Literal' &&
+    separator.value === '\n' &&
+    elements.length > 1 &&
+    elements.every(element => element.type === 'Literal' || element.type === 'TemplateLiteral')
+  )
 }
