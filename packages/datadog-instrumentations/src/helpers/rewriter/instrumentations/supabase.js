@@ -1,30 +1,30 @@
 'use strict'
 
+const versionRange = '>=2.112.2 <3'
+
 module.exports = [
   {
     module: {
-      name: '@supabase/supabase-js',
-      versionRange: '2.112.2',
+      name: '@supabase/storage-js',
+      versionRange,
       filePath: 'dist/index.cjs',
     },
-    astQuery: 'VariableDeclarator[id.name="fetchWithAuth"] ReturnStatement > ArrowFunctionExpression[async=true]',
-    functionQuery: { kind: 'Async' },
-    channelName: 'fetchWithAuth',
+    functionQuery: { functionName: '_handleRequest', kind: 'Async' },
+    channelName: 'handleRequest',
   },
   {
     module: {
-      name: '@supabase/supabase-js',
-      versionRange: '2.112.2',
+      name: '@supabase/storage-js',
+      versionRange,
       filePath: 'dist/index.mjs',
     },
-    astQuery: 'VariableDeclarator[id.name="fetchWithAuth"] ReturnStatement > ArrowFunctionExpression[async=true]',
-    functionQuery: { kind: 'Async' },
-    channelName: 'fetchWithAuth',
+    functionQuery: { functionName: '_handleRequest', kind: 'Async' },
+    channelName: 'handleRequest',
   },
   {
     module: {
       name: '@supabase/auth-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/main/GoTrueClient.js',
     },
     functionQuery: {
@@ -37,7 +37,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/auth-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/module/GoTrueClient.js',
     },
     functionQuery: {
@@ -49,34 +49,8 @@ module.exports = [
   },
   {
     module: {
-      name: '@supabase/storage-js',
-      versionRange: '2.112.2',
-      filePath: 'dist/index.cjs',
-    },
-    functionQuery: {
-      methodName: 'listBuckets',
-      className: 'StorageBucketApi',
-      kind: 'Async',
-    },
-    channelName: 'StorageBucketApi_listBuckets',
-  },
-  {
-    module: {
-      name: '@supabase/storage-js',
-      versionRange: '2.112.2',
-      filePath: 'dist/index.mjs',
-    },
-    functionQuery: {
-      methodName: 'listBuckets',
-      className: 'StorageBucketApi',
-      kind: 'Async',
-    },
-    channelName: 'StorageBucketApi_listBuckets',
-  },
-  {
-    module: {
       name: '@supabase/realtime-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/main/RealtimeChannel.js',
     },
     functionQuery: {
@@ -89,7 +63,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/realtime-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/module/RealtimeChannel.js',
     },
     functionQuery: {
@@ -102,7 +76,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/functions-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/main/FunctionsClient.js',
     },
     functionQuery: {
@@ -115,7 +89,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/functions-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/module/FunctionsClient.js',
     },
     functionQuery: {
@@ -128,7 +102,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/postgrest-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/index.cjs',
     },
     functionQuery: {
@@ -141,7 +115,7 @@ module.exports = [
   {
     module: {
       name: '@supabase/postgrest-js',
-      versionRange: '2.112.2',
+      versionRange,
       filePath: 'dist/index.mjs',
     },
     functionQuery: {

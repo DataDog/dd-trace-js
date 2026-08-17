@@ -66,12 +66,14 @@ async function runServerlessContract ({
 
   const spans = receivedTraces.flat()
   const operationSpans = spans.filter(span => span.name === spanName)
+  const supabaseSpans = spans.filter(span => span.meta?.component === 'supabase')
   const rootSpans = serverlessClassification === 'serverless-child'
     ? spans.filter(span => span.name === serverlessRootName)
     : operationSpans
 
   assert.strictEqual(rootSpans.length, 1, 'expected exactly one serverless root span')
   assert.strictEqual(operationSpans.length, 1, 'expected exactly one operation span')
+  assert.strictEqual(supabaseSpans.length, 1, 'expected exactly one Supabase span')
 
   const rootSpan = rootSpans[0]
   const operationSpan = operationSpans[0]
@@ -128,29 +130,28 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
     await testSetup.teardown()
   })
 
-  describe('fetchWithAuth() - supabase.storage.select', () => {
+  describe('storage file requests - supabase.storage.request', () => {
     it('should satisfy the serverless ownership contract (happy path)', async () => {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.storage.select',
+        operationName: 'supabase.storage.request',
         scenario: 'happy',
         expectedSpan:
         {
-          name: 'supabase.storage.select',
+          name: 'supabase.storage.request',
           service: 'test',
-          resource: 'POST /storage/v1/object/list/files',
+          resource: 'POST object/list',
           type: 'storage',
           meta: {
             component: 'supabase',
             'span.kind': 'client',
             'http.method': 'POST',
             'http.url': 'https://project.supabase.co/storage/v1/object/list/files',
-            'http.status_code': '200',
           },
           metrics: {},
         },
-        run: () => testSetup.fetchWithAuth(),
+        run: () => testSetup.storageFileList(),
       })
     })
 
@@ -158,74 +159,52 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.storage.select',
+        operationName: 'supabase.storage.request',
         scenario: 'error',
         expectedSpan:
         {
-          name: 'supabase.storage.select',
+          name: 'supabase.storage.request',
           service: 'test',
-          resource: 'POST /storage/v1/object/list/files',
+          resource: 'POST object/list',
           type: 'storage',
           meta: {
             component: 'supabase',
             'span.kind': 'client',
             'http.method': 'POST',
             'http.url': 'https://project.supabase.co/storage/v1/object/list/files',
-            'error.type': 'Error',
-            'error.message': 'Supabase request failed',
+            'http.status_code': '500',
+            'error.type': 'StorageApiError',
+            'error.message': 'Storage unavailable',
             'error.stack': ANY_STRING,
           },
           metrics: {},
           error: 1,
         },
-        run: () => testSetup.fetchWithAuthError(),
+        run: () => testSetup.storageFileListError(),
       })
     })
 
-    const inputCases = [
-      {
-        name: 'string input',
-        input: 'https://project.supabase.co/storage/v1/object/list/files?limit=10#results',
-        init: { method: 'DELETE' },
-        method: 'DELETE',
-      },
-      {
-        name: 'URL input',
-        input: new URL('https://project.supabase.co/storage/v1/object/list/files?limit=10#results'),
-        init: { method: 'PUT' },
-        method: 'PUT',
-      },
-      {
-        name: 'Request input',
-        input: new Request('https://project.supabase.co/storage/v1/object/list/files?limit=10#results', {
-          method: 'PATCH',
-        }),
-        method: 'PATCH',
-      },
-    ]
-
-    for (const testCase of inputCases) {
-      it(`captures method and URL from ${testCase.name}`, async () => {
+    for (const path of ['avatars/user-1.png', 'documents/report.pdf']) {
+      it(`normalizes the object path for ${path}`, async () => {
         return runServerlessContract({
           agent,
           tracer: meta.tracer,
-          operationName: 'supabase.storage.select',
+          operationName: 'supabase.storage.request',
           scenario: 'happy',
           expectedSpan: {
-            name: 'supabase.storage.select',
+            name: 'supabase.storage.request',
             service: 'test',
-            resource: `${testCase.method} /storage/v1/object/list/files`,
+            resource: 'GET object/info',
             type: 'storage',
             meta: {
               component: 'supabase',
               'span.kind': 'client',
-              'http.method': testCase.method,
-              'http.url': 'https://project.supabase.co/storage/v1/object/list/files',
-              'http.status_code': '200',
+              'http.method': 'GET',
+              'http.url': `https://project.supabase.co/storage/v1/object/info/files/${path}`,
             },
             metrics: {},
           },
-          run: () => testSetup.fetchWithAuthInput(testCase.input, testCase.init),
+          run: () => testSetup.storageFileInfo(path),
         })
       })
     }
@@ -287,25 +266,24 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
     })
   })
 
-  describe('StorageBucketApi.listBuckets() - supabase.storage.list', () => {
+  describe('StorageBucketApi.listBuckets() - supabase.storage.request', () => {
     it('should satisfy the serverless ownership contract (happy path)', async () => {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.storage.list',
+        operationName: 'supabase.storage.request',
         scenario: 'happy',
         expectedSpan:
         {
-          name: 'supabase.storage.list',
+          name: 'supabase.storage.request',
           service: 'test',
-          resource: 'GET /storage/v1/bucket',
+          resource: 'GET bucket',
           type: 'storage',
           meta: {
             component: 'supabase',
             'span.kind': 'client',
             'http.method': 'GET',
             'http.url': 'https://project.supabase.co/storage/v1/bucket',
-            'http.status_code': '200',
           },
           metrics: {},
         },
@@ -317,13 +295,13 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.storage.list',
+        operationName: 'supabase.storage.request',
         scenario: 'error',
         expectedSpan:
         {
-          name: 'supabase.storage.list',
+          name: 'supabase.storage.request',
           service: 'test',
-          resource: 'GET /storage/v1/bucket',
+          resource: 'GET bucket',
           type: 'storage',
           meta: {
             component: 'supabase',
@@ -484,16 +462,16 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
     })
   })
 
-  describe('PostgrestBuilder.then() - supabase.database.select', () => {
+  describe('PostgrestBuilder.then() - supabase.database.query', () => {
     it('should satisfy the serverless ownership contract (happy path)', async () => {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.database.select',
+        operationName: 'supabase.database.query',
         scenario: 'happy',
         expectedSpan:
         {
-          name: 'supabase.database.select',
+          name: 'supabase.database.query',
           service: 'test',
           resource: 'SELECT items',
           type: 'sql',
@@ -515,11 +493,11 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.database.select',
+        operationName: 'supabase.database.query',
         scenario: 'error',
         expectedSpan:
         {
-          name: 'supabase.database.select',
+          name: 'supabase.database.query',
           service: 'test',
           resource: 'SELECT items',
           type: 'sql',
@@ -554,10 +532,10 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
         return runServerlessContract({
           agent,
           tracer: meta.tracer,
-          operationName: 'supabase.database.select',
+          operationName: 'supabase.database.query',
           scenario: 'happy',
           expectedSpan: {
-            name: 'supabase.database.select',
+            name: 'supabase.database.query',
             service: 'test',
             resource,
             type: 'sql',
@@ -602,11 +580,11 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       },
       {
         name: 'StorageBucketApi.listBuckets() returns a StorageUnknownError',
-        operationName: 'supabase.storage.list',
+        operationName: 'supabase.storage.request',
         expectedSpan: {
-          name: 'supabase.storage.list',
+          name: 'supabase.storage.request',
           service: 'test',
-          resource: 'GET /storage/v1/bucket',
+          resource: 'GET bucket',
           type: 'storage',
           meta: {
             component: 'supabase',
@@ -668,9 +646,9 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       },
       {
         name: 'PostgrestBuilder.then() returns a PostgrestError',
-        operationName: 'supabase.database.select',
+        operationName: 'supabase.database.query',
         expectedSpan: {
-          name: 'supabase.database.select',
+          name: 'supabase.database.query',
           service: 'test',
           resource: 'SELECT items',
           type: 'sql',
@@ -743,7 +721,7 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.storage.list',
+        operationName: 'supabase.storage.request',
         scenario: 'error',
         expectedSpan: cases[1].expectedSpan,
         run: () => testSetup.storageBucketApiListBucketsRejected(),
@@ -755,7 +733,7 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       return runServerlessContract({
         agent,
         tracer: meta.tracer,
-        operationName: 'supabase.database.select',
+        operationName: 'supabase.database.query',
         scenario: 'error',
         expectedSpan: {
           ...cases[4].expectedSpan,
@@ -777,12 +755,12 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
 
       try {
         const operations = [
-          ['supabase.storage.select', () => testSetup.fetchWithAuth()],
+          ['supabase.storage.request', () => testSetup.storageFileList()],
           ['supabase.http.getuser', () => testSetup.goTrueClientGetUser()],
-          ['supabase.storage.list', () => testSetup.storageBucketApiListBuckets()],
+          ['supabase.storage.request', () => testSetup.storageBucketApiListBuckets()],
           ['supabase.messaging.send', () => testSetup.realtimeChannelSend()],
           ['supabase.http.invoke', () => testSetup.functionsClientInvoke()],
-          ['supabase.database.select', () => testSetup.postgrestBuilderThen()],
+          ['supabase.database.query', () => testSetup.postgrestBuilderThen()],
         ]
 
         for (const [operationName, run] of operations) {
@@ -815,7 +793,7 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
       }, { spanResourceMatch: new RegExp(serverlessRootName.replaceAll('.', '\\.')) })
 
       try {
-        const result = await meta.tracer.trace(serverlessRootName, async () => testSetup.fetchWithAuth())
+        const result = await meta.tracer.trace(serverlessRootName, async () => testSetup.storageFileList())
         await rootTraceAssertion
 
         assert.strictEqual(result.error, null)
