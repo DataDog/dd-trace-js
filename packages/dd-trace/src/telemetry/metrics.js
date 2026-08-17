@@ -31,6 +31,10 @@ function mapToJsonArray (map, filter) {
   return array
 }
 
+/**
+ * @param {Metric} metric
+ * @returns {boolean}
+ */
 function hasPoints (metric) {
   return metric.hasPoints()
 }
