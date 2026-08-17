@@ -55,6 +55,12 @@ class NoopDataset {
     return Promise.resolve({ pushedCount: 0, totalCount: 0 })
   }
 
+  /**
+   * Add tags to a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
   addTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this
@@ -63,6 +69,12 @@ class NoopDataset {
     return this
   }
 
+  /**
+   * Remove tags from a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
   removeTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this
@@ -72,6 +84,12 @@ class NoopDataset {
     return this
   }
 
+  /**
+   * Replace all tags on a dataset record.
+   * @param {number} index Dataset record index.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {NoopDataset} This dataset for chaining.
+   */
   replaceTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this

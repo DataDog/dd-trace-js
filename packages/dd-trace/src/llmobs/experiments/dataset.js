@@ -337,6 +337,10 @@ class Dataset {
     return this.#latestVersion
   }
 
+  /**
+   * Return the tags used to filter this dataset.
+   * @returns {string[]} Dataset record filter tags.
+   */
   filterTags () {
     return [...this.#filterTags]
   }
@@ -449,6 +453,12 @@ class Dataset {
    */
   #detachCommittedTagOperations (pending) {
     pending.inFlightTagOperations = new Map()
+    for (const [recordId] of pending.insertPayloads) {
+      const operations = this.#pendingTagOperations.get(recordId)
+      if (!operations) continue
+      pending.inFlightTagOperations.set(recordId, copyTagOperations(operations))
+      this.#pendingTagOperations.delete(recordId)
+    }
     for (const [recordId, payload] of pending.updatePayloads) {
       const operations = this.#pendingTagOperations.get(recordId)
       if (!operations || !Object.hasOwn(payload, 'tag_operations')) continue
@@ -503,6 +513,8 @@ class Dataset {
       this.#newRecordsById.delete(recordId)
       const update = this.#updatedRecordsById.get(recordId) ??
         updateFromInsertedRecord(recordId, current, payload)
+      const queuedOperations = this.#pendingTagOperations.get(recordId)
+      if (queuedOperations) update.tagOperations = queuedOperations
       this.#updatedRecordsById.set(recordId, update)
     }
 

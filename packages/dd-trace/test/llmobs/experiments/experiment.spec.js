@@ -112,6 +112,26 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('topic:')), ['topic:math', 'topic:logic'])
   })
 
+  it('keeps automatic tags authoritative in fallback experiment spans', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      'input',
+      'expected',
+      {},
+      ['experiment_id:fake', 'dataset_id:fake']
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+    }).run()
+
+    const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_id:')), ['experiment_id:exp'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_id:')), ['dataset_id:ds'])
+  })
+
   it('surfaces backend failures', async () => {
     const createDatasetError = new Error(`POST ${API_BASE_PATH}/proj/datasets failed: HTTP 500 boom`)
     const { client: c } = clientWithMockBackend({ createDatasetError })
@@ -232,6 +252,44 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     }])
     await dataset.push()
     assert.equal(requests.length, 2)
+  })
+
+  it('keeps tag edits made while an insert is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    dataset.addTags(0, ['topic:initial'])
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.removeTags(0, ['topic:initial'])
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'input',
+      expected_output: null,
+      metadata: {},
+      tags: ['topic:initial'],
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      tag_operations: { remove: ['topic:initial'] },
+    }])
   })
 
   it('combines replace tag operations and clears inverse changes', async () => {

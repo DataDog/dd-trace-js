@@ -16,6 +16,7 @@ const {
   recordTagsToObject,
   timestampMs,
   validateEvaluatorName,
+  validateTagsList,
 } = require('../../../src/llmobs/experiments/util')
 
 describe('LLMObs Experiments util', () => {
@@ -78,6 +79,19 @@ describe('LLMObs Experiments util', () => {
       'source:test',
       'experiment_id:exp',
     ])
+  })
+
+  it('preserves record tags that collide with object prototype keys', () => {
+    const tags = recordTagsToObject(['toString:value', '__proto__:prototype', 'constructor:class'])
+
+    assert.equal(tags.toString, 'value')
+    assert.equal(Object.getOwnPropertyDescriptor(tags, '__proto__').value, 'prototype')
+    assert.equal(tags.constructor, 'class')
+    assert.equal(Object.hasOwn(tags, '__proto__'), true)
+  })
+
+  it('rejects record tags without a key', () => {
+    assert.throws(() => validateTagsList([':value']), /malformed/)
   })
 
   it('infers metric types with a normalized JSON fallback', () => {

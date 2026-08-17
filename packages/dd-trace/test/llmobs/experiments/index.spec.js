@@ -264,11 +264,9 @@ describe('LLMObs Experiments facade', () => {
         records: [{ inputData: 'input' }],
       })
 
-      assert.doesNotThrow(() => {
-        dataset.addTags(0)
-        dataset.removeTags(0)
-        dataset.replaceTags(0)
-      })
+      dataset.addTags(0)
+      dataset.removeTags(0)
+      dataset.replaceTags(0)
       assert.deepEqual(dataset.records()[0].tags, [])
     })
   })

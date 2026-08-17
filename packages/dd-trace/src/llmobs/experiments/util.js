@@ -27,7 +27,7 @@ function validateTagsList (tags) {
   if (!Array.isArray(tags)) throw new TypeError('Tags must be an array of strings')
   for (const tag of tags) {
     if (typeof tag !== 'string') throw new TypeError('Each tag must be a string')
-    if (!tag.includes(':')) {
+    if (tag.indexOf(':') <= 0) {
       throw new Error(`Tag '${tag}' is malformed. Tags must be in 'key:value' format (e.g., 'env:prod').`)
     }
   }
@@ -223,10 +223,18 @@ function recordTagsToObject (tags) {
 
     const key = tag.slice(0, separator)
     const value = tag.slice(separator + 1)
-    const existing = result[key]
-    if (existing === undefined) result[key] = value
-    else if (Array.isArray(existing)) existing.push(value)
-    else result[key] = [existing, value]
+    if (!Object.hasOwn(result, key)) {
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+      })
+    } else if (Array.isArray(result[key])) {
+      result[key].push(value)
+    } else {
+      result[key] = [result[key], value]
+    }
   }
   return result
 }
