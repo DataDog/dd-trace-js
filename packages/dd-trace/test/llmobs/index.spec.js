@@ -309,6 +309,124 @@ describe('module', () => {
       )
     })
 
+    it('does not duplicate _dd.p.llmobs_ml_app when already present in x-datadog-tags', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
+    })
+
+    it('preserves non-replaced LLMObs keys from upstream carrier', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.dm=-0',
+          '_dd.p.llmobs_sid=retained-session',
+        ].join(','),
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.dm=-0',
+          '_dd.p.llmobs_sid=retained-session',
+          '_dd.p.llmobs_ml_app=test',
+        ].join(',')
+      )
+    })
+
+    it('updates existing LLMObs tags in x-datadog-tags without duplicating keys', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'new-parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SESSION_ID]: 'new-session',
+        [SAMPLE_RATE]: '0.8',
+        [SAMPLING_DECISION]: '1',
+      })
+
+      const carrier = {
+        'x-datadog-tags': [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.llmobs_parent_id=old-id',
+          '_dd.p.llmobs_ml_app=old-app',
+          '_dd.p.llmobs_sid=old-session',
+        ].join(','),
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.llmobs_parent_id=new-parent-id',
+          '_dd.p.llmobs_ml_app=test',
+          '_dd.p.llmobs_sid=new-session',
+          '_dd.p.llmobs_sr=0.8',
+          '_dd.p.llmobs_sd=1',
+        ].join(',')
+      )
+    })
+
+    it('prevents duplicate tags through the full extraction -> standard propagation -> injection path (#9714)', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'downstream-app', agentlessEnabled: false } })
+
+      const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+      const config = getConfigFresh({ llmobs: { mlApp: 'downstream-app', agentlessEnabled: false } })
+      const propagator = new TextMapPropagator(config)
+
+      const inboundCarrier = {
+        'x-datadog-trace-id': '1234567890',
+        'x-datadog-parent-id': '9876543210',
+        'x-datadog-tags': [
+          '_dd.p.tid=69fe014200000000',
+          '_dd.p.dm=-0',
+          '_dd.p.llmobs_ml_app=upstream-app',
+          '_dd.p.llmobs_sid=upstream-session',
+        ].join(','),
+      }
+
+      const spanContext = propagator.extract(inboundCarrier)
+      assert.ok(spanContext)
+      assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_ml_app'], 'upstream-app')
+      assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_sid'], 'upstream-session')
+
+      const outboundCarrier = {}
+      propagator.inject(spanContext, outboundCarrier)
+
+      const tags = outboundCarrier['x-datadog-tags']
+      assert.ok(tags)
+
+      const mlAppEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_ml_app='))
+      assert.strictEqual(mlAppEntries.length, 1, `Expected exactly one _dd.p.llmobs_ml_app entry in: ${tags}`)
+      assert.strictEqual(mlAppEntries[0], '_dd.p.llmobs_ml_app=downstream-app')
+
+      const sidEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_sid='))
+      assert.strictEqual(sidEntries.length, 1, `Expected exactly one _dd.p.llmobs_sid entry in: ${tags}`)
+      assert.strictEqual(sidEntries[0], '_dd.p.llmobs_sid=upstream-session')
+
+      assert.ok(tags.includes('_dd.p.tid=69fe014200000000'))
+      assert.ok(tags.includes('_dd.p.dm=-0'))
+    })
+
     describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
       let config
 
