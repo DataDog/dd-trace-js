@@ -178,6 +178,7 @@
     "version.js"
   ],
   "dependencies": {
+    "@datadog/apm-data-pipeline": "^0.1.0",
     "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.3.2",
     "opentracing": ">=0.14.7"

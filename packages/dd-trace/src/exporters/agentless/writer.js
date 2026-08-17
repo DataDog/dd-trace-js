@@ -1,31 +1,41 @@
 'use strict'
 
+const { createAgentlessExporter } = require('@datadog/apm-data-pipeline')
+
+const { storage } = require('../../../../datadog-core')
 const getConfig = require('../../config')
 const log = require('../../log')
-const request = require('../common/request')
 const tracerVersion = require('../../../../../package.json').version
 
 const BaseWriter = require('../common/writer')
-const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
+const { AgentEncoder } = require('../../encode/0.4')
 const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
+
+const legacyStorage = storage('legacy')
 
 /**
  * Writer for agentless APM trace intake.
- * Sends traces directly to the Datadog intake endpoint without an agent.
+ * Encodes traces as v0.4 MessagePack and delegates transformation and delivery
+ * to the APM data pipeline.
  */
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
+  #exporter
+  #exporterApiKey
+  #exporterEndpoint
+  #metadata
   #urlMissing = false
 
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
-   * @param {object} [options.metadata] - Metadata to pass to the encoder (hostname, env, etc.)
+   * @param {object} [options.metadata] - Metadata to pass to the data pipeline
    */
   constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
     super({ url })
-    this._encoder = new AgentlessJSONEncoder(this, metadata)
+    this.#metadata = metadata
+    this._encoder = new AgentEncoder(this)
 
     if (!url) {
       try {
@@ -36,7 +46,7 @@ class AgentlessWriter extends BaseWriter {
           site,
           err.message
         )
-        this._url = null
+        this._url = undefined
       }
     }
 
@@ -46,59 +56,25 @@ class AgentlessWriter extends BaseWriter {
     }
   }
 
+  /**
+   * @param {URL} url - The new intake URL.
+   * @returns {void}
+   */
   setUrl (url) {
     super.setUrl(url)
+    this.#closeExporter()
     if (url) {
       this.#urlMissing = false
     }
   }
 
   /**
-   * Flushes accumulated traces to the intake as a single request.
-   * @param {Function} [done] - Callback when send completes
-   */
-  flush (done = () => {}) {
-    if (!request.writable) {
-      const count = this._encoder.count()
-      if (count > 0) {
-        log.error('Maximum number of active requests reached. Dropping %d trace(s).', count)
-      }
-      this._encoder.reset()
-      done()
-      return
-    }
-
-    const count = this._encoder.count()
-
-    if (count === 0) {
-      done()
-      return
-    }
-
-    const payload = this._encoder.makePayload()
-
-    if (payload.length === 0) {
-      log.debug('Skipping send of empty payload')
-      done()
-      return
-    }
-
-    this._sendPayload(payload, count, done)
-  }
-
-  /**
-   * Sends the encoded payload to the intake endpoint.
-   * @param {Buffer} data - The encoded JSON payload
-   * @param {number} count - Number of traces in the payload
-   * @param {Function} done - Callback when complete
+   * @param {Buffer} data - v0.4 MessagePack payload.
+   * @param {number} count - Number of traces in the payload.
+   * @param {Function} done - Callback invoked after delivery completes or fails.
+   * @returns {void}
    */
   _sendPayload (data, count, done) {
-    if (!data || data.length === 0) {
-      log.debug('Skipping send of empty payload')
-      done()
-      return
-    }
-
     if (!this._url) {
       if (!this.#urlMissing) {
         this.#urlMissing = true
@@ -121,81 +97,68 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyMissing = false
 
-    const options = {
-      path: INTAKE_PATH,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'dd-api-key': DD_API_KEY,
-        'X-Datadog-Trace-Count': String(count),
-        'Datadog-Meta-Lang': 'nodejs',
-        'Datadog-Meta-Lang-Version': process.version,
-        'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
-        'Datadog-Meta-Tracer-Version': tracerVersion,
-      },
-      timeout: 15_000,
-      url: this._url,
-    }
-
-    log.debug('Request to the agentless intake: %j', options)
-
-    request(data, options, (err, res, statusCode) => {
-      if (err) {
-        this.#logRequestError(err, statusCode, count)
+    const endpoint = this.#endpoint()
+    const exporter = this.#getExporter(endpoint, DD_API_KEY)
+    // The WASM fallback performs its HTTP request in JavaScript. Keep that
+    // internal request out of the instrumented application's traces.
+    legacyStorage.run({ noop: true }, () => exporter.sendV04(data)).then(
+      () => done(),
+      error => {
+        log.error('Failed to send %d trace(s) to the agentless intake: %s', count, error.message)
         done()
-        return
       }
-
-      log.debug('Response from the agentless intake: %s', res)
-      done()
-    })
+    )
   }
 
   /**
-   * Logs request errors with status-specific guidance.
-   * @param {Error} err - The error object
-   * @param {number} statusCode - HTTP status code (if available)
-   * @param {number} count - Number of traces that were being sent
+   * @returns {string} The full agentless intake endpoint.
    */
-  #logRequestError (err, statusCode, count) {
-    if (statusCode === 401 || statusCode === 403) {
-      log.error(
-        'Authentication failed sending %d trace(s) (status %s). Verify DD_API_KEY is valid.',
-        count,
-        statusCode
-      )
-    } else if (statusCode === 404) {
-      log.error(
-        'Trace intake endpoint not found (status %s). Verify DD_SITE is correctly configured. %d trace(s) dropped.',
-        statusCode,
-        count
-      )
-    } else if (statusCode === 429) {
-      log.error(
-        'Rate limited by trace intake (status 429). %d trace(s) dropped.',
-        count
-      )
-    } else if (statusCode >= 500) {
-      log.error(
-        'Trace intake server error (status %s). %d trace(s) dropped. This may be transient.',
-        statusCode,
-        count
-      )
-    } else if (statusCode) {
-      log.error(
-        'Error sending agentless payload (status %s): %s. %d trace(s) dropped.',
-        statusCode,
-        err.message,
-        count
-      )
-    } else {
-      log.error(
-        'Network error sending %d trace(s) to %s: %s',
-        count,
-        this._url?.hostname || 'unknown',
-        err.message
-      )
+  #endpoint () {
+    const endpoint = new URL(this._url)
+    endpoint.pathname = INTAKE_PATH
+    endpoint.search = ''
+    endpoint.hash = ''
+    return endpoint.href
+  }
+
+  /**
+   * @param {string} endpoint - The full agentless intake endpoint.
+   * @param {string} apiKey - Datadog API key.
+   * @returns {{ sendV04(data: Buffer): Promise<void>, close(): void }} The configured data pipeline exporter.
+   */
+  #getExporter (endpoint, apiKey) {
+    if (this.#exporter && this.#exporterEndpoint === endpoint && this.#exporterApiKey === apiKey) {
+      return this.#exporter
     }
+
+    this.#closeExporter()
+    const config = getConfig()
+    this.#exporter = createAgentlessExporter({
+      endpoint,
+      apiKey,
+      hostname: this.#metadata.hostname,
+      env: this.#metadata.env,
+      service: config.service,
+      version: config.version,
+      runtimeId: this.#metadata.runtimeID,
+      containerId: this.#metadata.containerId,
+      tracerVersion,
+      languageVersion: process.version,
+      languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
+    })
+    this.#exporterApiKey = apiKey
+    this.#exporterEndpoint = endpoint
+    return this.#exporter
+  }
+
+  /**
+   * @returns {void}
+   */
+  #closeExporter () {
+    this.#exporter?.close()
+    this.#exporter = undefined
+    this.#exporterApiKey = undefined
+    this.#exporterEndpoint = undefined
   }
 }
 
