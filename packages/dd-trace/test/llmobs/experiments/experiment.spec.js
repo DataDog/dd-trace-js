@@ -53,7 +53,7 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
 
 describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
-    const { client: c } = clientWithMockBackend()
+    const { client: c, requests } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
     const callsToLlmobs = []
     const llmobs = {
@@ -72,6 +72,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       dataset,
       task: (input) => input.q,
       evaluators: { ok: () => true },
+      config: { temperature: 0 },
     }, llmobs).run()
 
     assert.equal(callsToLlmobs[0][0], 'trace')
@@ -81,6 +82,9 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
+    assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
+      temperature: 0,
+    })
   })
 
   it('surfaces backend failures', async () => {
