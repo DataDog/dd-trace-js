@@ -283,6 +283,49 @@ describe('module', () => {
       )
     })
 
+    it('does not duplicate _dd.p.llmobs_ml_app when already present in x-datadog-tags', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
+    })
+
+    it('updates existing LLMObs tags in x-datadog-tags without duplicating keys', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'new-parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SESSION_ID]: 'new-session',
+        [SAMPLE_RATE]: '0.8',
+        [SAMPLING_DECISION]: '1',
+      })
+
+      const carrier = {
+        'x-datadog-tags':
+          '_dd.p.tid=69fe014200000000,_dd.p.llmobs_parent_id=old-id,_dd.p.llmobs_ml_app=old-app,_dd.p.llmobs_sid=old-session',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.llmobs_parent_id=new-parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=new-session,_dd.p.llmobs_sr=0.8,_dd.p.llmobs_sd=1'
+      )
+    })
+
     describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
       let config
 

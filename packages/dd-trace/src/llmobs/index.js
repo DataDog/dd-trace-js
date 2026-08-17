@@ -163,12 +163,30 @@ function handleLLMObsInjection ({ carrier }) {
   // tags, so it may be undefined here — coalesce before appending.
   const existing = readDatadogTags(carrier)
   let tags = existing || ''
-  if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-  if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
-  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
-  if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
-  if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
-  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
+  if (parentId) {
+    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_ID_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
+  }
+  if (mlApp) {
+    tags = stripTagsetEntry(tags, PROPAGATED_ML_APP_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  }
+  if (sessionId) {
+    tags = stripTagsetEntry(tags, PROPAGATED_SESSION_ID_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
+  }
+  if (sampleRate != null) {
+    tags = stripTagsetEntry(tags, PROPAGATED_SAMPLE_RATE_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
+  }
+  if (samplingDecision != null) {
+    tags = stripTagsetEntry(tags, PROPAGATED_SAMPLING_DECISION_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
+  }
+  if (propagatedTraceId != null) {
+    tags = stripTagsetEntry(tags, PROPAGATED_TRACE_ID_KEY)
+    tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
+  }
   // When a local agent attribution is resolved, strip any stale upstream pagent entries that
   // `_injectTags` may have already written into the carrier (it propagates all `_dd.p.*` from
   // `_trace.tags`). This ensures the downstream sees a consistent id-only or id+name pair
