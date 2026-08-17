@@ -3,7 +3,7 @@
 const log = require('../log')
 const { TOP_LEVEL_KEY } = require('../constants')
 const { normalizeSpan } = require('./tags-processors')
-const { stringifySpanEvents } = require('./0.4')
+const { stringifySpanEvents } = require('./span-events')
 
 // Soft limit for estimated payload size. Triggers an early flush to stay under intake request size limits.
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB

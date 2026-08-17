@@ -1,13 +1,11 @@
 'use strict'
 
 /**
- * Native spans module loader.
+ * Libdatadog pipeline module loader.
  *
- * Provides access to the optional `@datadog/libdatadog` pipeline crate for
- * native span storage. Loading is deferred to first use so package managers
- * can omit optional dependencies in constrained installs. If native spans are
- * selected and `@datadog/libdatadog` is missing or corrupt, the native loader
- * throws instead of silently falling back to JS spans.
+ * Loading is deferred until the native exporter is selected so package managers
+ * can omit the optional dependency in constrained installs. Loader failures are
+ * surfaced to the caller, which distinguishes an omitted dependency from corruption.
  */
 
 const { storage } = require('../../../datadog-core')
@@ -15,12 +13,6 @@ const { storage } = require('../../../datadog-core')
 // Cached module references to avoid repeated require() calls
 // which can cause infinite recursion if fs plugin is active during require
 let NativeSpansInterfaceModule = null
-let NativeDatadogSpanModule = null
-
-// Lazily cached on first call. `OpCode` is read on every span_processor
-// sampling sync; `WasmSpanState`/`wasmMemory` are only read once (at
-// native_spans.js module load) so they don't need separate caches.
-let cachedOpCode = null
 
 // Flag to track if we're currently loading a module to prevent recursion
 let isLoading = false
@@ -67,7 +59,7 @@ function getPipeline () {
   // The agent returns `Datadog-Container-Tags-Hash` whenever the request carried
   // a container id. The legacy writer feeds it to the propagation hash so DBM SQL
   // comments and DSM pathway hashes correlate with container tags; without this
-  // the native path keeps hashing process tags alone. Registered on the module
+  // the libdatadog transport keeps hashing process tags alone. Registered on the module
   // (not the state), so it survives the `setAgentUrl` state rebuild.
   pipeline.setResponseHeaderObserver(observeResponseHeaders)
   return pipeline
@@ -105,44 +97,13 @@ module.exports = {
   },
 
   /**
-   * The OpCode enum from the pipeline crate for change buffer operations.
-   * @type {object}
-   */
-  get OpCode () {
-    if (!cachedOpCode) cachedOpCode = getPipeline().getOpCodes()
-    return cachedOpCode
-  },
-
-  /**
-   * Get the WASM memory for direct buffer access.
-   * @type {WebAssembly.Memory}
-   */
-  get wasmMemory () {
-    return getPipeline().getWasmMemory()
-  },
-
-  /**
-   * The NativeSpansInterface class for managing native span storage.
-   * @type {typeof import('./native_spans')}
+   * The NativeSpansInterface class for managing libdatadog export state.
+   * @type {typeof import('./native-spans')}
    */
   get NativeSpansInterface () {
     if (!NativeSpansInterfaceModule) {
-      NativeSpansInterfaceModule = loadWithNoop(() => require('./native_spans'))
+      NativeSpansInterfaceModule = loadWithNoop(() => require('./native-spans'))
     }
     return NativeSpansInterfaceModule
   },
-
-  /**
-   * The NativeDatadogSpan class for native-backed spans.
-   * @type {typeof import('./span')}
-   */
-  get NativeDatadogSpan () {
-    if (!NativeDatadogSpanModule) {
-      NativeDatadogSpanModule = loadWithNoop(() => require('./span'))
-    }
-    return NativeDatadogSpanModule
-  },
-
-  // Exposed for unit tests; registered on the pipeline module by getPipeline().
-  observeResponseHeaders,
 }

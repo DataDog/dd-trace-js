@@ -1,156 +1,152 @@
 'use strict'
 
-/**
- * End-to-end integration tests against the real libdatadog pipeline.
- *
- * These exercise the tracer's full lifecycle (creation, tagging, finishing,
- * parent-child propagation, link/event serialization, and export) against an
- * actual NativeSpansInterface. Unit-level behavior is covered separately in
- * span.spec.js / span_context.spec.js / native_spans.spec.js / exporter.spec.js.
- */
-
 const assert = require('node:assert/strict')
+
 const sinon = require('sinon')
 
 require('../setup/core')
 
+const FakeAgent = require('../../../../integration-tests/helpers/fake-agent')
 const tags = require('../../../../ext/tags')
 
 const { RESOURCE_NAME, SERVICE_NAME, SPAN_TYPE } = tags
 
 describe('Native Spans Integration', () => {
-  let Tracer
+  let beforeExitHandlers
+  let handlersBefore
+  let agent
+  let sentTraces
   let tracer
-  let exportedSpans
-  let originalMaxListeners
 
-  before(() => {
-    // Each tracer instantiation registers a beforeExit listener inside
-    // NativeExporter. setup/core.js caps process.defaultMaxListeners at 6
-    // for the leak detector. We need a fresh tracer per test, so allow
-    // more listeners just for this suite.
-    originalMaxListeners = process.getMaxListeners()
-    process.setMaxListeners(0)
-  })
+  beforeEach(async () => {
+    beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+    handlersBefore = new Set(beforeExitHandlers)
+    sentTraces = []
+    agent = await new FakeAgent().start()
+    agent.on('message', ({ payload }) => sentTraces.push(...payload))
 
-  after(() => {
-    process.setMaxListeners(originalMaxListeners)
-  })
-
-  beforeEach(() => {
-    exportedSpans = []
-
+    process.env.DD_TRACE_NATIVE_SPAN_EVENTS = 'true'
     delete require.cache[require.resolve('../../src/config')]
     delete require.cache[require.resolve('../../src/tracer')]
 
     const getConfig = require('../../src/config')
-    const config = getConfig({ service: 'test-service' })
-
-    Tracer = require('../../src/tracer')
+    const config = getConfig({
+      flushInterval: 60_000,
+      hostname: '127.0.0.1',
+      port: agent.port,
+      service: 'test-service',
+    })
+    const Tracer = require('../../src/tracer')
     tracer = new Tracer(config)
+  })
 
-    if (tracer._exporter && tracer._exporter.export) {
-      sinon.stub(tracer._exporter, 'export').callsFake((spans) => {
-        exportedSpans.push(...spans)
-      })
+  afterEach(async () => {
+    delete process.env.DD_TRACE_NATIVE_SPAN_EVENTS
+    for (const handler of beforeExitHandlers) {
+      if (!handlersBefore.has(handler)) beforeExitHandlers.delete(handler)
     }
-  })
-
-  afterEach(() => {
     sinon.restore()
+    await agent.stop()
   })
 
-  it('initializes with NativeSpansInterface + NativeExporter wired into the tracer', () => {
+  function materialize () {
+    return new Promise((resolve) => tracer._exporter.flush(resolve))
+  }
+
+  /**
+   * @param {string} name Span name
+   * @returns {object|undefined}
+   */
+  function findSpan (name) {
+    for (const trace of sentTraces) {
+      const span = trace.find(span => span.name === name)
+      if (span) return span
+    }
+  }
+
+  it('wires one JS span model through the native exporter', () => {
     const NativeExporter = require('../../src/exporters/native')
-    assert.ok(tracer._nativeSpans, 'tracer should have _nativeSpans')
-    assert.ok(tracer._exporter instanceof NativeExporter, 'tracer should use NativeExporter')
+    const DatadogSpan = require('../../src/opentracing/span')
+
+    const span = tracer.startSpan('request')
+
+    assert.ok(span instanceof DatadogSpan)
+    assert.ok(tracer._exporter instanceof NativeExporter)
+    assert.strictEqual(span.context()._nativeSpanId, undefined)
   })
 
-  it('runs a full span lifecycle end-to-end (create, tag, link, event, finish, export)', (done) => {
-    const linked = tracer.startSpan('linked')
-    linked.finish()
+  it('encodes finalized tags, links, events, and meta_struct for the binding', async () => {
+    const linked = tracer.startSpan('linked', { startTime: 1000 })
+    linked.finish(1001)
 
     const span = tracer.startSpan('lifecycle', {
+      startTime: 1000,
       tags: { 'custom.tag': 'custom-value', 'numeric.tag': 42 },
     })
     span.setTag('http.url', 'https://example.com')
     span.addLink({ context: linked.context(), attributes: { reason: 'test' } })
-    span.addEvent('event-1', { key: 'value' })
+    span.addEvent('event-1', { key: 'value' }, 1000.5)
+    span.meta_struct = {
+      '_dd.appsec.s.req.body': {
+        account: 'ruben',
+        omitted: undefined,
+      },
+    }
+    span.finish(1001)
+    await materialize()
 
-    const start = Date.now()
-    while (Date.now() - start < 5) { /* busy wait for measurable duration */ }
-    span.finish()
-
-    assert.ok(span._duration > 0, 'duration should be positive')
-    assert.strictEqual(span.context()._isFinished, true)
-    assert.strictEqual(span.context().getTags()['custom.tag'], 'custom-value')
-    assert.strictEqual(span.context().getTags()['numeric.tag'], 42)
-    assert.strictEqual(span.context().getTags()['http.url'], 'https://example.com')
-
-    const linksTag = JSON.parse(span.context().getTags()['_dd.span_links'])
-    assert.strictEqual(linksTag.length, 1)
-    // Assert the recorded event list directly rather than a serialized form:
-    // `_events` is populated by addEvent regardless of DD_TRACE_NATIVE_SPAN_EVENTS,
-    // so this holds whether events serialize to the native top-level `span_events`
-    // field (flag on) or the `events` meta fallback (flag off, the default).
-    assert.strictEqual(span._events.length, 1)
-    assert.strictEqual(span._events[0].name, 'event-1')
-
-    setTimeout(() => {
-      const exported = exportedSpans.find(s => s.context()._name === 'lifecycle')
-      assert.ok(exported, 'finished span should reach the exporter')
-      done()
-    }, 50)
+    const exported = findSpan('lifecycle')
+    assert.ok(exported)
+    assert.strictEqual(exported.meta['custom.tag'], 'custom-value')
+    assert.strictEqual(exported.metrics['numeric.tag'], 42)
+    assert.strictEqual(JSON.parse(exported.meta['_dd.span_links']).length, 1)
+    assert.strictEqual(exported.span_events[0].name, 'event-1')
+    assert.ok(exported.meta_struct['_dd.appsec.s.req.body'] instanceof Uint8Array)
   })
 
-  it('only finishes once (double-finish is a no-op)', () => {
+  it('only finishes once', async () => {
     const span = tracer.startSpan('double-finish')
-    const processSpy = sinon.spy(tracer._processor, 'process')
+    const processSpan = sinon.spy(tracer._processor, 'process')
 
     span.finish()
     span.finish()
+    await materialize()
 
-    assert.strictEqual(processSpy.callCount, 1, 'processor.process should be called once')
+    sinon.assert.calledOnce(processSpan)
   })
 
-  it('propagates parent → child via tracer.trace under an active scope and exports both', (done) => {
+  it('exports a parent and child in one finalized chunk', async () => {
     const parent = tracer.startSpan('parent')
 
     tracer.scope().activate(parent, () => {
-      tracer.trace('child', {}, (child) => {
-        assert.strictEqual(
-          child.context()._parentId.toString(),
-          parent.context()._spanId.toString(),
-          'child._parentId should be the active parent span'
-        )
-        assert.strictEqual(
-          child.context()._trace,
-          parent.context()._trace,
-          'parent and child share the trace object'
-        )
+      tracer.trace('child', {}, child => {
+        assert.strictEqual(child.context()._parentId.toString(), parent.context()._spanId.toString())
+        assert.strictEqual(child.context()._trace, parent.context()._trace)
       })
     })
-
     parent.finish()
+    await materialize()
 
-    setTimeout(() => {
-      const parentExport = exportedSpans.find(s => s.context()._name === 'parent')
-      const childExport = exportedSpans.find(s => s.context()._name === 'child')
-      assert.ok(parentExport, 'parent should be exported')
-      assert.ok(childExport, 'child should be exported')
-      done()
-    }, 50)
+    assert.ok(findSpan('parent'))
+    assert.ok(findSpan('child'))
+    assert.strictEqual(sentTraces.length, 1)
   })
 
-  it('applies service/resource/type via tracer.trace options', () => {
-    tracer.trace('typed', { service: 'svc', resource: 'GET /x', type: 'web' }, (span) => {
+  it('applies service, resource, and type through tracer.trace options', async () => {
+    tracer.trace('typed', { service: 'svc', resource: 'GET /x', type: 'web' }, span => {
       assert.strictEqual(span.context().getTags()[SERVICE_NAME], 'svc')
       assert.strictEqual(span.context().getTags()[RESOURCE_NAME], 'GET /x')
       assert.strictEqual(span.context().getTags()[SPAN_TYPE], 'web')
     })
+    await materialize()
+
+    const exported = findSpan('typed')
+    assert.strictEqual(exported.service, 'svc')
+    assert.strictEqual(exported.resource, 'GET /x')
+    assert.strictEqual(exported.type, 'web')
   })
 
-  it('syncs final tag state without stale meta or metric representations', () => {
+  it('uses only the final representation after tag replacement and deletion', async () => {
     const span = tracer.startSpan('final-tags')
 
     span.setTag('dynamic.tag', 'first')
@@ -159,55 +155,49 @@ describe('Native Spans Integration', () => {
     span.setTag('removed.tag', undefined)
     span.addTags({ obj: { a: 1, b: 'x' } })
     span.context().clearTags()
+    span.setTag('service.name', 'test-service')
     span.setTag('dynamic.tag', 42)
     span.finish()
+    await materialize()
 
-    tracer._nativeSpans.flushChangeQueue()
-    const nativeId = span.context().toBigIntSpanId()
-    const state = tracer._nativeSpans._state
-
-    assert.equal(state.getMetaAttr(nativeId, 'dynamic.tag'), null)
-    assert.strictEqual(state.getMetricAttr(nativeId, 'dynamic.tag'), 42)
-    assert.equal(state.getMetaAttr(nativeId, 'removed.tag'), null)
-    assert.equal(state.getMetricAttr(nativeId, 'obj.a'), null)
-    assert.equal(state.getMetaAttr(nativeId, 'obj.b'), null)
+    const exported = findSpan('final-tags')
+    assert.strictEqual(exported.meta['dynamic.tag'], undefined)
+    assert.strictEqual(exported.metrics['dynamic.tag'], 42)
+    assert.strictEqual(exported.meta['removed.tag'], undefined)
+    assert.strictEqual(exported.metrics['obj.a'], undefined)
+    assert.strictEqual(exported.meta['obj.b'], undefined)
   })
 
-  it('syncs the final error bit so OK-style clears override earlier error tags', () => {
+  it('uses the final cleared error state', async () => {
     const span = tracer.startSpan('final-error')
 
     span.setTag('error.message', 'first')
     span.context().deleteTag('error.message')
     span.setTag('error', 0)
     span.finish()
+    await materialize()
 
-    tracer._nativeSpans.flushChangeQueue()
-    const nativeId = span.context().toBigIntSpanId()
-    const state = tracer._nativeSpans._state
-
-    assert.strictEqual(state.getError(nativeId), 0)
-    assert.equal(state.getMetaAttr(nativeId, 'error.message'), null)
+    const exported = findSpan('final-error')
+    assert.strictEqual(exported.error, 0)
+    assert.strictEqual(exported.meta['error.message'], undefined)
   })
 
-  it('propagates errors thrown inside tracer.trace callbacks', () => {
+  it('propagates errors thrown inside tracer.trace callbacks', async () => {
     const error = new Error('test')
     assert.throws(() => tracer.trace('erroring', {}, () => { throw error }), /^Error: test$/)
+    await materialize()
   })
 
-  it('round-trips trace context through inject + extract', () => {
+  it('round-trips trace context through inject and extract', async () => {
     const span = tracer.startSpan('inject-source')
     const carrier = {}
 
     tracer.inject(span.context(), 'text_map', carrier)
     const extracted = tracer.extract('text_map', carrier)
 
-    assert.ok(extracted, 'should extract a context')
-    assert.strictEqual(
-      extracted._traceId.toString(),
-      span.context()._traceId.toString(),
-      'extracted traceId should match injected'
-    )
-
+    assert.ok(extracted)
+    assert.strictEqual(extracted._traceId.toString(), span.context()._traceId.toString())
     span.finish()
+    await materialize()
   })
 })

@@ -4,7 +4,6 @@ const os = require('os')
 const fs = require('fs')
 const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
-const JsSpanProcessor = require('../js_span_processor')
 const getExporter = require('../exporter')
 const exporters = require('../../../../ext/exporters')
 const PrioritySampler = require('../priority_sampler')
@@ -25,9 +24,8 @@ const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
 
-// Lazy-loaded so the libdatadog initialization cost is only paid the first
-// time native spans are selected. A corrupt native install still fails hard;
-// an omitted optional @datadog/libdatadog can fall back to JS agent export.
+// Lazy-loaded so libdatadog initialization is only paid when its exporter is selected.
+// A corrupt install still fails hard; an omitted optional dependency can fall back.
 let nativeModule
 function getNativeModule () {
   if (nativeModule === undefined) {
@@ -36,8 +34,8 @@ function getNativeModule () {
   return nativeModule
 }
 
-// Two distinct ways the native pipeline can be unavailable on a runtime that is
-// otherwise fine, both of which must degrade to the JS pipeline rather than
+// Two distinct ways the native exporter can be unavailable on a runtime that is
+// otherwise fine, both of which must degrade to a JS exporter rather than
 // abort tracer construction (proxy.js swallows the throw into a NoopTracer, so
 // rethrowing here silently disables tracing altogether):
 //
@@ -70,7 +68,7 @@ class DatadogTracer {
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
 
-    // Exporters that consume JS-formatted spans stay on the JS pipeline. Lambda
+    // Exporters that consume JS-formatted spans stay on the JS exporter pipeline. Lambda
     // also uses it unless native-only OTLP trace export was requested.
     const configuredExporter = config.experimental?.exporter
     const useOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
@@ -84,7 +82,7 @@ class DatadogTracer {
       !useOtlpExporter
     // A Lambda with neither the Datadog extension layer nor the mini agent has no
     // local agent to receive traces: the Datadog Forwarder ships them from stdout
-    // instead. Probe for both markers exactly as the pre-native-spans exporter
+    // instead. Probe for both markers exactly as the previous exporter
     // selection did, otherwise these functions POST every span to a loopback port
     // nothing listens on (config forces flushInterval=0 there) and lose all traces.
     //
@@ -99,25 +97,25 @@ class DatadogTracer {
       !fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) &&
       !fs.existsSync(DATADOG_MINI_AGENT_PATH)
     const useLambdaLogExporter = useLambdaJsPipeline && lambdaWithoutLocalAgent
-    // A custom DNS `lookup` cannot be honoured on the native path. libdatadog's
+    // A custom DNS `lookup` cannot be honoured by the native exporter. libdatadog's
     // shipped transport builds its own `http.request` options and exposes no hook
     // for them (only `setStorage` and the response-header observer), so the
     // callback would be silently dropped and every payload would go wherever the
     // system resolver points. Anyone setting `lookup` is resolving the agent
     // through custom service discovery, so ignoring it is worse than not using
-    // native spans: run them on the JS pipeline, which threads `lookup` into
+    // the native exporter: use the JS agent exporter, which threads `lookup` into
     // every agent request (exporters/agent/writer.js).
     //
     // Ask config where the value came from rather than comparing it to
     // `dns.lookup`: the dns plugin wraps `dns.lookup` in-place, so an identity
     // check reports "custom" for every default install once that instrumentation
     // is active. A config without `getOrigin` (plain object in tests) is treated
-    // as the default, which keeps the native pipeline.
+    // as the default, which keeps the native exporter.
     //
     // Configured JS exporters do not use the native transport.
     //
     // OTLP is excluded for a harder reason: OTLP export lives in libdatadog, so
-    // the JS pipeline cannot do it at all. Routing there would quietly ship every
+    // the JS exporter cannot do it at all. Routing there would quietly ship every
     // span to the agent instead of the configured collector, which is a worse
     // failure than resolving the collector with the system resolver. OTLP keeps
     // precedence exactly as it does for the Lambda pipeline above, and the
@@ -137,9 +135,9 @@ class DatadogTracer {
       !useLambdaJsPipeline &&
       !config.isCiVisibility
 
-    // Built once for every pipeline: the JS and native processors both take it,
-    // and config forces DD_TRACE_STATS_COMPUTATION_ENABLED when it is enabled, so
-    // a branch that omits it silently ships v0.6 client stats to the agent instead.
+    // Built once for every exporter pipeline. Config forces
+    // DD_TRACE_STATS_COMPUTATION_ENABLED when it is enabled, so a branch that
+    // omits it silently ships v0.6 client stats to the agent instead.
     let otlpStatsExporter
     if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
       const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
@@ -147,7 +145,6 @@ class DatadogTracer {
     }
 
     if (config.isCiVisibility || useConfiguredJsExporter || useLambdaJsPipeline || useCustomLookup) {
-      this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
@@ -161,7 +158,7 @@ class DatadogTracer {
                 ? require('../exporters/agent')
                 : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
-      this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
+      this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
       this._url = this._exporter._url
 
       log.debug(useConfiguredJsExporter
@@ -177,21 +174,21 @@ class DatadogTracer {
     } else {
       if (unsupportedApmExporter) {
         log.warn(
-          'Native spans mode ignores unsupported experimental exporter "%s"; using native agent exporter',
+          'Native exporter ignores unsupported experimental exporter "%s"; using native agent exporter',
           configuredExporter
         )
       }
-      this._useJsSpans = false
+      let useNativeExporter = true
       let NativeSpansInterface
       try {
         NativeSpansInterface = getNativeModule().NativeSpansInterface
-      } catch (e) {
-        if (isNativeUnavailable(e)) {
+      } catch (error) {
+        if (isNativeUnavailable(error)) {
           const reason = typeof WebAssembly === 'undefined'
             ? 'this runtime has no WebAssembly support'
             : 'optional dependency @datadog/libdatadog is not installed'
           const useJsOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp'
-          this._useJsSpans = true
+          useNativeExporter = false
           this._isCiVisibility = false
           if (useJsOtlpExporter) {
             const { createOtlpTraceExporter } = require('../opentelemetry/trace')
@@ -202,28 +199,30 @@ class DatadogTracer {
               : require('../exporters/agent')
             this._exporter = new Exporter(config, this._prioritySampler)
           }
-          this._processor = new JsSpanProcessor(
+          this._processor = new SpanProcessor(
             this._exporter,
             this._prioritySampler,
             config,
             otlpStatsExporter
           )
           this._url = this._exporter._url
-          log.warn('Native spans unavailable because %s; using JS span pipeline', reason)
+          log.warn('Native exporter unavailable because %s; using JS exporter pipeline', reason)
         } else {
-          throw e
+          throw error
         }
       }
 
-      if (!this._useJsSpans) {
+      if (useNativeExporter) {
         const { url, hostname = defaults.hostname, port } = config
+        const nativeStatsEnabled = config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED === true &&
+          !config.OTEL_TRACES_SPAN_METRICS_ENABLED
         const agentUrl = url || new URL(format({
           protocol: 'http:',
           hostname,
           port,
         }))
 
-        this._nativeSpans = new NativeSpansInterface({
+        const nativeSpans = new NativeSpansInterface({
           agentUrl: agentUrl.toString(),
           tracerVersion: pkg.version,
           lang: 'nodejs',
@@ -238,30 +237,28 @@ class DatadogTracer {
           // DD_TRACE_STATS_COMPUTATION_ENABLED=true so the OTLP stats exporter runs,
           // but the native concentrator must NOT also ship v0.6 stats. Route stats
           // to OTLP only in that case by leaving the native concentrator disabled.
-          statsEnabled: (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
-          !config.OTEL_TRACES_SPAN_METRICS_ENABLED) || false,
+          statsEnabled: nativeStatsEnabled,
           hostname: config.hostname || os.hostname(),
           env: config.env || '',
           appVersion: config.version || '',
           runtimeId: config.tags?.['runtime-id'] || '',
-          otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
           // Advertise Datadog-Client-Computed-Stats when we compute stats
           // client-side or run in APM-standalone (apmTracingEnabled=false), so the
           // agent skips its own APM stats/sampling for these traces.
           clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
         })
 
-        this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+        this._exporter = new NativeExporter(config, this._prioritySampler, nativeSpans)
         this._processor = new SpanProcessor(
           this._exporter,
           this._prioritySampler,
           config,
-          this._nativeSpans,
-          otlpStatsExporter
+          otlpStatsExporter,
+          nativeStatsEnabled
         )
         this._url = agentUrl
 
-        log.debug('Native spans mode enabled')
+        log.debug('Native exporter enabled')
       }
     }
 
@@ -292,21 +289,7 @@ class DatadogTracer {
       links: options.links,
     }
 
-    let span
-    if (this._useJsSpans) {
-      // CI Visibility + the electron exporter use plain JS spans (see the constructor).
-      span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
-    } else {
-      const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
-      span = new NativeDatadogSpan(
-        this,
-        this._processor,
-        this._prioritySampler,
-        fields,
-        this._debug,
-        this._nativeSpans
-      )
-    }
+    const span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
@@ -322,17 +305,7 @@ class DatadogTracer {
       ctx.setTag('service.name', this._service)
     }
 
-    // As per unified service tagging, a span whose service differs from the
-    // global service must not inherit the global version. The JS formatter
-    // dropped the `undefined` version override at format time; the native tag
-    // sync skips undefined values (it can't clear an already-synced meta), so
-    // omit version from the config tags up front instead.
-    if (options.tags?.service && options.tags.service !== this._service) {
-      const { version, ...configTagsWithoutVersion } = this._config.tags
-      span.addTags(configTagsWithoutVersion)
-    } else {
-      span.addTags(this._config.tags)
-    }
+    span.addTags(this._config.tags)
     span.addTags(options.tags)
 
     return span

@@ -1,47 +1,26 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const nock = require('nock')
-
 const guard = require('../startup-guard')
-const { createNativeSpanDrain } = require('../native-span-drain')
+const eraseTrace = require('../../../packages/dd-trace/src/span-processor-state')
 
-nock.disableNetConnect()
-nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).reply(200, '{}')
-
-const { FINISH, SHAPE = 'plain' } = process.env
-
-const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
-const nativeSpans = tracer._tracer._nativeSpans
-const nativeSpanDrain = SHAPE === 'tags-and-otel' ? createNativeSpanDrain(tracer) : undefined
-
-let queuedSpans = 0
+const tracer = require('../../..').init()
 
 /** @param {import('../../../packages/dd-trace/src/opentracing/span')} span */
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
-  if (nativeSpanDrain) {
-    nativeSpanDrain.add(span)
-  } else if (nativeSpans && ++queuedSpans === BATCH) {
-    // This benchmark excludes processing and export; discard queued native mutations before the buffer fills.
-    nativeSpans.resetChangeQueue()
-    queuedSpans = 0
-  }
-  this._erase(trace, [])
+  eraseTrace(trace, [])
 }
 
-// Total spans created per process. The count stays env-driven so CI can keep
-// each native-mode variant under the job timeout while still making tracer load
-// a small share of the measured run.
+const { FINISH, SHAPE = 'plain' } = process.env
+
+// Keep the operation count tunable because the span shapes cross the allocation
+// cliff at different points.
 const OPERATIONS = Number(process.env.OPERATIONS)
 
 // finish-later defers the finish so it runs off the active-span path. Holding all
-// OPERATIONS spans live at once would blow the heap (a 1M array of spans is ~1.6 GB);
-// instead run in fixed-size batches so the deferred-finish path is still exercised
-// while live memory stays flat. The batch size sets peak live spans, hence major-GC
-// pause size: 10k drove run-to-run jitter (the major share of finish-later's noise),
-// 500 added loop/reset overhead and got noisy again, 2000 sits in the valley (lower
-// stddev and ~10% faster locally). Overridable to re-sweep if the span shape changes.
+// operations live at once would grow the heap with the workload. Fixed-size batches
+// still exercise deferred finish while keeping live memory flat.
 const BATCH = Number(process.env.BATCH) || 2000
 
 const spans = []
@@ -113,43 +92,27 @@ function startOne () {
   return tracer.startSpan('some.span.name', {})
 }
 
-async function main () {
-  await nativeSpanDrain?.drain()
-
-  guard.loopStart()
-  if (FINISH === 'now' && nativeSpanDrain) {
-    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-      startOne().finish()
-      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
-    }
-  } else if (FINISH === 'now') {
-    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-      startOne().finish()
-    }
-  } else {
-    // Deferred finish in batches: start BATCH spans, finish them after the batch is
-    // built (so each finishes off the active path), then drop the references.
-    let remaining = OPERATIONS
-    while (remaining > 0) {
-      const size = remaining < BATCH ? remaining : BATCH
-      for (let i = 0; i < size; i++) {
-        spans.push(startOne())
-      }
-      for (let i = 0; i < size; i++) {
-        spans[i].finish()
-      }
-      spans.length = 0
-      remaining -= size
-      if (nativeSpanDrain?.needsDrain()) await nativeSpanDrain.drain()
-    }
+guard.loopStart()
+if (FINISH === 'now') {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+    startOne().finish()
   }
-  await nativeSpanDrain?.drain()
-  nativeSpans?.resetChangeQueue()
-  // Native-mode CI counts are intentionally lower than the old JS-only counts so
-  // the candidate shard finishes before the job timeout. The older baseline source
-  // can run those counts in under a second, so allow a higher startup share there
-  // instead of failing before the A/B result is recorded.
-  guard.done(0.50)
+} else {
+  // Deferred finish in batches: start BATCH spans, finish them after the batch is
+  // built (so each finishes off the active path), then drop the references.
+  let remaining = OPERATIONS
+  while (remaining > 0) {
+    const size = remaining < BATCH ? remaining : BATCH
+    for (let i = 0; i < size; i++) {
+      spans.push(startOne())
+    }
+    for (let i = 0; i < size; i++) {
+      spans[i].finish()
+    }
+    spans.length = 0
+    remaining -= size
+  }
 }
-
-main()
+// These allocation-heavy variants cannot grow enough to meet the default startup
+// share without crossing the GC cliff.
+guard.done(0.15)
