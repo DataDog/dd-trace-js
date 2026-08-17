@@ -5,7 +5,6 @@ const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/writers')
 const telemetry = require('../telemetry')
 const { fetchAgentInfo } = require('../../agent/info')
 
-// TODO: Use the shared utilities in src/evp_proxy when LLMObs migrates this product-specific fallback policy.
 /**
  * @param {import('../../config/config-base')} config
  * @param {(agentless: boolean) => void} setWritersAgentlessValue

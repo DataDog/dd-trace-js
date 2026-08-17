@@ -8,7 +8,6 @@ const request = require('../request')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
-// TODO: Use the shared utilities in src/evp_proxy when this product migrates its EVP version policy.
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 

@@ -438,7 +438,6 @@
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/evp_proxy/ @DataDog/lang-platform-js
-/packages/dd-trace/src/guardrails/ @DataDog/lang-platform-js
 /packages/dd-trace/src/heap_snapshots.js @DataDog/lang-platform-js
 /packages/dd-trace/src/histogram.js @DataDog/lang-platform-js
 /packages/dd-trace/src/id.js @DataDog/lang-platform-js
@@ -460,7 +459,6 @@
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
-/packages/dd-trace/test/encode/ @DataDog/lang-platform-js
 /packages/dd-trace/test/evp_proxy/ @DataDog/lang-platform-js
 /packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
