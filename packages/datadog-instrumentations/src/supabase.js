@@ -2,9 +2,7 @@
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('@supabase/supabase-js')) {
-  addHook(hook, exports => exports)
-}
+addHook({ name: '@supabase/supabase-js', versions: ['>=2.112.2 <3'] }, exports => exports)
 
 for (const hook of getHooks('@supabase/auth-js')) {
   addHook(hook, exports => exports)

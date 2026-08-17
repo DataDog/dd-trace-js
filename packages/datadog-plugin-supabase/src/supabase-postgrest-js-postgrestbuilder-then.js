@@ -26,7 +26,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     const operation = path.includes('/rpc/') ? 'CALL' : operationByMethod[method] || method
     const resource = `${operation} ${path.slice(path.lastIndexOf('/') + 1)}`
 
-    const span = this.startSpan('supabase.database.select', {
+    const span = this.startSpan('supabase.database.query', {
       service: getService(this.config.service, this.tracer._service),
       type: 'sql',
       resource,

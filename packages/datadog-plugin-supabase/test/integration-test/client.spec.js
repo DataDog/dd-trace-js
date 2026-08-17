@@ -16,9 +16,9 @@ const rootName = 'serverless.test.invocation'
 const evidencePath = process.env.DD_APM_SERVERLESS_LOCAL_EVIDENCE
 const expectedOperations = [
   {
-    operationName: 'supabase.storage.select',
-    spanName: 'supabase.storage.select',
-    resource: 'POST /storage/v1/object/list/files',
+    operationName: 'supabase.storage.request',
+    spanName: 'supabase.storage.request',
+    resource: 'POST object/list',
     meta: {
       component: 'supabase',
       'http.method': 'POST',
@@ -36,9 +36,9 @@ const expectedOperations = [
     },
   },
   {
-    operationName: 'supabase.storage.list',
-    spanName: 'supabase.storage.list',
-    resource: 'GET /storage/v1/bucket',
+    operationName: 'supabase.storage.request',
+    spanName: 'supabase.storage.request',
+    resource: 'GET bucket',
     meta: {
       component: 'supabase',
       'http.method': 'GET',
@@ -67,8 +67,8 @@ const expectedOperations = [
     },
   },
   {
-    operationName: 'supabase.database.select',
-    spanName: 'supabase.database.select',
+    operationName: 'supabase.database.query',
+    spanName: 'supabase.database.query',
     resource: 'SELECT items',
     meta: {
       component: 'supabase',
@@ -125,11 +125,15 @@ describe('esm', () => {
 
         const spans = receivedTraces.flat()
         const rootSpans = spans.filter(span => span.name === rootName)
+        const supabaseSpans = spans.filter(span => span.meta?.component === 'supabase')
         assert.strictEqual(rootSpans.length, 1)
+        assert.strictEqual(supabaseSpans.length, expectedOperations.length)
         const rootSpan = rootSpans[0]
 
         for (const expected of expectedOperations) {
-          const operationSpans = spans.filter(span => span.name === expected.spanName)
+          const operationSpans = spans.filter(span => (
+            span.name === expected.spanName && span.resource === expected.resource
+          ))
           assert.strictEqual(operationSpans.length, 1)
 
           const operationSpan = operationSpans[0]

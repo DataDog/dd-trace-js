@@ -40,8 +40,6 @@
   "@supabase/realtime-js/dist/module/RealtimeChannel.js": "@supabase/realtime-js",
   "@supabase/storage-js/dist/index.cjs": "@supabase/storage-js",
   "@supabase/storage-js/dist/index.mjs": "@supabase/storage-js",
-  "@supabase/supabase-js/dist/index.cjs": "@supabase/supabase-js",
-  "@supabase/supabase-js/dist/index.mjs": "@supabase/supabase-js",
   "@wdio/cli/build/index.js": "@wdio/cli",
   "@wdio/jasmine-framework/build/index.js": "@wdio/jasmine-framework",
   "@wdio/local-runner/build/index.js": "@wdio/local-runner",
