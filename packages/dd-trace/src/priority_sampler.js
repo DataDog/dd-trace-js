@@ -20,6 +20,10 @@ const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
 const { formatKnuthRate } = require('./util')
+const {
+  isInstrumentationHttpResource,
+  otelHttpResourceName,
+} = require('./plugins/util/http-otel-semantics')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -64,8 +68,8 @@ class PrioritySampler {
    * @param {string} env - The environment name (e.g., "production", "staging").
    * @param {SamplingConfig} [config] - The configuration object for sampling.
    */
-  constructor (env, config) {
-    this.configure(env, config)
+  constructor (env, config, tracerConfig) {
+    this.configure(env, config, tracerConfig)
     this.update({})
   }
 
@@ -74,8 +78,9 @@ class PrioritySampler {
    * @param {string} env
    * @param {SamplingConfig} config
    */
-  configure (env, config = {}) {
+  configure (env, config = {}, tracerConfig = {}) {
     const { sampleRate, provenance, rateLimit = 100, rules } = config
+    this._otelHttpSemanticsEnabled = tracerConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED === true
     this._env = env
     this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
@@ -105,10 +110,35 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
+    // A completed decision must be immutable. In particular, do not rewrite the resource
+    // every time propagation asks the sampler for an already-decided trace.
+    if (context._sampling.priority !== undefined) return
+
     const root = context._trace.started[0]
 
+    if (this._otelHttpSemanticsEnabled && root && !context._otelHttpResourceNormalizedForSampling) {
+      const tags = root.context().getTags()
+      const method = tags['http.method']
+      if (method !== undefined) {
+        const samplingResource = otelHttpResourceName(method, tags['http.route'])
+        const resourceIsOwnedByInstrumentation =
+          isInstrumentationHttpResource(tags.resource, method) &&
+          isInstrumentationHttpResource(tags['resource.name'], method)
+        if (resourceIsOwnedByInstrumentation && tags.resource === undefined && tags['resource.name'] === undefined) {
+          tags['resource.name'] = samplingResource
+        } else if (resourceIsOwnedByInstrumentation) {
+          if (tags.resource !== undefined) {
+            tags.resource = samplingResource
+          }
+          if (tags['resource.name'] !== undefined) {
+            tags['resource.name'] = samplingResource
+          }
+        }
+        context._otelHttpResourceNormalizedForSampling = true
+      }
+    }
+
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
-    if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
     log.trace(span, auto)

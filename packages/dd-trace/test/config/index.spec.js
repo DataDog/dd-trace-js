@@ -804,6 +804,15 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
+  it('should force OTLP traces export when OTel HTTP semantics are enabled', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+  })
+
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
@@ -2444,6 +2453,23 @@ describe('Config', () => {
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
       assert.strictEqual(config.spanComputePeerService, true)
+    })
+
+    it('should disable peer service when OTel HTTP semantics are enabled', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.spanAttributeSchema, 'v0')
+      assert.strictEqual(config.spanComputePeerService, false)
+      assert(log.warn.calledWith(
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
+      ))
+      assert(log.warn.calledWith(
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
+      ))
     })
   })
 

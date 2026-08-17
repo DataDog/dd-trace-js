@@ -229,6 +229,44 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
 
+    it('applies the root sampling priority to every span in a trace', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const root = createMockSpan({
+        parent_id: id('0'),
+        metrics: { _sampling_priority_v1: 0 },
+      })
+      const child = createMockSpan({
+        span_id: id('abcdef1234567891'),
+        parent_id: root.span_id,
+        metrics: { _sampling_priority_v1: 2 },
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([child, root]))
+      const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+      assert.strictEqual(spans[0].flags, 0)
+      assert.strictEqual(spans[1].flags, 0)
+    })
+
+    it('sets the sampled flag on every span when the root is kept', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const root = createMockSpan({
+        parent_id: id('0'),
+        metrics: { _sampling_priority_v1: 2 },
+      })
+      const child = createMockSpan({
+        span_id: id('abcdef1234567891'),
+        parent_id: root.span_id,
+        metrics: {},
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([root, child]))
+      const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+      assert.strictEqual(spans[0].flags, 1)
+      assert.strictEqual(spans[1].flags, 1)
+    })
+
     it('maps span kind correctly', () => {
       const transformer = new OtlpTraceTransformer({})
 
@@ -642,17 +680,14 @@ describe('OpenTelemetry Traces', () => {
         assert.deepStrictEqual(byKey['server.address'], { stringValue: 'localhost' })
       })
 
-      it('leaves a non-numeric int-typed attribute as a string rather than emitting NaN', () => {
+      it('omits a malformed int-typed OTel attribute', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({ meta: { 'http.response.status_code': 'bogus' }, metrics: {} })
 
         const decoded = decodePayload(transformer.transformSpans([span]))
         const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
 
-        assert.deepStrictEqual(
-          attributes.find(({ key }) => key === 'http.response.status_code').value,
-          { stringValue: 'bogus' }
-        )
+        assert.strictEqual(attributes.find(({ key }) => key === 'http.response.status_code'), undefined)
       })
 
       it('does not promote the int-typed keys when OTel semantics are disabled', () => {

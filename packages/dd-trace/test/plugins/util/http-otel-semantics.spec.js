@@ -232,7 +232,7 @@ describe('http-otel-semantics', () => {
         resource: 'PROPFIND /p',
       }
       applyHttpOtelSemantics(serverSpan)
-      assert.strictEqual(serverSpan.resource, 'HTTP /p')
+      assert.strictEqual(serverSpan.resource, 'HTTP')
 
       const clientSpan = {
         meta: { 'span.kind': 'client', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' },
@@ -244,15 +244,49 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(clientSpan.resource, 'HTTP')
     })
 
-    it('leaves a known-method span name unchanged', () => {
+    it('does not use the URL path when a server route is absent', () => {
       const span = {
-        meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/users/1' },
+        meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/not/a/route' },
         metrics: {},
         error: 0,
-        resource: 'GET /users/{id}',
+        resource: 'GET /not/a/route',
+      }
+      applyHttpOtelSemantics(span)
+      assert.strictEqual(span.resource, 'GET')
+    })
+
+    it('uses the route in a known-method server span name', () => {
+      const span = {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.route': '/users/{id}',
+          'http.url': 'http://h/users/1',
+        },
+        metrics: {},
+        error: 0,
+        resource: 'GET',
       }
       applyHttpOtelSemantics(span)
       assert.strictEqual(span.resource, 'GET /users/{id}')
+    })
+
+    it('preserves a user-defined HTTP resource name', () => {
+      const span = {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.route': '/users/{id}',
+          'http.url': 'http://h/users/1',
+        },
+        metrics: {},
+        error: 0,
+        resource: 'checkout-custom',
+      }
+
+      applyHttpOtelSemantics(span)
+
+      assert.strictEqual(span.resource, 'checkout-custom')
     })
 
     // Whether an HTTP status makes the span an error is decided at capture time,

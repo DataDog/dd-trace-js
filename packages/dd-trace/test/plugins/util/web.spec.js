@@ -702,6 +702,7 @@ describe('plugins/util/web', () => {
 
       // The framework resolves the route between the pre-finish hook and finish.
       web.setRoute(req, '/users/:id')
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
 
       web.finishAll(context)
 

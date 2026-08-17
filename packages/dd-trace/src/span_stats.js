@@ -100,16 +100,30 @@ class SpanAggStats {
   }
 }
 
+function validHttpStatus (value) {
+  if (typeof value === 'number') return Number.isFinite(value) && Number.isInteger(value)
+  return typeof value === 'string' && value.trim() !== '' && Number.isInteger(Number(value))
+}
+
+function httpStatusCode (span) {
+  const candidates = [
+    span.meta[HTTP_STATUS_CODE],
+    span.meta['http.response.status_code'],
+    span.metrics?.['http.response.status_code'],
+  ]
+  return candidates.find(validHttpStatus) ?? 0
+}
+
 class SpanAggKey {
   constructor (span) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
-    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.statusCode = httpStatusCode(span)
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
-    this.method = span.meta[HTTP_METHOD] || ''
+    this.method = span.meta[HTTP_METHOD] || span.meta['http.request.method'] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.

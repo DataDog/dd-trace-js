@@ -216,6 +216,79 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_RULE)
     })
 
+    it('should normalize an unknown HTTP method before rule matching under OTel semantics', () => {
+      context._tags['http.method'] = 'PROPFIND'
+      context._tags['http.route'] = '/'
+      delete context._tags['resource.name']
+      prioritySampler = new PrioritySampler(
+        'test',
+        {
+          sampleRate: 0,
+          rules: [{ sampleRate: 1, resource: 'HTTP*' }],
+        },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'HTTP /')
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_RULE)
+    })
+
+    it('should not use the URI path as an early server resource', () => {
+      context._tags['http.method'] = 'GET'
+      context._tags['http.url'] = 'http://localhost:7777/make_distant_call?url=http://weblog:7777/'
+      delete context._tags['resource.name']
+      prioritySampler = new PrioritySampler(
+        'test',
+        {
+          sampleRate: 0,
+          rules: [{ sampleRate: 1, resource: 'GET' }],
+        },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'GET')
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_RULE)
+    })
+
+    it('should not rewrite an HTTP resource after sampling has been decided', () => {
+      context._tags['http.method'] = 'GET'
+      context._tags['http.route'] = '/first'
+      context._tags['resource.name'] = 'GET /first'
+      context._sampling.priority = USER_KEEP
+      prioritySampler = new PrioritySampler(
+        'test',
+        { rules: [{ sampleRate: 1, resource: 'GET *' }] },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+      context._tags['http.route'] = '/second'
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'GET /first')
+    })
+
+    it('should preserve a user-defined HTTP resource before sampling', () => {
+      context._tags['http.method'] = 'GET'
+      context._tags['http.route'] = '/users/:id'
+      context._tags['resource.name'] = 'checkout-custom'
+      prioritySampler = new PrioritySampler(
+        'test',
+        { sampleRate: 0, rules: [{ sampleRate: 1, resource: 'checkout-custom' }] },
+        { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      )
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._tags['resource.name'], 'checkout-custom')
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+    })
+
     it('should support a customer-defined remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
