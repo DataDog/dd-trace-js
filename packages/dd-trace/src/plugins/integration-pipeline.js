@@ -79,9 +79,12 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  * @property {Resolvable<string | undefined>} [resource]
  * @property {Resolvable<string | undefined>} [type]
  * @property {Resolvable<string | undefined>} [kind]
- * @property {Record<string, Resolvable<string | number | boolean | undefined>>} [tags]
- * @property {Record<string, Resolvable<number | undefined>>} [metrics]
- * @property {Record<string, Resolvable<string | number | boolean | undefined>>} [resultTags]
+ * @property {Record<string, Resolvable<string | number | boolean | undefined>> |
+ *   ((frame: PipelineFrame) => Record<string, unknown> | undefined)} [tags]
+ * @property {Record<string, Resolvable<number | undefined>> |
+ *   ((frame: PipelineFrame) => Record<string, unknown> | undefined)} [metrics]
+ * @property {Record<string, Resolvable<string | number | boolean | undefined>> |
+ *   ((frame: PipelineFrame) => Record<string, unknown> | undefined)} [resultTags]
  */
 
 /**
@@ -92,17 +95,39 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
  *   parent?: Resolvable<import('../opentracing/span') | import('../opentracing/span_context') | null>
  * }} [context]
  * @property {{
- *   start?: Record<string, (invocation: InvocationContext, frame: PipelineFrame) => unknown>,
- *   complete?: Record<string, (invocation: InvocationContext, frame: PipelineFrame) => unknown>
+ *   start?: Record<string, (invocation: InvocationContext, frame: PipelineFrame) => unknown> |
+ *     ((invocation: InvocationContext) => Record<string, unknown> | undefined),
+ *   complete?: Record<string, (invocation: InvocationContext, frame: PipelineFrame) => unknown> |
+ *     ((invocation: InvocationContext, frame: PipelineFrame) => Record<string, unknown> | undefined)
  * }} [extract]
  * @property {(frame: PipelineFrame) => boolean} [when]
- * @property {'parent' | 'noop'} [skip]
+ * @property {Resolvable<'parent' | 'noop'>} [skip]
  * @property {IntegrationSpanDefinition} [span]
  * @property {PipelineStage[]} [stages]
  */
 
 /**
- * @typedef {IntegrationOperation & {stages: PipelineStage[]}} NormalizedOperation
+ * @typedef {Array<[string, (invocation: InvocationContext, frame: PipelineFrame) => unknown]> |
+ *   ((invocation: InvocationContext, frame?: PipelineFrame) => Record<string, unknown> | undefined)} CompiledExtractor
+ */
+
+/**
+ * @typedef {Array<[string, unknown]> |
+ *   ((frame: PipelineFrame) => Record<string, unknown> | undefined)} CompiledRecord
+ */
+
+/**
+ * @typedef {IntegrationOperation & {
+ *   stages: PipelineStage[],
+ *   contextStages: PipelineStage[],
+ *   tracingStages: PipelineStage[],
+ *   sharesStartState: boolean,
+ *   startExtractors?: CompiledExtractor,
+ *   completeExtractors?: CompiledExtractor,
+ *   tagResolvers?: CompiledRecord,
+ *   metricResolvers?: CompiledRecord,
+ *   resultTagResolvers?: CompiledRecord
+ * }} NormalizedOperation
  */
 
 /**
@@ -116,6 +141,7 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
 /**
  * @typedef {object} IntegrationDefinition
  * @property {string} id
+ * @property {typeof TracingPlugin} [base]
  * @property {IntegrationSource} [source]
  * @property {(config: Record<string, unknown>) => Record<string, unknown>} [configure]
  * @property {IntegrationOperation[]} operations
@@ -124,15 +150,13 @@ const spanContextKey = Symbol('integration.pipeline.span_context')
 /**
  * @typedef {object} InvocationState
  * @property {PipelineFrame} frame
- * @property {NormalizedOperation} operation
  * @property {import('../opentracing/span_context') | undefined} spanContext
+ * @property {CorrelationContext} [correlation]
  * @property {import('../opentracing/span') | import('../opentracing/span_context') | null | undefined} parent
  * @property {import('../../../..').Span | undefined} span
- * @property {PipelineStage[]} startedStages
- * @property {Record<string, unknown>} pendingTags
+ * @property {PipelineStage[] | undefined} startedStages
+ * @property {Record<string, unknown>} [pendingTags]
  * @property {boolean} skipped
- * @property {boolean} contextStagesStarted
- * @property {boolean} tracingStagesStarted
  */
 
 const orchestrionSource = {
@@ -151,7 +175,7 @@ const orchestrionSource = {
 function readPath (value, path) {
   for (let i = 0; i < path.length; i++) {
     if (value === null || value === undefined) return
-    value = Reflect.get(Object(value), path[i])
+    value = value[path[i]]
   }
   return value
 }
@@ -177,7 +201,7 @@ function createRecord () {
 }
 
 function resolveValue (value, frame) {
-  return typeof value === 'function' ? Reflect.apply(value, undefined, [frame]) : value
+  return typeof value === 'function' ? value(frame) : value
 }
 
 function requireInvocation (value) {
@@ -185,54 +209,187 @@ function requireInvocation (value) {
   throw new TypeError('Integration pipeline received an invalid invocation')
 }
 
-function startSpan (plugin, name, options, invocation) {
-  return Reflect.apply(plugin.startSpan, plugin, [name, options, invocation])
-}
+class TraceCapability {
+  #state
 
-function createFrame (plugin, invocation) {
-  const pendingTags = createRecord()
-  let invocationState
-  const frame = {
-    invocation,
-    data: createRecord(),
-    correlation: undefined,
-    trace: undefined,
-    config: plugin.config,
-    serviceName: options => plugin.serviceName(options),
-    propagation: {
-      extract: (format, carrier) => plugin.tracer.extract(format, carrier),
-    },
-    dataStreams: {
-      decode: carrier => plugin.tracer.decodeDataStreamsContext(carrier),
-      setCheckpoint: (edgeTags, payloadSize) => plugin.tracer.setCheckpoint(edgeTags, frame.trace, payloadSize),
-    },
+  /**
+   * Create a trace annotation block for one invocation.
+   *
+   * @param {InvocationState} state
+   */
+  constructor (state) {
+    this.#state = state
   }
 
-  frame.trace = {
-    setTag (name, value) {
-      if (invocationState.span) {
-        invocationState.span.setTag(name, value)
-      } else {
-        pendingTags[name] = value
-      }
-    },
-  }
-
-  return {
-    frame,
-    pendingTags,
-    attachState (state) {
-      invocationState = state
-    },
+  /**
+   * Add a tag immediately or buffer it until the span is materialized.
+   *
+   * @param {string} name
+   * @param {unknown} value
+   * @returns {void}
+   */
+  setTag (name, value) {
+    const state = this.#state
+    if (state.span) {
+      state.span.setTag(name, value)
+    } else {
+      state.pendingTags ||= createRecord()
+      state.pendingTags[name] = value
+    }
   }
 }
 
-function resolveRecord (values, frame) {
-  if (!values) return
+class PropagationCapability {
+  #tracer
+
+  /**
+   * Create a propagation block backed by the configured tracer.
+   *
+   * @param {object} tracer
+   */
+  constructor (tracer) {
+    this.#tracer = tracer
+  }
+
+  /**
+   * Extract distributed context from a carrier.
+   *
+   * @param {string} format
+   * @param {object} carrier
+   * @returns {object | null | undefined}
+   */
+  extract (format, carrier) {
+    return this.#tracer.extract(format, carrier)
+  }
+}
+
+class DataStreamsCapability {
+  #frame
+  #tracer
+
+  /**
+   * Create a data-streams block for one invocation.
+   *
+   * @param {object} tracer
+   * @param {IntegrationFrame} frame
+   */
+  constructor (tracer, frame) {
+    this.#tracer = tracer
+    this.#frame = frame
+  }
+
+  /**
+   * Decode an incoming data-streams carrier.
+   *
+   * @param {object} carrier
+   * @returns {object | undefined}
+   */
+  decode (carrier) {
+    return this.#tracer.decodeDataStreamsContext(carrier)
+  }
+
+  /**
+   * Create a data-streams checkpoint associated with this invocation.
+   *
+   * @param {string[]} edgeTags
+   * @param {number} [payloadSize]
+   * @returns {object | undefined}
+   */
+  setCheckpoint (edgeTags, payloadSize) {
+    return this.#tracer.setCheckpoint(edgeTags, this.#frame.trace, payloadSize)
+  }
+}
+
+class IntegrationFrame {
+  #dataStreams
+  #plugin
+  #propagation
+  #state
+  #trace
+
+  /**
+   * Create the semantic workspace for one integration invocation.
+   *
+   * @param {TracingPlugin} plugin
+   * @param {InvocationContext} invocation
+   * @param {InvocationState} state
+   */
+  constructor (plugin, invocation, state) {
+    this.#plugin = plugin
+    this.#state = state
+    this.invocation = invocation
+    this.config = plugin.config
+  }
+
+  /**
+   * Materialize correlation identifiers only when an integration block reads them.
+   *
+   * @returns {CorrelationContext | undefined}
+   */
+  get correlation () {
+    const state = this.#state
+    if (state.spanContext && !state.correlation) {
+      state.correlation = createCorrelation(this.#plugin.tracer, state.spanContext)
+    }
+    return state.correlation
+  }
+
+  /**
+   * Get the trace annotation block, allocating it on first use.
+   *
+   * @returns {TraceCapability}
+   */
+  get trace () {
+    this.#trace ||= new TraceCapability(this.#state)
+    return this.#trace
+  }
+
+  /**
+   * Get the propagation block, allocating it on first use.
+   *
+   * @returns {PropagationCapability}
+   */
+  get propagation () {
+    this.#propagation ||= new PropagationCapability(this.#plugin.tracer)
+    return this.#propagation
+  }
+
+  /**
+   * Get the data-streams block, allocating it on first use.
+   *
+   * @returns {DataStreamsCapability}
+   */
+  get dataStreams () {
+    this.#dataStreams ||= new DataStreamsCapability(this.#plugin.tracer, this)
+    return this.#dataStreams
+  }
+
+  /**
+   * Resolve an integration service name through the existing schema.
+   *
+   * @param {object} options
+   * @returns {string | {name: string, source?: string}}
+   */
+  serviceName (options) {
+    return this.#plugin.serviceName(options)
+  }
+}
+
+function compileRecord (record) {
+  return typeof record === 'function' ? record : record ? Object.entries(record) : undefined
+}
+
+function compileExtractor (extractor) {
+  return typeof extractor === 'function' ? extractor : extractor ? Object.entries(extractor) : undefined
+}
+
+function resolveRecord (resolver, frame) {
+  if (!resolver) return
+  if (typeof resolver === 'function') return resolver(frame)
 
   const resolved = createRecord()
   let hasValue = false
-  for (const [name, value] of Object.entries(values)) {
+  for (const [name, value] of resolver) {
     const result = resolveValue(value, frame)
     if (result !== undefined) {
       resolved[name] = result
@@ -242,10 +399,29 @@ function resolveRecord (values, frame) {
   return hasValue ? resolved : undefined
 }
 
-function extract (extractors, invocation, frame) {
-  if (!extractors) return
-  for (const [name, extractor] of Object.entries(extractors)) {
-    frame.data[name] = extractor(invocation, frame)
+function extractStart (extractor, invocation, frame) {
+  if (typeof extractor === 'function') {
+    frame.data = extractor(invocation) || createRecord()
+    return
+  }
+
+  frame.data = createRecord()
+  if (!extractor) return
+  for (const [name, extractField] of extractor) {
+    frame.data[name] = extractField(invocation, frame)
+  }
+}
+
+function extractComplete (extractor, invocation, frame) {
+  if (!extractor) return
+  if (typeof extractor === 'function') {
+    const data = extractor(invocation, frame)
+    if (data) Object.assign(frame.data, data)
+    return
+  }
+
+  for (const [name, extractField] of extractor) {
+    frame.data[name] = extractField(invocation, frame)
   }
 }
 
@@ -261,16 +437,16 @@ function runStageHook (stage, phase, frame) {
   }
 }
 
-function startStages (state, tracing) {
+function startStages (state, stages) {
   const { frame } = state
-  for (const stage of state.operation.stages) {
-    if (requiresTracing(stage) !== tracing) continue
+  for (const stage of stages) {
     state.startedStages.push(stage)
     runStageHook(stage, 'start', frame)
   }
 }
 
 function unwindStages (state, phase) {
+  if (!state.startedStages) return
   for (let i = state.startedStages.length - 1; i >= 0; i--) {
     runStageHook(state.startedStages[i], phase, state.frame)
   }
@@ -301,32 +477,27 @@ function prepareOperation (plugin, operation, invocation, states) {
   let state = states.get(invocation)
   if (state) return state
 
-  const created = createFrame(plugin, invocation)
-  const frame = created.frame
   state = {
-    frame,
-    operation,
+    frame: undefined,
     spanContext: undefined,
     parent: undefined,
     span: undefined,
-    startedStages: [],
-    pendingTags: created.pendingTags,
+    startedStages: operation.stages.length > 0 ? [] : undefined,
     skipped: false,
-    contextStagesStarted: false,
-    tracingStagesStarted: false,
   }
-  created.attachState(state)
-  states.set(invocation, state)
+  const frame = new IntegrationFrame(plugin, invocation, state)
+  state.frame = frame
+  if (operation.sharesStartState) states.set(invocation, state)
 
-  extract(operation.extract?.start, invocation, frame)
+  extractStart(operation.startExtractors, invocation, frame)
   if (operation.when && !operation.when(frame)) {
     state.skipped = true
     return state
   }
 
+  if (!operation.sharesStartState) states.set(invocation, state)
   state.parent = getParentContext(operation, frame)
   state.spanContext = plugin.tracer.createSpanContext(state.parent)
-  frame.correlation = createCorrelation(plugin.tracer, state.spanContext)
   return state
 }
 
@@ -344,34 +515,32 @@ function bindLegacySpan (plugin, operation, invocation, states) {
   const state = prepareOperation(plugin, operation, invocation, states)
   const parentStore = legacyStorage.getStore()
   if (state.skipped) {
-    return operation.skip === 'noop' ? { noop: true } : parentStore
+    return resolveValue(operation.skip, state.frame) === 'noop' ? { noop: true } : parentStore
   }
 
-  if (!state.contextStagesStarted) {
-    state.contextStagesStarted = true
-    startStages(state, false)
-  }
+  startStages(state, operation.contextStages)
   if (parentStore?.noop && !Object.hasOwn(invocation, 'currentStore')) return parentStore
   if (!operation.span || (operation.span.enabled !== undefined && !resolveValue(operation.span.enabled, state.frame))) {
     return parentStore
   }
 
   const span = operation.span
-  state.span = startSpan(plugin, resolveValue(span.name, state.frame), {
+  state.span = plugin.startSpan(resolveValue(span.name, state.frame), {
     context: state.spanContext,
     childOf: state.parent,
     service: resolveValue(span.service, state.frame),
     resource: resolveValue(span.resource, state.frame),
     type: resolveValue(span.type, state.frame),
     kind: resolveValue(span.kind, state.frame),
-    meta: resolveRecord(span.tags, state.frame),
-    metrics: resolveRecord(span.metrics, state.frame),
+    meta: resolveRecord(operation.tagResolvers, state.frame),
+    metrics: resolveRecord(operation.metricResolvers, state.frame),
   }, invocation)
-  state.span.addTags(state.pendingTags)
+  if (state.pendingTags) state.span.addTags(state.pendingTags)
   return invocation.currentStore
 }
 
 function bindSpan (plugin, operation, invocation, states) {
+  if (operation.contextStages.length === 0 && legacyStorage.getStore()?.noop) return spanStorage.getStore()
   const state = prepareOperation(plugin, operation, invocation, states)
   if (state.skipped || !state.span) return spanStorage.getStore()
   return { ...spanStorage.getStore(), span: state.span }
@@ -379,9 +548,8 @@ function bindSpan (plugin, operation, invocation, states) {
 
 function beginOperation (operation, invocation, states) {
   const state = states.get(invocation)
-  if (!state || state.skipped || !state.span || state.tracingStagesStarted) return
-  state.tracingStagesStarted = true
-  startStages(state, true)
+  if (!state || state.skipped || !state.span) return
+  startStages(state, operation.tracingStages)
 }
 
 function errorOperation (plugin, operation, invocation, states) {
@@ -391,21 +559,21 @@ function errorOperation (plugin, operation, invocation, states) {
   unwindStages(state, 'error')
 }
 
-function completeOperation (operation, invocation, states) {
+function completeOperation (plugin, operation, invocation, states) {
   const state = states.get(invocation)
   if (!state) return
 
   try {
     if (state.skipped) return
-    extract(operation.extract?.complete, invocation, state.frame)
+    extractComplete(operation.completeExtractors, invocation, state.frame)
     if (state.span) {
-      const resultTags = resolveRecord(operation.span.resultTags, state.frame)
+      const resultTags = resolveRecord(operation.resultTagResolvers, state.frame)
       if (resultTags) state.span.addTags(resultTags)
     }
     unwindStages(state, 'complete')
   } finally {
     states.delete(invocation)
-    state.span?.finish()
+    if (state.span) plugin.finish(invocation)
   }
 }
 
@@ -416,6 +584,11 @@ function validateDefinition (definition) {
   if (!Array.isArray(definition.operations) || definition.operations.length === 0) {
     throw new TypeError(`Integration pipeline "${definition.id}" requires at least one operation`)
   }
+  if (definition.base !== undefined &&
+    (typeof definition.base !== 'function' || !(definition.base === TracingPlugin ||
+      definition.base.prototype instanceof TracingPlugin))) {
+    throw new TypeError(`Integration pipeline "${definition.id}" requires a TracingPlugin base`)
+  }
 
   const targets = new Set()
   for (const operation of definition.operations) {
@@ -425,6 +598,10 @@ function validateDefinition (definition) {
     }
     if (lifecycle !== 'sync' && lifecycle !== 'async') {
       throw new TypeError(`Integration operation "${target.name}" requires a sync or async lifecycle`)
+    }
+    if (operation.skip !== undefined && typeof operation.skip !== 'function' &&
+      operation.skip !== 'parent' && operation.skip !== 'noop') {
+      throw new TypeError(`Integration operation "${target.name}" has an invalid skip mode`)
     }
     if (span && span.name === undefined) {
       throw new TypeError(`Integration operation "${target.name}" has a trace definition without a span name`)
@@ -447,7 +624,30 @@ function validateDefinition (definition) {
 }
 
 function normalizeOperations (operations) {
-  return operations.map(operation => ({ ...operation, stages: operation.stages || [] }))
+  return operations.map(operation => {
+    const stages = operation.stages || []
+    const contextStages = []
+    const tracingStages = []
+    for (const stage of stages) {
+      if (requiresTracing(stage)) {
+        tracingStages.push(stage)
+      } else {
+        contextStages.push(stage)
+      }
+    }
+    return {
+      ...operation,
+      stages,
+      contextStages,
+      tracingStages,
+      sharesStartState: contextStages.length > 0 || tracingStages.length > 0,
+      startExtractors: compileExtractor(operation.extract?.start),
+      completeExtractors: compileExtractor(operation.extract?.complete),
+      tagResolvers: compileRecord(operation.span?.tags),
+      metricResolvers: compileRecord(operation.span?.metrics),
+      resultTagResolvers: compileRecord(operation.span?.resultTags),
+    }
+  })
 }
 
 /**
@@ -461,8 +661,9 @@ function createIntegrationPlugin (definition) {
   validateDefinition(definition)
   const operations = normalizeOperations(definition.operations)
   const source = definition.source || orchestrionSource
+  const PluginBase = definition.base || TracingPlugin
 
-  return class IntegrationPipeline extends TracingPlugin {
+  return class IntegrationPipeline extends PluginBase {
     static id = definition.id
     static operation = definition.id
 
@@ -474,31 +675,40 @@ function createIntegrationPlugin (definition) {
         const channels = source.channels(operation.target)
         const invocation = message => source.invocation(message)
 
-        // Store bindings execute in reverse registration order. Context is registered last so
-        // it is reserved and active before the inner legacy/span bindings materialize tracing.
-        this.addStoreBind(channels.start, spanStorage,
-          message => bindSpan(this, operation, invocation(message), states))
+        // Store bindings execute in reverse registration order. Register only the capability stores used by stages;
+        // legacy storage remains the common span lifecycle block and sits between context and tracing when present.
+        if (operation.tracingStages.length > 0) {
+          this.addStoreBind(channels.start, spanStorage,
+            message => bindSpan(this, operation, invocation(message), states))
+        }
         this.addBind(channels.start,
-          message => bindLegacySpan(this, operation, invocation(message), states), { allowNoop: true })
-        this.addStoreBind(channels.start, contextStorage,
-          message => bindContext(this, operation, invocation(message), states))
+          message => bindLegacySpan(this, operation, invocation(message), states),
+          operation.contextStages.length > 0 ? { allowNoop: true } : undefined)
+        if (operation.contextStages.length > 0) {
+          this.addStoreBind(channels.start, contextStorage,
+            message => bindContext(this, operation, invocation(message), states))
+        }
 
-        const subscriptionOptions = { allowNoop: true }
-        this.addSub(channels.start,
-          message => beginOperation(operation, invocation(message), states), subscriptionOptions)
+        const contextSubscriptionOptions = operation.contextStages.length > 0 ? { allowNoop: true } : undefined
+        if (operation.tracingStages.length > 0) {
+          this.addSub(channels.start, message => beginOperation(operation, invocation(message), states))
+        }
         this.addSub(channels.error,
-          message => errorOperation(this, operation, invocation(message), states), subscriptionOptions)
+          message => errorOperation(this, operation, invocation(message), states), contextSubscriptionOptions)
+
+        // A rejected operation may bind a no-op legacy scope. Completion must still delete its WeakMap state.
+        const completionOptions = { allowNoop: true }
 
         if (operation.lifecycle === 'sync') {
           this.addSub(channels.end,
-            message => completeOperation(operation, invocation(message), states), subscriptionOptions)
+            message => completeOperation(this, operation, invocation(message), states), completionOptions)
         } else {
           this.addSub(channels.end, message => {
             const current = invocation(message)
-            if (current.error !== undefined) completeOperation(operation, current, states)
-          }, subscriptionOptions)
+            if (current.error !== undefined) completeOperation(this, operation, current, states)
+          }, completionOptions)
           this.addSub(channels.asyncEnd,
-            message => completeOperation(operation, invocation(message), states), subscriptionOptions)
+            message => completeOperation(this, operation, invocation(message), states), completionOptions)
         }
       }
     }
