@@ -323,6 +323,19 @@ describe('AgentlessJSONEncoder', () => {
       })
     })
 
+    it('should encode multiple traces without metadata', () => {
+      const encoderWithoutMetadata = new AgentlessJSONEncoder(writer, {})
+      encoderWithoutMetadata.encode(data)
+      encoderWithoutMetadata.encode([childSpan])
+
+      const decoded = JSON.parse(encoderWithoutMetadata.makePayload().toString())
+
+      assert.strictEqual(decoded.traces.length, 2)
+      assert.strictEqual(decoded.traces[0].spans[0].name, 'test')
+      assert.strictEqual(decoded.traces[1].spans[0].name, 'child')
+      assert.strictEqual(decoded.traces[0].hostname, undefined)
+    })
+
     it('should set _dd.compute_stats on first span of each trace', () => {
       encoder.encode(data)
       encoder.encode([childSpan])

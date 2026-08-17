@@ -38,16 +38,20 @@ function formatAnthropicToolResultContent (content) {
   if (typeof content === 'string') {
     return content
   } else if (Array.isArray(content)) {
-    const formattedContent = []
+    let formattedContent = ''
     for (const toolResultBlock of content) {
+      let part
       if (toolResultBlock.text) {
-        formattedContent.push(toolResultBlock.text)
+        part = toolResultBlock.text
       } else if (toolResultBlock.type === 'image') {
-        formattedContent.push('([IMAGE DETECTED])')
+        part = '([IMAGE DETECTED])'
       }
+      if (part === undefined) continue
+      if (formattedContent) formattedContent += ','
+      formattedContent += part
     }
 
-    return formattedContent.join(',')
+    return formattedContent
   }
   return JSON.stringify(content)
 }

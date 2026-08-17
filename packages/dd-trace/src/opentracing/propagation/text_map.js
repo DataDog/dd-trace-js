@@ -292,7 +292,7 @@ class TextMapPropagator {
       return
     }
 
-    const tags = []
+    let header = ''
 
     for (const key of Object.keys(trace.tags)) {
       const value = trace.tags[key]
@@ -302,10 +302,9 @@ class TextMapPropagator {
         return
       }
 
-      tags.push(`${key}=${value}`)
+      if (header) header += ','
+      header += `${key}=${value}`
     }
-
-    const header = tags.join(',')
 
     if (header.length > this._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
       log.error('Trace tags from span are too large, skipping injection.')
