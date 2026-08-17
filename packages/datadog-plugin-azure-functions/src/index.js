@@ -156,7 +156,7 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
     : triggerMetadata.propertiesArray
 
   const addLinkFromProperties = (props) => {
-    if (!props || Object.keys(props).length === 0) return
+    if (!props) return
     const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
       span.addLink({ context: spanContext })
