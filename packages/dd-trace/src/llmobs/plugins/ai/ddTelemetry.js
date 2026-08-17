@@ -232,7 +232,13 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     const lastUserPrompt =
       promptInfo.prompt ??
       promptInfo.messages.reverse().find(message => message.role === 'user')?.content
-    const prompt = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
+    let prompt = lastUserPrompt
+    if (Array.isArray(lastUserPrompt)) {
+      prompt = ''
+      for (const part of lastUserPrompt) {
+        if (typeof part.text === 'string') prompt += part.text
+      }
+    }
 
     const output = tags['ai.response.object']
 
@@ -248,7 +254,13 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     const lastUserPrompt =
       promptInfo.prompt ??
       promptInfo.messages.reverse().find(message => message.role === 'user')?.content
-    const prompt = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
+    let prompt = lastUserPrompt
+    if (Array.isArray(lastUserPrompt)) {
+      prompt = ''
+      for (const part of lastUserPrompt) {
+        if (typeof part.text === 'string') prompt += part.text
+      }
+    }
 
     const output = tags['ai.response.text']
 

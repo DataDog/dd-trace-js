@@ -8,7 +8,7 @@ const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 // boundaries), so excluding them preserves match semantics for valid URLs while keeping
 // the regex linear on arbitrary input.
 const QUERY_FRAGMENT = '[?#&]([^=&;?#]+)=([^?#&]+)'
-const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
+const pattern = new RegExp(`${AUTHORITY}|${QUERY_FRAGMENT}`, 'gmi')
 
 module.exports = function extractSensitiveRanges (evidence) {
   try {
