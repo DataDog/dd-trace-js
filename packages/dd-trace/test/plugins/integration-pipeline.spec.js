@@ -134,11 +134,17 @@ const PipelinePlugin = createIntegrationPlugin({
     {
       target: { module: '@example/client', name: 'Client_ping' },
       lifecycle: 'sync',
+      extract: {
+        start: invocation => ({ resource: invocation.arguments[0] }),
+        complete: invocation => ({ status: invocation.result.status }),
+      },
       span: {
         name: 'example.ping',
-        resource: 'ping',
+        resource: field('resource'),
         type: 'custom',
         kind: 'client',
+        tags: () => ({ 'example.tag_block': 'resolved' }),
+        resultTags: { 'example.status': field('status') },
       },
     },
     {
@@ -260,10 +266,30 @@ describe('IntegrationPipeline', () => {
     const assertion = agent.assertFirstTraceSpan(span => {
       assert.strictEqual(span.name, 'example.ping')
       assert.strictEqual(span.resource, 'ping')
+      assert.strictEqual(span.meta.example_tag_block, undefined)
+      assert.strictEqual(span.meta['example.tag_block'], 'resolved')
+      assert.strictEqual(span.metrics['example.status'], 204)
     })
 
-    assert.strictEqual(pingChannel.traceSync(() => 'pong', { arguments: [] }), 'pong')
+    const result = pingChannel.traceSync(() => ({ status: 204 }), { arguments: ['ping'] })
+    assert.deepStrictEqual(result, { status: 204 })
     await assertion
+  })
+
+  it('skips unused capability blocks inside a legacy noop scope', async () => {
+    const noTraces = agent.assertNoTraces(() => {
+      throw new Error('noop-nested stage-free operation unexpectedly produced a trace')
+    }, { timeoutMs: 100 })
+
+    const value = legacyStorage.run({ noop: true }, () => pingChannel.traceSync(() => {
+      assert.deepStrictEqual(legacyStorage.getStore(), { noop: true })
+      assert.strictEqual(contextStorage.getStore(), undefined)
+      assert.strictEqual(spanStorage.getStore(), undefined)
+      return 'noop-pong'
+    }, { arguments: [] }))
+
+    assert.strictEqual(value, 'noop-pong')
+    await noTraces
   })
 
   it('runs an operation with correlation context and no span', async () => {
@@ -378,6 +404,14 @@ describe('IntegrationPipeline', () => {
       { message: 'Integration pipeline "invalid" requires at least one operation' }
     )
     assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        base: class {},
+        operations: [{ target: { module: 'example', name: 'request' }, lifecycle: 'sync' }],
+      }),
+      { message: 'Integration pipeline "invalid" requires a TracingPlugin base' }
+    )
+    assert.throws(
       () => createIntegrationPlugin({ id: 'invalid', operations: [{ target: {} }] }),
       { message: 'Integration pipeline "invalid" has an invalid target' }
     )
@@ -387,6 +421,13 @@ describe('IntegrationPipeline', () => {
         operations: [{ target: { module: 'example', name: 'request' }, lifecycle: 'callback' }],
       }),
       { message: 'Integration operation "request" requires a sync or async lifecycle' }
+    )
+    assert.throws(
+      () => createIntegrationPlugin({
+        id: 'invalid',
+        operations: [{ target: { module: 'example', name: 'request' }, lifecycle: 'sync', skip: 'invalid' }],
+      }),
+      { message: 'Integration operation "request" has an invalid skip mode' }
     )
     assert.throws(
       () => createIntegrationPlugin({
