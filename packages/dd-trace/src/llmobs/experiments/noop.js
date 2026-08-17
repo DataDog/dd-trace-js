@@ -22,7 +22,7 @@ class NoopDataset {
       input: record.inputData,
       expectedOutput: record.expectedOutput ?? null,
       metadata: record.metadata ?? {},
-      ...(record.tags === undefined ? {} : { tags: record.tags }),
+      tags: [...(record.tags ?? [])],
     }))
   }
 
@@ -32,22 +32,8 @@ class NoopDataset {
       input,
       expectedOutput: expectedOutput ?? null,
       metadata: metadata ?? {},
-      ...(tags === undefined ? {} : { tags }),
+      tags: [...(tags ?? [])],
     })
-    return this
-  }
-
-  update (index, fields) {
-    const record = this.#records[index]
-    if (record == null) return this
-    if (Object.hasOwn(fields, 'input')) record.input = fields.input
-    if (Object.hasOwn(fields, 'expectedOutput')) record.expectedOutput = fields.expectedOutput ?? null
-    if (Object.hasOwn(fields, 'metadata')) record.metadata = fields.metadata ?? {}
-    return this
-  }
-
-  delete (index) {
-    this.#records.splice(index, 1)
     return this
   }
 

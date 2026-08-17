@@ -7,11 +7,13 @@ const sinon = require('sinon')
 const log = require('../../../src/log')
 
 const {
+  buildTags,
   durationNs,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   timestampMs,
   validateEvaluatorName,
 } = require('../../../src/llmobs/experiments/util')
@@ -61,6 +63,21 @@ describe('LLMObs Experiments util', () => {
     })
     assert.deepEqual(mergeTags(undefined, { tag: 'value' }), { tag: 'value' })
     assert.deepEqual(mergeTags({ tag: 'value' }, undefined), { tag: 'value' })
+  })
+
+  it('preserves repeated record tag keys in object and wire representations', () => {
+    const recordTags = ['topic:math', 'topic:logic', 'source:test']
+
+    assert.deepEqual(recordTagsToObject(recordTags), {
+      topic: ['math', 'logic'],
+      source: 'test',
+    })
+    assert.deepEqual(buildTags(recordTagsToObject(recordTags), { experiment_id: 'exp' }), [
+      'topic:math',
+      'topic:logic',
+      'source:test',
+      'experiment_id:exp',
+    ])
   })
 
   it('infers metric types with a normalized JSON fallback', () => {

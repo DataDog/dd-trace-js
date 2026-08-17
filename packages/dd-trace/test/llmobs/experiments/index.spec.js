@@ -119,6 +119,7 @@ describe('LLMObs Experiments facade', () => {
 
       assert.equal(dataset.name(), 'd')
       assert.equal(dataset.records()[0].input, 'in')
+      assert.deepEqual(dataset.records()[0].tags, [])
       sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
 
@@ -219,6 +220,12 @@ describe('LLMObs Experiments facade', () => {
       dataset.update(10, { input: 'ignored' })
       dataset.delete(1)
       dataset.delete(10)
+      dataset.addTags(0, ['topic:math', 'topic:math'])
+      dataset.removeTags(0, ['topic:math'])
+      dataset.replaceTags(0, ['topic:logic'])
+      dataset.addTags(10, ['ignored:tag'])
+      dataset.removeTags(10, ['ignored:tag'])
+      dataset.replaceTags(10, ['ignored:tag'])
 
       assert.equal(dataset.name(), 'd')
       assert.equal(dataset.description(), 'desc')
@@ -226,6 +233,7 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.projectId(), null)
       assert.equal(dataset.version(), null)
       assert.equal(dataset.latestVersion(), null)
+      assert.deepEqual(dataset.filterTags(), [])
       assert.deepEqual(dataset.recordIds(), [])
       assert.equal(dataset.url(), null)
       assert.deepEqual(dataset.records(), [{
@@ -233,6 +241,7 @@ describe('LLMObs Experiments facade', () => {
         input: 'updated',
         expectedOutput: null,
         metadata: {},
+        tags: ['topic:logic'],
       }])
       dataset.addRecord('after push')
       assert.equal(dataset.records().length, 2)
@@ -296,11 +305,17 @@ describe('LLMObs Experiments facade', () => {
       ])
       assert.deepEqual(dataset.recordIds(), ['r1', 'r2'])
       sinon.assert.calledWith(ExperimentsClient.prototype.listDatasets, 'proj', { name: 'remote-dataset' })
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', tags: [], version: 2 }])
-      assert.deepEqual(listDatasetRecords.secondCall.args, ['proj', 'ds', { cursor: 'next-page', tags: [], version: 2 }])
+      assert.deepEqual(
+        listDatasetRecords.firstCall.args,
+        ['proj', 'ds', { cursor: '', tags: [], version: 2 }]
+      )
+      assert.deepEqual(
+        listDatasetRecords.secondCall.args,
+        ['proj', 'ds', { cursor: 'next-page', tags: [], version: 2 }]
+      )
     })
 
-    it('uses the latest dataset version when no version is requested', async () => {
+    it('leaves the dataset version unset when no version is requested', async () => {
       const { listDatasetRecords } = stubPullDatasetClient({
         datasets: [datasetResource({ name: 'remote-dataset', latestVersion: 5 })],
         pages: [{ records: [], after: '' }],
@@ -308,8 +323,12 @@ describe('LLMObs Experiments facade', () => {
 
       const dataset = await createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 })
 
-      assert.equal(dataset.version(), 5)
-      assert.deepEqual(listDatasetRecords.firstCall.args, ['proj', 'ds', { cursor: '', tags: [], version: 5 }])
+      assert.equal(dataset.version(), null)
+      assert.equal(dataset.latestVersion(), 5)
+      assert.deepEqual(
+        listDatasetRecords.firstCall.args,
+        ['proj', 'ds', { cursor: '', tags: [], version: null }]
+      )
     })
 
     it('surfaces list failures from the backend client', async () => {

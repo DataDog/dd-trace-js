@@ -185,16 +185,20 @@ function stringify (value) {
  * @returns {string[]}
  */
 function buildTags (userTags, autoTags) {
-  const tags = new Map()
+  const tagsByKey = new Map()
   if ((userTags) != null) {
     for (const [key, value] of Object.entries(userTags)) {
-      tags.set(key, `${key}:${value}`)
+      const values = Array.isArray(value) ? value : [value]
+      tagsByKey.set(key, values.map(item => `${key}:${item}`))
     }
   }
   for (const [key, value] of Object.entries(autoTags)) {
-    if (value !== undefined && value !== null && value !== '') tags.set(key, `${key}:${value}`)
+    if (value !== undefined && value !== null && value !== '') tagsByKey.set(key, [`${key}:${value}`])
   }
-  return [...tags.values()]
+
+  const tags = []
+  for (const values of tagsByKey.values()) tags.push(...values)
+  return tags
 }
 
 /**
@@ -208,14 +212,21 @@ function mergeTags (baseTags, overrideTags) {
 
 /**
  * @param {string[] | undefined} tags
- * @returns {Record<string, string>}
+ * @returns {Record<string, string | string[]>}
  */
 function recordTagsToObject (tags) {
   const result = {}
   if (!Array.isArray(tags)) return result
   for (const tag of tags) {
     const separator = tag.indexOf(':')
-    if (separator > 0) result[tag.slice(0, separator)] = tag.slice(separator + 1)
+    if (separator <= 0) continue
+
+    const key = tag.slice(0, separator)
+    const value = tag.slice(separator + 1)
+    const existing = result[key]
+    if (existing === undefined) result[key] = value
+    else if (Array.isArray(existing)) existing.push(value)
+    else result[key] = [existing, value]
   }
   return result
 }

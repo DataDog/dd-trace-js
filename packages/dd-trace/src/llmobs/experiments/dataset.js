@@ -3,6 +3,15 @@
 const { randomUUID } = require('node:crypto')
 
 /** @typedef {{add?: string[], remove?: string[], replace?: string[]}} TagOperations */
+/**
+ * @typedef {object} PendingBatch
+ * @property {object} attributes
+ * @property {string[]} deleteRecordIds
+ * @property {Map<string, object>} insertPayloads
+ * @property {Map<string, object>} updatePayloads
+ * @property {number} totalCount
+ * @property {Map<string, TagOperations>} [inFlightTagOperations]
+ */
 
 const { tagOperationsAreEmpty, validateTagsList } = require('./util')
 
@@ -55,6 +64,14 @@ function serializedTagOperations (operations) {
   if (Object.hasOwn(operations, 'remove')) output.remove = operations.remove
   if (Object.hasOwn(operations, 'replace')) output.set = operations.replace
   return output
+}
+
+/**
+ * @param {TagOperations} operations
+ * @returns {TagOperations}
+ */
+function copyTagOperations (operations) {
+  return Object.fromEntries(Object.entries(operations).map(([key, tags]) => [key, [...tags]]))
 }
 
 function mergeTagOperations (operations, operation, tags) {
@@ -363,10 +380,13 @@ class Dataset {
     const pending = this.#pendingBatch()
     if (pending.totalCount === 0) return { pushedCount: 0, totalCount: 0 }
 
+    this.#detachCommittedTagOperations(pending)
+
     let result
     try {
       result = await this.#client.batchUpdateDatasetRecords(projectId, this.#id, pending.attributes)
     } catch (err) {
+      this.#restoreFailedTagOperations(pending)
       throw new Error(`Failed to push changes to dataset '${this.#name}': ${err.message}`)
     }
 
@@ -415,6 +435,52 @@ class Dataset {
     }
   }
 
+  /**
+   * Detach tag changes sent by this batch so edits made while the request is in flight
+   * are queued relative to the response that this batch will commit.
+   * @param {PendingBatch} pending
+   * @returns {void}
+   */
+  #detachCommittedTagOperations (pending) {
+    pending.inFlightTagOperations = new Map()
+    for (const [recordId, payload] of pending.updatePayloads) {
+      const operations = this.#pendingTagOperations.get(recordId)
+      if (!operations || !Object.hasOwn(payload, 'tag_operations')) continue
+
+      pending.inFlightTagOperations.set(recordId, copyTagOperations(operations))
+      this.#pendingTagOperations.delete(recordId)
+      const update = this.#updatedRecordsById.get(recordId)
+      if (update) delete update.tagOperations
+    }
+  }
+
+  /**
+   * Restore tag changes when a batch request fails, including edits made while it was in flight.
+   * @param {PendingBatch} pending
+   * @returns {void}
+   */
+  #restoreFailedTagOperations (pending) {
+    if (!pending.inFlightTagOperations) return
+    for (const [recordId, operations] of pending.inFlightTagOperations) {
+      const record = this.#recordsById.get(recordId)
+      if (!record || this.#newRecordsById.has(recordId) || this.#deletedRecordIds.has(recordId)) continue
+
+      const update = this.#updatedRecordsById.get(recordId) ?? { id: recordId }
+      const queuedOperations = this.#pendingTagOperations.get(recordId)
+      const restoredOperations = queuedOperations
+        ? { replace: [...record.tags] }
+        : copyTagOperations(operations)
+      this.#pendingTagOperations.set(recordId, restoredOperations)
+      update.tagOperations = restoredOperations
+      this.#updatedRecordsById.set(recordId, update)
+    }
+  }
+
+  /**
+   * Clear the changes represented by a completed batch while retaining concurrent local edits.
+   * @param {PendingBatch} pending
+   * @returns {void}
+   */
   #clearCommittedChanges (pending) {
     for (const [recordId, payload] of pending.insertPayloads) {
       const current = this.#newRecordsById.get(recordId)
@@ -436,7 +502,13 @@ class Dataset {
 
     for (const [recordId, payload] of pending.updatePayloads) {
       const current = this.#updatedRecordsById.get(recordId)
-      if (current && valuesAreEqual(serializedRecordUpdate(current), payload)) {
+      const queuedOperations = this.#pendingTagOperations.get(recordId)
+      if (!current || queuedOperations) continue
+
+      const comparison = { ...current }
+      const committedOperations = pending.inFlightTagOperations?.get(recordId)
+      if (committedOperations) comparison.tagOperations = committedOperations
+      if (valuesAreEqual(serializedRecordUpdate(comparison), payload)) {
         this.#updatedRecordsById.delete(recordId)
         this.#pendingTagOperations.delete(recordId)
       }

@@ -86,7 +86,7 @@ class Experiments {
 
     let pulledDataset = null
     let records = []
-    let datasetVersion = version ?? null
+    const datasetVersion = version ?? null
     let latestVersion = null
     let lastError = ''
 
@@ -98,7 +98,6 @@ class Experiments {
             if (dataset.name() === name) {
               pulledDataset = dataset
               latestVersion = dataset.latestVersion()
-              datasetVersion = version ?? latestVersion
               break
             }
           }

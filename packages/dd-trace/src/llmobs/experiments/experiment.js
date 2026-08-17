@@ -34,6 +34,15 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
     meta.error = { type: row.errorType ?? '', message: row.errorMessage ?? '', stack: row.errorStack ?? '' }
   }
 
+  const tags = buildTags(userTags, {
+    experiment_id: ids.experimentId,
+    run_id: ids.runId,
+    run_iteration: ids.runIteration,
+    dataset_id: ids.datasetId,
+    dataset_record_id: ids.datasetRecordId,
+  })
+  if (Array.isArray(recordTags)) tags.push(...recordTags)
+
   return {
     span_id: row.spanId,
     trace_id: row.traceId,
@@ -44,14 +53,7 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
     duration: row.durationNs,
     status: row.isError ? 'error' : 'ok',
     meta,
-    tags: buildTags(userTags, {
-      ...recordTagsToObject(recordTags),
-      experiment_id: ids.experimentId,
-      run_id: ids.runId,
-      run_iteration: ids.runIteration,
-      dataset_id: ids.datasetId,
-      dataset_record_id: ids.datasetRecordId,
-    }),
+    tags,
   }
 }
 
