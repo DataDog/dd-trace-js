@@ -4,10 +4,12 @@ const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable } = require('../config/helper')
 
+const httpRequestStartChannel = channel('apm:http:server:request:start')
 const httpRequestFinishChannel = channel('apm:http:server:request:finish')
 const http2ResponseEmitChannel = channel('apm:http2:server:response:emit')
+const nextRequestStartChannel = channel('apm:next:request:start')
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
-const VERCEL_FLUSH_TIMEOUT = 2000
+const VERCEL_FLUSH_TIMEOUT = 2_000
 const vercelRetentionHandlers = new WeakMap()
 const retainedVercelRequests = new WeakMap()
 
@@ -30,21 +32,56 @@ function flushVercelTelemetry (tracer, done) {
   })
 }
 
+function getRequestKey (req) {
+  return req?.originalRequest || req
+}
+
+function retainVercelRequest (req, tracer) {
+  req = getRequestKey(req)
+  if (!req || typeof req !== 'object') return false
+
+  let retainedTracers = retainedVercelRequests.get(req)
+  if (!retainedTracers) {
+    retainedTracers = new WeakMap()
+    retainedVercelRequests.set(req, retainedTracers)
+  }
+  if (retainedTracers.has(tracer)) return true
+
+  const requestContext = getVercelRequestContext()
+  if (!requestContext) return false
+
+  const { waitUntil } = requestContext
+  if (typeof waitUntil !== 'function') return false
+
+  let done
+  const pending = new Promise(resolve => { done = resolve })
+  try {
+    waitUntil(pending)
+    retainedTracers.set(tracer, { done, tracer })
+    return true
+  } catch {
+    done()
+    return false
+  }
+}
+
+function flushVercelRequest (req, tracer) {
+  req = getRequestKey(req)
+  if (!req || typeof req !== 'object') return
+  const retainedTracers = retainedVercelRequests.get(req)
+  const retained = retainedTracers?.get(tracer)
+  if (!retained || retained.flushed) return
+
+  retained.flushed = true
+  flushVercelTelemetry(retained.tracer, retained.done)
+}
+
 function registerVercelRequestFlush (tracer) {
   const requestContext = getVercelRequestContext()
   if (!requestContext) return
 
   const { waitUntil } = requestContext
   if (typeof waitUntil !== 'function') return
-  let retainedTracers = retainedVercelRequests.get(requestContext)
-  if (!retainedTracers) {
-    retainedTracers = new WeakSet()
-    retainedVercelRequests.set(requestContext, retainedTracers)
-  }
-  if (retainedTracers.has(tracer)) return
-  retainedTracers.add(tracer)
-
-  // Retain the invocation synchronously, then flush after the response completes.
   let done
   const pending = new Promise(resolve => { done = resolve })
   try {
@@ -70,16 +107,27 @@ function registerVercelTelemetryRetention (tracer) {
   if (existing) return existing
 
   if (typeof tracer?.flushAll !== 'function') return
-  const flushRequest = () => registerVercelRequestFlush(tracer)
-  const flushHttp2Response = ({ eventName }) => {
-    if (eventName === 'close') flushRequest()
+  const retainRequest = ({ req }) => retainVercelRequest(req, tracer)
+  const startNextRequest = ({ req }) => retainVercelRequest(req, tracer)
+  const finishHttpRequest = ({ req }) => {
+    req = getRequestKey(req)
+    const retained = retainVercelRequest(req, tracer)
+    if (retained) flushVercelRequest(req, tracer)
+    else registerVercelRequestFlush(tracer)
   }
-  httpRequestFinishChannel.subscribe(flushRequest)
+  const flushHttp2Response = ({ eventName }) => {
+    if (eventName === 'close') registerVercelRequestFlush(tracer)
+  }
+  httpRequestStartChannel.subscribe(retainRequest)
+  httpRequestFinishChannel.subscribe(finishHttpRequest)
   http2ResponseEmitChannel.subscribe(flushHttp2Response)
+  nextRequestStartChannel.subscribe(startNextRequest)
 
   const unregister = () => {
-    httpRequestFinishChannel.unsubscribe(flushRequest)
+    httpRequestStartChannel.unsubscribe(retainRequest)
+    httpRequestFinishChannel.unsubscribe(finishHttpRequest)
     http2ResponseEmitChannel.unsubscribe(flushHttp2Response)
+    nextRequestStartChannel.unsubscribe(startNextRequest)
     vercelRetentionHandlers.delete(tracer)
   }
   vercelRetentionHandlers.set(tracer, unregister)

@@ -213,7 +213,7 @@ describe('Vercel telemetry retention', () => {
       metrics.getMeter('serverless-flush').createCounter('flush.me').add(1)
 
       unregister = registerVercelTelemetryRetention(tracer)
-      channel('apm:http:server:request:finish').publish({})
+      channel('apm:http:server:request:finish').publish({ req: {} })
       await intakeRequests
       await retained
       assert.deepStrictEqual(received, new Set(['traces', 'logs', 'metrics']))
@@ -226,28 +226,29 @@ describe('Vercel telemetry retention', () => {
     }
   })
 
-  it('waits for HTTP response completion after Next request finish', async () => {
+  it('retains a Next request until its HTTP response finishes', async () => {
     process.env.VERCEL = '1'
     let retained
     globalThis[requestContext] = {
       get: () => ({ waitUntil: promise => { retained = promise } }),
     }
-    const nextFinishChannel = channel('apm:next:request:finish')
+    const nextStartChannel = channel('apm:next:request:start')
     const httpFinishChannel = channel('apm:http:server:request:finish')
-    let finished = false
+    const req = {}
+    let httpFinished = false
     const tracer = {
       flushAll (done) {
-        assert.ok(finished)
+        assert.ok(httpFinished)
         done()
       },
     }
 
     const unregister = initializeServerlessTelemetry(tracer)
     try {
-      nextFinishChannel.publish({})
-      assert.strictEqual(retained, undefined)
-      finished = true
-      httpFinishChannel.publish({})
+      nextStartChannel.publish({ req })
+      assert.ok(retained)
+      httpFinished = true
+      httpFinishChannel.publish({ req })
       await retained
     } finally {
       unregister()
@@ -267,7 +268,9 @@ describe('Vercel telemetry retention', () => {
       },
     })
     try {
-      channel('apm:http:server:request:finish').publish({})
+      const req = {}
+      channel('apm:http:server:request:finish').publish({ req })
+      channel('apm:http:server:request:finish').publish({ req })
       await Promise.all(retained)
       assert.strictEqual(flushes, 1)
     } finally {
@@ -290,7 +293,7 @@ describe('Vercel telemetry retention', () => {
           done()
         },
       })
-      channel('apm:http:server:request:finish').publish({})
+      channel('apm:http:server:request:finish').publish({ req: {} })
       await retained
 
       assert.deepStrictEqual(options, { timeout: 2_000 })
