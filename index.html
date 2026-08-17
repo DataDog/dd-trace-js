@@ -18,6 +18,10 @@
 <pre><code class="javascript"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tracer</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-3">init</span><span class="hl-1">()</span><br/><br/><span class="hl-5">// enable and configure postgresql integration</span><br/><span class="hl-6">tracer</span><span class="hl-1">.</span><span class="hl-3">use</span><span class="hl-1">(</span><span class="hl-4">&#39;pg&#39;</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-6">service:</span><span class="hl-1"> </span><span class="hl-4">&#39;pg-cluster&#39;</span><br/><span class="hl-1">})</span>
 </code><button type="button">Copy</button></pre>
 
+<p>The <code>langchain</code> and <code>modelcontextprotocol-sdk</code> integrations accept an <code>llmobs</code> option. Setting it to <code>false</code> stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:</p>
+<pre><code class="javascript"><span class="hl-5">// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.</span><br/><span class="hl-6">tracer</span><span class="hl-1">.</span><span class="hl-3">use</span><span class="hl-1">(</span><span class="hl-4">&#39;modelcontextprotocol-sdk&#39;</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-6">llmobs:</span><span class="hl-1"> </span><span class="hl-0">false</span><br/><span class="hl-1">})</span>
+</code><button type="button">Copy</button></pre>
+
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
@@ -35,6 +39,7 @@
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
 <h5 id="azure-durable-functions"></h5>
+<h5 id="browser-bunyan"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -120,6 +125,7 @@
 <li><a href="./interfaces/export_.plugins.azure_functions.html">azure-functions</a></li>
 <li><a href="./interfaces/export_.plugins.azure_service_bus.html">azure-service-bus</a></li>
 <li><a href="./interfaces/export_.plugins.azure_durable_functions.html">azure-durable-functions</a></li>
+<li><a href="./interfaces/export_.plugins.browser_bunyan.html">browser-bunyan</a></li>
 <li><a href="./interfaces/export_.plugins.bullmq.html">bullmq</a></li>
 <li><a href="./interfaces/export_.plugins.bunyan.html">bunyan</a></li>
 <li><a href="./interfaces/export_.plugins.cassandra_driver.html">cassandra-driver</a></li>
