@@ -244,18 +244,18 @@ class EvaluationReporter {
 
     const requestTelemetryTags = redaction.enabled
       ? {
-        action: result.action,
-        error: false,
-        block: shouldBlock,
-        redacted: redaction.applied,
-        ...report.telemetryTags,
-      }
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          redacted: redaction.applied,
+          ...report.telemetryTags,
+        }
       : {
-        action: result.action,
-        error: false,
-        block: shouldBlock,
-        ...report.telemetryTags,
-      }
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          ...report.telemetryTags,
+        }
     aiguardMetrics.count(TAGS.TELEMETRY_REQUESTS, requestTelemetryTags).inc(1)
 
     report.span.setTag(TAGS.ACTION_TAG_KEY, result.action)
