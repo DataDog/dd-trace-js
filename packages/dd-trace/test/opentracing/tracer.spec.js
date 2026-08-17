@@ -19,17 +19,15 @@ describe('Tracer', () => {
   let Tracer
   let loadTracer
   let tracer
-  let NativeDatadogSpan
+  let DatadogSpan
   let span
   let spanCtx
   let PrioritySampler
   let prioritySampler
   let NativeExporter
   let SpanProcessor
-  let JsSpanProcessor
   let processor
   let exporter
-  let jsProcessor
   let agentExporter
   let AgentExporter
   let logExporter
@@ -62,7 +60,7 @@ describe('Tracer', () => {
       addTags: sinon.stub().returns(span),
       context: sinon.stub().returns(spanCtx),
     }
-    NativeDatadogSpan = sinon.stub().returns(span)
+    DatadogSpan = sinon.stub().returns(span)
 
     prioritySampler = {
       sample: sinon.stub(),
@@ -78,11 +76,6 @@ describe('Tracer', () => {
       process: sinon.spy(),
     }
     SpanProcessor = sinon.stub().returns(processor)
-
-    jsProcessor = {
-      process: sinon.spy(),
-    }
-    JsSpanProcessor = sinon.stub().returns(jsProcessor)
 
     agentExporter = {
       export: sinon.spy(),
@@ -144,9 +137,9 @@ describe('Tracer', () => {
     } = {}) =>
       proxyquire('../../src/opentracing/tracer', {
         './span_context': SpanContext,
+        './span': DatadogSpan,
         '../priority_sampler': PrioritySampler,
         '../span_processor': SpanProcessor,
-        '../js_span_processor': JsSpanProcessor,
         './propagation/text_map': TextMapPropagator,
         './propagation/http': HttpPropagator,
         './propagation/binary': BinaryPropagator,
@@ -165,7 +158,6 @@ describe('Tracer', () => {
             if (nativeError) throw nativeError
             return NativeSpansInterface
           },
-          get NativeDatadogSpan () { return NativeDatadogSpan },
         },
       })
     Tracer = loadTracer()
@@ -176,7 +168,7 @@ describe('Tracer', () => {
 
     sinon.assert.called(NativeExporter)
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
-    sinon.assert.calledWith(SpanProcessor, exporter, prioritySampler, config, nativeSpansInstance)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, exporter, prioritySampler, config, undefined, false)
   })
 
   it('should allow to configure an alternative prioritySampler', () => {
@@ -184,7 +176,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config, sampler)
 
     sinon.assert.calledWith(NativeExporter, config, sampler, nativeSpansInstance)
-    sinon.assert.calledWith(SpanProcessor, exporter, sampler, config, nativeSpansInstance)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, exporter, sampler, config, undefined, false)
   })
 
   it('uses the JS pipeline for the configured log exporter', () => {
@@ -192,10 +184,9 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.calledOnceWithExactly(LogExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, logExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, logExporter, prioritySampler, config, undefined)
   })
 
   it('uses the JS pipeline for the configured agentless exporter', () => {
@@ -203,21 +194,19 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentlessExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentlessExporter, prioritySampler, config, undefined)
   })
 
-  it('warns and uses native spans for unsupported APM exporters', () => {
+  it('warns and uses the native exporter for unsupported APM exporters', () => {
     config.experimental.exporter = 'unsupported'
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.calledWith(
       log.warn,
-      'Native spans mode ignores unsupported experimental exporter "%s"; using native agent exporter',
+      'Native exporter ignores unsupported experimental exporter "%s"; using native agent exporter',
       'unsupported'
     )
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
@@ -231,13 +220,12 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     assert.strictEqual(tracer._isCiVisibility, false)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.notCalled(NativeSpansInterface)
     sinon.assert.notCalled(LogExporter)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
     sinon.assert.calledWith(log.debug, 'AWS Lambda environment detected (JS span pipeline)')
   })
 
@@ -251,10 +239,9 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(LogExporter)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
   })
 
   it('uses the JS agent pipeline in a Lambda where only the mini agent marker exists', () => {
@@ -265,10 +252,9 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(LogExporter)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
   })
 
   it('exports to stdout in AWS Lambda when neither the extension nor the mini agent is present', () => {
@@ -279,12 +265,11 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.notCalled(NativeSpansInterface)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.calledOnceWithExactly(LogExporter, config, prioritySampler)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, logExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, logExporter, prioritySampler, config, undefined)
   })
 
   it('preserves explicit OTLP export in AWS Lambda environments', () => {
@@ -294,7 +279,6 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.calledOnce(NativeSpansInterface)
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
@@ -309,13 +293,12 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     assert.strictEqual(tracer._isCiVisibility, false)
     sinon.assert.notCalled(NativeExporter)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
     sinon.assert.calledWith(
       log.warn,
-      'Native spans unavailable because %s; using JS span pipeline',
+      'Native exporter unavailable because %s; using JS exporter pipeline',
       'optional dependency @datadog/libdatadog is not installed'
     )
 
@@ -332,11 +315,10 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.calledOnceWithExactly(createOtlpTraceExporter, config)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, otlpTraceExporter, prioritySampler, config, undefined)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, otlpTraceExporter, prioritySampler, config, undefined)
   })
 
   it('uses the JS agent pipeline when the runtime has no WebAssembly', () => {
@@ -355,36 +337,34 @@ describe('Tracer', () => {
       globalThis.WebAssembly = wasm
     }
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
     sinon.assert.calledWith(
       log.warn,
-      'Native spans unavailable because %s; using JS span pipeline',
+      'Native exporter unavailable because %s; using JS exporter pipeline',
       'this runtime has no WebAssembly support'
     )
   })
 
   it('uses the JS agent pipeline when a custom DNS lookup is configured', () => {
     // libdatadog's transport builds its own `http.request` options and takes no
-    // lookup hook, so on the native path the callback is silently dropped and
+    // lookup hook, so the native exporter silently drops the callback and
     // traces go wherever the system resolver points. Users who set `lookup` are
     // resolving the agent through service discovery, so honouring it matters more
-    // than using native spans.
+    // than using the native exporter.
     config.lookup = (hostname, options, callback) => callback(null, '127.0.0.1', 4)
     config.getOrigin = sinon.stub().withArgs('lookup').returns('code')
     Tracer = loadTracer()
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     assert.strictEqual(tracer._isCiVisibility, false)
     sinon.assert.notCalled(NativeExporter)
     sinon.assert.notCalled(NativeSpansInterface)
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
   })
 
-  it('stays on native spans when lookup is only the default', () => {
+  it('stays on the native exporter when lookup is only the default', () => {
     // `config.lookup` is always a function - it defaults to `dns.lookup` - so the
     // guard has to key off where the value came from. It cannot compare against
     // `dns.lookup` either: the dns plugin wraps that in place, so an identity
@@ -396,7 +376,6 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.calledOnce(NativeSpansInterface)
   })
 
@@ -413,7 +392,6 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
     // The dropped `lookup` must be announced, not silently ignored.
@@ -432,7 +410,6 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, true)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.notCalled(LogExporter)
     sinon.assert.calledOnceWithExactly(createOtlpTraceExporter, config)
@@ -454,13 +431,12 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.notCalled(log.warn)
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
   })
 
-  it('forwards the OTLP span stats exporter to the JS span processor', () => {
-    // Every other JsSpanProcessor assertion in this file expects `undefined` as
+  it('forwards the OTLP span stats exporter in the JS exporter pipeline', () => {
+    // Every other SpanProcessor assertion in this file expects `undefined` as
     // the stats-exporter argument, because nothing else here sets
     // OTEL_TRACES_SPAN_METRICS_ENABLED — so a branch that hardcoded `undefined`
     // would pass the whole suite. Config forces
@@ -479,10 +455,10 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     sinon.assert.calledOnceWithExactly(createOtlpSpanStatsExporter, config)
-    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, otlpStats)
+    sinon.assert.calledOnceWithExactly(SpanProcessor, agentExporter, prioritySampler, config, otlpStats)
   })
 
-  it('forwards the OTLP span stats exporter to the native span processor', () => {
+  it('forwards the OTLP span stats exporter in the native exporter pipeline', () => {
     const otlpStats = { export: sinon.spy() }
     const createOtlpSpanStatsExporter = sinon.stub().returns(otlpStats)
     config.OTEL_TRACES_SPAN_METRICS_ENABLED = true
@@ -490,9 +466,23 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
 
-    assert.strictEqual(tracer._useJsSpans, false)
     sinon.assert.calledOnceWithExactly(
-      SpanProcessor, exporter, prioritySampler, config, nativeSpansInstance, otlpStats
+      SpanProcessor, exporter, prioritySampler, config, otlpStats, false
+    )
+  })
+
+  it('lets native stats own APM stats when OTLP span metrics are disabled', () => {
+    config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledOnceWithExactly(
+      SpanProcessor,
+      exporter,
+      prioritySampler,
+      config,
+      undefined,
+      true
     )
   })
 
@@ -504,7 +494,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -512,7 +502,7 @@ describe('Tracer', () => {
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
         links: undefined,
-      }, true, nativeSpansInstance)
+      })
 
       sinon.assert.calledWith(span.addTags, {
         foo: 'bar',
@@ -532,7 +522,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -548,7 +538,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -561,7 +551,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -585,7 +575,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -601,7 +591,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
       })
@@ -659,7 +649,7 @@ describe('Tracer', () => {
 
       sinon.assert.calledWith(span.addTags, config.tags)
       sinon.assert.calledWith(span.addTags, { ...fields.tags, version: undefined })
-      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -677,7 +667,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -696,7 +686,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(DatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,

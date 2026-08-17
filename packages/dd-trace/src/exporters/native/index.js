@@ -5,33 +5,27 @@ const { URL, format } = require('url')
 const { channel } = require('dc-polyfill')
 
 const defaults = require('../../config/defaults')
+const { AgentEncoder } = require('../../encode/0.4')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const { fetchAgentInfo } = require('../../agent/info')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
-// The JS encoder flushes at 8 MiB; libdatadog exposes no pre-serialization byte
-// count. Bound the full span objects retained during the batching window instead.
+
+// Bound finalized span objects retained until the next batch flush.
 const MAX_PENDING_SPANS = 2000
 
 // Native sends mirror legacy exporter request/response/error health metrics.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 // Lazy debug representation matching the legacy payload log.
+/**
+ * @param {object[]} spans Finalized spans
+ * @returns {string}
+ */
 function formatSpansForDebug (spans) {
   try {
-    return JSON.stringify(
-      spans.map(span => {
-        const ctx = span.context()
-        return {
-          name: ctx._name,
-          resource: ctx.getTag('resource.name'),
-          service: ctx.getTag('service.name'),
-          meta: { ...ctx._trace?.tags, ...ctx.getTags() },
-        }
-      }),
-      (_key, value) => (typeof value === 'bigint' ? value.toString() : value)
-    )
+    return JSON.stringify(spans, (_key, value) => (typeof value === 'bigint' ? value.toString() : value))
   } catch {
     // A pathological tag value (e.g. circular) must never throw out of export().
     return '[unserializable]'
@@ -39,28 +33,33 @@ function formatSpansForDebug (spans) {
 }
 
 /**
- * Batches raw spans and delegates serialization and transport to libdatadog.
+ * Batches finalized spans and delegates serialization and transport to libdatadog.
  */
 class NativeExporter {
+  #nativeSpans
   #timer
   #flushInFlight = false
   #firstFlushSent = false
   #flushCallbacks = []
-  #activeSpans = 0
+  #encoder
+  #pendingPayloads = []
   #pendingSpanCount = 0
+  #pendingTraces = []
   #urlUpdateCallbacks = []
   // Fatal native exporter construction errors cannot recover.
   #disabled = false
   /**
    * @param {object} config - Tracer configuration
    * @param {object} prioritySampler - Priority sampler instance
-   * @param {import('../../native/native_spans')} nativeSpans - NativeSpansInterface instance
+   * @param {import('../../native/native-spans')} nativeSpans - NativeSpansInterface instance
    */
   constructor (config, prioritySampler, nativeSpans) {
     this._config = config
     this._prioritySampler = prioritySampler
-    this._nativeSpans = nativeSpans
-    this._pendingSpanChunks = []
+    this.#nativeSpans = nativeSpans
+    const nativeSpanEvents = config.DD_TRACE_NATIVE_SPAN_EVENTS || config.OTEL_TRACES_EXPORTER === 'otlp'
+    this.#encoder = new AgentEncoder({ flush: () => this.#stageEncodedPayload() }, undefined, nativeSpanEvents)
+    this._writer = { flush: this.#flushWithStats.bind(this) }
 
     const { url, hostname = defaults.hostname, port } = config
     this._url = url || new URL(format({
@@ -80,8 +79,8 @@ class NativeExporter {
     // traces before stats because chunk preparation feeds the concentrator.
     const finalFlush = () => {
       this.flush(() => {
-        this.flushStats().catch((err) => {
-          log.warn('Failed final native stats flush on exit:', err)
+        this.flushStats().catch((error) => {
+          log.warn('Failed final native stats flush on exit: %s', error)
         })
       })
     }
@@ -105,15 +104,15 @@ class NativeExporter {
       return
     }
     // Invalid endpoints fail loudly during native exporter construction.
-    this._nativeSpans.setOtlpEndpoint(endpoint)
+    this.#nativeSpans.setOtlpEndpoint(endpoint)
 
     const protocol = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
     if (protocol) {
       try {
-        this._nativeSpans.setOtlpProtocol(protocol)
-      } catch (e) {
+        this.#nativeSpans.setOtlpProtocol(protocol)
+      } catch (error) {
         // Unsupported protocols fall back to the native default.
-        log.warn('Native exporter: unsupported OTLP protocol %s, using default: %s', protocol, e.message)
+        log.warn('Native exporter: unsupported OTLP protocol %s, using default: %s', protocol, error.message)
       }
     }
 
@@ -125,7 +124,7 @@ class NativeExporter {
         flat.push(key, String(value))
       }
       if (flat.length > 0) {
-        this._nativeSpans.setOtlpHeaders(flat)
+        this.#nativeSpans.setOtlpHeaders(flat)
       }
     }
   }
@@ -137,84 +136,36 @@ class NativeExporter {
     let infoUrl
     try {
       infoUrl = typeof this._url === 'string' ? new URL(this._url) : this._url
-    } catch (e) {
-      log.warn('Native exporter: cannot parse agent URL for /info v0.5 check: %s', e.message)
+    } catch (error) {
+      log.warn('Native exporter: cannot parse agent URL for /info v0.5 check: %s', error.message)
       return
     }
-    fetchAgentInfo(infoUrl, (err, info) => {
-      if (err) {
-        log.debug('Native exporter: /info fetch failed, staying on v0.4: %s', err.message)
+    fetchAgentInfo(infoUrl, (error, info) => {
+      if (error) {
+        log.debug('Native exporter: /info fetch failed, staying on v0.4: %s', error.message)
         return
       }
       // `endpoints` is untrusted agent input: guard the type so a malformed
       // response (non-array, or a string that substring-matches) can't throw
       // in this async callback or false-positive into v0.5.
       if (Array.isArray(info?.endpoints) && info.endpoints.includes('/v0.5/traces')) {
-        this._nativeSpans.setUseV05(true)
+        this.#nativeSpans.setUseV05(true)
       }
     })
-  }
-
-  _trackSpanStart () {
-    this.#activeSpans++
-  }
-
-  _trackSpanFinish () {
-    if (this.#activeSpans > 0) this.#activeSpans--
-    this.#finishUrlUpdateCallbacks()
-  }
-
-  #nativeStatsEnabled () {
-    return this._config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED === true &&
-      !this._config.OTEL_TRACES_SPAN_METRICS_ENABLED
-  }
-
-  _discardNativeSpans (spans) {
-    if (this.#disabled || this.#nativeStatsEnabled() || !spans?.length) return false
-    const discard = this._nativeSpans.discardSpansGrouped
-    if (typeof discard !== 'function') return false
-
-    const groups = this.#groupsFromSpanChunks([spans], false)
-    if (groups.length === 0) return false
-    return discard.call(this._nativeSpans, groups) > 0
-  }
-
-  _resetNativeStateWhenIdle () {
-    if (this.#disabled || this.#nativeStatsEnabled()) return
-    this.#urlUpdateCallbacks.push(() => {
-      try {
-        this._nativeSpans.setAgentUrl(this._url.toString())
-      } catch (e) {
-        log.warn('Failed to reset idle native span state: %s', e.message)
-      }
-    })
-    this.#finishUrlUpdateCallbacks()
   }
 
   #finishUrlUpdateCallbacks () {
     if (this.#urlUpdateCallbacks.length === 0) return
-    if (this.#activeSpans > 0 || this.#flushInFlight) return
-    if (this._pendingSpanChunks.length > 0) {
+    if (this.#flushInFlight) return
+    if (this.#hasPendingWork()) {
       this.flush()
       return
     }
 
     const callbacks = this.#urlUpdateCallbacks
     this.#urlUpdateCallbacks = []
-    let firstError
-    let hasError = false
     for (const callback of callbacks) {
-      try {
-        callback()
-      } catch (err) {
-        if (!hasError) {
-          firstError = err
-          hasError = true
-        }
-      }
-    }
-    if (hasError) {
-      setImmediate(() => { throw firstError })
+      callback()
     }
   }
 
@@ -226,8 +177,8 @@ class NativeExporter {
     let parsed
     try {
       parsed = new URL(url)
-    } catch (e) {
-      log.warn('Failed to parse new agent URL %s: %s', url, e.message)
+    } catch (error) {
+      log.warn('Failed to parse new agent URL %s: %s', url, error.message)
       return
     }
 
@@ -237,10 +188,10 @@ class NativeExporter {
         // setAgentUrl succeeds — otherwise a thrown setAgentUrl would leave
         // `_url` reflecting the new URL while the WASM state still points at
         // the old one (silent JS/WASM divergence).
-        this._nativeSpans.setAgentUrl(parsed.toString())
+        this.#nativeSpans.setAgentUrl(parsed.toString())
         this._url = parsed
-      } catch (e) {
-        log.warn('Failed to apply new agent URL to native state %s: %s', url, e.message)
+      } catch (error) {
+        log.warn('Failed to apply new agent URL to native state %s: %s', url, error.message)
       }
     }
 
@@ -249,26 +200,27 @@ class NativeExporter {
   }
 
   /**
-   * Buffer one processor export call as one trace chunk.
-   * @param {Array<object>} spans Spans to export
+   * Queue one finalized trace chunk.
+   * @param {Array<object>} spans Finalized spans to export
    */
   export (spans) {
-    if (this.#disabled) return
+    if (this.#disabled || spans.length === 0) return
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
-
-    // Preserve each SpanProcessor export call as a trace chunk. A delayed child
-    // that finishes later must remain a second chunk rather than being merged
-    // back into its parent's earlier export call.
-    if (spans.length > 0) {
-      this._pendingSpanChunks.push(spans)
-      this.#pendingSpanCount += spans.length
-    }
+    log.debug(() => `Queueing payload: ${formatSpansForDebug(spans)}`)
 
     const { flushInterval } = this._config
+    if (flushInterval === 0) {
+      this.#encoder.encode(spans)
+      this.#stageEncodedPayload()
+      this.flush()
+      return
+    }
 
-    if (flushInterval === 0 || this.#pendingSpanCount >= MAX_PENDING_SPANS) {
+    this.#pendingTraces.push(spans)
+    this.#pendingSpanCount += spans.length
+
+    if (this.#pendingSpanCount >= MAX_PENDING_SPANS) {
       this.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
@@ -282,18 +234,15 @@ class NativeExporter {
   /**
    * Compatibility surface for tooling that calls `_writer.flush(cb)`. Native
    * stats must flush after traces so recently prepared chunks are included.
+   * @param {Function} [done] Callback when both flushes complete
    */
-  get _writer () {
-    return {
-      flush: (done = () => {}) => {
-        this.flush(() => {
-          this.flushStats().then(() => done(), (err) => {
-            log.error('Error force-flushing native stats via _writer.flush:', err)
-            done()
-          })
-        })
-      },
-    }
+  #flushWithStats (done = () => {}) {
+    this.flush(() => {
+      this.flushStats().then(() => done(), (error) => {
+        log.error('Error force-flushing native stats via _writer.flush: %s', error)
+        done()
+      })
+    })
   }
 
   /**
@@ -301,7 +250,7 @@ class NativeExporter {
    * @returns {Promise<boolean>}
    */
   flushStats () {
-    return this._nativeSpans.flushStats()
+    return this.#nativeSpans.flushStats()
   }
 
   #finishFlushCallbacks () {
@@ -312,9 +261,9 @@ class NativeExporter {
     for (const done of callbacks) {
       try {
         done()
-      } catch (err) {
+      } catch (error) {
         if (!hasError) {
-          firstError = err
+          firstError = error
           hasError = true
         }
       }
@@ -325,7 +274,7 @@ class NativeExporter {
   }
 
   #finishSend () {
-    if (this._pendingSpanChunks.length === 0) {
+    if (!this.#hasPendingWork()) {
       this.#finishFlushCallbacks()
       this.#finishUrlUpdateCallbacks()
       return
@@ -336,19 +285,24 @@ class NativeExporter {
     if (this.#timer === undefined) this.flush()
   }
 
-  #handleSendError (err) {
+  /**
+   * @param {Error & { code?: string }} error Native send error
+   */
+  #handleSendError (error) {
     this.#flushInFlight = false
     runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-    runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
-    if (err.code) {
-      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+    runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${error.name}`, true)
+    if (error.code) {
+      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${error.code}`, true)
     }
-    log.error('Error sending spans to agent via native exporter:', err)
+    log.error('Error sending spans to agent via native exporter: %s', error)
     // Stop after a one-shot native exporter build failure.
-    if (err?.name === 'NativeExporterBuildError') {
+    if (error?.name === 'NativeExporterBuildError') {
       this.#disabled = true
-      this._pendingSpanChunks = []
+      this.#encoder.reset()
+      this.#pendingPayloads = []
       this.#pendingSpanCount = 0
+      this.#pendingTraces = []
       clearTimeout(this.#timer)
       this.#timer = undefined
       log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
@@ -379,19 +333,29 @@ class NativeExporter {
       return
     }
 
-    if (this._pendingSpanChunks.length === 0) {
+    if (!this.#hasPendingWork()) {
       this.#finishFlushCallbacks()
       return
     }
 
-    const spanChunks = this._pendingSpanChunks
-    this._pendingSpanChunks = []
-    this.#pendingSpanCount = 0
+    if (this.#pendingPayloads.length === 0) {
+      try {
+        this.#encodePendingTraces()
+      } catch (error) {
+        this.#handleSendError(error)
+        return
+      }
+    }
 
-    // Preserve processor export-call boundaries while splitting mixed traces.
-    const groups = this.#groupsFromSpanChunks(spanChunks, true)
+    const payload = this.#pendingPayloads.shift()
+    if (payload === undefined) {
+      this.#finishFlushCallbacks()
+      this.#finishUrlUpdateCallbacks()
+      return
+    }
 
-    // Serialize asynchronous sends so prepared chunks cannot accumulate.
+    // Serialize preparation and sends because libdatadog allows only one
+    // prepared-send transaction at a time.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
     // Publish when a send is attempted, matching the legacy AgentWriter. This
     // must also fire when the agent is unreachable.
@@ -399,37 +363,60 @@ class NativeExporter {
       this.#firstFlushSent = true
       firstFlushChannel.publish()
     }
-    // At flushInterval 0, preserve the legacy one-trace-per-request behavior.
-    // Apply sampling rates from every response, not only the last one.
-    const applyResponse = (response) => {
-      this.#updateSamplingRates(response)
-      return response
-    }
-    let sendGrouped
+    let send
     try {
-      sendGrouped = this._config.flushInterval === 0 && groups.length > 1
-        ? groups.reduce(
-          (previous, group) => previous
-            .then(() => this._nativeSpans.flushSpansGrouped([group]))
-            .then(applyResponse),
-          Promise.resolve('no spans to flush')
-        )
-        : this._nativeSpans.flushSpansGrouped(groups).then(applyResponse)
-    } catch (err) {
-      this.#handleSendError(err)
+      send = this.#nativeSpans.sendEncodedTraces(payload)
+    } catch (error) {
+      this.#handleSendError(error)
       return
     }
     this.#flushInFlight = true
-    sendGrouped
+    send
       .then((response) => {
+        this.#updateSamplingRates(response)
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         // Flush callbacks wait until the exporter is idle so explicit flush
         // endpoints only acknowledge once all queued sends have reached the agent.
         this.#finishSend()
-      }, (err) => {
-        this.#handleSendError(err)
+      }, (error) => {
+        this.#handleSendError(error)
       })
+  }
+
+  /**
+   * Stage the encoder's current payload for an asynchronous send.
+   */
+  #stageEncodedPayload () {
+    if (this.#encoder.count() > 0) {
+      this.#pendingPayloads.push(this.#encoder.makePayload())
+    }
+  }
+
+  /**
+   * Encode all finalized trace chunks in the current batch.
+   */
+  #encodePendingTraces () {
+    const traces = this.#pendingTraces
+    this.#pendingTraces = []
+    this.#pendingSpanCount = 0
+
+    try {
+      for (const trace of traces) {
+        this.#encoder.encode(trace)
+      }
+      this.#stageEncodedPayload()
+    } catch (error) {
+      this.#encoder.reset()
+      throw error
+    }
+  }
+
+  /**
+   * @returns {boolean} Whether finalized or encoded trace data is waiting to be sent
+   */
+  #hasPendingWork () {
+    return this.#pendingPayloads.length > 0 || this.#pendingTraces.length > 0
   }
 
   /**
@@ -448,95 +435,9 @@ class NativeExporter {
       if (rateByService) {
         this._prioritySampler.update(rateByService)
       }
-    } catch (err) {
-      log.error('Error updating priority sampler rates from native response:', err)
+    } catch (error) {
+      log.error('Error updating priority sampler rates from native response: %s', error)
     }
-  }
-
-  #groupsFromSpanChunks (spanChunks, syncTraceTags) {
-    const groups = []
-    for (const spans of spanChunks) {
-      const byTrace = new Map()
-      for (const span of spans) {
-        const trace = span.context()._trace
-        let group = byTrace.get(trace)
-        if (group === undefined) { group = []; byTrace.set(trace, group) }
-        group.push(span)
-      }
-
-      for (const group of byTrace.values()) {
-        // The local root leads the chunk so the pipeline treats it as chunk root.
-        const root = group.find(span => this.#isLocalRoot(span))
-        const firstIsLocalRoot = root !== undefined
-        let ordered = group
-        if (firstIsLocalRoot) {
-          if (syncTraceTags) this.#syncTraceTags(root)
-          if (group[0] !== root) {
-            ordered = [root, ...group.filter(span => span !== root)]
-          }
-        }
-        groups.push({
-          spanIds: ordered.map(span => span.context()._nativeSpanId),
-          firstIsLocalRoot,
-        })
-      }
-    }
-    return groups
-  }
-
-  /**
-   * Sync trace-level tags to a span.
-   * Trace tags are stored on the trace object and should be added to the
-   * first span in each trace chunk before native export.
-   *
-   * @param {object} span - The first span in the chunk
-   */
-  #syncTraceTags (span) {
-    const context = span.context()
-    const traceTags = context._trace?.tags
-
-    if (!traceTags) return
-
-    // Keep the JS tag cache aligned with legacy writer debug/observer paths;
-    // native trace tags are mirrored by SpanProcessor before export.
-    for (const [key, value] of Object.entries(traceTags)) {
-      if (value !== undefined && value !== null && // Don't overwrite existing span tags
-        !context.hasTag(key)) {
-        context.setTag(key, value)
-      }
-    }
-  }
-
-  /**
-   * Check if a span is a local root span.
-   *
-   * A local root span is either:
-   * - A true root span (no parent)
-   * - A span whose parent is from a different service/process
-   *
-   * @param {object} span - Span to check
-   * @returns {boolean}
-   */
-  #isLocalRoot (span) {
-    if (!span) return true
-
-    const context = span.context()
-
-    // No parent means it's a root span
-    if (!context._parentId) return true
-
-    // Check if parent was remote (from context propagation)
-    // In that case, this span is the local root
-    if (context._isRemote) return true
-
-    // Check if this is the first span in the trace's started array
-    const trace = context._trace
-    if (trace && trace.started.length > 0) {
-      const firstSpan = trace.started[0]
-      if (firstSpan === span) return true
-    }
-
-    return false
   }
 }
 

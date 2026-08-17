@@ -4,6 +4,7 @@ const getConfig = require('../config')
 const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 const log = require('../log')
 const { normalizeSpan, eventTimeNano } = require('./tags-processors')
+const { stringifySpanEvents } = require('./span-events')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 // Values longer than this byte threshold skip the `_stringMap` lookup and
@@ -126,107 +127,6 @@ function formatSpanWithLegacyEvents (span) {
   return span
 }
 
-/**
- * Hand-written stringifier for `span.span_events`. Events arrive in their raw
- * `{ name, startTime, attributes? }` shape; `time_unix_nano` is derived per
- * event via `eventTimeNano` and empty attribute objects are dropped, matching
- * what the formatter used to precompute. Attribute values are pre-sanitized to
- * primitives or arrays of primitives, so we skip everything `JSON.stringify`
- * does for the generic case (toJSON probing, prototype-chain key iteration,
- * replacer hooks).
- *
- * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
- * @returns {string}
- */
-function stringifySpanEvents (spanEvents) {
-  let result = '['
-  for (let index = 0; index < spanEvents.length; index++) {
-    if (index > 0) result += ','
-    const event = spanEvents[index]
-    // `_sanitizeEventAttributes` leaves `attributes` undefined when empty, so a
-    // present value always has entries — no emptiness probe here.
-    const attributes = event.attributes
-    // `addEvent` does not type-check `name`; defer the unusual cases to
-    // `JSON.stringify` so non-string names match the prior behaviour instead
-    // of throwing in `escapeJsonString`. Build the wire-shaped object so the
-    // emitted key stays `time_unix_nano`, not the raw `startTime`.
-    if (typeof event.name !== 'string') {
-      result += JSON.stringify({ name: event.name, time_unix_nano: eventTimeNano(event), attributes })
-      continue
-    }
-    result += '{"name":' + escapeJsonString(event.name) +
-      ',"time_unix_nano":' + jsonNumber(eventTimeNano(event))
-    if (attributes) {
-      result += ',"attributes":' + stringifyAttributes(attributes)
-    }
-    result += '}'
-  }
-  return result + ']'
-}
-
-function stringifyAttributes (attributes) {
-  let result = '{'
-  let first = true
-  for (const key of Object.keys(attributes)) {
-    if (first) {
-      first = false
-    } else {
-      result += ','
-    }
-    result += escapeJsonString(key) + ':' + stringifyAttributeValue(attributes[key])
-  }
-  return result + '}'
-}
-
-function stringifyAttributeValue (value) {
-  if (typeof value === 'string') return escapeJsonString(value)
-  if (typeof value === 'number') return jsonNumber(value)
-  if (typeof value === 'boolean') return value ? 'true' : 'false'
-  if (Array.isArray(value)) {
-    let result = '['
-    for (let index = 0; index < value.length; index++) {
-      if (index > 0) result += ','
-      result += stringifyAttributeValue(value[index])
-    }
-    return result + ']'
-  }
-  // Sanitization rejects everything else, but keep the safety net.
-  return 'null'
-}
-
-/**
- * Match `JSON.stringify` for numbers: `NaN` and `±Infinity` collapse to the
- * literal `null`, everything else uses ECMAScript's default `Number → String`
- * conversion (which is what `JSON.stringify` calls internally).
- *
- * @param {number} value
- * @returns {string}
- */
-function jsonNumber (value) {
-  if (Number.isFinite(value)) return String(value)
-  return 'null'
-}
-
-/**
- * Fast path: scan once, and if no character in the string requires JSON
- * escaping, emit `"<str>"` as-is. The scanned chars are `"`, `\`, and any
- * control char in the U+0000–U+001F range. Anything else delegates to
- * `JSON.stringify` for full spec-compliant escaping (surrogate pairs,
- * lone surrogates, etc.).
- *
- * @param {string} value
- * @returns {string}
- */
-function escapeJsonString (value) {
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index)
-    if (code < 0x20 || code === 0x22 || code === 0x5C) {
-      return JSON.stringify(value)
-    }
-  }
-  return '"' + value + '"'
-}
-
 function lazyEncodedTraceBufferLogger (bytes, start, end) {
   const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
   return `Adding encoded trace to buffer: ${hex}`
@@ -239,7 +139,12 @@ class AgentEncoder {
   #debugEncoding
   #formatSpan
 
-  constructor (writer, limit = SOFT_LIMIT) {
+  /**
+   * @param {{ flush: Function }} writer
+   * @param {number} [limit]
+   * @param {boolean} [nativeSpanEvents]
+   */
+  constructor (writer, limit = SOFT_LIMIT, nativeSpanEvents) {
     this.#limit = limit
     this._traceBytes = new MsgpackChunk()
     this._stringBytes = new MsgpackChunk()
@@ -250,7 +155,7 @@ class AgentEncoder {
     // Pick the per-span formatter once so the hot loop pays no per-span
     // config check. The native path keeps the raw `span_events` slot for
     // `#encodeSpanEvents`; the legacy path serializes it into meta.events.
-    this.#formatSpan = this.#config.DD_TRACE_NATIVE_SPAN_EVENTS
+    this.#formatSpan = (nativeSpanEvents ?? this.#config.DD_TRACE_NATIVE_SPAN_EVENTS)
       ? normalizeSpan
       : formatSpanWithLegacyEvents
   }
@@ -813,7 +718,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      bytes.writeFloat(eventTimeNano(event))
+      bytes.writeLong(eventTimeNano(event))
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {

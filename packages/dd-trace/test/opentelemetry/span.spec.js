@@ -50,7 +50,7 @@ describe('OTel Span', () => {
     assert.strictEqual(context._hostname, tracer._hostname)
   })
 
-  it('should use plain Datadog spans when the tracer uses the JS span pipeline', () => {
+  it('should use plain Datadog spans', () => {
     const span = makeSpan('name')
 
     assert.strictEqual(span._ddSpan.constructor, DatadogSpan)
@@ -58,7 +58,7 @@ describe('OTel Span', () => {
 
   it('should apply global config tags (DD_TAGS / OTEL_RESOURCE_ATTRIBUTES) to bridged spans', () => {
     // OTEL_RESOURCE_ATTRIBUTES and DD_TAGS are parsed into config.tags; the OTel
-    // bridge must apply them to bridged spans just like the native path does.
+    // bridge must apply them to bridged spans just like the OpenTracing path does.
     const { tags } = tracer._tracer._config
     tags.dd_llmobs_enabled = 'false'
     try {

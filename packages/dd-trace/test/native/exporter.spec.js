@@ -1,932 +1,591 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 const { channel } = require('dc-polyfill')
-const sinon = require('sinon')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../setup/core')
+const { AgentEncoder } = require('../../src/encode/0.4')
+const id = require('../../src/id')
+
+const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
+const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 describe('NativeExporter', () => {
   let NativeExporter
-  let exporter
+  let beforeExitHandlers
+  let handlersBefore
+  let clock
   let config
-  let prioritySampler
-  let nativeSpans
+  let exporter
+  let fetchAgentInfo
+  let logDebug
   let logError
   let logWarn
   let metricsIncrement
-  let fetchAgentInfo
-  let clock
+  let nativeSpans
+  let prioritySampler
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
-
+    beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+    handlersBefore = new Set(beforeExitHandlers)
     config = {
       url: 'http://localhost:8126',
       flushInterval: 1000,
     }
-
     prioritySampler = {
-      sample: sinon.stub(),
       update: sinon.stub(),
     }
-
     nativeSpans = {
-      flushChangeQueue: sinon.stub(),
-      flushSpansGrouped: sinon.stub().resolves('unchanged'),
       flushStats: sinon.stub().resolves(true),
+      sendEncodedTraces: sinon.stub().resolves('unchanged'),
       setAgentUrl: sinon.stub(),
-      setUseV05: sinon.stub(),
       setOtlpEndpoint: sinon.stub(),
-      setOtlpProtocol: sinon.stub(),
       setOtlpHeaders: sinon.stub(),
+      setOtlpProtocol: sinon.stub(),
+      setUseV05: sinon.stub(),
     }
-
+    logDebug = sinon.stub()
     logError = sinon.stub()
     logWarn = sinon.stub()
     metricsIncrement = sinon.stub()
     fetchAgentInfo = sinon.stub()
     NativeExporter = proxyquire('../../src/exporters/native', {
+      '../../agent/info': { fetchAgentInfo },
       '../../log': {
-        warn: logWarn,
+        debug: logDebug,
         error: logError,
-        debug: sinon.stub(),
+        warn: logWarn,
       },
       '../../runtime_metrics': { increment: metricsIncrement },
-      '../../agent/info': { fetchAgentInfo },
     })
   })
 
   afterEach(() => {
+    for (const handler of beforeExitHandlers) {
+      if (!handlersBefore.has(handler)) beforeExitHandlers.delete(handler)
+    }
     clock.restore()
   })
 
-  describe('v0.5 negotiation', () => {
-    it('enables v0.5 when protocol is 0.5 and the agent advertises /v0.5/traces', () => {
+  /** @param {number} [testId] */
+  function createSpan (testId = 1) {
+    return {
+      testId,
+      trace_id: id('0000000000000001'),
+      span_id: id(String(testId).padStart(16, '0')),
+      parent_id: id('0000000000000000'),
+      name: 'request',
+      resource: 'GET /',
+      service: 'web',
+      meta: {},
+      metrics: {},
+      error: 0,
+      start: 1,
+      duration: 2,
+    }
+  }
+
+  /** @returns {InstanceType<NativeExporter>} */
+  function createExporter () {
+    exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    return exporter
+  }
+
+  /**
+   * @param {object[]} [spans]
+   * @returns {void}
+   */
+  function exportChunk (spans = [createSpan()]) {
+    exporter.export(spans)
+  }
+
+  async function settle () {
+    for (let turn = 0; turn < 8; turn++) {
+      await Promise.resolve()
+    }
+  }
+
+  describe('configuration', () => {
+    it('enables v0.5 only when the agent advertises it', () => {
       config.protocolVersion = '0.5'
-      fetchAgentInfo.callsArgWith(1, null, { endpoints: ['/v0.4/traces', '/v0.5/traces'] })
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
+      fetchAgentInfo.callsArgWith(1, undefined, { endpoints: ['/v0.5/traces'] })
+
+      createExporter()
+
       sinon.assert.calledOnceWithExactly(nativeSpans.setUseV05, true)
     })
 
-    it('stays on v0.4 when protocol is 0.5 but the agent lacks /v0.5/traces', () => {
+    it('ignores malformed v0.5 capability responses', () => {
       config.protocolVersion = '0.5'
-      fetchAgentInfo.callsArgWith(1, null, { endpoints: ['/v0.4/traces'] })
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
+      fetchAgentInfo.callsArgWith(1, undefined, { endpoints: '/v0.5/traces' })
+
+      createExporter()
+
       sinon.assert.notCalled(nativeSpans.setUseV05)
     })
 
-    it('stays on v0.4 when /info omits or malforms endpoints', () => {
+    it('configures OTLP endpoint, protocol, and flattened headers without v0.5 negotiation', () => {
       config.protocolVersion = '0.5'
-      // No `endpoints` key, and a non-array value — neither may enable v0.5
-      // or throw in the async callback.
-      fetchAgentInfo.callsArgWith(1, null, {})
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      fetchAgentInfo.callsArgWith(1, null, { endpoints: '/v0.5/traces' })
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.notCalled(nativeSpans.setUseV05)
-    })
-
-    it('stays on v0.4 when /info fails', () => {
-      config.protocolVersion = '0.5'
-      fetchAgentInfo.callsArgWith(1, new Error('connection refused'))
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.notCalled(nativeSpans.setUseV05)
-    })
-
-    it('does not fetch /info at all when protocol is not 0.5', () => {
-      config.protocolVersion = '0.4'
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.notCalled(fetchAgentInfo)
-      sinon.assert.notCalled(nativeSpans.setUseV05)
-    })
-  })
-
-  describe('OTLP export', () => {
-    beforeEach(() => {
       config.OTEL_TRACES_EXPORTER = 'otlp'
       config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector:4318/v1/traces'
-    })
-
-    it('routes traces to the OTLP endpoint when OTEL_TRACES_EXPORTER=otlp', () => {
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpEndpoint, 'http://collector:4318/v1/traces')
-      // No protocol/headers configured — the native defaults are used.
-      sinon.assert.notCalled(nativeSpans.setOtlpProtocol)
-      sinon.assert.notCalled(nativeSpans.setOtlpHeaders)
-    })
-
-    it('forwards the OTLP protocol and flattened headers', () => {
       config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/protobuf'
-      config.OTEL_EXPORTER_OTLP_TRACES_HEADERS = { authorization: 'Bearer t', 'x-tenant': 'a' }
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
+      config.OTEL_EXPORTER_OTLP_TRACES_HEADERS = { authorization: 'token', count: 2 }
+
+      createExporter()
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpEndpoint, 'http://collector:4318/v1/traces')
       sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpProtocol, 'http/protobuf')
-      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpHeaders, ['authorization', 'Bearer t', 'x-tenant', 'a'])
-    })
-
-    it('takes precedence over v0.5 (no /info negotiation)', () => {
-      config.protocolVersion = '0.5'
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpHeaders, ['authorization', 'token', 'count', '2'])
       sinon.assert.notCalled(fetchAgentInfo)
+    })
+
+    it('warns and keeps the agent route when OTLP has no endpoint', () => {
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+
+      createExporter()
+
+      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
+      sinon.assert.calledOnce(logWarn)
+    })
+
+    it('warns and keeps the native default when the OTLP protocol is unsupported', () => {
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector:4318/v1/traces'
+      config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'unsupported'
+      nativeSpans.setOtlpProtocol.throws(new Error('unsupported protocol'))
+
+      createExporter()
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpEndpoint, 'http://collector:4318/v1/traces')
+      sinon.assert.calledOnce(logWarn)
+    })
+
+    it('warns and keeps v0.4 when the agent URL cannot be parsed for negotiation', () => {
+      config.protocolVersion = '0.5'
+      config.url = 'not a URL'
+
+      createExporter()
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      sinon.assert.calledOnce(logWarn)
+    })
+
+    it('keeps v0.4 when the agent info request fails', () => {
+      config.protocolVersion = '0.5'
+      fetchAgentInfo.callsArgWith(1, new Error('agent unavailable'))
+
+      createExporter()
+
       sinon.assert.notCalled(nativeSpans.setUseV05)
+      sinon.assert.calledOnce(logDebug)
     })
 
-    it('tolerates an unsupported protocol (caught, falls back to default)', () => {
-      config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
-      nativeSpans.setOtlpProtocol.throws(new Error('OTLP gRPC export is not supported'))
+    it('derives the URL from hostname and port', () => {
+      delete config.url
+      config.hostname = 'agent.internal'
+      config.port = 9126
 
-      // Construction must not throw — the unsupported protocol is caught and logged.
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
-      // The fallback is observable as a warning.
-      sinon.assert.calledOnce(logWarn)
-    })
+      createExporter()
 
-    it('does not configure OTLP when exporter is not otlp', () => {
-      config.OTEL_TRACES_EXPORTER = 'none'
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
-    })
-
-    it('does not call setOtlpHeaders for an empty headers map', () => {
-      config.OTEL_EXPORTER_OTLP_TRACES_HEADERS = {}
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
-      sinon.assert.notCalled(nativeSpans.setOtlpHeaders)
-    })
-
-    it('skips OTLP setup (and warns) when no endpoint is resolved', () => {
-      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = undefined
-      // eslint-disable-next-line no-new
-      new NativeExporter(config, prioritySampler, nativeSpans)
-      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
-      sinon.assert.calledOnce(logWarn)
-    })
-  })
-
-  describe('constructor', () => {
-    it('should initialize config, pending spans, and register beforeExit', () => {
-      // Constructor wires up immutable state — assert all of it in one shot
-      // rather than splitting across three near-identical it() blocks. The
-      // URL fallback path has its own test below since it has real branching.
-      const ddTrace = globalThis[Symbol.for('dd-trace')]
-      const beforeCount = ddTrace.beforeExitHandlers.size
-
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-
-      assert.strictEqual(exporter._config, config)
-      assert.strictEqual(exporter._prioritySampler, prioritySampler)
-      assert.strictEqual(exporter._nativeSpans, nativeSpans)
-      assert.deepStrictEqual(exporter._pendingSpanChunks, [])
-      // Constructor should add to the shared registry rather than attaching
-      // a fresh listener to `process` (which would leak under test reinit).
-      assert.strictEqual(ddTrace.beforeExitHandlers.size, beforeCount + 1)
-    })
-
-    it('runs the final native stats flush after the final trace flush', async () => {
-      const ddTrace = globalThis[Symbol.for('dd-trace')]
-      const handlersBefore = new Set(ddTrace.beforeExitHandlers)
-      const order = []
-      nativeSpans.flushSpansGrouped.callsFake(() => {
-        order.push('traces')
-        return Promise.resolve('unchanged')
-      })
-      nativeSpans.flushStats.callsFake(() => {
-        order.push('stats')
-        return Promise.resolve(true)
-      })
-      config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-      const finalFlush = [...ddTrace.beforeExitHandlers].find(handler => !handlersBefore.has(handler))
-
-      exporter.export([createMockSpan(1n)])
-      finalFlush()
-      await Promise.resolve()
-      await Promise.resolve()
-
-      assert.deepStrictEqual(order, ['traces', 'stats'])
-    })
-
-    it('should derive URL from config.url, falling back to hostname:port', () => {
-      // Two branches of the URL-derivation logic in one test: the happy path
-      // (config.url provided) and the fallback (only hostname/port given).
-      const fromUrl = new NativeExporter(config, prioritySampler, nativeSpans)
-      assert.ok(fromUrl._url)
-
-      const configWithHostname = {
-        hostname: 'agent.example.com',
-        port: 8127,
-        flushInterval: 1000,
-      }
-      const fromHostname = new NativeExporter(configWithHostname, prioritySampler, nativeSpans)
-      assert.ok(fromHostname._url.toString().includes('agent.example.com'))
+      assert.strictEqual(exporter._url.href, 'http://agent.internal:9126/')
     })
   })
 
   describe('export', () => {
-    beforeEach(() => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    it('formats BigInt values in lazy debug payloads', () => {
+      createExporter()
+      const span = createSpan()
+      span.meta.value = 1n
+
+      exportChunk([span])
+
+      const message = logDebug.firstCall.args[0]()
+      assert.match(message, /"value":"1"/)
     })
 
-    it('should collect spans for batch export', () => {
-      const span1 = createMockSpan(1n)
-      const span2 = createMockSpan(2n)
+    it('encodes finalized data when the batching window ends', () => {
+      createExporter()
+      const span = createSpan(1)
 
-      exporter.export([span1, span2])
+      exportChunk([span])
 
-      assert.strictEqual(exporter._pendingSpanChunks[0].length, 2)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
-    })
-
-    it('preserves same-trace chunk boundaries across export calls', () => {
-      const root = createMockSpan(1n)
-      root.context()._parentId = null
-      const child = createMockSpan(2n)
-      child.context()._trace = root.context()._trace
-      child.context()._parentId = root.context()._spanId
-
-      exporter.export([root])
-      exporter.export([child])
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
       clock.tick(config.flushInterval)
 
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      const groups = nativeSpans.flushSpansGrouped.firstCall.args[0]
-      assert.strictEqual(groups.length, 2)
-      assert.deepStrictEqual(groups[0], {
-        spanIds: [root.context()._nativeSpanId],
-        firstIsLocalRoot: true,
-      })
-      assert.deepStrictEqual(groups[1], {
-        spanIds: [child.context()._nativeSpanId],
-        firstIsLocalRoot: false,
-      })
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      const decoded = msgpack.decode(nativeSpans.sendEncodedTraces.firstCall.args[0], { useBigInt64: true })
+      assert.strictEqual(decoded[0][0].resource, 'GET /')
     })
 
-    it('should flush immediately when flushInterval is 0', () => {
-      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
+    it('flushes at the pending span limit', () => {
+      createExporter()
+      const spans = Array.from({ length: 1999 }, (_, index) => createSpan(index + 1))
 
-      const span = createMockSpan(1n)
-      exporter.export([span])
+      exportChunk(spans)
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      exportChunk([createSpan(2000)])
 
-      // The exporter doesn't call flushChangeQueue directly; the
-      // change queue is drained inside flushSpansGrouped. Assert the visible
-      // public-API call instead.
-      sinon.assert.called(nativeSpans.flushSpansGrouped)
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
     })
 
-    it('schedules exactly one flush timer after flushInterval ms regardless of repeated export() calls', () => {
-      // Several export() calls within the same flushInterval window should
-      // share one timer, not stack up — and no flush should fire until the
-      // interval elapses.
-      exporter.export([createMockSpan(1n)])
-      clock.tick(config.flushInterval / 2)
-      exporter.export([createMockSpan(2n)])
-      clock.tick(config.flushInterval / 2 - 1)
-      exporter.export([createMockSpan(3n)])
+    it('uses native span events for the feature flag and OTLP', () => {
+      config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      createExporter()
+      const firstSpan = createSpan()
+      firstSpan.span_events = [{ name: 'event', startTime: 1.5, attributes: { value: 1 } }]
+      exportChunk([firstSpan])
+      clock.tick(config.flushInterval)
+      const firstPayload = msgpack.decode(nativeSpans.sendEncodedTraces.firstCall.args[0], { useBigInt64: true })
+      assert.strictEqual(firstPayload[0][0].span_events[0].name, 'event')
 
-      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-
-      clock.tick(2)
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-    })
-
-    it('flushes when the pending span cap is reached', () => {
-      const spans = []
-      for (let i = 1; i < 2000; i++) spans.push(createMockSpan(BigInt(i)))
-
-      exporter.export(spans)
-      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-
-      exporter.export([createMockSpan(2000n)])
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-    })
-
-    it('resets native state immediately when explicitly requested while idle', () => {
-      exporter._resetNativeStateWhenIdle()
-
-      sinon.assert.calledWith(nativeSpans.setAgentUrl, config.url)
-    })
-
-    it('does not reset native state before native stats are flushed', () => {
-      config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+      config.DD_TRACE_NATIVE_SPAN_EVENTS = false
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector:4318/v1/traces'
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-
-      exporter._resetNativeStateWhenIdle()
-
-      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      const secondSpan = createSpan()
+      secondSpan.span_events = [{ name: 'event', startTime: 2.5 }]
+      exportChunk([secondSpan])
+      clock.tick(config.flushInterval)
+      const secondPayload = msgpack.decode(nativeSpans.sendEncodedTraces.secondCall.args[0], { useBigInt64: true })
+      assert.strictEqual(secondPayload[0][0].span_events[0].name, 'event')
     })
 
-    it('delays explicit native state reset until active spans finish', () => {
-      exporter._trackSpanStart()
-      exporter._resetNativeStateWhenIdle()
+    it('handles a synchronous native send error', () => {
+      nativeSpans.sendEncodedTraces.throws(new Error('send failed'))
+      createExporter()
 
-      sinon.assert.notCalled(nativeSpans.setAgentUrl)
-      exporter._trackSpanFinish()
-      sinon.assert.calledWith(nativeSpans.setAgentUrl, config.url)
+      exportChunk()
+      clock.tick(config.flushInterval)
+
+      sinon.assert.calledOnce(logError)
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+    })
+
+    it('flushes immediately at zero interval', () => {
+      config.flushInterval = 0
+      createExporter()
+
+      exportChunk()
+
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+    })
+
+    it('uses one timer for repeated exports and sends all chunks together', () => {
+      createExporter()
+      exportChunk([createSpan(1)])
+      clock.tick(config.flushInterval / 2)
+      exportChunk([createSpan(2)])
+
+      clock.tick(config.flushInterval / 2 - 1)
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      clock.tick(1)
+
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      const decoded = msgpack.decode(nativeSpans.sendEncodedTraces.firstCall.args[0], { useBigInt64: true })
+      assert.strictEqual(decoded.length, 2)
+      assert.strictEqual(decoded[0][0].span_id, 1n)
+      assert.strictEqual(decoded[1][0].span_id, 2n)
     })
   })
 
   describe('flush', () => {
-    beforeEach(() => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    it('settles immediately when there is no pending chunk', () => {
+      createExporter()
+      const done = sinon.stub()
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
     })
 
-    it('should do nothing if no pending spans', (done) => {
-      exporter.flush(() => {
-        sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-        done()
-      })
+    it('waits for the native send and applies sampling rates', async () => {
+      const rates = { 'service:,env:': 0.5 }
+      nativeSpans.sendEncodedTraces.resolves(JSON.stringify({ rate_by_service: rates }))
+      createExporter()
+      exportChunk()
+      const done = sinon.stub()
+
+      exporter.flush(done)
+      sinon.assert.notCalled(done)
+      await settle()
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.requests`, true)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.responses`, true)
     })
 
-    it('exposes a _writer.flush shim that flushes traces then native stats (weblog /flush compat)', (done) => {
-      exporter._writer.flush(() => {
-        // no pending spans -> no trace send, but the shim still force-flushes
-        // the native stats concentrator so the /flush endpoint ships stats
-        sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-        sinon.assert.calledOnce(nativeSpans.flushStats)
-        done()
-      })
-    })
-
-    it('flushStats() force-flushes the native concentrator (parametric stats-flush)', async () => {
-      const result = await exporter.flushStats()
-      sinon.assert.calledOnce(nativeSpans.flushStats)
-      assert.strictEqual(result, true)
-      // The weblog /flush endpoint reaches _writer.flush(cb); it must also
-      // force-flush client-computed stats (native APM stats otherwise ship
-      // only on a 10s interval that a test-harness teardown can beat).
-      await new Promise((resolve) => exporter._writer.flush(resolve))
-      sinon.assert.calledTwice(nativeSpans.flushStats)
-    })
-
-    it('waits for in-flight trace sends before _writer.flush force-flushes stats', async () => {
-      let resolveFirst
-      let resolveSecond
-      let resolveStats
-      nativeSpans.flushSpansGrouped
-        .onFirstCall().callsFake(() => new Promise(resolve => { resolveFirst = resolve }))
-        .onSecondCall().callsFake(() => new Promise(resolve => { resolveSecond = resolve }))
-      nativeSpans.flushStats.callsFake(() => new Promise(resolve => { resolveStats = resolve }))
-
-      exporter.export([createMockSpan(1n)])
+    it('serializes work queued during an in-flight send', async () => {
+      let releaseFirst
+      nativeSpans.sendEncodedTraces.onFirstCall().returns(new Promise(resolve => { releaseFirst = resolve }))
+      nativeSpans.sendEncodedTraces.onSecondCall().resolves('unchanged')
+      createExporter()
+      exportChunk([createSpan(1)])
       exporter.flush()
-      exporter.export([createMockSpan(2n)])
+      exportChunk([createSpan(2)])
+      const done = sinon.stub()
 
-      let called = false
-      exporter._writer.flush(() => { called = true })
+      exporter.flush(done)
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      sinon.assert.notCalled(done)
+      releaseFirst('unchanged')
+      await settle()
 
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      sinon.assert.notCalled(nativeSpans.flushStats)
-      assert.strictEqual(called, false)
-
-      resolveFirst('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      sinon.assert.notCalled(nativeSpans.flushStats)
-      assert.strictEqual(called, false)
-
-      resolveSecond('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnce(nativeSpans.flushStats)
-      assert.strictEqual(called, false)
-
-      resolveStats(true)
-      await clock.tickAsync(0)
-
-      assert.strictEqual(called, true)
+      sinon.assert.calledTwice(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledOnce(done)
     })
 
-    it('drains every queued flush callback when one callback throws', async () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
-      let scheduledThrow
-      const setImmediateStub = sinon.stub(global, 'setImmediate').callsFake(fn => { scheduledThrow = fn })
-      const throwValue = (value) => { throw value }
+    it('sends one request per chunk at zero interval', async () => {
+      config.flushInterval = 0
+      createExporter()
+      exportChunk([createSpan(1)])
+      exportChunk([createSpan(2)])
+      await settle()
 
+      sinon.assert.calledTwice(nativeSpans.sendEncodedTraces)
+      const firstPayload = msgpack.decode(nativeSpans.sendEncodedTraces.firstCall.args[0], { useBigInt64: true })
+      const secondPayload = msgpack.decode(nativeSpans.sendEncodedTraces.secondCall.args[0], { useBigInt64: true })
+      assert.strictEqual(firstPayload.length, 1)
+      assert.strictEqual(secondPayload.length, 1)
+      assert.strictEqual(firstPayload[0][0].span_id, 1n)
+      assert.strictEqual(secondPayload[0][0].span_id, 2n)
+    })
+
+    it('runs compatibility stats flush after traces finish', async () => {
+      let releaseTrace
+      nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseTrace = resolve }))
+      createExporter()
+      exportChunk()
+      const done = sinon.stub()
+
+      exporter._writer.flush(done)
+      sinon.assert.notCalled(nativeSpans.flushStats)
+      releaseTrace('unchanged')
+      await settle()
+
+      sinon.assert.calledOnce(nativeSpans.flushStats)
+      sinon.assert.calledOnce(done)
+    })
+
+    it('completes compatibility flushes when native stats reject', async () => {
+      nativeSpans.flushStats.rejects(new Error('stats failed'))
+      createExporter()
+      const done = sinon.stub()
+
+      exporter._writer.flush(done)
+      await settle()
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(logError)
+    })
+
+    it('logs failed final native stats flushes', async () => {
+      nativeSpans.flushStats.rejects(new Error('stats failed'))
+      createExporter()
+      let finalFlush
+      for (const handler of beforeExitHandlers) {
+        if (!handlersBefore.has(handler)) finalFlush = handler
+      }
+
+      assert.strictEqual(typeof finalFlush, 'function')
+      finalFlush()
+      await settle()
+
+      sinon.assert.calledOnce(logWarn)
+    })
+
+    it('runs every flush callback before surfacing a callback error', async () => {
+      let releaseSend
+      nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseSend = resolve }))
+      createExporter()
+      exportChunk()
+      const expected = new Error('callback failed')
+      const second = sinon.stub()
+
+      exporter.flush(() => { throw expected })
+      exporter.flush(second)
+      releaseSend('unchanged')
+      await settle()
+
+      sinon.assert.calledOnce(second)
+      assert.throws(() => clock.runAll(), expected)
+    })
+
+    it('handles encoding errors without sending a partial payload', () => {
+      createExporter()
+      const span = createSpan()
+      Object.defineProperty(span, 'meta', {
+        get () { throw new Error('invalid meta') },
+      })
+      const done = sinon.stub()
+
+      exportChunk([span])
+      exporter.flush(done)
+
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(logError)
+    })
+
+    it('settles without sending when the encoder drops an oversized trace', () => {
+      const encode = sinon.stub(AgentEncoder.prototype, 'encode')
       try {
-        exporter.export([createMockSpan(1n)])
+        createExporter()
+        const done = sinon.stub()
 
-        let firstCalled = false
-        let secondCalled = false
-        exporter.flush(() => { firstCalled = true })
-        exporter.flush(() => { throwValue(0) })
-        exporter.flush(() => { secondCalled = true })
+        exportChunk()
+        exporter.flush(done)
 
-        resolveSend('unchanged')
-        await clock.tickAsync(0)
-
-        assert.strictEqual(firstCalled, true)
-        assert.strictEqual(secondCalled, true)
-        sinon.assert.calledOnce(setImmediateStub)
-        try {
-          scheduledThrow()
-          assert.fail('expected scheduled throw')
-        } catch (err) {
-          assert.strictEqual(err, 0)
-        }
+        sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
+        sinon.assert.calledOnce(done)
       } finally {
-        setImmediateStub.restore()
+        encode.restore()
       }
     })
 
-    it('settles queued flush callbacks when native send setup throws synchronously', () => {
-      nativeSpans.flushSpansGrouped.throws(new Error('prepare failed'))
+    it('ignores malformed native sampling responses', async () => {
+      nativeSpans.sendEncodedTraces.resolves('{')
+      createExporter()
+      exportChunk()
 
-      exporter.export([createMockSpan(1n)])
-
-      let cbErr = 'unset'
-
-      exporter.flush((err) => { cbErr = err })
-
-      assert.strictEqual(cbErr, undefined)
-      sinon.assert.called(logError)
-    })
-
-    // This pins the complete successful flush sequence.
-    it('end-to-end successful flush: calls flushSpansGrouped with span ids, drains pending, fires done',
-      async () => {
-        const span1 = createMockSpan(123n)
-        const span2 = createMockSpan(456n)
-        exporter.export([span1, span2])
-
-        // done() waits for the async send to settle so explicit /flush callers
-        // don't observe the trace before it reaches the agent.
-        let cbErr = 'unset'
-        exporter.flush((err) => { cbErr = err })
-        assert.strictEqual(cbErr, 'unset')
-
-        // flushSpansGrouped called with the extracted span-id array — the native
-        // pipeline addresses spans by their span id.
-        sinon.assert.called(nativeSpans.flushSpansGrouped)
-        // Two distinct traces -> two per-trace chunks; every span id is present.
-        const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
-        const allIds = groups.flatMap(g => g.spanIds)
-        assert.deepStrictEqual(allIds, [
-          span1.context()._nativeSpanId,
-          span2.context()._nativeSpanId,
-        ])
-        // Pending spans drain synchronously when the flush is dispatched.
-        assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-
-        // Drain microtasks so the resolved-flush handler runs.
-        await clock.tickAsync(0)
-        assert.strictEqual(cbErr, undefined)
-      })
-
-    it('sends one payload per trace at flushInterval:0 when a flush coalesced multiple traces',
-      async () => {
-        // flushInterval:0 mirrors the legacy AgentWriter's one-trace-per-request
-        // behaviour. When several traces pile up during an in-flight send and
-        // drain together, each must ship as its own payload so a `traces[0]`
-        // consumer isn't handed a coalesced multi-trace payload.
-        exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
-        const span1 = createMockSpan(123n)
-        const span2 = createMockSpan(456n)
-        exporter.export([span1, span2])
-
-        // Drain the sequenced per-group sends.
-        await clock.tickAsync(0)
-        await clock.tickAsync(0)
-
-        sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 1)
-        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(1).args[0].length, 1)
-      })
-
-    it('sends one batched payload at flushInterval:0 for a single trace', async () => {
-      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
-      exporter.export([createMockSpan(1n)])
-      await clock.tickAsync(0)
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 1)
-    })
-
-    it('should sync trace tags to first span', (done) => {
-      const span = createMockSpan(1n)
-      // Make this span a local root by setting parentId to null
-      span.context()._parentId = null
-      span.context()._trace.tags = { '_dd.p.tid': 'abc123' }
-      exporter.export([span])
-
-      exporter.flush(() => {
-        // Trace tags should be synced to span tags
-        assert.ok(span.context().getTag('_dd.p.tid'))
-        done()
-      })
-    })
-
-    it('should determine first is local root correctly for root span', (done) => {
-      const span = createMockSpan(1n)
-      span.context()._parentId = null
-      exporter.export([span])
-
-      exporter.flush(() => {
-        const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
-        assert.strictEqual(groups.length, 1)
-        assert.strictEqual(groups[0].firstIsLocalRoot, true)
-        done()
-      })
-    })
-
-    it('should re-flush pending spans after a flush rejection', async () => {
-      // Asymmetric to the success-path drain. Without this, a single
-      // transient agent failure would leave spans buffered indefinitely
-      // until the next export() call woke the exporter back up.
-      let rejectSend
-      nativeSpans.flushSpansGrouped
-        .onFirstCall().callsFake(() => new Promise((_resolve, reject) => { rejectSend = reject }))
-        .onSecondCall().resolves('unchanged')
-
-      exporter.export([createMockSpan(1n)])
       exporter.flush()
-      exporter.export([createMockSpan(2n)])
-      exporter.flush()
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
+      await settle()
 
-      rejectSend(new Error('Network error'))
-      await clock.tickAsync(0)
-      await clock.tickAsync(0)
-
-      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-    })
-
-    it('disables the exporter on a fatal NativeExporterBuildError (no retry loop)', async () => {
-      // A build failure (bad config) is fatal and one-shot; the exporter must
-      // stop instead of looping on the same error every flush.
-      const buildErr = new Error('native exporter build failed: invalid config')
-      buildErr.name = 'NativeExporterBuildError'
-      nativeSpans.flushSpansGrouped.rejects(buildErr)
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-      await clock.tickAsync(0)
-
-      // Buffered spans dropped, and the exporter is now disabled.
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-
-      // Subsequent export()/flush() are no-ops — no further send attempts.
-      exporter.export([createMockSpan(2n)])
-      exporter.flush()
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-    })
-
-    it('should not start a new flush while one is in flight', () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-
-      // Second batch arrives while the first send is still in flight:
-      exporter.export([createMockSpan(2n)])
-      exporter.flush()
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
-
-      // Settle the in-flight send so afterEach's clock.restore() doesn't
-      // leak an unhandled-rejection warning across tests.
-      resolveSend('unchanged')
-    })
-
-    it('waits for the scheduled flush when an in-flight send settles before the interval', async () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped
-        .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
-        .onSecondCall().resolves('unchanged')
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      exporter.export([createMockSpan(2n)])
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
-
-      resolveSend('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
-
-      await clock.tickAsync(config.flushInterval)
-
-      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-    })
-
-    it('re-flushes queued spans when their scheduled interval elapsed during an in-flight send', async () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped
-        .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
-        .onSecondCall().resolves('unchanged')
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      exporter.export([createMockSpan(2n)])
-
-      await clock.tickAsync(config.flushInterval)
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
-
-      resolveSend('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
-      assert.strictEqual(exporter._pendingSpanChunks.length, 0)
-    })
-
-    it('should swallow flushSpansGrouped rejections (logged, not propagated to done)', async () => {
-      // flush() waits for async send settlement, then log.error()s any rejection.
-      // Errors do not surface through the done callback.
-      nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
-
-      const span = createMockSpan(1n)
-      exporter.export([span])
-
-      let cbErr = 'unset'
-      exporter.flush((err) => { cbErr = err })
-      assert.strictEqual(cbErr, 'unset')
-
-      // Drain pending microtasks so the rejection handler runs. With
-      // sinon.useFakeTimers() Promise microtasks still settle when we yield
-      // to the host promise queue via tickAsync.
-      await clock.tickAsync(0)
-      assert.strictEqual(cbErr, undefined)
-
-      sinon.assert.called(logError)
-    })
-  })
-
-  describe('agent sampling rates', () => {
-    beforeEach(() => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-    })
-
-    it('forwards rate_by_service from the agent response to the priority sampler', async () => {
-      const rates = { 'service:web,env:prod': 0.5, 'service:db,env:prod': 0.1 }
-      nativeSpans.flushSpansGrouped.resolves(JSON.stringify({ rate_by_service: rates }))
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
-    })
-
-    it('applies rates from every request when a zero-interval flush sends per group', async () => {
-      // At flushInterval:0 a coalesced flush sends one request per group. Each
-      // carries its own `rate_by_service`, so taking only whatever the chain
-      // settles with loses fresh rates whenever a later request says 'unchanged'.
-      const rates = { 'service:web,env:prod': 0.5 }
-      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
-
-      let release
-      nativeSpans.flushSpansGrouped = sinon.stub()
-      nativeSpans.flushSpansGrouped.onCall(0).returns(new Promise(resolve => { release = resolve }))
-      nativeSpans.flushSpansGrouped.onCall(1).resolves(JSON.stringify({ rate_by_service: rates }))
-      nativeSpans.flushSpansGrouped.onCall(2).resolves('unchanged')
-
-      // First export starts a send; the next two queue behind it and are drained
-      // together, which is what produces the multi-group per-request chain.
-      exporter.export([createMockSpan(1n)])
-      exporter.export([createMockSpan(2n)])
-      exporter.export([createMockSpan(3n)])
-      release('unchanged')
-      await clock.tickAsync(0)
-
-      assert.strictEqual(nativeSpans.flushSpansGrouped.callCount, 3)
-      sinon.assert.calledOnceWithExactly(prioritySampler.update, rates)
-    })
-
-    it('does not update rates for sentinel responses (unchanged / no spans / empty)', async () => {
-      // The native layer resolves 'unchanged' when the rates payload-version
-      // header matches the previous flush, 'no spans to flush' when nothing
-      // was sent, and these carry no body to parse. None should touch the
-      // sampler or log an error.
-      for (const sentinel of ['unchanged', 'no spans to flush', '']) {
-        nativeSpans.flushSpansGrouped.resolves(sentinel)
-        exporter.export([createMockSpan(1n)])
-        exporter.flush()
-        await clock.tickAsync(0)
-      }
-
-      sinon.assert.notCalled(prioritySampler.update)
-      sinon.assert.notCalled(logError)
-    })
-
-    it('does not update rates when the response body omits rate_by_service', async () => {
-      nativeSpans.flushSpansGrouped.resolves(JSON.stringify({ something_else: true }))
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      sinon.assert.notCalled(prioritySampler.update)
-    })
-
-    it('swallows malformed JSON in the response without disrupting the flush', async () => {
-      nativeSpans.flushSpansGrouped.resolves('this is not json')
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      // No throw, sampler untouched, error logged.
       sinon.assert.notCalled(prioritySampler.update)
       sinon.assert.calledOnce(logError)
     })
-  })
 
-  describe('first-flush channel', () => {
-    const firstFlushChannel = channel('dd-trace:exporter:first-flush')
-    let onFirstFlush
+    it('retries work queued during a transient failure', async () => {
+      let rejectFirst
+      nativeSpans.sendEncodedTraces.onFirstCall().returns(new Promise((_resolve, reject) => { rejectFirst = reject }))
+      nativeSpans.sendEncodedTraces.onSecondCall().resolves('unchanged')
+      createExporter()
+      exportChunk([createSpan(1)])
+      exporter.flush()
+      exportChunk([createSpan(2)])
 
-    beforeEach(() => {
-      onFirstFlush = sinon.spy()
-      firstFlushChannel.subscribe(onFirstFlush)
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+      rejectFirst(new Error('network failed'))
+      await settle()
+
+      sinon.assert.calledOnce(nativeSpans.sendEncodedTraces)
+      clock.tick(config.flushInterval)
+      await settle()
+
+      sinon.assert.calledTwice(nativeSpans.sendEncodedTraces)
+      sinon.assert.called(logError)
     })
 
-    afterEach(() => {
-      firstFlushChannel.unsubscribe(onFirstFlush)
+    it('disables future exports after a fatal native build failure', async () => {
+      const error = new Error('build failed')
+      error.name = 'NativeExporterBuildError'
+      nativeSpans.sendEncodedTraces.rejects(error)
+      createExporter()
+      exportChunk([createSpan(1)])
+      exporter.flush()
+      await settle()
+      nativeSpans.sendEncodedTraces.resetHistory()
+
+      exportChunk([createSpan(2)])
+
+      sinon.assert.notCalled(nativeSpans.sendEncodedTraces)
     })
 
-    it('publishes once on first successful flush and does not republish on subsequent flushes', async () => {
-      exporter.export([createMockSpan(1n)])
+    it('records error name and code on failed sends', async () => {
+      const error = new Error('connection refused')
+      error.code = 'ECONNREFUSED'
+      nativeSpans.sendEncodedTraces.rejects(error)
+      createExporter()
+      exportChunk()
       exporter.flush()
-      await clock.tickAsync(0)
-      sinon.assert.calledOnce(onFirstFlush)
+      await settle()
 
-      exporter.export([createMockSpan(2n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-      sinon.assert.calledOnce(onFirstFlush)
-    })
-
-    it('publishes even when the send rejects (so abort.integration fires without an agent)', async () => {
-      // The channel is announced when the send is attempted, not when it
-      // succeeds — logAbortedIntegrations must run even against an unreachable
-      // agent (the guardrails harness has no agent).
-      nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
-
-      exporter.export([createMockSpan(1n)])
-      exporter.flush()
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnce(onFirstFlush)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.errors`, true)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.errors.by.name`, 'name:Error', true)
+      sinon.assert.calledWith(metricsIncrement, `${METRIC_PREFIX}.errors.by.code`, 'code:ECONNREFUSED', true)
     })
   })
 
   describe('setUrl', () => {
-    beforeEach(() => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+    it('updates native state immediately while idle', () => {
+      createExporter()
+
+      exporter.setUrl('http://agent.internal:9126')
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://agent.internal:9126/')
+      assert.strictEqual(exporter._url.href, 'http://agent.internal:9126/')
     })
 
-    it('should update the URL immediately when the exporter is idle', () => {
-      const originalUrl = exporter._url.toString()
-      exporter.setUrl('http://new-agent:9999')
+    it('flushes pending chunks before replacing native state', async () => {
+      let releaseSend
+      nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseSend = resolve }))
+      createExporter()
+      exportChunk()
 
-      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
-      assert.notStrictEqual(exporter._url.toString(), originalUrl)
+      exporter.setUrl('http://agent.internal:9126')
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      releaseSend('unchanged')
+      await settle()
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://agent.internal:9126/')
     })
 
-    it('flushes pending spans before reinitializing native state', async () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped.returns(new Promise(resolve => { resolveSend = resolve }))
+    it('waits for an in-flight send before replacing native state', async () => {
+      let releaseSend
+      nativeSpans.sendEncodedTraces.returns(new Promise(resolve => { releaseSend = resolve }))
+      createExporter()
+      exportChunk()
+      exporter.flush()
 
-      exporter.export([createMockSpan(1n)])
-      exporter.setUrl('http://new-agent:9999')
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      exporter.setUrl('http://agent.internal:9126')
       sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      releaseSend('unchanged')
+      await settle()
 
-      resolveSend('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
-      assert.strictEqual(exporter._url.toString(), 'http://new-agent:9999/')
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://agent.internal:9126/')
     })
 
-    it('waits for active spans to finish before reinitializing native state', async () => {
-      let resolveSend
-      nativeSpans.flushSpansGrouped.returns(new Promise(resolve => { resolveSend = resolve }))
+    it('keeps the old URL when native state replacement fails', () => {
+      nativeSpans.setAgentUrl.throws(new Error('invalid native URL'))
+      createExporter()
 
-      exporter._trackSpanStart()
-      exporter.setUrl('http://new-agent:9999')
+      exporter.setUrl('http://agent.internal:9126')
 
-      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
-      sinon.assert.notCalled(nativeSpans.setAgentUrl)
-
-      exporter.export([createMockSpan(1n)])
-      exporter._trackSpanFinish()
-
-      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
-      sinon.assert.notCalled(nativeSpans.setAgentUrl)
-
-      resolveSend('unchanged')
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
-      assert.strictEqual(exporter._url.toString(), 'http://new-agent:9999/')
+      assert.strictEqual(exporter._url, 'http://localhost:8126')
+      sinon.assert.calledOnce(logWarn)
     })
 
-    it('keeps ordinary flush callbacks independent from active spans', () => {
-      const done = sinon.stub()
+    it('rejects malformed URLs without touching native state', () => {
+      createExporter()
 
-      exporter._trackSpanStart()
-      exporter.flush(done)
+      exporter.setUrl('not a URL')
 
-      sinon.assert.calledOnce(done)
       sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      sinon.assert.calledOnce(logWarn)
     })
   })
 
-  describe('health metrics', () => {
-    const P = 'datadog.tracer.node.exporter.agent'
+  describe('first flush', () => {
+    it('publishes exactly once even when the first send rejects', async () => {
+      const observer = sinon.stub()
+      firstFlushChannel.subscribe(observer)
+      nativeSpans.sendEncodedTraces.onFirstCall().rejects(new Error('network failed'))
+      nativeSpans.sendEncodedTraces.onSecondCall().resolves('unchanged')
+      config.flushInterval = 0
+      createExporter()
 
-    it('increments request + response counters on a successful flush', async () => {
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-      exporter.export([createMockSpan(1n)])
-      exporter.flush(() => {})
-      await clock.tickAsync(0)
-      sinon.assert.calledWith(metricsIncrement, `${P}.requests`, true)
-      sinon.assert.calledWith(metricsIncrement, `${P}.responses`, true)
-    })
+      exportChunk([createSpan(1)])
+      await settle()
+      exportChunk([createSpan(2)])
+      await settle()
 
-    it('increments error counters (name + code) on a failed flush', async () => {
-      const err = new Error('boom')
-      err.code = 'ECONNREFUSED'
-      nativeSpans.flushSpansGrouped.rejects(err)
-      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
-      exporter.export([createMockSpan(1n)])
-      exporter.flush(() => {})
-      await clock.tickAsync(0)
-      sinon.assert.calledWith(metricsIncrement, `${P}.requests`, true)
-      sinon.assert.calledWith(metricsIncrement, `${P}.errors`, true)
-      sinon.assert.calledWith(metricsIncrement, `${P}.errors.by.name`, 'name:Error', true)
-      sinon.assert.calledWith(metricsIncrement, `${P}.errors.by.code`, 'code:ECONNREFUSED', true)
+      sinon.assert.calledOnce(observer)
+      firstFlushChannel.unsubscribe(observer)
     })
   })
-
-  // Helper function to create mock spans
-  function createMockSpan (nativeSpanIdValue) {
-    // Create an 8-byte buffer for the span ID (big-endian)
-    const nativeSpanId = Buffer.alloc(8)
-    nativeSpanId.writeBigUInt64BE(BigInt(nativeSpanIdValue))
-
-    const spanId = {
-      toString: () => String(nativeSpanIdValue),
-      toBigInt: () => BigInt(nativeSpanIdValue),
-      toBuffer: () => nativeSpanId,
-    }
-
-    const tagStore = Object.create(null)
-
-    const context = {
-      _nativeSpanId: nativeSpanId,
-      _spanId: spanId,
-      _parentId: { toString: () => '0' },
-      _isRemote: false,
-      // The exporter reads context._nativeSpanId to build the span-id
-      // array passed to nativeSpans.flushSpansGrouped.
-      _trace: {
-        started: [],
-        finished: [],
-        tags: {},
-      },
-      hasTag (key) {
-        return key in tagStore
-      },
-      setTag (key, value) {
-        tagStore[key] = value
-      },
-      getTag (key) {
-        return tagStore[key]
-      },
-    }
-
-    return {
-      context: () => context,
-    }
-  }
 })

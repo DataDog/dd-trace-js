@@ -278,13 +278,22 @@ describe('encode', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           startTime: 1633023102,
-          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+          attributes: {
+            emotion: 'happy',
+            rating: 9.8,
+            other: [1, 9.5, 1],
+            idol: false,
+            success: true,
+            invalid: null,
+            notNumber: NaN,
+          },
         },
       ]
 
       const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
       '{"name":"I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx","time_unix_nano":1633023102000000,' +
-      '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false}}]'
+      '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false,"success":true,' +
+      '"invalid":null,"notNumber":null}}]'
 
       data[0].span_events = topLevelEvents
 
@@ -294,6 +303,26 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       assert.deepStrictEqual(trace[0].meta.events, encodedLink)
+    })
+
+    it('should preserve lone surrogates in fallback span event JSON', () => {
+      const events = [{
+        name: '\uD800',
+        startTime: 1,
+        attributes: { '\uD801': '\uD802' },
+      }]
+      data[0].span_events = events
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const expected = JSON.stringify([{
+        name: '\uD800',
+        time_unix_nano: 1000000,
+        attributes: { '\uD801': '\uD802' },
+      }])
+      assert.strictEqual(decoded[0][0].meta.events, expected)
     })
 
     it('should encode span events whose name is not a string without throwing', () => {
@@ -664,10 +693,10 @@ describe('encode', () => {
       const trace = decoded[0]
 
       const formattedTopLevelEvent = [
-        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        { name: 'Something went so wrong', time_unix_nano: 1000000n },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
           attributes: {
             emotion: { type: 0, string_value: 'happy' },
             idol: { type: 1, bool_value: false },
@@ -718,11 +747,11 @@ describe('encode', () => {
       const formattedTopLevelEvent = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
         },
         {
           name: 'I can sing!!!',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
           attributes: { array: { type: 4, array_value: { values: [{ type: 0, string_value: 'valid_value' }] } } },
         },
       ]
@@ -820,7 +849,7 @@ describe('encode', () => {
       assert.deepStrictEqual(trace[0].span_events, [
         {
           name: 'kept',
-          time_unix_nano: 5000000,
+          time_unix_nano: 5000000n,
           attributes: { mood: { type: 0, string_value: 'happy' } },
         },
       ])

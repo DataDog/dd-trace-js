@@ -2,7 +2,8 @@
 
 const { MAX_SIZE, OverflowError } = require('../msgpack')
 const { normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
+const { AgentEncoder: BaseEncoder } = require('./0.4')
+const { stringifySpanEvents } = require('./span-events')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
