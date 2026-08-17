@@ -2,7 +2,7 @@
 
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
-const { argument, field } = require('../../dd-trace/src/plugins/orchestrion-pipeline')
+const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
 
 /**
  * Remove and return Datadog propagation fields from BullMQ telemetry metadata.
@@ -30,25 +30,25 @@ function extractDatadog (job) {
 /**
  * Resolve the messaging consumer service using the existing naming schema.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').PipelineFrame} frame
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
  * @returns {string | {name: string, source?: string}}
  */
 function consumerService (frame) {
-  return frame.config.service || frame.plugin.serviceName({ type: 'messaging', kind: 'consumer' })
+  return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'consumer' })
 }
 
 const consumerDsmStage = {
   name: 'data-streams',
+  requires: ['tracing'],
   start (frame) {
     if (!frame.config.dsmEnabled) return
 
     const job = frame.data.job
     if (!job) return
     const carrier = frame.data.carrier
-    if (carrier) frame.tracer.decodeDataStreamsContext(carrier)
-    frame.tracer.setCheckpoint(
+    frame.dataStreams.decode(carrier)
+    frame.dataStreams.setCheckpoint(
       ['direction:in', `topic:${frame.data.queueName}`, 'type:bullmq'],
-      frame.span,
       job.data ? getMessageSize(job.data) : 0
     )
   },
@@ -64,13 +64,15 @@ const operation = {
       carrier: context => extractDatadog(context.arguments[0]),
     },
   },
+  context: {
+    parent: frame => frame.data.carrier && frame.propagation.extract('text_map', frame.data.carrier),
+  },
   span: {
     name: 'bullmq.processJob',
     service: consumerService,
     resource: field('queueName'),
     type: 'messaging',
     kind: 'consumer',
-    childOf: frame => frame.data.carrier && frame.tracer.extract('text_map', frame.data.carrier),
     tags: {
       component: 'bullmq',
       'span.kind': 'consumer',
