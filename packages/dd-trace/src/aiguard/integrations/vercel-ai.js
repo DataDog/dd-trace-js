@@ -74,18 +74,17 @@ function onStreamAfter (ctx) {
  */
 function getStreamContent (chunks) {
   const toolCalls = []
-  const textParts = []
+  let text = ''
 
   for (const chunk of chunks) {
     if (chunk?.type === 'tool-call') {
       toolCalls.push(chunk)
     } else if (chunk?.type === 'text-delta') {
-      textParts.push(chunk.textDelta)
+      text += chunk.textDelta
     }
   }
 
   if (toolCalls.length) return toolCalls
-  const text = textParts.join('')
   return text ? [{ type: 'text', text }] : []
 }
 
