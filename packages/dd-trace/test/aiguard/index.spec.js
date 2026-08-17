@@ -397,6 +397,7 @@ describe('AIGuard SDK', () => {
 
   it('returns complete redacted messages while truncating only the meta-struct copy', async () => {
     const maxContentSize = 12
+    const atLimit = 'A'.repeat(maxContentSize)
     const limited = new AIGuard(tracer, {
       ...config,
       experimental: {
@@ -408,6 +409,7 @@ describe('AIGuard SDK', () => {
       role: 'user',
       content: [
         { type: 'input_text', text: 'My SSN is 123-45-6789' },
+        { type: 'input_text', text: atLimit },
         { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
       ],
     }]
@@ -429,10 +431,12 @@ describe('AIGuard SDK', () => {
       role: 'user',
       content: [
         { type: 'input_text', text: replacement },
+        { type: 'input_text', text: atLimit },
         { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
       ],
     }])
     assertTelemetry('truncated', { type: 'content', ...sdkTags })
+    assert.strictEqual(count.getCalls().filter(call => call.args[0] === 'truncated').length, 1)
     await assertAIGuardSpan(
       { 'ai_guard.redacted': 'true' },
       {
@@ -440,6 +444,7 @@ describe('AIGuard SDK', () => {
           role: 'user',
           content: [
             { type: 'input_text', text: replacement.slice(0, maxContentSize) },
+            { type: 'input_text', text: atLimit },
             { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
           ],
         }],

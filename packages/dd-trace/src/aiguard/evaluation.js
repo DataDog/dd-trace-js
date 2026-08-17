@@ -13,6 +13,7 @@ const TAGS = require('./tags')
 
 const ALLOW = 'ALLOW'
 
+/** @typedef {import('../../../../index').aiguard.ContentPart} ContentPart */
 /** @typedef {import('../../../../index').aiguard.Message} Message */
 /** @typedef {import('../../../../index').aiguard.RedactionReplacement} RedactionReplacement */
 /** @typedef {import('../opentracing/span')} Span */
@@ -282,16 +283,39 @@ class EvaluationReporter {
     let contentTruncated = false
     for (let i = messages.length - size; i < messages.length; i++) {
       const message = clone(messages[i])
-      if (message.content?.length > this.#maxContentSize) {
-        contentTruncated = true
-        message.content = message.content.slice(0, this.#maxContentSize)
-      }
+      if (this.#truncateMessageContent(message)) contentTruncated = true
       result.push(message)
     }
     if (contentTruncated) {
       aiguardMetrics.count(TAGS.TELEMETRY_TRUNCATED, { type: 'content', ...telemetryTags }).inc(1)
     }
     return result
+  }
+
+  /**
+   * Truncates oversized text fields in a cloned message.
+   *
+   * @param {{ content?: string|ContentPart[] }} message
+   * @returns {boolean}
+   */
+  #truncateMessageContent (message) {
+    if (typeof message.content === 'string') {
+      if (message.content.length <= this.#maxContentSize) return false
+
+      message.content = message.content.slice(0, this.#maxContentSize)
+      return true
+    }
+
+    if (!Array.isArray(message.content)) return false
+
+    let truncated = false
+    for (const part of message.content) {
+      if (typeof part.text === 'string' && part.text.length > this.#maxContentSize) {
+        part.text = part.text.slice(0, this.#maxContentSize)
+        truncated = true
+      }
+    }
+    return truncated
   }
 
   /**
