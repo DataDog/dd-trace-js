@@ -47,6 +47,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
 <h5 id="azure-durable-functions"></h5>
+<h5 id="browser-bunyan"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -132,6 +133,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
 * [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
+* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
