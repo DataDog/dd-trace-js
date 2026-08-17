@@ -606,6 +606,7 @@ describe('LLMObs Experiments facade', () => {
         'source:eve',
         'eval:smoke',
         'experiment_id:exp',
+        'project_id:proj',
         'dataset_id:dataset',
         runTag,
         'run_iteration:0',
