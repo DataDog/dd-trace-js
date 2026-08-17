@@ -445,7 +445,8 @@ addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase)
   return shimmer.wrapFunction(PoolBase, wrapPoolBase)
 })
 
-// MariaDB 3.5.3 added minified single-file CommonJS bundles whose internal classes cannot be targeted by Orchestrion
-// or module-loader hooks, so instrument the runtime objects returned by their public factories instead.
+// MariaDB 3.5.3 added single-file CommonJS bundles that do not load the original source modules at runtime.
+// Matching their generated, minified internals would couple instrumentation to unstable bundle output, so wrap
+// the runtime objects returned by the public factories instead.
 addHook({ name, versions: ['>=3.5.3'] }, wrapPromiseBundle)
 addHook({ name, file: 'dist/callback.cjs', versions: ['>=3.5.3'] }, wrapCallbackBundle)

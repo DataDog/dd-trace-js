@@ -2,11 +2,16 @@
 
 const assert = require('node:assert/strict')
 const { mkdtemp, rm, writeFile } = require('node:fs/promises')
+const net = require('node:net')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
+const { performance } = require('node:perf_hooks')
+const { setImmediate: nextImmediate } = require('node:timers/promises')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
 
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const { CLIENT_PORT_KEY, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -18,6 +23,7 @@ const connectionOptions = {
   user: 'root',
   database: 'db',
 }
+const noop = () => {}
 
 /**
  * Resolves when a MariaDB callback reports success.
@@ -46,12 +52,29 @@ function consumeStream (stream) {
 }
 
 /**
- * Waits for work already queued with setImmediate.
- *
+ * @returns {Promise<number>}
+ */
+async function getClosedPort () {
+  const probe = net.createServer()
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+  const port = probe.address().port
+  await new Promise(resolve => probe.close(resolve))
+  return port
+}
+
+/**
+ * @param {number} start
+ * @param {(advanceTo: (value: number) => void) => Promise<unknown>} run
  * @returns {Promise<void>}
  */
-function nextImmediate () {
-  return new Promise(resolve => setImmediate(resolve))
+async function withFakeNow (start, run) {
+  const nowStub = sinon.stub(performance, 'now').returns(start)
+
+  try {
+    await run(value => nowStub.returns(value))
+  } finally {
+    nowStub.restore()
+  }
 }
 
 /**
@@ -181,6 +204,23 @@ describe('Plugin', () => {
           await assertion
         })
 
+        it('traces transactions queued behind untraced promise commands', async () => {
+          const assertion = assertTraceResources('bundle.promise.queued_transactions', ['COMMIT', 'COMMIT'])
+
+          await tracer.trace('bundle.promise.queued_transactions', async () => {
+            const ping = connection.ping()
+            const pingCommit = connection.commit()
+            await Promise.all([ping, pingCommit])
+
+            const prepare = connection.prepare('SELECT ? AS queued_promise_prepare')
+            const prepareCommit = connection.commit()
+            const [statement] = await Promise.all([prepare, prepareCommit])
+            statement.close()
+          })
+
+          await assertion
+        })
+
         it('traces batch and importFile operations', async () => {
           const importFile = mariadb.importFile
           const assertion = assertTraceResources('bundle.promise.bulk', [
@@ -215,6 +255,7 @@ describe('Plugin', () => {
             'SELECT ? AS pool_execute',
             'INSERT INTO dd_bundle_pool_batch VALUES (?)',
             'IMPORT FILE',
+            'mariadb.pool.acquire',
             'SELECT 6 AS acquired_query',
           ])
 
@@ -231,6 +272,189 @@ describe('Plugin', () => {
             })
 
             await assertion
+          } finally {
+            await pool.end()
+          }
+        })
+
+        for (const [method, sql] of [
+          ['query', 'SELECT 23 AS bundle_pool_wait'],
+          ['execute', 'SELECT 24 AS bundle_execute_pool_wait'],
+        ]) {
+          it(`records the pool acquire wait time on the bundled ${method} span`, async () => {
+            const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+
+            try {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const span = traces[0].find(span => span.resource === sql)
+
+                  assert.ok(span, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+                  assert.strictEqual(typeof span.metrics['mariadb.pool.wait_time'], 'number')
+                  assert.ok(span.metrics['mariadb.pool.wait_time'] >= 0)
+                  assert.strictEqual(traces[0].find(span => span.name === 'mariadb.pool.acquire'), undefined)
+                }, { spanResourceMatch: new RegExp(`^${sql}$`) }),
+                pool[method](sql),
+              ])
+            } finally {
+              await pool.end()
+            }
+          })
+        }
+
+        it('uses zero wait without clock reads for a recent bundled pool connection', async () => {
+          const pool = mariadb.createPool({
+            ...connectionOptions,
+            connectionLimit: 1,
+            minDelayValidation: Number.MAX_SAFE_INTEGER,
+          })
+
+          try {
+            await pool.query('SELECT 1')
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.resource === 'SELECT 25 AS bundle_recent_idle')
+
+              assert.ok(span, `missing query span: ${inspect(traces.flat().map(span => span.resource))}`)
+              assert.strictEqual(span.metrics['mariadb.pool.wait_time'], 0)
+            }, { spanResourceMatch: /^SELECT 25 AS bundle_recent_idle$/ })
+            const nowStub = sinon.stub(performance, 'now').returns(100)
+
+            try {
+              const query = pool.query('SELECT 25 AS bundle_recent_idle')
+
+              sinon.assert.notCalled(nowStub)
+              await Promise.all([assertion, query])
+            } finally {
+              nowStub.restore()
+            }
+          } finally {
+            await pool.end()
+          }
+        })
+
+        it('includes bundled idle validation in the pool wait time', async () => {
+          const pool = mariadb.createPool({
+            ...connectionOptions,
+            connectionLimit: 1,
+            minDelayValidation: 0,
+          })
+
+          try {
+            await pool.query('SELECT 1')
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.resource === 'SELECT 26 AS bundle_validation')
+
+              assert.ok(span, `missing query span: ${inspect(traces.flat().map(span => span.resource))}`)
+              assert.strictEqual(span.metrics['mariadb.pool.wait_time'], 50)
+            }, { spanResourceMatch: /^SELECT 26 AS bundle_validation$/ })
+
+            await withFakeNow(100, async advanceTo => {
+              const query = pool.query('SELECT 26 AS bundle_validation')
+              advanceTo(150)
+              await Promise.all([assertion, query])
+            })
+          } finally {
+            await pool.end()
+          }
+        })
+
+        it('creates an acquire span for an explicit bundled promise getConnection', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const parent = tracer.startSpan('bundle-promise-acquire-parent')
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+              }, { spanResourceMatch: /^mariadb\.pool\.acquire$/ }),
+              tracer.scope().activate(parent, async () => {
+                const acquired = await pool.getConnection()
+                await acquired.release()
+                parent.finish()
+              }),
+            ])
+          } finally {
+            await pool.end()
+          }
+        })
+
+        it('does not classify reentrant bundled pool operations as each other', async () => {
+          const pool = mariadb.createPool({
+            ...connectionOptions,
+            connectionLimit: 1,
+            minDelayValidation: Number.MAX_SAFE_INTEGER,
+          })
+
+          try {
+            await pool.query('CREATE TEMPORARY TABLE dd_bundle_reentrant (value INT)')
+            let batch
+            pool.once('acquire', () => {
+              batch = pool.batch('INSERT INTO dd_bundle_reentrant VALUES (?)', [[1]])
+            })
+            const nowStub = sinon.stub(performance, 'now').returns(100)
+
+            try {
+              await pool.query('SELECT 27 AS bundle_reentrant')
+              assert.ok(batch, 'reentrant batch did not start')
+              await batch
+              sinon.assert.notCalled(nowStub)
+            } finally {
+              nowStub.restore()
+            }
+          } finally {
+            await pool.end()
+          }
+        })
+
+        it('forwards bundled pool operations without subscribers', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+
+          tracer.use('mariadb', false)
+          try {
+            const rows = await pool.query('SELECT 28 AS bundle_untraced_pool')
+            const acquired = await pool.getConnection()
+
+            await acquired.release()
+            assert.strictEqual(rows[0].bundle_untraced_pool, 28)
+          } finally {
+            tracer.use('mariadb', true)
+            await pool.end()
+          }
+        })
+
+        it('records errors for explicit and pooled bundled acquisition failures', async () => {
+          const pool = mariadb.createPool({
+            ...connectionOptions,
+            acquireTimeout: 500,
+            connectTimeout: 100,
+            host: '127.0.0.1',
+            port: await getClosedPort(),
+          })
+          pool.on('error', noop)
+
+          try {
+            for (const [method, args] of [
+              ['getConnection', []],
+              ['query', ['SELECT 29 AS bundle_query_acquire_failure']],
+              ['execute', ['SELECT 30 AS bundle_execute_acquire_failure']],
+            ]) {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                  assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                  assert.strictEqual(acquireSpan.error, 1)
+                  assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+                }),
+                assert.rejects(pool[method](...args)),
+              ])
+            }
           } finally {
             await pool.end()
           }
@@ -405,6 +629,25 @@ describe('Plugin', () => {
           await assertion
         })
 
+        it('traces transactions queued behind untraced callback commands', async () => {
+          const assertion = assertTraceResources('bundle.callback.queued_transactions', ['COMMIT', 'COMMIT'])
+
+          await tracer.trace('bundle.callback.queued_transactions', async () => {
+            const ping = callbackResult(callback => connection.ping(callback))
+            const pingCommit = callbackResult(callback => connection.commit(callback))
+            await Promise.all([ping, pingCommit])
+
+            const prepare = callbackResult(callback => {
+              connection.prepare('SELECT ? AS queued_callback_prepare', callback)
+            })
+            const prepareCommit = callbackResult(callback => connection.commit(callback))
+            const [[statement]] = await Promise.all([prepare, prepareCommit])
+            statement.close()
+          })
+
+          await assertion
+        })
+
         it('traces batch and importFile operations', async () => {
           const importFile = mariadb.importFile
           const assertion = assertTraceResources('bundle.callback.bulk', [
@@ -472,6 +715,7 @@ describe('Plugin', () => {
             'SELECT ? AS callback_pool_execute',
             'INSERT INTO dd_bundle_callback_pool_batch VALUES (?)',
             'IMPORT FILE',
+            'mariadb.pool.acquire',
             'SELECT 15 AS callback_acquired_query',
           ])
 
@@ -499,6 +743,119 @@ describe('Plugin', () => {
           } finally {
             await callbackResult(callback => pool.end(callback))
           }
+        })
+
+        it('records the pool acquire wait time on a bundled callback query span', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const sql = 'SELECT 31 AS bundle_callback_pool_wait'
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const span = traces[0].find(span => span.resource === sql)
+
+                assert.ok(span, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+                assert.strictEqual(typeof span.metrics['mariadb.pool.wait_time'], 'number')
+                assert.ok(span.metrics['mariadb.pool.wait_time'] >= 0)
+                assert.strictEqual(traces[0].find(span => span.name === 'mariadb.pool.acquire'), undefined)
+              }, { spanResourceMatch: new RegExp(`^${sql}$`) }),
+              callbackResult(callback => pool.query(sql, callback)),
+            ])
+          } finally {
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('forwards bundled callback pool operations without subscribers', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+
+          tracer.use('mariadb', false)
+          try {
+            const [rows] = await callbackResult(callback => {
+              pool.query('SELECT 34 AS bundle_untraced_callback_pool', callback)
+            })
+            const [acquired] = await callbackResult(callback => pool.getConnection(callback))
+
+            await callbackResult(callback => acquired.release(callback))
+            assert.strictEqual(rows[0].bundle_untraced_callback_pool, 34)
+          } finally {
+            tracer.use('mariadb', true)
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('creates an acquire span for an explicit bundled callback getConnection', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          const parent = tracer.startSpan('bundle-callback-acquire-parent')
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+              }, { spanResourceMatch: /^mariadb\.pool\.acquire$/ }),
+              tracer.scope().activate(parent, async () => {
+                const [acquired] = await callbackResult(callback => pool.getConnection(callback))
+                await callbackResult(callback => acquired.release(callback))
+                parent.finish()
+              }),
+            ])
+          } finally {
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('records errors for bundled callback pool acquisition failures', async () => {
+          const pool = mariadb.createPool({
+            ...connectionOptions,
+            acquireTimeout: 500,
+            connectTimeout: 100,
+            host: '127.0.0.1',
+            port: await getClosedPort(),
+          })
+          pool.on('error', noop)
+
+          try {
+            for (const [method, args] of [
+              ['getConnection', []],
+              ['query', ['SELECT 32 AS bundle_callback_query_acquire_failure']],
+              ['execute', ['SELECT 33 AS bundle_callback_execute_acquire_failure']],
+            ]) {
+              await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+                  assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+                  assert.strictEqual(acquireSpan.error, 1)
+                  assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+                }),
+                assert.rejects(callbackResult(callback => pool[method](...args, callback))),
+              ])
+            }
+          } finally {
+            await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('records a synchronous bundled callback pool acquisition failure', async () => {
+          const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+          await callbackResult(callback => pool.end(callback))
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+              assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+              assert.strictEqual(acquireSpan.error, 1)
+              assert.strictEqual(acquireSpan.metrics['mariadb.pool.wait_time'], 0)
+            }),
+            assert.rejects(callbackResult(callback => {
+              pool.query('SELECT 35 AS bundle_closed_pool_acquire_failure', callback)
+            })),
+          ])
         })
 
         it('traces pool clusters and uses selected node metadata', async () => {

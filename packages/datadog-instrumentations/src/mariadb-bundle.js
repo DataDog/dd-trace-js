@@ -1,9 +1,11 @@
 'use strict'
 
 const { errorMonitor } = require('node:events')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
+const { acquireWait, reportPoolAcquireError } = require('./helpers/pool-acquire')
 
 const connectionStartCh = channel('apm:mariadb:connection:start')
 const connectionFinishCh = channel('apm:mariadb:connection:finish')
@@ -11,9 +13,17 @@ const startCh = channel('apm:mariadb:query:start')
 const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
+const acquireStartCh = channel('apm:mariadb:pool:acquire:start')
+const acquireFinishCh = channel('apm:mariadb:pool:acquire:finish')
+const poolAcquireChannels = {
+  connectionFinishCh,
+  acquireStartCh,
+  acquireFinishCh,
+}
 
 const activeCommands = new WeakMap()
 const commandMethods = ['query', 'execute', 'batch']
+const trackedCommandMethods = ['changeUser', 'ping', 'prepare', 'reset']
 const emptyConnectionContext = { currentStore: {} }
 const emptyOptions = {}
 const wrappedClients = new WeakSet()
@@ -27,14 +37,36 @@ const transactionMethods = [
   ['rollback', 'ROLLBACK'],
 ]
 
-/** @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} Descriptor */
 /** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 /** @typedef {{ options: object, pendingRemovals: number }} ClusterNodeOptions */
 /** @typedef {{ options?: object }} ClusterSelection */
 /** @typedef {import('node:async_hooks').AsyncLocalStorage<ClusterSelection>} ClusterSelectionStorage */
+/**
+ * @typedef {object} PoolAcquisition
+ * @property {Record<string, unknown>} [acquireCtx]
+ * @property {boolean} [acquired]
+ * @property {object} connectionCtx
+ * @property {unknown} [error]
+ * @property {boolean} [errorReported]
+ * @property {boolean} [finished]
+ * @property {boolean} measure
+ * @property {object} options
+ * @property {object} pool
+ * @property {object} [queryCtx]
+ * @property {boolean} [ready]
+ * @property {number} [start]
+ */
+/** @typedef {import('node:async_hooks').AsyncLocalStorage<PoolAcquisition>} PoolAcquisitionStorage */
+/** @typedef {{ acquisitions: PoolAcquisition[], index: number }} PendingPoolAcquisitions */
 
 /** @type {ClusterSelectionStorage | undefined} */
 let clusterSelectionStorage
+
+/** @type {PoolAcquisitionStorage | undefined} */
+let poolAcquisitionStorage
+
+/** @type {WeakMap<object, PendingPoolAcquisitions>} */
+const pendingPoolAcquisitions = new WeakMap()
 
 /**
  * Creates cluster selection storage only when an application uses pool clusters.
@@ -50,13 +82,26 @@ function getClusterSelectionStorage () {
 }
 
 /**
+ * Creates pool acquisition storage only when an application uses a bundled pool.
+ *
+ * @returns {PoolAcquisitionStorage}
+ */
+function getPoolAcquisitionStorage () {
+  if (poolAcquisitionStorage === undefined) {
+    const { AsyncLocalStorage } = require('node:async_hooks')
+    poolAcquisitionStorage = new AsyncLocalStorage()
+  }
+  return poolAcquisitionStorage
+}
+
+/**
  * Extracts SQL from MariaDB's string and object command forms.
  *
  * @param {unknown} command
  * @returns {unknown}
  */
 function normalizeSql (command) {
-  return command !== null && typeof command === 'object' ? command.sql : command
+  return command?.sql ?? command
 }
 
 /**
@@ -72,6 +117,231 @@ function normalizeOptions (defaultOptions, options) {
   } catch {
     return options !== null && typeof options === 'object' ? options : {}
   }
+}
+
+/**
+ * Creates acquisition state while the caller context is still active.
+ *
+ * @param {object} pool
+ * @param {object} options
+ * @param {object} [queryCtx]
+ * @param {boolean} [explicit]
+ * @returns {PoolAcquisition}
+ */
+function createPoolAcquisition (pool, options, queryCtx, explicit) {
+  const measure = explicit === true || queryCtx !== undefined
+  const connectionCtx = measure ? {} : emptyConnectionContext
+  const acquisition = { connectionCtx, measure, options, pool, queryCtx }
+
+  if (measure) connectionStartCh.publish(connectionCtx)
+  if (explicit) {
+    acquisition.acquireCtx = { conf: options }
+    acquireStartCh.publish(acquisition.acquireCtx)
+  }
+
+  return acquisition
+}
+
+/**
+ * Queues a delayed acquisition for pool events that no longer carry its async-local context.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @returns {void}
+ */
+function queuePoolAcquisition (acquisition) {
+  let pending = pendingPoolAcquisitions.get(acquisition.pool)
+  if (pending === undefined) {
+    pending = { acquisitions: [], index: 0 }
+    pendingPoolAcquisitions.set(acquisition.pool, pending)
+  }
+  pending.acquisitions.push(acquisition)
+}
+
+/**
+ * Reports whether an acquisition still needs a matching pool event.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @returns {boolean}
+ */
+function isPoolAcquisitionPending (acquisition) {
+  return !acquisition.acquired && !acquisition.finished && !acquisition.errorReported
+}
+
+/**
+ * Removes completed entries from the front of a pool's acquisition queue.
+ *
+ * @param {object} pool
+ * @returns {void}
+ */
+function prunePoolAcquisitions (pool) {
+  const pending = pendingPoolAcquisitions.get(pool)
+  if (pending === undefined) return
+
+  while (pending.index < pending.acquisitions.length) {
+    const acquisition = pending.acquisitions[pending.index]
+    if (isPoolAcquisitionPending(acquisition)) return
+    pending.index++
+  }
+
+  pendingPoolAcquisitions.delete(pool)
+}
+
+/**
+ * Takes the next unfinished acquisition from a pool's public-operation queue.
+ *
+ * @param {object} pool
+ * @returns {PoolAcquisition | undefined}
+ */
+function takePoolAcquisition (pool) {
+  const pending = pendingPoolAcquisitions.get(pool)
+  if (pending === undefined) return
+
+  while (pending.index < pending.acquisitions.length) {
+    const acquisition = pending.acquisitions[pending.index++]
+    if (isPoolAcquisitionPending(acquisition)) return acquisition
+  }
+
+  pendingPoolAcquisitions.delete(pool)
+}
+
+/**
+ * Records the pool wait when MariaDB announces that the calling operation acquired a connection.
+ *
+ * @param {object} pool
+ * @returns {void}
+ */
+function recordPoolAcquisition (pool) {
+  let acquisition = poolAcquisitionStorage?.getStore()
+  if (acquisition?.pool !== pool || !isPoolAcquisitionPending(acquisition)) {
+    acquisition = takePoolAcquisition(pool)
+  }
+  if (acquisition === undefined) return
+
+  acquisition.acquired = true
+  prunePoolAcquisitions(pool)
+  if (!acquisition.measure) return
+
+  const poolWaitTime = acquireWait(acquisition.start)
+
+  if (acquisition.queryCtx !== undefined) acquisition.queryCtx.poolWaitTime = poolWaitTime
+  if (acquisition.acquireCtx !== undefined) acquisition.acquireCtx.poolWaitTime = poolWaitTime
+}
+
+/**
+ * Creates an acquire error span when a pooled query fails before receiving a connection.
+ *
+ * @param {PoolAcquisition | undefined} acquisition
+ * @param {unknown} error
+ * @returns {void}
+ */
+function reportPoolQueryAcquireError (acquisition, error) {
+  if (acquisition === undefined || acquisition.acquired || acquisition.errorReported) return
+
+  acquisition.error = error
+  if (!acquisition.ready) return
+
+  acquisition.errorReported = true
+  prunePoolAcquisitions(acquisition.pool)
+  connectionFinishCh.runStores(acquisition.connectionCtx, reportPoolAcquireError, undefined,
+    acquisition.start, error, { conf: acquisition.options }, poolAcquireChannels)
+}
+
+/**
+ * Calls a method with its original receiver and arguments.
+ *
+ * @param {Function} method
+ * @param {unknown} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function callMethod (method, receiver, args) {
+  return method.apply(receiver, args)
+}
+
+/**
+ * Runs a public pool operation while associating its acquire event with that operation.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @param {Function} method
+ * @param {object} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function runPoolAcquisition (acquisition, method, receiver, args) {
+  const result = getPoolAcquisitionStorage().run(acquisition, callMethod, method, receiver, args)
+
+  acquisition.ready = true
+  if (!acquisition.acquired && !acquisition.finished) {
+    queuePoolAcquisition(acquisition)
+    if (!acquisition.measure) return result
+
+    if (acquisition.error === undefined) {
+      acquisition.start = performance.now()
+    } else {
+      reportPoolQueryAcquireError(acquisition, acquisition.error)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Completes tracking for a pool command that has returned to the caller.
+ *
+ * @param {PoolAcquisition | undefined} acquisition
+ * @param {unknown} [error]
+ * @returns {void}
+ */
+function finishPoolCommandAcquisition (acquisition, error) {
+  if (acquisition === undefined) return
+  if (error && acquisition.measure) {
+    reportPoolQueryAcquireError(acquisition, error)
+    if (!acquisition.ready) return
+  }
+  if (!acquisition.acquired) acquisition.finished = true
+  prunePoolAcquisitions(acquisition.pool)
+}
+
+/**
+ * Runs a bundled pool method in the instrumentation skip context.
+ *
+ * @param {Function} method
+ * @param {unknown} receiver
+ * @param {ArgumentsLike} args
+ * @returns {unknown}
+ */
+function runSkippedPoolMethod (method, receiver, args) {
+  return skipCh.runStores({}, method, receiver, ...args)
+}
+
+/**
+ * Finishes the acquire span created for a public getConnection call.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @param {unknown} [error]
+ * @returns {void}
+ */
+function finishExplicitPoolAcquisition (acquisition, error) {
+  if (acquisition.finished) return
+  acquisition.finished = true
+  prunePoolAcquisitions(acquisition.pool)
+
+  const acquireCtx = acquisition.acquireCtx
+  if (acquireCtx === undefined) return
+
+  acquireCtx.poolWaitTime ??= acquireWait(acquisition.start)
+  if (error) acquireCtx.error = error
+  acquireFinishCh.publish(acquireCtx)
+}
+
+/**
+ * Observes the public acquire event forwarded by a bundled pool.
+ *
+ * @param {object} pool
+ * @returns {void}
+ */
+function observePoolAcquisitions (pool) {
+  pool.prependListener('acquire', () => recordPoolAcquisition(pool))
 }
 
 /**
@@ -134,6 +404,100 @@ function finishCommand (ctx, owner, error, result) {
 }
 
 /**
+ * Replaces an existing callback or inserts one in the method's declared callback slot.
+ *
+ * @param {ArgumentsLike} args
+ * @param {number} callbackIndex
+ * @param {unknown} callback
+ * @param {(callback?: Function) => Function} createCallback
+ * @returns {void}
+ */
+function setCommandCallback (args, callbackIndex, callback, createCallback) {
+  if (typeof callback === 'function') {
+    args[args.length - 1] = shimmer.wrapCallback(callback, createCallback)
+    return
+  }
+
+  const wrappedCallback = createCallback()
+  // MariaDB reads the declared callback slot, so appending after an explicit null leaves the wrapper unused.
+  if (callbackIndex >= 0 && args.length > callbackIndex && args[callbackIndex] == null) {
+    args[callbackIndex] = wrappedCallback
+    return
+  }
+
+  args.length = Math.max(args.length + 1, callbackIndex + 1)
+  args[args.length - 1] = wrappedCallback
+}
+
+/**
+ * Tracks an untraced promise command while MariaDB may have work queued for it.
+ *
+ * @param {Function} command
+ * @returns {Function}
+ */
+function createTrackPromiseCommand (command) {
+  return function () {
+    if (!startCh.hasSubscribers) return command.apply(this, arguments)
+
+    const owner = this
+    startCommand(owner)
+
+    let result
+    try {
+      result = command.apply(this, arguments)
+    } catch (error) {
+      endCommand(owner)
+      throw error
+    }
+
+    return result.then(result => {
+      endCommand(owner)
+      return result
+    }, error => {
+      endCommand(owner)
+      throw error
+    })
+  }
+}
+
+/**
+ * Tracks an untraced callback command while MariaDB may have work queued for it.
+ *
+ * @param {Function} command
+ * @returns {Function}
+ */
+function createTrackCallbackCommand (command) {
+  const callbackIndex = command.length - 1
+
+  return function () {
+    if (!startCh.hasSubscribers) return command.apply(this, arguments)
+
+    const owner = this
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      endCommand(owner)
+    }
+    const createCallback = callback => function () {
+      finish()
+      if (typeof callback === 'function') return callback.apply(this, arguments)
+    }
+
+    const callback = arguments[arguments.length - 1]
+    setCommandCallback(arguments, callbackIndex, callback, createCallback)
+    startCommand(owner)
+
+    try {
+      return command.apply(this, arguments)
+    } catch (error) {
+      finish()
+      throw error
+    }
+  }
+}
+
+/**
  * Creates a promise-returning command wrapper.
  *
  * @param {object} options
@@ -141,30 +505,45 @@ function finishCommand (ctx, owner, error, result) {
  * @param {object} [commandOwner]
  * @param {number} [_commandArity] Reserved for callback command wrappers.
  * @param {boolean} [trackActiveCommands]
+ * @param {'measure' | 'observe'} [poolAcquisition]
  * @returns {(command: Function) => Function}
  */
-function createWrapPromiseCommand (options, preparedSql, commandOwner, _commandArity, trackActiveCommands = true) {
+function createWrapPromiseCommand (
+  options,
+  preparedSql,
+  commandOwner,
+  _commandArity,
+  trackActiveCommands = true,
+  poolAcquisition
+) {
   return function wrapCommand (command) {
     return function (sql) {
       if (!startCh.hasSubscribers) return command.apply(this, arguments)
 
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      const acquisition = poolAcquisition !== undefined && acquireStartCh.hasSubscribers
+        ? createPoolAcquisition(this, options, poolAcquisition === 'measure' ? ctx : undefined)
+        : undefined
 
       startCommand(owner)
 
       let result
       try {
-        result = startCh.runStores(ctx, command, this, ...arguments)
+        result = acquisition === undefined
+          ? startCh.runStores(ctx, command, this, ...arguments)
+          : startCh.runStores(ctx, runPoolAcquisition, undefined, acquisition, command, this, arguments)
       } catch (error) {
         finishCommand(ctx, owner, error)
         throw error
       }
 
       return result.then(result => {
+        finishPoolCommandAcquisition(acquisition)
         finishCommand(ctx, owner, undefined, result)
         return result
       }, error => {
+        finishPoolCommandAcquisition(acquisition, error)
         finishCommand(ctx, owner, error)
         throw error
       })
@@ -180,9 +559,17 @@ function createWrapPromiseCommand (options, preparedSql, commandOwner, _commandA
  * @param {object} [commandOwner]
  * @param {number} [commandArity] Original arity when command is wrapped by a variadic forwarding function.
  * @param {boolean} [trackActiveCommands]
+ * @param {'measure' | 'observe'} [poolAcquisition]
  * @returns {(command: Function) => Function}
  */
-function createWrapCallbackCommand (options, preparedSql, commandOwner, commandArity, trackActiveCommands = true) {
+function createWrapCallbackCommand (
+  options,
+  preparedSql,
+  commandOwner,
+  commandArity,
+  trackActiveCommands = true,
+  poolAcquisition
+) {
   return function wrapCommand (command) {
     const callbackIndex = (commandArity ?? command.length) - 1
 
@@ -192,7 +579,11 @@ function createWrapCallbackCommand (options, preparedSql, commandOwner, commandA
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const callback = arguments[arguments.length - 1]
       const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      const acquisition = poolAcquisition !== undefined && acquireStartCh.hasSubscribers
+        ? createPoolAcquisition(this, options, poolAcquisition === 'measure' ? ctx : undefined)
+        : undefined
       const wrapper = callback => function (error) {
+        finishPoolCommandAcquisition(acquisition, error)
         finishCommandState(ctx, owner, error)
 
         return typeof callback === 'function'
@@ -200,19 +591,14 @@ function createWrapCallbackCommand (options, preparedSql, commandOwner, commandA
           : finishCh.runStores(ctx, noop, this)
       }
 
-      if (typeof callback === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapCallback(callback, wrapper)
-      } else if (callbackIndex >= 0 && arguments.length > callbackIndex && arguments[callbackIndex] == null) {
-        arguments[callbackIndex] = wrapper()
-      } else {
-        arguments.length = Math.max(arguments.length + 1, callbackIndex + 1)
-        arguments[arguments.length - 1] = wrapper()
-      }
+      setCommandCallback(arguments, callbackIndex, callback, wrapper)
 
       startCommand(owner)
 
       try {
-        return startCh.runStores(ctx, command, this, ...arguments)
+        return acquisition === undefined
+          ? startCh.runStores(ctx, command, this, ...arguments)
+          : startCh.runStores(ctx, runPoolAcquisition, undefined, acquisition, command, this, arguments)
       } catch (error) {
         finishCommand(ctx, owner, error)
         throw error
@@ -288,6 +674,27 @@ function wrapClientCommands (client, wrapper) {
 }
 
 /**
+ * Wraps commands exposed by a bundled pool and tracks acquisition for query and execute.
+ *
+ * @param {object} pool
+ * @param {object} options
+ * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number,
+ *   trackActiveCommands?: boolean, poolAcquisition?: 'measure' | 'observe') =>
+ *   (command: Function) => Function} createWrapper
+ * @returns {void}
+ */
+function wrapPoolCommands (pool, options, createWrapper) {
+  if (wrappedClients.has(pool)) return
+
+  wrappedClients.add(pool)
+  for (const method of commandMethods) {
+    if (typeof pool[method] !== 'function') continue
+    const poolAcquisition = method === 'query' || method === 'execute' ? 'measure' : 'observe'
+    shimmer.wrap(pool, method, createWrapPoolCommand(options, createWrapper, undefined, poolAcquisition))
+  }
+}
+
+/**
  * Wraps transaction helpers whose bundled implementations bypass the public query methods.
  *
  * @param {object} client
@@ -313,7 +720,8 @@ function wrapTransactionMethods (client, options, createWrapper) {
  */
 function createWrapTransaction (options, sql, createWrapper) {
   return function wrapTransaction (transaction) {
-    const tracedTransaction = createWrapper(options, sql, undefined, transaction.length)(function () {
+    const wrapCommand = createWrapper(options, sql, undefined, transaction.length)
+    const tracedTransaction = wrapCommand(function () {
       return skipCh.runStores({}, transaction, this, ...arguments)
     })
 
@@ -343,6 +751,9 @@ function wrapPromiseConnection (connection, options) {
   if (wrappedConnections.has(connection)) return connection
 
   wrappedConnections.add(connection)
+  for (const method of trackedCommandMethods) {
+    if (typeof connection[method] === 'function') shimmer.wrap(connection, method, createTrackPromiseCommand)
+  }
   shimmer.wrap(connection, 'importFile', createWrapPromiseCommand(options, IMPORT_FILE_RESOURCE))
   if (typeof connection.queryStream === 'function') {
     shimmer.wrap(connection, 'queryStream', createWrapStream(options))
@@ -365,6 +776,9 @@ function wrapCallbackConnection (connection, options) {
   if (wrappedConnections.has(connection)) return connection
 
   wrappedConnections.add(connection)
+  for (const method of trackedCommandMethods) {
+    if (typeof connection[method] === 'function') shimmer.wrap(connection, method, createTrackCallbackCommand)
+  }
   shimmer.wrap(connection, 'importFile', createWrapCallbackCommand(options, IMPORT_FILE_RESOURCE))
   if (typeof connection.queryStream === 'function') {
     shimmer.wrap(connection, 'queryStream', createWrapStream(options))
@@ -441,8 +855,10 @@ function createWrapCallbackPrepare (options) {
  */
 function createWrapCallbackPreparedExecute (options, sql, connection) {
   return function wrapExecute (execute) {
-    const executeWithCallback = createWrapCallbackCommand(options, sql, connection)(execute)
-    const executeWithPromise = createWrapPromiseCommand(options, sql, connection)(execute)
+    const wrapCallbackCommand = createWrapCallbackCommand(options, sql, connection)
+    const wrapPromiseCommand = createWrapPromiseCommand(options, sql, connection)
+    const executeWithCallback = wrapCallbackCommand(execute)
+    const executeWithPromise = wrapPromiseCommand(execute)
 
     return function () {
       const hasCallback = typeof arguments[1] === 'function' || typeof arguments[2] === 'function'
@@ -457,14 +873,16 @@ function createWrapCallbackPreparedExecute (options, sql, connection) {
  *
  * @param {object} options
  * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number,
- *   trackActiveCommands?: boolean) =>
+ *   trackActiveCommands?: boolean, poolAcquisition?: 'measure' | 'observe') =>
  *   (command: Function) => Function} createWrapper
  * @param {unknown} [preparedSql]
+ * @param {'measure' | 'observe'} [poolAcquisition]
  * @returns {(command: Function) => Function}
  */
-function createWrapPoolCommand (options, createWrapper, preparedSql) {
+function createWrapPoolCommand (options, createWrapper, preparedSql, poolAcquisition) {
   return function wrapPoolCommand (command) {
-    return createWrapper(options, preparedSql, undefined, command.length, false)(function () {
+    const wrapCommand = createWrapper(options, preparedSql, undefined, command.length, false, poolAcquisition)
+    return wrapCommand(function () {
       return skipCh.runStores({}, command, this, ...arguments)
     })
   }
@@ -494,6 +912,35 @@ function finishPromiseGetConnectionError (ctx, error) {
 }
 
 /**
+ * Finishes an explicit promise acquisition and instruments its connection in the caller context.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @param {object} connection
+ * @param {object} options
+ * @returns {object}
+ */
+function finishExplicitPromiseGetConnection (acquisition, connection, options) {
+  return connectionFinishCh.runStores(acquisition.connectionCtx, () => {
+    finishExplicitPoolAcquisition(acquisition)
+    return wrapPromiseConnection(connection, options)
+  })
+}
+
+/**
+ * Finishes a failed explicit promise acquisition in the caller context.
+ *
+ * @param {PoolAcquisition} acquisition
+ * @param {Error} error
+ * @throws {Error} The connection acquisition error.
+ */
+function finishExplicitPromiseGetConnectionError (acquisition, error) {
+  return connectionFinishCh.runStores(acquisition.connectionCtx, () => {
+    finishExplicitPoolAcquisition(acquisition, error)
+    throw error
+  })
+}
+
+/**
  * Wraps getConnection on a bundled promise pool.
  *
  * @param {object} options
@@ -502,13 +949,29 @@ function finishPromiseGetConnectionError (ctx, error) {
 function createWrapPromiseGetConnection (options) {
   return function wrapGetConnection (getConnection) {
     return function () {
-      const ctx = {}
+      if (!connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
 
-      connectionStartCh.publish(ctx)
+      if (!acquireStartCh.hasSubscribers) {
+        const ctx = {}
+        connectionStartCh.publish(ctx)
+        return skipCh.runStores({}, getConnection, this, ...arguments).then(
+          connection => finishPromiseGetConnection(ctx, connection, options),
+          error => finishPromiseGetConnectionError(ctx, error)
+        )
+      }
 
-      return skipCh.runStores({}, getConnection, this, ...arguments).then(
-        connection => finishPromiseGetConnection(ctx, connection, options),
-        error => finishPromiseGetConnectionError(ctx, error)
+      const acquisition = createPoolAcquisition(this, options, undefined, true)
+      let result
+
+      try {
+        result = runPoolAcquisition(acquisition, runSkippedPoolMethod, undefined, [getConnection, this, arguments])
+      } catch (error) {
+        return finishExplicitPromiseGetConnectionError(acquisition, error)
+      }
+
+      return result.then(
+        connection => finishExplicitPromiseGetConnection(acquisition, connection, options),
+        error => finishExplicitPromiseGetConnectionError(acquisition, error)
       )
     }
   }
@@ -526,16 +989,34 @@ function createWrapCallbackGetConnection (options) {
       const callback = arguments[arguments.length - 1]
       if (typeof callback !== 'function') return getConnection.apply(this, arguments)
 
-      const ctx = {}
-      arguments[arguments.length - 1] = function () {
-        const connection = arguments[1]
-        if (connection) wrapCallbackConnection(connection, options)
-        return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
+      if (!connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
+
+      if (!acquireStartCh.hasSubscribers) {
+        const ctx = {}
+        arguments[arguments.length - 1] = function () {
+          const connection = arguments[1]
+          if (connection) wrapCallbackConnection(connection, options)
+          return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
+        }
+
+        connectionStartCh.publish(ctx)
+        return skipCh.runStores({}, getConnection, this, ...arguments)
       }
 
-      connectionStartCh.publish(ctx)
+      const acquisition = createPoolAcquisition(this, options, undefined, true)
+      arguments[arguments.length - 1] = function (error, connection) {
+        if (connection) wrapCallbackConnection(connection, options)
+        return connectionFinishCh.runStores(acquisition.connectionCtx, () => {
+          finishExplicitPoolAcquisition(acquisition, error)
+          return callback.apply(this, arguments)
+        })
+      }
 
-      return skipCh.runStores({}, getConnection, this, ...arguments)
+      try {
+        return runPoolAcquisition(acquisition, runSkippedPoolMethod, undefined, [getConnection, this, arguments])
+      } catch (error) {
+        return finishExplicitPromiseGetConnectionError(acquisition, error)
+      }
     }
   }
 }
@@ -798,12 +1279,13 @@ function createWrapPromisePoolFactory (defaultOptions) {
       const pool = skipCh.runStores({}, createPool, this, ...arguments)
       const normalizedOptions = normalizeOptions(defaultOptions, options)
 
+      observePoolAcquisitions(pool)
       wrapPoolConnectionEvent(pool, normalizedOptions, wrapPromiseConnection)
-      wrapClientCommands(pool, createWrapPoolCommand(normalizedOptions, createWrapPromiseCommand))
+      wrapPoolCommands(pool, normalizedOptions, createWrapPromiseCommand)
       shimmer.wrap(
         pool,
         'importFile',
-        createWrapPoolCommand(normalizedOptions, createWrapPromiseCommand, IMPORT_FILE_RESOURCE)
+        createWrapPoolCommand(normalizedOptions, createWrapPromiseCommand, IMPORT_FILE_RESOURCE, 'observe')
       )
       shimmer.wrap(pool, 'getConnection', createWrapPromiseGetConnection(normalizedOptions))
 
@@ -824,12 +1306,13 @@ function createWrapCallbackPoolFactory (defaultOptions) {
       const pool = skipCh.runStores({}, createPool, this, ...arguments)
       const normalizedOptions = normalizeOptions(defaultOptions, options)
 
+      observePoolAcquisitions(pool)
       wrapPoolConnectionEvent(pool, normalizedOptions, wrapCallbackConnection)
-      wrapClientCommands(pool, createWrapPoolCommand(normalizedOptions, createWrapCallbackCommand))
+      wrapPoolCommands(pool, normalizedOptions, createWrapCallbackCommand)
       shimmer.wrap(
         pool,
         'importFile',
-        createWrapPoolCommand(normalizedOptions, createWrapCallbackCommand, IMPORT_FILE_RESOURCE)
+        createWrapPoolCommand(normalizedOptions, createWrapCallbackCommand, IMPORT_FILE_RESOURCE, 'observe')
       )
       shimmer.wrap(pool, 'getConnection', createWrapCallbackGetConnection(normalizedOptions))
 
@@ -875,13 +1358,14 @@ function createWrapCallbackClusterFactory (defaultOptions) {
 function createWrapPromiseImportFile (defaultOptions) {
   return function wrapImportFile (importFile) {
     return function (options) {
-      const wrapper = createWrapPromiseCommand(
+      const wrapCommand = createWrapPromiseCommand(
         normalizeOptions(defaultOptions, options),
         IMPORT_FILE_RESOURCE,
         undefined,
         undefined,
         false
-      )(importFile)
+      )
+      const wrapper = wrapCommand(importFile)
       return wrapper.apply(this, arguments)
     }
   }
@@ -896,57 +1380,38 @@ function createWrapPromiseImportFile (defaultOptions) {
 function createWrapCallbackImportFile (defaultOptions) {
   return function wrapImportFile (importFile) {
     return function (options) {
-      const wrapper = createWrapCallbackCommand(
+      const wrapCommand = createWrapCallbackCommand(
         normalizeOptions(defaultOptions, options),
         IMPORT_FILE_RESOURCE,
         undefined,
         undefined,
         false
-      )(importFile)
+      )
+      const wrapper = wrapCommand(importFile)
       return wrapper.apply(this, arguments)
     }
   }
 }
 
 /**
- * Replaces a cloned export descriptor value while preserving its descriptor shape.
- *
- * @param {Descriptor} descriptor
- * @param {unknown} value
- * @returns {void}
- */
-function replaceDescriptorValue (descriptor, value) {
-  if (descriptor.get) {
-    descriptor.get = () => value
-  } else {
-    descriptor.value = value
-  }
-}
-
-/**
- * Clones a CommonJS bundle namespace and wraps selected factories without mutating non-configurable exports.
+ * Wraps selected CommonJS factories in the mutable default export and its non-configurable namespace getters.
  *
  * @param {object} mariadb
  * @param {Array<[string, (factory: Function) => Function]>} factories
  * @returns {object}
  */
 function wrapBundle (mariadb, factories) {
-  const descriptors = Object.getOwnPropertyDescriptors(mariadb)
-  const defaultDescriptors = Object.getOwnPropertyDescriptors(mariadb.default)
+  const defaultExport = mariadb.default
+  let wrappedBundle = mariadb
 
   for (const [name, wrapper] of factories) {
-    const wrapped = shimmer.wrapFunction(mariadb[name], wrapper)
-    replaceDescriptorValue(descriptors[name], wrapped)
-    replaceDescriptorValue(defaultDescriptors[name], wrapped)
+    wrappedBundle = shimmer.wrap(wrappedBundle, name, wrapper, { replaceGetter: true })
+  }
+  for (const [name] of factories) {
+    shimmer.wrap(defaultExport, name, () => wrappedBundle[name])
   }
 
-  const defaultExport = Object.defineProperties(
-    Object.create(Object.getPrototypeOf(mariadb.default)),
-    defaultDescriptors
-  )
-  replaceDescriptorValue(descriptors.default, defaultExport)
-
-  return Object.defineProperties(Object.create(Object.getPrototypeOf(mariadb)), descriptors)
+  return wrappedBundle
 }
 
 /**
