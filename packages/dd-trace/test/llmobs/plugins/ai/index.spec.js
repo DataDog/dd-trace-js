@@ -978,7 +978,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })
@@ -1021,7 +1028,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })

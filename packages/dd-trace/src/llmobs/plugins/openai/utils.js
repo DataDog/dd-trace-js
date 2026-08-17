@@ -7,7 +7,6 @@ const {
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
 } = require('./constants')
 
@@ -139,22 +138,18 @@ function extractContentParts (parts) {
   const audioParts = []
 
   for (const part of parts) {
-    const partType = part?.type ?? ''
+    const partType = part.type
     let extracted
     if (partType === 'text') {
-      extracted = part.text ?? ''
+      extracted = part.text
     } else if (partType === 'image_url') {
       extracted = IMAGE_FALLBACK
     } else if (partType === 'input_audio') {
-      const inputAudio = part.input_audio ?? {}
-      const data = inputAudio.data
-      if (data) {
-        // Audio is captured as a structured audio part (rendered as a player), so no text marker
-        // is needed. Only fall back to "[audio]" when there's no audio to capture.
-        audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)))
-      } else {
-        extracted = AUDIO_FALLBACK
-      }
+      const inputAudio = part.input_audio
+      audioParts.push(formatAudioPart(
+        inputAudio.data,
+        audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)
+      ))
     } else {
       extracted = `[${partType}]`
     }

@@ -705,6 +705,8 @@ export default [
       'unicorn/iteration-fallback-style': 'error',
       'unicorn/no-unsafe-dom-html': 'error',
       'unicorn/no-unused-properties': 'error',
+      'unicorn/prefer-array-find': 'error',
+      'unicorn/prefer-array-some': 'error',
 
       // Overriding recommended unicorn rules.
       // Rules not listed here are left at the `recommended` default. The entries below
@@ -1153,6 +1155,19 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
     },
   },
 ]

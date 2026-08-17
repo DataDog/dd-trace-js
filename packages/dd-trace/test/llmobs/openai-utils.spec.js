@@ -8,13 +8,12 @@ const { UNKNOWN_MODEL_PROVIDER } = require('../../src/llmobs/constants/tags')
 describe('extractContentParts', () => {
   it('preserves empty text and formats every multimodal fallback', () => {
     assert.deepStrictEqual(extractContentParts([
-      { type: 'text' },
-      { type: 'image_url' },
-      { type: 'input_audio' },
+      { type: 'text', text: '' },
+      { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
       { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
-      null,
+      { type: 'file', file: { file_id: 'file-1' } },
     ]), {
-      content: '\n[image]\n[audio]\n[]',
+      content: '\n[image]\n[file]',
       audioParts: [{ content: 'aGVsbG8=', mimeType: 'audio/wav' }],
     })
   })

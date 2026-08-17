@@ -2082,12 +2082,17 @@ function formatTestOptimizationList (items) {
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
 
-  return shown
-    .map(({ text, suffix }) => `  • ${truncateTestOptimizationNameMiddle(
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const { text, suffix } of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${truncateTestOptimizationNameMiddle(
       sanitizeTestOptimizationName(text),
       MAX_TEST_OPTIMIZATION_NAME_LENGTH
-    )}${suffix ? ` (${suffix})` : ''}`)
-    .join('\n') + moreSuffix
+    )}${suffix ? ` (${suffix})` : ''}`
+    isFirstItem = false
+  }
+  return formattedItems + moreSuffix
 }
 
 /**
