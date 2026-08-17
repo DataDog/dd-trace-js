@@ -265,6 +265,30 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(requests.length, 1)
   })
 
+  it('retains field updates when inverse tag edits cancel', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0')],
+      1,
+      1
+    )
+
+    dataset.update(0, { metadata: { changed: true } })
+    dataset.addTags(0, ['topic:temporary'])
+    dataset.removeTags(0, ['topic:temporary'])
+    await dataset.push()
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { changed: true },
+    }])
+  })
+
   it('restores tag operations when a push fails', async () => {
     const { client: c, requests } = clientWithMockBackend()
     const dataset = Dataset.fromExisting(

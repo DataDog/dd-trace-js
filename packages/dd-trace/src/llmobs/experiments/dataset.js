@@ -286,8 +286,11 @@ class Dataset {
       this.#pendingTagOperations.delete(recordId)
       const update = this.#updatedRecordsById.get(recordId)
       if (update) {
+        const hasRecordUpdate = Object.hasOwn(update, 'input') ||
+          Object.hasOwn(update, 'expectedOutput') ||
+          Object.hasOwn(update, 'metadata')
         delete update.tagOperations
-        if (Object.keys(update).length === 1) this.#updatedRecordsById.delete(recordId)
+        if (!hasRecordUpdate) this.#updatedRecordsById.delete(recordId)
       }
       return
     }
