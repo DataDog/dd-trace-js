@@ -444,7 +444,7 @@ describe('AIGuard SDK', () => {
           role: 'user',
           content: [
             { type: 'input_text', text: replacement.slice(0, maxContentSize) },
-            { type: 'input_text', text: atLimit },
+            { type: 'input_text', text: '' },
             { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
           ],
         }],

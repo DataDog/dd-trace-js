@@ -293,27 +293,32 @@ class EvaluationReporter {
   }
 
   /**
-   * Truncates oversized text fields in a cloned message.
+   * Truncates text in a cloned message to one shared content-size limit.
    *
    * @param {{ content?: string|ContentPart[] }} message
    * @returns {boolean}
    */
   #truncateMessageContent (message) {
-    if (typeof message.content === 'string') {
-      if (message.content.length <= this.#maxContentSize) return false
+    const { content } = message
+    if (typeof content === 'string') {
+      if (content.length <= this.#maxContentSize) return false
 
-      message.content = message.content.slice(0, this.#maxContentSize)
+      message.content = content.slice(0, this.#maxContentSize)
       return true
     }
 
-    if (!Array.isArray(message.content)) return false
+    if (!Array.isArray(content)) return false
 
+    let remainingContentSize = this.#maxContentSize
     let truncated = false
-    for (const part of message.content) {
-      if (typeof part.text === 'string' && part.text.length > this.#maxContentSize) {
-        part.text = part.text.slice(0, this.#maxContentSize)
+    for (const part of content) {
+      if (typeof part.text !== 'string') continue
+
+      if (part.text.length > remainingContentSize) {
+        part.text = part.text.slice(0, remainingContentSize)
         truncated = true
       }
+      remainingContentSize -= part.text.length
     }
     return truncated
   }
