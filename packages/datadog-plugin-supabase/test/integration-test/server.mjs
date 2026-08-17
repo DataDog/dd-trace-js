@@ -1,21 +1,7 @@
 import 'dd-trace/init.js'
 import tracer from 'dd-trace'
 
-const [
-  { GoTrueClient },
-  { FunctionsClient },
-  { PostgrestClient },
-  { RealtimeClient },
-  { StorageClient },
-  { createClient },
-] = await Promise.all([
-  import('@supabase/auth-js'),
-  import('@supabase/functions-js'),
-  import('@supabase/postgrest-js'),
-  import('@supabase/realtime-js'),
-  import('@supabase/storage-js'),
-  import('@supabase/supabase-js'),
-])
+const { createClient } = await import('@supabase/supabase-js')
 
 const SUPABASE_KEY = 'test-key'
 const SUPABASE_URL = 'https://project.supabase.co'
@@ -58,7 +44,7 @@ async function testFetch (input) {
   throw new Error(`Unexpected Supabase request: ${url}`)
 }
 
-async function fetchWithAuthTest (input) {
+async function supabaseFetch (input) {
   if (fails) throw new Error('Supabase request failed')
   return testFetch(input)
 }
@@ -70,35 +56,15 @@ async function executeOperations () {
       detectSessionInUrl: false,
       persistSession: false,
     },
-    global: { fetch: fetchWithAuthTest },
+    global: { fetch: supabaseFetch },
+    realtime: { timeout: 100 },
   })
   await supabase.storage.from('files').list()
-
-  const auth = new GoTrueClient({
-    url: `${SUPABASE_URL}/auth/v1`,
-    headers: { apikey: SUPABASE_KEY },
-    fetch: testFetch,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-    persistSession: false,
-  })
-  await auth.getUser('token')
-
-  const storage = new StorageClient(`${SUPABASE_URL}/storage/v1`, { apikey: SUPABASE_KEY }, testFetch)
-  await storage.listBuckets()
-
-  const realtime = new RealtimeClient('wss://project.supabase.co/realtime/v1', {
-    params: { apikey: SUPABASE_KEY },
-    fetch: testFetch,
-    timeout: 100,
-  })
-  await realtime.channel('test-room').send({ type: 'broadcast', event: 'test', payload: { ok: !fails } })
-
-  const functions = new FunctionsClient(`${SUPABASE_URL}/functions/v1`, { customFetch: testFetch })
-  await functions.invoke('hello', { body: { name: 'test' } })
-
-  const postgrest = new PostgrestClient(`${SUPABASE_URL}/rest/v1`, { fetch: testFetch })
-  await postgrest.from('items').select('*')
+  await supabase.auth.getUser('token')
+  await supabase.storage.listBuckets()
+  await supabase.channel('test-room').send({ type: 'broadcast', event: 'test', payload: { ok: !fails } })
+  await supabase.functions.invoke('hello', { body: { name: 'test' } })
+  await supabase.from('items').select('*')
 }
 
 await tracer.trace('serverless.test.invocation', executeOperations)

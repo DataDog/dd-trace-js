@@ -81,22 +81,26 @@ class SupabaseTestSetup {
   }
 
   /** @returns {Promise<object>} */
-  fetchWithAuth () {
+  storageFileList () {
     return this.createSupabaseClient().storage.from('files').list()
   }
 
   /** @returns {Promise<object>} */
-  fetchWithAuthError () {
+  storageFileListError () {
+    return this.createSupabaseClient({ fail: true }).storage.from('files').list()
+  }
+
+  /** @returns {Promise<object>} */
+  storageFileListTransportError () {
     return this.createSupabaseClient({ reject: true }).storage.from('files').list()
   }
 
   /**
-   * @param {string | URL | Request} input Fetch input.
-   * @param {{ method?: string }} [init] Fetch options.
-   * @returns {Promise<Response>}
+   * @param {string} path Storage object path.
+   * @returns {Promise<object>}
    */
-  fetchWithAuthInput (input, init) {
-    return this.createSupabaseClient().fetch(input, init)
+  storageFileInfo (path) {
+    return this.createSupabaseClient().storage.from('files').info(path)
   }
 
   /** @returns {Promise<object>} */
