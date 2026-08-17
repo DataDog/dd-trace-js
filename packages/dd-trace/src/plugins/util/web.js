@@ -147,6 +147,11 @@ const web = {
     if (!context) return
 
     context.paths = [path]
+    if (path) {
+      // A downstream request can trigger sampling from inside the route handler. Publish the
+      // matched route now so OTel resource rules do not need to derive a name from the URI path.
+      context.span.setTag('http.route', path)
+    }
   },
 
   // Remove the current route segment.

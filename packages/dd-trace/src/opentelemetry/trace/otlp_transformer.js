@@ -5,6 +5,7 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -140,6 +141,17 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformScopeSpans (spans) {
     let traceKey
     let traceIdHigh
+    const samplingByTrace = new Map()
+    for (const span of spans) {
+      const priority = span.metrics?.[SAMPLING_PRIORITY_KEY]
+      if (!Number.isFinite(priority)) continue
+      const key = span.trace_id.toString(16)
+      const isRoot = !span.parent_id || span.parent_id.equals(ZERO_ID)
+      const current = samplingByTrace.get(key)
+      if (current === undefined || (isRoot && !current.isRoot)) {
+        samplingByTrace.set(key, { priority, isRoot })
+      }
+    }
     const otlpSpans = spans.map((span) => {
       // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
       // Reset at each trace boundary for batching of multiple traces.
@@ -148,7 +160,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         traceKey = key
         traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
       }
-      return this.#transformSpan(span, traceIdHigh)
+      const priority = samplingByTrace.get(key)?.priority
+      const flags = priority !== undefined && priority > 0 ? 1 : 0
+      return this.#transformSpan(span, traceIdHigh, flags)
     })
     return [{
       scope: {
@@ -167,9 +181,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
+   * @param {number} flags - Trace-level OTLP sampled flag
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span, traceIdHigh) {
+  #transformSpan (span, traceIdHigh, flags) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
@@ -188,6 +203,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       links: links.length ? links : undefined,
       droppedLinksCount: 0,
       status: this.#mapStatus(span),
+      flags,
     }
   }
 
@@ -230,8 +246,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
           const intValue = Number(value)
           if (Number.isInteger(intValue)) {
             attributes.push({ key, value: { intValue } })
-            continue
           }
+          continue
         }
         attributes.push({ key, value: { stringValue: value } })
       }
@@ -240,6 +256,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
+        if (
+          this.#otelTraceSemanticsEnabled &&
+          INT_VALUED_OTEL_ATTRIBUTES.has(key) &&
+          !Number.isInteger(value)
+        ) {
+          continue
+        }
         if (Number.isInteger(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {

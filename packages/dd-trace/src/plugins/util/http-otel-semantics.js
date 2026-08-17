@@ -25,6 +25,21 @@ const KNOWN_METHODS = new Set([
   'CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY', 'TRACE',
 ])
 
+function otelHttpResourceName (method, route) {
+  const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
+  if (typeof route === 'string' && route.length > 0) return `${normalizedMethod} ${route}`
+  return normalizedMethod
+}
+
+function isInstrumentationHttpResource (resource, method) {
+  if (typeof resource !== 'string' || resource.length === 0) return true
+  const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
+  return resource === method ||
+    resource === normalizedMethod ||
+    resource.startsWith(`${method} `) ||
+    resource.startsWith(`${normalizedMethod} `)
+}
+
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
 // `http.endpoint` is deliberately absent: it is Datadog-only with no OTel
 // equivalent, and ASM plus endpoint aggregation read it, so it is retained on
@@ -197,14 +212,9 @@ function applyHttpOtelSemantics (formattedSpan) {
       // Known-method names are already `{method} {route}`.
       newMeta[HTTP_REQUEST_METHOD] = '_OTHER'
       newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
-      const resource = formattedSpan.resource
-      if (typeof resource === 'string') {
-        if (resource === method) {
-          formattedSpan.resource = 'HTTP'
-        } else if (resource.startsWith(`${method} `)) {
-          formattedSpan.resource = `HTTP${resource.slice(method.length)}`
-        }
-      }
+    }
+    if (isInstrumentationHttpResource(formattedSpan.resource, method)) {
+      formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
     }
   }
 
@@ -276,5 +286,7 @@ function applyHttpOtelSemantics (formattedSpan) {
 module.exports = {
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
+  isInstrumentationHttpResource,
+  otelHttpResourceName,
   applyHttpOtelSemantics,
 }
