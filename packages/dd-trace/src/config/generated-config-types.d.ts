@@ -209,6 +209,7 @@ export interface GeneratedConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
@@ -895,6 +896,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_BEAUTIFUL_LOGS: boolean;
   DD_TRACE_BLUEBIRD_ENABLED: boolean;
   DD_TRACE_BODY_PARSER_ENABLED: boolean;
+  DD_TRACE_BROWSER_BUNYAN_ENABLED: boolean;
   DD_TRACE_BSON_ENABLED: boolean;
   DD_TRACE_BULLMQ_ENABLED: boolean;
   DD_TRACE_BUNYAN_ENABLED: boolean;
