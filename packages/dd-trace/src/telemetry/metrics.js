@@ -61,9 +61,6 @@ class Metric {
     this.points = []
   }
 
-  /**
-   * @returns {boolean}
-   */
   hasPoints () {
     return this.points.length > 0
   }
@@ -125,18 +122,12 @@ class DistributionMetric extends Metric {
     return 'distribution'
   }
 
-  /**
-   * @returns {void}
-   */
   reset () {
     super.reset()
     this.sketch = undefined
     this.pointCount = 0
   }
 
-  /**
-   * @returns {boolean}
-   */
   hasPoints () {
     return this.pointCount > 0
   }
