@@ -282,6 +282,13 @@ class Dataset {
     return this
   }
 
+  /**
+   * Queue a tag operation for the next dataset push.
+   * @param {string} recordId Dataset record id.
+   * @param {'add' | 'remove' | 'replace'} operation Tag operation to queue.
+   * @param {string[]} tags Tags in key:value format.
+   * @returns {void}
+   */
   #queueTagOperation (recordId, operation, tags) {
     if (operation !== 'replace' && tags.length === 0) return
     const operations = mergeTagOperations(this.#pendingTagOperations.get(recordId) ?? {}, operation, tags)
@@ -571,7 +578,8 @@ class Dataset {
         record.input,
         record.expectedOutput,
         record.metadata,
-        record.id
+        record.id,
+        record.tags
       )
     }
     if (this.#recordsById.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)

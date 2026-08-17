@@ -728,6 +728,14 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [existing], 1, 1)
     assert.deepEqual(dataset.recordIds(), ['record-0'])
     assert.equal(dataset.records()[0], existing)
+
+    const taggedDataset = Dataset.fromExisting(c, 'tagged', '', 'tagged-ds', 'proj', [{
+      input: 'tagged-input',
+      metadata: {},
+      id: 'tagged-record',
+      tags: ['topic:math'],
+    }], 1, 1)
+    assert.deepEqual(taggedDataset.records()[0].tags, ['topic:math'])
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
