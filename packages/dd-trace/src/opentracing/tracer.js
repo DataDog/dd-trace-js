@@ -74,8 +74,8 @@ class DatadogTracer {
     const parent = options.context
       ? null
       : options.childOf
-      ? getContext(options.childOf)
-      : getParent(options.references)
+        ? getContext(options.childOf)
+        : getParent(options.references)
 
     const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
