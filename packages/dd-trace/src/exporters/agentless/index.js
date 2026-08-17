@@ -41,11 +41,8 @@ class AgentlessExporter {
     const metadata = {
       hostname: os.hostname(),
       env: config.env,
-      languageName: 'nodejs',
-      languageVersion: process.version,
-      tracerVersion,
       runtimeID: config.tags?.['runtime-id'],
-      ...(entityId ? { containerID: entityId } : {}),
+      ...(entityId ? { containerId: entityId } : {}),
     }
 
     this._writer = new Writer({
