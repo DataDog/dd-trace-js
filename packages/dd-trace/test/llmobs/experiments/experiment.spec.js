@@ -118,7 +118,13 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       'input',
       'expected',
       {},
-      ['experiment_id:fake', 'dataset_id:fake']
+      [
+        'experiment_id:fake',
+        'dataset_id:fake',
+        'project_id:fake',
+        'dataset_name:fake',
+        'experiment_name:fake',
+      ]
     )
 
     await new Experiment(c, {
@@ -130,6 +136,9 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_id:')), ['experiment_id:exp'])
     assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_id:')), ['dataset_id:ds'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('project_id:')), ['project_id:proj'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_name:')), ['dataset_name:demo'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_name:')), ['experiment_name:exp-demo'])
   })
 
   it('surfaces backend failures', async () => {

@@ -41,8 +41,11 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
     experiment_id: ids.experimentId,
     run_id: ids.runId,
     run_iteration: ids.runIteration,
+    project_id: ids.projectId,
     dataset_id: ids.datasetId,
     dataset_record_id: ids.datasetRecordId,
+    dataset_name: ids.datasetName,
+    experiment_name: ids.experimentName,
   })
 
   return {
@@ -462,6 +465,8 @@ class Experiment {
             projectId,
             datasetId,
             datasetRecordId,
+            datasetName: this.#dataset.name(),
+            experimentName: this.#name,
             runId,
             runIteration,
           }, this.#task.name || this.#name, this.#tags, record.tags))
