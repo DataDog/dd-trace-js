@@ -2,7 +2,7 @@
 
 const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
-const { argument, field } = require('../../dd-trace/src/plugins/orchestrion-pipeline')
+const { argument, field } = require('../../dd-trace/src/plugins/integration-pipeline')
 
 const producerTags = {
   component: 'bullmq',
@@ -31,13 +31,13 @@ function parseTelemetryMetadata (raw) {
 /**
  * Add trace propagation to BullMQ telemetry metadata.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').PipelineFrame} frame
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
  * @param {object} opts
  * @returns {Record<string, unknown>}
  */
 function injectIntoOpts (frame, opts) {
   const carrier = {}
-  frame.tracer.inject(frame.span, 'text_map', carrier)
+  frame.correlation.inject('text_map', carrier)
   const metadata = parseTelemetryMetadata(opts.telemetry?.metadata)
   metadata._datadog = carrier
   opts.telemetry = { metadata: JSON.stringify(metadata), omitContext: true }
@@ -47,7 +47,7 @@ function injectIntoOpts (frame, opts) {
 /**
  * Ensure Queue.add has a mutable options argument.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').OrchestrionContext} context
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').InvocationContext} context
  * @returns {object}
  */
 function ensureQueueOpts (context) {
@@ -66,7 +66,7 @@ function ensureQueueOpts (context) {
 /**
  * Run a producer filter without allowing user code to break the instrumented operation.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').PipelineFrame} frame
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
  * @param {object} job
  * @returns {boolean}
  */
@@ -84,8 +84,8 @@ function shouldInstrument (frame, job) {
 /**
  * Select jobs accepted by the configured bulk filter.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').OrchestrionContext} context
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').PipelineFrame} frame
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').InvocationContext} context
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
  * @returns {object[] | undefined}
  */
 function extractBulkJobs (context, frame) {
@@ -115,22 +115,24 @@ function extractBulkJobs (context, frame) {
 /**
  * Resolve the messaging producer service using the existing naming schema.
  *
- * @param {import('../../dd-trace/src/plugins/orchestrion-pipeline').PipelineFrame} frame
+ * @param {import('../../dd-trace/src/plugins/integration-pipeline').PipelineFrame} frame
  * @returns {string | {name: string, source?: string}}
  */
 function producerService (frame) {
-  return frame.config.service || frame.plugin.serviceName({ type: 'messaging', kind: 'producer' })
+  return frame.config.service || frame.serviceName({ type: 'messaging', kind: 'producer' })
 }
 
 const queuePropagationStage = {
   name: 'trace-propagation',
+  requires: ['tracing'],
   start (frame) {
-    frame.data.metadata = injectIntoOpts(frame, ensureQueueOpts(frame.context))
+    frame.data.metadata = injectIntoOpts(frame, ensureQueueOpts(frame.invocation))
   },
 }
 
 const bulkPropagationStage = {
   name: 'trace-propagation',
+  requires: ['tracing'],
   start (frame) {
     const jobs = frame.data.jobs
     if (!jobs) return
@@ -148,6 +150,7 @@ const bulkPropagationStage = {
 
 const flowPropagationStage = {
   name: 'trace-propagation',
+  requires: ['tracing'],
   start (frame) {
     const flow = frame.data.flow
     if (!flow) return
@@ -158,17 +161,17 @@ const flowPropagationStage = {
 
 const queueDsmStage = {
   name: 'data-streams',
+  requires: ['tracing'],
   start (frame) {
     if (!frame.config.dsmEnabled) return
 
     const queueName = frame.data.queueName
     const payloadSize = frame.data.data ? getMessageSize(frame.data.data) : 0
-    const pathway = frame.tracer.setCheckpoint(
+    const pathway = frame.dataStreams.setCheckpoint(
       ['direction:out', `topic:${queueName}`, 'type:bullmq'],
-      frame.span,
       payloadSize
     )
-    const opts = ensureQueueOpts(frame.context)
+    const opts = ensureQueueOpts(frame.invocation)
     const metadata = frame.data.metadata || parseTelemetryMetadata(opts.telemetry?.metadata)
     DsmPathwayCodec.encode(pathway, metadata._datadog || metadata)
     if (!metadata._datadog) metadata._datadog = {}
@@ -178,6 +181,7 @@ const queueDsmStage = {
 
 const bulkDsmStage = {
   name: 'data-streams',
+  requires: ['tracing'],
   start (frame) {
     if (!frame.config.dsmEnabled) return
 
@@ -186,8 +190,9 @@ const bulkDsmStage = {
     const cache = frame.data.metadata
     for (let i = 0; i < jobs.length; i++) {
       const job = jobs[i]
-      if (!job?.data) continue
-      const pathway = frame.tracer.setCheckpoint(edgeTags, frame.span, getMessageSize(job.data))
+      if (!job) continue
+      const payloadSize = job.data ? getMessageSize(job.data) : 0
+      const pathway = frame.dataStreams.setCheckpoint(edgeTags, payloadSize)
       const metadata = cache?.[i] || parseTelemetryMetadata(job.opts.telemetry?.metadata)
       DsmPathwayCodec.encode(pathway, metadata._datadog || metadata)
       if (!metadata._datadog) metadata._datadog = {}
@@ -198,6 +203,7 @@ const bulkDsmStage = {
 
 const flowDsmStage = {
   name: 'data-streams',
+  requires: ['tracing'],
   start (frame) {
     if (!frame.config.dsmEnabled) return
 
@@ -205,9 +211,8 @@ const flowDsmStage = {
     if (!flow) return
     flow.opts ||= {}
     const queueName = flow.queueName || 'bullmq'
-    const pathway = frame.tracer.setCheckpoint(
+    const pathway = frame.dataStreams.setCheckpoint(
       ['direction:out', `topic:${queueName}`, 'type:bullmq'],
-      frame.span,
       flow.data ? getMessageSize(flow.data) : 0
     )
     const metadata = frame.data.metadata || parseTelemetryMetadata(flow.opts.telemetry?.metadata)
@@ -234,7 +239,7 @@ const operations = [
       name: frame.data.name,
       data: frame.data.data,
       opts: frame.data.opts,
-      queueName: frame.context.self?.name,
+      queueName: frame.invocation.self?.name,
     }),
     span: {
       name: 'bullmq.add',

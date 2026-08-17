@@ -15,8 +15,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const SpanContext = require('./span_context')
-
-const dateNow = Date.now
+const createSpanContext = require('./span_context_factory')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -391,63 +390,7 @@ class DatadogSpan {
   }
 
   _createContext (parent, fields) {
-    let spanContext
-    let startTime
-
-    let baggage
-    const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
-    if (parent && parent._isRemote && propagationBehavior !== 'continue') {
-      baggage = parent._baggageItems
-      parent = null
-    }
-
-    if (fields.context) {
-      spanContext = fields.context
-      if (!spanContext._trace.startTime) {
-        startTime = dateNow()
-      }
-    } else if (parent) {
-      spanContext = new SpanContext({
-        traceId: parent._traceId,
-        spanId: id(),
-        parentId: parent._spanId,
-        sampling: parent._sampling,
-        baggageItems: { ...parent._baggageItems },
-        trace: parent._trace,
-        tracestate: parent._tracestate,
-      })
-
-      if (!spanContext._trace.startTime) {
-        startTime = dateNow()
-      }
-    } else {
-      const spanId = id()
-      startTime = dateNow()
-      spanContext = new SpanContext({
-        traceId: spanId,
-        spanId,
-      })
-      spanContext._trace.startTime = startTime
-
-      if (fields.traceId128BitGenerationEnabled) {
-        spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
-          .padStart(8, '0')
-          .padEnd(16, '0')
-      }
-
-      if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage ?? {}
-      }
-    }
-
-    spanContext._trace.ticks ||= now()
-    if (startTime) {
-      spanContext._trace.startTime = startTime
-    }
-    // SpanContext was NOT propagated from a remote parent
-    spanContext._isRemote = false
-
-    return spanContext
+    return createSpanContext(this.#parentTracer, parent, fields)
   }
 
   _getTime () {

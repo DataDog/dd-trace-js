@@ -27,6 +27,7 @@ describe('Span', () => {
   let now
   let id
   let tagger
+  let createSpanContext
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
@@ -51,6 +52,15 @@ describe('Span', () => {
       add: sinon.spy(),
     }
 
+    createSpanContext = proxyquire('../../src/opentracing/span_context_factory', {
+      perf_hooks: {
+        performance: {
+          now,
+        },
+      },
+      '../id': id,
+    })
+
     Span = proxyquire('../../src/opentracing/span', {
       perf_hooks: {
         performance: {
@@ -59,6 +69,7 @@ describe('Span', () => {
       },
       '../id': id,
       '../tagger': tagger,
+      './span_context_factory': createSpanContext,
     })
   })
 
@@ -78,6 +89,16 @@ describe('Span', () => {
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
     assert.deepStrictEqual(span.context()._trace.started, [span])
+  })
+
+  it('should only materialize a reserved context once', () => {
+    const context = createSpanContext(tracer, null)
+    span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', context })
+
+    assert.throws(
+      () => new Span(tracer, processor, prioritySampler, { operationName: 'duplicate', context }),
+      { message: 'A reserved span context can only be materialized once' }
+    )
   })
 
   it('should calculate its start time and duration relative to the trace start', () => {
