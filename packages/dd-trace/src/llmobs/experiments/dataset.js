@@ -271,7 +271,10 @@ class Dataset {
     this.#records.splice(index, 1)
     this.#recordsById.delete(record.id)
 
-    if (this.#newRecordsById.delete(record.id)) return this
+    if (this.#newRecordsById.delete(record.id)) {
+      this.#pendingTagOperations.delete(record.id)
+      return this
+    }
 
     this.#updatedRecordsById.delete(record.id)
     this.#pendingTagOperations.delete(record.id)

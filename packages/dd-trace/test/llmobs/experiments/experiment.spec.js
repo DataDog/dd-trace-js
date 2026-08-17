@@ -321,6 +321,39 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     }])
   })
 
+  it('clears tags for a deleted new record before reusing its id', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo')
+      .addRecord(new DatasetRecord('deleted', null, {}, 'record-0'))
+
+    dataset.addTags(0, ['topic:stale'])
+    dataset.delete(0)
+    dataset.addRecord(new DatasetRecord('before', null, {}, 'record-0'))
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.update(0, { input: 'after' })
+    resolvePush()
+    await push
+    await dataset.push()
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[1].attributes.update_records, [{
+      id: 'record-0',
+      input: 'after',
+    }])
+  })
+
   it('preserves edits to a new record made while its insert is in flight', async () => {
     const { client: c, requests } = clientWithMockBackend()
     let resolvePush
