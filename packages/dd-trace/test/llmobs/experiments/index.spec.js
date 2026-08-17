@@ -258,6 +258,19 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
       sinon.assert.callCount(warn, 4)
     })
+
+    it('treats omitted no-op tag lists as empty', () => {
+      const dataset = new NoopExperiments().createDataset('d', {
+        records: [{ inputData: 'input' }],
+      })
+
+      assert.doesNotThrow(() => {
+        dataset.addTags(0)
+        dataset.removeTags(0)
+        dataset.replaceTags(0)
+      })
+      assert.deepEqual(dataset.records()[0].tags, [])
+    })
   })
 
   describe('pullDataset', () => {

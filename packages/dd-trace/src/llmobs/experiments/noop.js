@@ -58,14 +58,16 @@ class NoopDataset {
   addTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this
-    record.tags = [...new Set([...(record.tags ?? []), ...tags])].sort()
+    const normalizedTags = tags ?? []
+    record.tags = [...new Set([...(record.tags ?? []), ...normalizedTags])].sort()
     return this
   }
 
   removeTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this
-    const removed = new Set(tags)
+    const normalizedTags = tags ?? []
+    const removed = new Set(normalizedTags)
     record.tags = (record.tags ?? []).filter(tag => !removed.has(tag)).sort()
     return this
   }
@@ -73,7 +75,8 @@ class NoopDataset {
   replaceTags (index, tags) {
     const record = this.#records[index]
     if (!record) return this
-    record.tags = [...tags]
+    const normalizedTags = tags ?? []
+    record.tags = [...normalizedTags]
     return this
   }
 
