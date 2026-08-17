@@ -34,10 +34,11 @@ function parseSkippableSuitesResponse (
   if (validateRequiredFields) {
     validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
-  const coverage = {}
+  let coverage
   const coverageByFilename = parsedResponse.meta?.coverage
   if (coverageByFilename) {
     for (const [filename, bitmap] of Object.entries(coverageByFilename)) {
+      coverage ??= {}
       coverage[filename.replaceAll('\\', '/')] = bitmap
     }
   }

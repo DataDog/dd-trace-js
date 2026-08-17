@@ -374,6 +374,7 @@ class Experiment {
     }
     const datasetVersion = this.#dataset.version()
     if (datasetVersion !== null) attributes.dataset_version = datasetVersion
+    // eslint-disable-next-line no-restricted-syntax -- faster than tracking entries while copying arbitrary config
     if (Object.keys(this.#config).length > 0) attributes.config = this.#config
 
     let created
